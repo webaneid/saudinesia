@@ -15,7 +15,7 @@ Eksekusi SOP / Milestone SOP yang sudah ada).
 
 | # | Komponen | Status Saat Ini | Risiko Kalau Dibiarkan | Effort Estimasi | Prioritas |
 |---|----------|------------------|--------------------------|-------------------|-------------|
-| 1 | Backup otomatis (Postgres + MinIO) | Tidak ada — `scripts/` cuma berisi `import-wilayah.ts`, tidak ada script/cron backup apa pun | **Tinggi** — self-hosted di satu VPS Hostinger (`docs/architecture.md`), satu Docker container. Kalau VPS gagal/corrupt, seluruh data booking, pembayaran, dan dokumen pribadi jamaah (paspor/KTP/KK) hilang tanpa jalan pulih | Kecil–Sedang (pg_dump terjadwal + mirror bucket MinIO ke storage lain, lewat `lib/cron/` yang sudah ada polanya) | **Tinggi** |
+| 1 | Backup otomatis (Postgres + MinIO) | **Sebagian tertutup (2026-09-10)** — `scripts/backup-db.sh`/`restore-db.sh` sudah ditambahkan (pg_dump + gzip + upload rclone/gdrive, retention 30 hari, restore dengan konfirmasi manual), diadaptasi dari template. **Belum dijadwalkan** (perlu setup rclone remote + `~/.pgpass` + crontab manual di VPS — lihat komentar di kedua script). MinIO (dokumen paspor/KTP/KK) **masih belum ada backup sama sekali** | Sedang — sisi Postgres tinggal dijadwalkan, tapi dokumen jamaah di MinIO tetap berisiko Tinggi kalau VPS gagal | Kecil (jadwalkan cron yang sudah ada) untuk Postgres; Kecil–Sedang (script serupa untuk MinIO, belum dibuat) | **Tinggi** |
 | 2 | Kepatuhan UU PDP (data pribadi jamaah) | Sebagian — `CLAUDE.md` § Security sudah larang log PII, tapi tidak ada kebijakan privasi aktif (`components/campaigns/CampaignDashboard.tsx:159` link "Kebijakan Privasi" masih `href="#"`), tidak ada pencatatan consent, tidak ada mekanisme permintaan hapus/ekspor data pribadi | **Tinggi** — data yang diproses termasuk paspor, KTP, KK (lihat `lib/constants/booking.ts` `REQUIRED_DOCUMENTS`) — kategori data pribadi spesifik menurut UU PDP, ada konsekuensi hukum kalau tidak ada basis pemrosesan & hak subjek data yang jelas | Sedang (halaman kebijakan privasi + pencatatan consent saat registrasi + flow permintaan hapus akun) | **Tinggi** |
 | 3 | Observability / error tracking | Tidak ada — tidak ada Sentry atau APM apa pun di `package.json`; error hanya `console.error` (165 titik tersebar di `lib/` + `app/api/`), hilang begitu container restart | **Sedang** — kegagalan produksi (termasuk kegagalan pembayaran/notifikasi WA) baru diketahui dari laporan user, tidak ada alert proaktif | Kecil (integrasi 1 SDK error-tracking, tidak perlu ubah logic) | **Tinggi** (quick win) |
 | 4 | SEO — sitemap & robots | Tidak ada `sitemap.ts`/`robots.ts` (Next.js) atau file statis manapun ditemukan di `app/` | **Sedang** — platform publik dengan katalog produk (hotel/transport/visa/paket) kehilangan potensi traffic organik, mesin pencari mengindeks tidak optimal | Kecil (Next.js App Router native `sitemap.ts`/`robots.ts` generator dari data katalog yang sudah ada) | **Sedang–Tinggi** (quick win) |
@@ -35,6 +35,44 @@ Dicek langsung ke kode, bukan diasumsikan dari nama file:
 - **Notifikasi** — `lib/notifications/send.ts` + template WhatsApp (`lib/notifications/templates/whatsapp.ts`) via GOWA, email via Resend (`package.json`).
 - **Jobs** — `lib/cron/exchangeRateJob.ts`, `lib/cron/autocancelJob.ts`, pakai `node-cron`.
 - **i18n** — `next-intl`, locale `id`/`en`, terintegrasi di `middleware.ts`.
+
+## Update 2026-09-10 — Audit Tooling (Skills/Hooks/Struktur)
+
+User bertanya apakah fitur/skill/struktur folder dari template `master-typescript`
+sudah ikut diadopsi (bukan cuma audit fitur bisnis). Jawaban: **belum**, retrofit
+sebelumnya cuma menghasilkan laporan gap ini. Sudah ditutup di sesi ini:
+
+- `.claude/hooks/` (6 hook: adr-guard, secret-scan, dependency-audit,
+  post-edit-lint, pre-commit-guard, security-review-reminder) + `.claude/settings.json`
+  — diadaptasi ke Next.js Route Handler (`route.ts`), bukan pola `apps/api/src/routes/*`.
+- `.claude/agents/security-auditor.md` — subagent read-only untuk audit keamanan menyeluruh.
+- `.claude/skills/security-review/` dan `.claude/skills/new-api-route/` — ditulis ulang
+  untuk stack Prisma + Zod + Route Handler (bukan copy Elysia/Drizzle mentah).
+- `docs/decisions/adr-template.md` + `scripts/next-adr-number.sh` — mekanisme ADR baru
+  untuk keputusan besar ke depan (lihat `CLAUDE.md` § ADR untuk pembagian dengan `docs/decisions.md`).
+- `docs/architecture/architecture-security.md` — ditulis dari audit kode langsung,
+  BUKAN salinan template — termasuk temuan baru: `CLAUDE.md` § Tech Stack tidak
+  menyebutkan bahwa login sebenarnya **email+password** (bcrypt), OTP WhatsApp
+  cuma untuk verifikasi akun saat registrasi. Sudah dikoreksi di `CLAUDE.md`.
+- `scripts/backup-db.sh`/`restore-db.sh` — lihat gap #1 di atas.
+- `docs/WORKFLOW-MODES.md` — panduan pemakaian Claude Code (mode/subagent/hemat token),
+  bagian daftar plugin marketplace template DIHAPUS (belum diverifikasi terpasang di sini).
+
+**Sengaja TIDAK diadopsi:**
+- Skill `phase-workflow` — redundan dengan § "Fase Eksekusi SOP"/"Milestone SOP"
+  yang sudah ada inline di `CLAUDE.md`; mengadopsinya mentah akan menciptakan dua
+  sistem SOP paralel dengan istilah berbeda (Fase vs Milestone) yang berisiko drift.
+- `docs/SOP.md`/`docs/conventions.md`/`docs/PROGRESS.md`/`docs/phases/` terpisah —
+  saudinesia sudah punya ekuivalennya inline di `CLAUDE.md` (SOP) dan `docs/progress.md`
+  (tracking milestone M1-M15) — tidak diduplikasi ke nama/format template.
+- `docs/glossary.md` — domain Umroh/Haji (Muthowif, Manifest, dst.) sudah dijelaskan
+  ad-hoc di tiap `docs/arsitektur-*.md` terkait; belum dibuat glossary terpisah,
+  masih kandidat kalau user mau.
+- Skill `project-init`/`retrofit-adopt` milik template itu sendiri — meta-tool untuk
+  bootstrap project baru/retrofit, tidak relevan dipakai dari dalam saudinesia sendiri.
+- Multi-env scaffolding (docker-compose staging/prod terpisah, `.env.staging.example`) —
+  ini pekerjaan infrastruktur nyata (bukan sekadar copy file), tetap tercatat sebagai
+  gap #5 (Staging) di atas, bukan dieksekusi di sesi audit ini.
 
 ## Catatan Terpisah (Bukan Bagian Checklist Template, Tapi Layak Diketahui)
 

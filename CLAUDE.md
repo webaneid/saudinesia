@@ -62,6 +62,12 @@ Saat membuat dokumen baru untuk modul lain, ikuti struktur `docs/arsitektur-visa
 
 **Audit retrofit (2026-09-10):** lihat `docs/RETROFIT-GAPS.md` untuk daftar gap infra/operasional yang ditemukan lewat audit langsung ke kode (backup, observability, kepatuhan UU PDP, SEO/sitemap, staging, dst.) — belum ada yang dieksekusi, murni laporan untuk dipilih user.
 
+**Tooling retrofit (2026-09-10):** project ini sekarang punya hooks enforcement (`.claude/hooks/`), skill `security-review`/`new-api-route`, subagent `security-auditor`, dan `docs/architecture/architecture-security.md` — semua diadaptasi dari template `master-typescript` ke stack asli project ini (Next.js Route Handler + Prisma, bukan Elysia/Drizzle). Detail lengkap di `.claude/hooks/README.md`. Skill `phase-workflow` template **sengaja tidak diadopsi** — isinya sudah redundan dengan § "Fase Eksekusi SOP"/"Milestone SOP" di bawah.
+
+**ADR (Architecture Decision Record) — dua tingkat mulai 2026-09-10:**
+- Keputusan implementasi rutin → tetap append ke `docs/decisions.md` seperti biasa (tidak berubah).
+- Keputusan arsitektur BESAR/struktural ke depan → ADR baru di `docs/decisions/adr-XXXX-....md` (pakai `docs/decisions/adr-template.md`, nomor dari `bash scripts/next-adr-number.sh`) — **immutable setelah status `Accepted`**, di-enforce hard lewat `.claude/hooks/adr-guard.sh`. Belum ada migrasi retroaktif dari `docs/decisions.md` lama ke format ini.
+
 ---
 
 ## Tech Stack — Non-negotiable
@@ -76,7 +82,7 @@ Saat membuat dokumen baru untuk modul lain, ikuti struktur `docs/arsitektur-visa
 | Styling | Tailwind CSS — utility-first only |
 | Icons | Lucide React — no emojis anywhere in UI |
 | Rich text | Tiptap |
-| Auth | WhatsApp OTP via GOWA (aldinokemal, hosted on Sumopod) — no NextAuth |
+| Auth | Email + password (`bcryptjs`) for login; WhatsApp OTP via GOWA (aldinokemal, hosted on Sumopod) for account verification at registration — no NextAuth |
 | Storage | MinIO — self-hosted, Hostinger VPS |
 | Images | `next/image` with custom MinIO loader |
 | Package manager | Bun — `bun add`, `bun run` — never npm or yarn |
