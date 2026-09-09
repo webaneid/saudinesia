@@ -60,6 +60,8 @@ Status per 2026-07-25: `docs/arsitektur-visa.md`, `docs/arsitektur-transportasi.
 
 Saat membuat dokumen baru untuk modul lain, ikuti struktur `docs/arsitektur-visa.md` sebagai template.
 
+**Audit retrofit (2026-09-10):** lihat `docs/RETROFIT-GAPS.md` untuk daftar gap infra/operasional yang ditemukan lewat audit langsung ke kode (backup, observability, kepatuhan UU PDP, SEO/sitemap, staging, dst.) — belum ada yang dieksekusi, murni laporan untuk dipilih user.
+
 ---
 
 ## Tech Stack — Non-negotiable
