@@ -1,0 +1,67 @@
+{
+  "common": {
+    "loading": "Memuat...",
+    "error": "Terjadi kesalahan",
+    "submit": "Kirim",
+    "cancel": "Batal",
+    "save": "Simpan",
+    "back": "Kembali",
+    "next": "Lanjut",
+    "confirm": "Konfirmasi",
+    "delete": "Hapus",
+    "edit": "Edit",
+    "view": "Lihat"
+  },
+  "auth": {
+    "login": "Masuk",
+    "register": "Daftar",
+    "phone": "Nomor WhatsApp",
+    "otp": "Kode OTP",
+    "sendOtp": "Kirim OTP",
+    "verifyOtp": "Verifikasi",
+    "logout": "Keluar",
+    "name": "Nama Lengkap",
+    "email": "Email"
+  },
+  "booking": {
+    "new": "Buat Booking",
+    "dates": "Tanggal Perjalanan",
+    "hotel": "Pilih Hotel",
+    "transport": "Pilih Transportasi",
+    "muthowif": "Pilih Muthowif",
+    "addons": "Layanan Tambahan",
+    "pilgrims": "Data Jamaah",
+    "payment": "Pembayaran",
+    "summary": "Ringkasan",
+    "status": {
+      "awaiting_payment": "Menunggu Pembayaran",
+      "payment_review": "Pembayaran Diverifikasi",
+      "confirmed": "Dikonfirmasi",
+      "active": "Dalam Perjalanan",
+      "completed": "Selesai",
+      "cancelled": "Dibatalkan"
+    }
+  },
+  "visa": {
+    "status": {
+      "pending_documents": "Menunggu Dokumen",
+      "documents_complete": "Dokumen Lengkap",
+      "submitted_to_syarikah": "Dikirim ke Syarikah",
+      "in_review": "Sedang Diproses",
+      "issued": "Visa Terbit",
+      "rejected": "Ditolak"
+    }
+  },
+  "nav": {
+    "home": "Beranda",
+    "hotels": "Hotel",
+    "transport": "Transportasi",
+    "muthowif": "Muthowif",
+    "catering": "Katering",
+    "tours": "Wisata",
+    "dashboard": "Dashboard",
+    "bookings": "Booking Saya",
+    "admin": "Admin",
+    "superadmin": "Super Admin"
+  }
+}

@@ -1,0 +1,1234 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── USERS & AUTH ────────────────────────────────────────────
+
+model User {
+  id              String    @id @default(uuid())
+  email           String    @unique
+  passwordHash    String
+  fullName        String
+  phone           String?   @unique
+  phoneVerifiedAt DateTime?
+  role            UserRole  @default(pilgrim)
+  isActive        Boolean   @default(false)
+  resetToken      String?   @unique
+  resetTokenExp   DateTime?
+  addressId       String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  address           Address?          @relation(fields: [addressId], references: [id])
+  bookings          Booking[]
+  ledGroups         Group[]           @relation("GroupLeader")
+  groupMemberships  GroupMember[]
+  confirmedPayments Payment[]         @relation("ConfirmedBy")
+  approvedRefunds   Refund[]          @relation("ApprovedBy")
+  notifications     NotificationLog[]
+
+  @@map("users")
+}
+
+enum UserRole {
+  pilgrim
+  agent
+  admin
+  manager
+  superadmin
+
+  @@map("user_role")
+}
+
+model OtpRequest {
+  id        String   @id @default(uuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@map("otp_requests")
+}
+
+// ─── SEASONS ──────────────────────────────────────────────────
+
+model Season {
+  id        String   @id @default(uuid())
+  name      String
+  startDate DateTime @db.Date
+  endDate   DateTime @db.Date
+
+  @@map("seasons")
+}
+
+// ─── HOTELS ───────────────────────────────────────────────────
+
+model Hotel {
+  id               String  @id @default(uuid())
+  name             String
+  city             String
+  stars            Int?
+  distanceToHaramM Int?
+  description      String?
+  images           Json    @default("[]")
+  featuredImageKey String? // foto sampul eksplisit — docs/arsitektur-hotel.md §10.2
+  facilities       Json    @default("[]") // array kode fasilitas (checkbox), lihat lib/constants/hotelFacilities.ts
+  addressId        String? @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat fisik hotel
+  isActive         Boolean @default(true)
+
+  address      Address?           @relation(fields: [addressId], references: [id])
+  pricePeriods HotelPricePeriod[]
+  services     HotelService[]
+
+  @@map("hotels")
+}
+
+// Master data tipe kamar — di-seed (Single/Double/Triple/Quad/Quint), extensible admin.
+// docs/arsitektur-hotel.md §10.2.
+model RoomType {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  defaultCapacity Int
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  schedules HotelRoomSchedule[]
+
+  @@map("room_types")
+}
+
+// Periode sebagai entitas terpisah — satu periode dipakai bersama oleh banyak HotelRoomSchedule
+// (1 tipe kamar per baris), supaya tanggal tidak bisa "miring" antar tipe kamar dalam 1 rate sheet.
+// docs/arsitektur-hotel.md §11.2.
+model HotelPricePeriod {
+  id          String   @id @default(uuid())
+  hotelId     String
+  periodStart DateTime @db.Date
+  periodEnd   DateTime @db.Date
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  hotel     Hotel               @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  schedules HotelRoomSchedule[]
+
+  @@map("hotel_price_periods")
+}
+
+// Satu baris = 1 periode + 1 tipe kamar. Vendor/currency TIDAK disimpan di sini — tetap lewat
+// ProductCost/PreferredVendor per baris ini (konsisten arsitektur harga universal), "satu vendor
+// per periode" ditegakkan di level API (docs/arsitektur-hotel.md §11.3), bukan di skema.
+model HotelRoomSchedule {
+  id           String   @id @default(uuid())
+  periodId     String
+  roomTypeId   String
+  price        Decimal  @db.Decimal(12, 2) // cache hasil computeSellPrice() — TIDAK diisi manual
+  totalQuota   Int      @default(0)
+  pendingQuota Int      @default(0)
+  bookedQuota  Int      @default(0)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  period                    HotelPricePeriod         @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  roomType                  RoomType                 @relation(fields: [roomTypeId], references: [id])
+  bookingHotels             BookingHotel[]
+  tourPackageHotels         TourPackageHotel[]
+  tourPackageHotelOptions   TourPackageHotelOption[]
+  bookingTourPackages       BookingTourPackage[]
+  includedInPackagesMakkah  Package[]                @relation("PackageHotelMakkah")
+  includedInPackagesMadinah Package[]                @relation("PackageHotelMadinah")
+  packageHotelOptions       PackageHotelOption[]
+
+  @@unique([periodId, roomTypeId])
+  @@map("hotel_room_schedules")
+}
+
+model HotelService {
+  id          String  @id @default(uuid())
+  hotelId     String
+  serviceName String
+  serviceType String?
+  price       Decimal @db.Decimal(12, 2)
+  description String?
+  isActive    Boolean @default(true)
+
+  hotel           Hotel            @relation(fields: [hotelId], references: [id], onDelete: Cascade)
+  bookingServices BookingService[]
+
+  @@map("hotel_services")
+}
+
+// ─── TRANSPORT ────────────────────────────────────────────────
+
+model TransportVehicle {
+  id          String   @id @default(uuid())
+  name        String
+  vehicleType String
+  capacity    Int
+  fleetCount  Int      @default(1)
+  description String?
+  images      Json     @default("[]")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  pricing TransportPricing[]
+
+  @@map("transport_vehicles")
+}
+
+model TransportTrip {
+  id          String   @id @default(uuid())
+  name        String // "Airport Transfer", "City Tour 4 Tempat", "Madinah → Makkah"
+  category    String? // bebas admin: "airport" | "city_tour" | "intercity" | dll
+  description String?
+  origin      String // wajib — struktur rute, meniru FlightRoute (docs/arsitektur-transportasi.md §9.1)
+  destination String // wajib
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  pricing      TransportPricing[]
+  tourPackages TourPackage[] // paket ziarah yang pakai trip ini sebagai kendaraan+kuota (docs/arsitektur-ziarah.md §8)
+  packages     Package[] // paket umroh yang pakai trip ini sbg sumber opsi kendaraan (docs/arsitektur-paket-umroh.md §4)
+
+  @@map("transport_trips")
+}
+
+model TransportPricing {
+  id        String   @id @default(uuid())
+  tripId    String
+  vehicleId String
+  price     Decimal  @default(0) @db.Decimal(12, 2) // cache computeSellPrice(), diisi lewat endpoint cost — bukan diisi manual
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  trip                    TransportTrip    @relation(fields: [tripId], references: [id])
+  vehicle                 TransportVehicle @relation(fields: [vehicleId], references: [id])
+  quotas                  TransportQuota[]
+  includedInPackages      TourPackage[] // paket ziarah yang mengunci pricing ini sbg kendaraan "included" (docs/arsitektur-ziarah.md §12.3)
+  includedInUmrohPackages Package[] // paket umroh yang mengunci pricing ini sbg kendaraan "included" (docs/arsitektur-paket-umroh.md §4)
+
+  @@unique([tripId, vehicleId])
+  @@map("transport_pricing")
+}
+
+model TransportQuota {
+  id           String   @id @default(uuid())
+  pricingId    String
+  travelDate   DateTime @db.Date
+  totalSeats   Int
+  pendingSeats Int      @default(0)
+  bookedSeats  Int      @default(0)
+
+  pricing             TransportPricing     @relation(fields: [pricingId], references: [id])
+  bookingTransports   BookingTransport[]
+  bookingTourPackages BookingTourPackage[] // paket ziarah reuse kuota kendaraan yang sama (docs/arsitektur-ziarah.md §8)
+
+  @@unique([pricingId, travelDate])
+  @@map("transport_quotas")
+}
+
+// ─── FLIGHT (docs/arsitektur-tiket-pesawat.md) ─────────────────
+
+model FlightRoute {
+  id          String   @id @default(uuid())
+  origin      String // "Cengkareng (CGK)" — teks bebas, tidak hardcode daftar bandara
+  destination String // "Madinah (MED)"
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  schedules FlightSchedule[]
+  packages  Package[] // paket umroh yang pakai route ini sbg sumber opsi tiket pesawat (docs/arsitektur-paket-umroh.md §4)
+
+  @@map("flight_routes")
+}
+
+model FlightSchedule {
+  id            String   @id @default(uuid())
+  routeId       String
+  departureFrom DateTime @db.Date // periode mulai — harga & kuota berlaku untuk keberangkatan di rentang ini
+  departureTo   DateTime @db.Date // periode akhir
+  price         Decimal  @db.Decimal(12, 2) // cache hasil computeSellPrice() — docs/arsitektur-harga.md, TIDAK diisi manual
+  totalSeats    Int      @default(0)
+  pendingSeats  Int      @default(0)
+  bookedSeats   Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  route              FlightRoute     @relation(fields: [routeId], references: [id])
+  bookingFlights     BookingFlight[]
+  includedInPackages Package[] // paket umroh yang mengunci schedule ini sbg tiket "included" (docs/arsitektur-paket-umroh.md §4)
+
+  @@map("flight_schedules")
+}
+
+// Schema siap, BELUM ada pemanggil (wizard booking) — docs/arsitektur-tiket-pesawat.md §2.1
+model BookingFlight {
+  id               String   @id @default(uuid())
+  bookingId        String
+  flightScheduleId String
+  departureDate    DateTime @db.Date // tanggal keberangkatan aktual yang dipilih jamaah (dalam rentang schedule)
+  numPassengers    Int      @default(1)
+  unitPrice        Decimal  @db.Decimal(12, 2)
+  totalPrice       Decimal  @db.Decimal(14, 2)
+
+  booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  flightSchedule FlightSchedule @relation(fields: [flightScheduleId], references: [id])
+
+  @@map("booking_flights")
+}
+
+// ─── MUTHOWIF ─────────────────────────────────────────────────
+
+model Muthowif {
+  id            String  @id @default(uuid())
+  name          String
+  bio           String?
+  photoKey      String? // object key MinIO, bukan URL — presigned URL digenerate saat baca (docs/arsitektur-muthowif.md §9, menutup Gap #2)
+  languages     Json    @default("[]")
+  rating        Decimal @default(5.00) @db.Decimal(3, 2)
+  dailyCapacity Int     @default(50)
+  isActive      Boolean @default(true)
+  // priceRegular/Ramadan/Hajj dihapus — harga sekarang di MuthowifServicePrice (docs/arsitektur-muthowif.md §9)
+
+  availability    MuthowifAvailability[]
+  bookingMuthowif BookingMuthowif[]
+
+  @@map("muthowif")
+}
+
+model MuthowifServicePrice {
+  id        String   @id @default(uuid())
+  price     Decimal  @default(0) @db.Decimal(12, 2) // cache computeSellPrice(), diisi lewat endpoint cost
+  updatedAt DateTime @updatedAt
+
+  @@map("muthowif_service_price")
+}
+
+// Singleton — selalu 1 baris (pola sama PricingRule global row). Harga tidak lagi per-season
+// (docs/arsitektur-muthowif.md §10) — satu harga flat, cache dari computeSellPrice().
+
+model MuthowifPoolAvailability {
+  id           String   @id @default(uuid())
+  date         DateTime @db.Date
+  pendingCount Int      @default(0)
+  bookedCount  Int      @default(0)
+
+  @@unique([date])
+  @@map("muthowif_pool_availability")
+}
+
+// Kapasitas TIDAK disimpan di sini — dihitung live dari SUM(Muthowif.dailyCapacity WHERE isActive).
+
+model MuthowifAvailability {
+  id           String   @id @default(uuid())
+  muthowifId   String
+  date         DateTime @db.Date
+  pendingCount Int      @default(0)
+  bookedCount  Int      @default(0)
+
+  muthowif Muthowif @relation(fields: [muthowifId], references: [id], onDelete: Cascade)
+
+  @@unique([muthowifId, date])
+  @@map("muthowif_availability")
+}
+
+// Sekarang cuma ditulis dari alur assignment admin (docs/arsitektur-muthowif.md §9.4), bukan booking creation.
+
+// ─── HAJI PRODUCT ────────────────────────────────────────────
+
+model HajiProduct {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  hajiType      String // 'khusus' | 'furoda' | 'reguler' | 'plus'
+  year          Int
+  departureDate DateTime? @db.Date
+  returnDate    DateTime? @db.Date
+  durationDays  Int?
+  includes      Json      @default("[]") // list of what's included
+  price         Decimal   @db.Decimal(14, 2)
+  priceLabel    String? // e.g. "per orang"
+  totalQuota    Int       @default(0)
+  pendingQuota  Int       @default(0) // docs/arsitektur-booking.md §6 Step 2 — menutup Gap #1 (docs/arsitektur-umroh.md §7)
+  bookedQuota   Int       @default(0)
+  images        Json      @default("[]")
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+
+  bookingHaji BookingHaji[]
+
+  @@map("haji_products")
+}
+
+// ─── VISA PRODUCT ─────────────────────────────────────────────
+
+model VisaProduct {
+  id           String   @id @default(uuid())
+  name         String
+  country      String   @default("Saudi Arabia")
+  visaType     String // free text — admin defines (e.g. "Umroh", "Visitor", "Bisnis")
+  description  String?
+  requirements Json     @default("[]") // VisaRequirement[] — see lib/types/visa.ts
+  price        Decimal  @db.Decimal(12, 2) // cache hasil computeSellPrice() (durasi default) — docs/arsitektur-harga.md §6
+  priceLabel   String?
+  processDays  Int      @default(14)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  // BARU (docs/arsitektur-visa.md §9.2) — belum dipakai wizard/booking, lihat gap di docs/arsitektur-visa.md §9.5
+  requiredComponents Json @default("[]") // ["hotel","transport"] dst — komponen booking lain yang wajib untuk varian ini
+  durationFeeRules   Json @default("[]") // cache hasil computeSellPrice() per rentang hari — docs/arsitektur-harga.md §6.2
+
+  bookingVisa        BookingVisa[]
+  visaApplications   VisaApplication[]
+  includedInPackages Package[] // paket umroh yang mengunci produk ini sbg visa "included" (docs/arsitektur-paket-umroh.md §4)
+  packageOptions     PackageVisaOption[]
+
+  @@map("visa_products")
+}
+
+// ─── DOCUMENT REQUIREMENT (universal, docs/arsitektur-dokumen.md §3) ──────────
+// Menggantikan VisaProduct.requirements: Json (dipertahankan sementara, deprecated) sebagai
+// sumber kebenaran syarat dokumen — polimorfik, pola sama ProductCost/PreferredVendor
+// (docs/arsitektur-harga.md §3.3), supaya produk lain (Paket Umroh, Tiket Pesawat, Haji) bisa
+// punya syarat dokumen sendiri, bukan monopoli Visa.
+model DocumentRequirement {
+  id          String  @id @default(uuid())
+  productType String // 'visa' | 'package' | 'flight' | 'haji' | dst — bebas teks, tidak hardcode daftar
+  productId   String // FK ke produk spesifik, TIDAK di-enforce di DB (pola sama PackageItem/ProductCost)
+  docType     String // key mesin: 'ktp' | 'paspor' | 'kk' | 'foto' | dst — bebas admin isi
+  label       String // nama tampilan: "Paspor Asli (scan semua halaman)"
+  description String  @default("")
+  required    Boolean @default(true)
+  order       Int     @default(0)
+
+  @@index([productType, productId])
+  @@map("document_requirements")
+}
+
+// ─── MANIFEST FIELD REQUIREMENT (universal, docs/arsitektur-manifest.md §3) ───
+// Definisi field form per-orang, per produk — polimorfik, pola SAMA PERSIS DocumentRequirement.
+// Menggantikan asumsi lama "semua booking pakai bentuk form BookingPilgrim yang sama" — admin
+// bebas atur field apa saja per productType+productId tanpa migrasi schema.
+model ManifestFieldRequirement {
+  id          String  @id @default(uuid())
+  productType String // 'visa' | 'package' | 'transport' | 'haji' | dst — bebas teks
+  productId   String // FK ke produk spesifik, TIDAK di-enforce di DB
+  fieldKey    String // key mesin: 'fullName' | 'passportNumber' | 'bloodType' | dst — bebas admin
+  label       String // nama tampilan: "Nomor Paspor"
+  fieldType   String // 'text' | 'textarea' | 'phone' | 'email' | 'date' | 'select' | 'number' | 'address' — §3.1
+  options     Json? // untuk fieldType='select' — daftar pilihan
+  required    Boolean @default(true)
+  order       Int     @default(0)
+
+  // Peran sistem — OPSIONAL. Beberapa fitur (dashboard admin, pencocokan dokumen) tetap butuh
+  // tahu field mana yang berperan "nama"/"nomor HP" TANPA hardcode fieldKey (yang bebas admin
+  // atur) — lihat docs/arsitektur-manifest.md §4.
+  role String? // 'display_name' | 'whatsapp' | 'phone' | 'email' | 'passport_number' | null
+
+  @@index([productType, productId])
+  @@map("manifest_field_requirements")
+}
+
+// ─── PACKAGE / BUNDLE ─────────────────────────────────────────
+
+// Paket Umroh — refactor total docs/arsitektur-paket-umroh.md §4 (2026-07-22). PackageItem
+// (generik, tidak pernah dipakai kode manapun) dihapus, diganti variable harga 3-mode per
+// komponen (pola sama TourPackage, docs/arsitektur-ziarah.md §12), diperluas ke 6 komponen sumber.
+model Package {
+  id          String   @id @default(uuid())
+  name        String // "Paket Umroh Hemat 9 Hari"
+  description String?
+  price       Decimal  @db.Decimal(14, 2) // cache hasil computePackageBreakdown().baseTotal() — TIDAK diisi manual lagi
+  priceLabel  String? // "per orang"
+  highlights  Json     @default("[]") // bullet points
+  images      Json     @default("[]")
+  isActive    Boolean  @default(true)
+  isFeatured  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  // Hotel Makkah
+  hotelMakkahMode               PriceVariableMode @default(none)
+  includedHotelMakkahScheduleId String?
+  includedHotelMakkahNights     Int?
+  includedHotelMakkahNumRooms   Int?
+  includedHotelMakkahPrice      Decimal?          @db.Decimal(14, 2)
+
+  // Hotel Madinah
+  hotelMadinahMode               PriceVariableMode @default(none)
+  includedHotelMadinahScheduleId String?
+  includedHotelMadinahNights     Int?
+  includedHotelMadinahNumRooms   Int?
+  includedHotelMadinahPrice      Decimal?          @db.Decimal(14, 2)
+
+  // Transport (pola identik TourPackage §12.3)
+  transportMode              PriceVariableMode @default(none)
+  transportTripId            String?
+  includedTransportPricingId String?
+  includedTransportPrice     Decimal?          @db.Decimal(14, 2)
+
+  // Muthowif — singleton, tidak ada "sumber opsi" untuk dipilih
+  muthowifMode          PriceVariableMode @default(none)
+  includedMuthowifPrice Decimal?          @db.Decimal(14, 2)
+
+  // Visa
+  visaMode              PriceVariableMode @default(none)
+  includedVisaProductId String?
+  includedVisaPrice     Decimal?          @db.Decimal(14, 2)
+
+  // Tiket Pesawat
+  flightMode               PriceVariableMode @default(none)
+  flightRouteId            String?
+  includedFlightScheduleId String?
+  includedFlightPrice      Decimal?          @db.Decimal(14, 2)
+
+  // Katering
+  cateringMode              PriceVariableMode @default(none)
+  includedCateringOptionId  String?
+  includedCateringNumPeople Int?
+  includedCateringNumDays   Int?
+  includedCateringPrice     Decimal?          @db.Decimal(14, 2)
+
+  hotelOptions    PackageHotelOption[]
+  visaOptions     PackageVisaOption[]
+  cateringOptions PackageCateringOption[]
+
+  transportTrip                TransportTrip?     @relation(fields: [transportTripId], references: [id])
+  includedTransportPricing     TransportPricing?  @relation(fields: [includedTransportPricingId], references: [id])
+  includedVisaProduct          VisaProduct?       @relation(fields: [includedVisaProductId], references: [id])
+  flightRoute                  FlightRoute?       @relation(fields: [flightRouteId], references: [id])
+  includedFlightSchedule       FlightSchedule?    @relation(fields: [includedFlightScheduleId], references: [id])
+  includedCateringOption       CateringOption?    @relation(fields: [includedCateringOptionId], references: [id])
+  includedHotelMakkahSchedule  HotelRoomSchedule? @relation("PackageHotelMakkah", fields: [includedHotelMakkahScheduleId], references: [id])
+  includedHotelMadinahSchedule HotelRoomSchedule? @relation("PackageHotelMadinah", fields: [includedHotelMadinahScheduleId], references: [id])
+
+  @@map("packages")
+}
+
+// Kurasi manual opsi Hotel saat mode='user_choice' (pola sama TourPackageHotelOption, + slot Makkah/Madinah)
+model PackageHotelOption {
+  id                  String @id @default(uuid())
+  packageId           String
+  slot                String // 'makkah' | 'madinah'
+  hotelRoomScheduleId String
+  nights              Int
+
+  package           Package           @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  hotelRoomSchedule HotelRoomSchedule @relation(fields: [hotelRoomScheduleId], references: [id])
+
+  @@unique([packageId, slot, hotelRoomScheduleId])
+  @@map("package_hotel_options")
+}
+
+// Kurasi manual opsi Visa saat mode='user_choice' (VisaProduct sudah leaf-level, tidak perlu grouping)
+model PackageVisaOption {
+  id            String @id @default(uuid())
+  packageId     String
+  visaProductId String
+
+  package     Package     @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  visaProduct VisaProduct @relation(fields: [visaProductId], references: [id])
+
+  @@unique([packageId, visaProductId])
+  @@map("package_visa_options")
+}
+
+// Kurasi manual opsi Katering saat mode='user_choice' — tiap baris simpan numPeople/numDays sendiri
+// (mirip TourPackageHotel, karena harga Catering bergantung multiplier bukan cuma harga flat)
+model PackageCateringOption {
+  id               String @id @default(uuid())
+  packageId        String
+  cateringOptionId String
+  numPeople        Int
+  numDays          Int
+
+  package        Package        @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  cateringOption CateringOption @relation(fields: [cateringOptionId], references: [id])
+
+  @@unique([packageId, cateringOptionId])
+  @@map("package_catering_options")
+}
+
+// ─── CATERING & TOURS ─────────────────────────────────────────
+
+model CateringOption {
+  id                    String  @id @default(uuid())
+  name                  String
+  boardType             String
+  menuStyle             String
+  pricePerPersonRegular Decimal @db.Decimal(12, 2)
+  pricePerPersonRamadan Decimal @db.Decimal(12, 2)
+  pricePerPersonHajj    Decimal @db.Decimal(12, 2)
+  isActive              Boolean @default(true)
+
+  bookingCatering    BookingCatering[]
+  includedInPackages Package[] // paket umroh yang mengunci opsi ini sbg katering "included" (docs/arsitektur-paket-umroh.md §4)
+  packageOptions     PackageCateringOption[]
+
+  @@map("catering_options")
+}
+
+// HeritageTour dihapus — diganti TourPackage (docs/arsitektur-ziarah.md §8), terintegrasi
+// dengan TransportTrip/TransportPricing/TransportQuota yang sudah ada (bukan sistem terpisah).
+
+model TourismSite {
+  id          String   @id @default(uuid())
+  name        String
+  city        String?
+  description String?
+  photoKey    String? // object key MinIO, presigned URL saat baca
+  gmapsUrl    String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  packageSites TourPackageSite[]
+
+  @@map("tourism_sites")
+}
+
+// Master data reusable — satu situs bisa dipakai banyak paket ziarah berbeda.
+
+// 3 mode variable harga (docs/arsitektur-ziarah.md §12.2), berlaku sama untuk Transport & Hotel:
+// included = admin kunci 1 pilihan, harga dibakukan masuk harga jual paket, pilgrim tidak pilih.
+// user_choice = admin cuma hubungkan sumber, pilgrim pilih & bayar sendiri saat booking, harga
+// TIDAK masuk harga jual paket dasar. none = tidak dipakai (atau isi manual lewat Komponen Biaya).
+enum PriceVariableMode {
+  included
+  user_choice
+  none
+
+  @@map("price_variable_mode")
+}
+
+model TourPackage {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+
+  // Kendaraan — 3 mode (§12.2). transportTripId = sumber opsi, dipakai kalau mode = user_choice.
+  // includedTransportPricingId/Price dipakai kalau mode = included (1 kendaraan dikunci, harga
+  // di-snapshot & editable — pola sama TourPackageHotel.pricePerNight, §10.10).
+  transportMode              PriceVariableMode @default(none)
+  transportTripId            String? // reuse TransportTrip, bukan data harga baru
+  includedTransportPricingId String?
+  includedTransportPrice     Decimal?          @db.Decimal(14, 2)
+
+  // Hotel — 3 mode juga. included pakai TourPackageHotel (list, sejak §10). user_choice pakai
+  // TourPackageHotelOption (list opsi, §12.3).
+  hotelMode PriceVariableMode @default(none)
+
+  price     Decimal  @default(0) @db.Decimal(14, 2)
+  // cache "harga jual paket dasar" (komponen + included transport/hotel saja, TIDAK termasuk
+  // opsi user_choice) untuk katalog — harga final dihitung ulang server-side saat booking
+  // (docs/arsitektur-ziarah.md §12.4).
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  transportTrip            TransportTrip?           @relation(fields: [transportTripId], references: [id])
+  includedTransportPricing TransportPricing?        @relation(fields: [includedTransportPricingId], references: [id])
+  sites                    TourPackageSite[]
+  hotels                   TourPackageHotel[]
+  hotelOptions             TourPackageHotelOption[]
+  bookings                 BookingTourPackage[]
+
+  @@map("tour_packages")
+}
+
+model TourPackageSite {
+  id            String @id @default(uuid())
+  tourPackageId String
+  tourismSiteId String
+  order         Int    @default(0) // urutan kunjungan, untuk itinerary
+
+  tourPackage TourPackage @relation(fields: [tourPackageId], references: [id], onDelete: Cascade)
+  tourismSite TourismSite @relation(fields: [tourismSiteId], references: [id])
+
+  @@unique([tourPackageId, tourismSiteId])
+  @@map("tour_package_sites")
+}
+
+// Hotel sebagai komponen add-on (docs/arsitektur-ziarah.md §10) — pricePerNight di-snapshot dari
+// HotelRoomSchedule.price server-side saat baris dibuat (bukan dari client), TIDAK dimargin lagi
+// (pass-through, sama alasan kendaraan). Setelah itu pricePerNight cuma REFERENSI/default — admin
+// bisa edit lagi kapan saja (§10.10), breakdown selalu pakai nilai tersimpan ini, bukan re-fetch
+// live dari HotelRoomSchedule. Dipilih di level TEMPLATE paket, bukan booking-time seperti
+// kendaraan — sengaja TIDAK reserve HotelQuota, lihat §10.7.
+model TourPackageHotel {
+  id                  String   @id @default(uuid())
+  tourPackageId       String
+  hotelRoomScheduleId String
+  nights              Int
+  numRooms            Int      @default(1)
+  pricePerNight       Decimal  @db.Decimal(12, 2)
+  createdAt           DateTime @default(now())
+
+  tourPackage       TourPackage       @relation(fields: [tourPackageId], references: [id], onDelete: Cascade)
+  hotelRoomSchedule HotelRoomSchedule @relation(fields: [hotelRoomScheduleId], references: [id])
+
+  @@map("tour_package_hotels")
+}
+
+// Opsi hotel yang DITAWARKAN (bukan dikunci) — dipakai kalau TourPackage.hotelMode = user_choice
+// (docs/arsitektur-ziarah.md §12.3). Beda dari TourPackageHotel: harga TIDAK di-snapshot/dibakukan
+// ke harga paket, dihitung live (pass-through) dari HotelRoomSchedule.price saat pilgrim
+// benar-benar memilih + berapa kamar saat booking.
+model TourPackageHotelOption {
+  id                  String @id @default(uuid())
+  tourPackageId       String
+  hotelRoomScheduleId String
+  nights              Int // durasi ditentukan admin; jumlah kamar ditentukan pilgrim saat booking
+
+  tourPackage       TourPackage       @relation(fields: [tourPackageId], references: [id], onDelete: Cascade)
+  hotelRoomSchedule HotelRoomSchedule @relation(fields: [hotelRoomScheduleId], references: [id])
+
+  @@unique([tourPackageId, hotelRoomScheduleId])
+  @@map("tour_package_hotel_options")
+}
+
+// ─── GROUPS ───────────────────────────────────────────────────
+
+model Group {
+  id           String   @id @default(uuid())
+  groupCode    String   @unique
+  groupName    String?
+  leaderUserId String
+  totalMembers Int
+  createdAt    DateTime @default(now())
+
+  leader   User          @relation("GroupLeader", fields: [leaderUserId], references: [id])
+  members  GroupMember[]
+  bookings Booking[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id          String  @id @default(uuid())
+  groupId     String
+  userId      String?
+  inviteToken String? @unique
+  status      String  @default("invited")
+
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User? @relation(fields: [userId], references: [id])
+
+  @@map("group_members")
+}
+
+// ─── BOOKINGS ─────────────────────────────────────────────────
+
+model Booking {
+  id              String        @id @default(uuid())
+  bookingCode     String        @unique
+  userId          String
+  groupId         String?
+  status          BookingStatus @default(awaiting_payment)
+  departureDate   DateTime      @db.Date
+  returnDate      DateTime      @db.Date
+  season          String
+  totalAmount     Decimal       @db.Decimal(14, 2)
+  notes           String?
+  paymentDeadline DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  user  User   @relation(fields: [userId], references: [id])
+  group Group? @relation(fields: [groupId], references: [id])
+
+  pilgrims      BookingPilgrim[]
+  hotels        BookingHotel[]
+  transports    BookingTransport[]
+  flights       BookingFlight[]
+  muthowif      BookingMuthowif[]
+  catering      BookingCatering[]
+  tourPackages  BookingTourPackage[]
+  services      BookingService[]
+  haji          BookingHaji[]
+  visa          BookingVisa[]
+  payments      Payment[]
+  refunds       Refund[]
+  notifications NotificationLog[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([status, paymentDeadline])
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  awaiting_payment
+  payment_review
+  confirmed
+  active
+  completed
+  cancelled
+
+  @@map("booking_status")
+}
+
+// ─── PILGRIMS ─────────────────────────────────────────────────
+
+// docs/arsitektur-manifest.md §3 — kolom baku lama (fullName, gender, email, phone/whatsapp
+// +countryCode, passportNumber, passportExpiry, nationality, dateOfBirth) DIHAPUS, diganti
+// fieldValues: Json — bentuk & isinya mengikuti ManifestFieldRequirement produk yang relevan
+// untuk orang ini (lib/manifest/getRequirements.ts). Field kontak (Kontak, docs/arsitektur-
+// komponen-kontak.md) juga ikut masuk fieldValues (fieldType='phone', shape {countryCode,
+// number}) — komponen Kontak SEBELUMNYA punya kolom baku sendiri, sekarang bagian dari manifest
+// yang sama seperti field lain, tidak ada perlakuan khusus lagi.
+model BookingPilgrim {
+  id        String  @id @default(uuid())
+  bookingId String
+  userId    String? // link opsional ke akun kalau orang ini pembeli sendiri (prefill dari akun)
+  isLeader  Boolean @default(false) // tetap flag struktural (peran grup), bukan form field admin
+
+  fieldValues Json @default("{}")
+
+  booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  visaApplication VisaApplication?
+  documents       Document[]
+
+  @@index([bookingId])
+  @@map("booking_pilgrims")
+}
+
+model VisaApplication {
+  id               String     @id @default(uuid())
+  bookingPilgrimId String     @unique
+  visaProductId    String?
+  visaType         String
+  status           VisaStatus @default(pending_documents)
+  submittedAt      DateTime?
+  issuedAt         DateTime?
+  rejectionReason  String?
+  isForceMajeure   Boolean    @default(false)
+  notes            String?
+
+  // Snapshot harga saat booking dibuat (docs/arsitektur-harga.md §7) — field ada, TAPI BELUM
+  // DIISI kode manapun: menunggu Gap #1/#2 di docs/arsitektur-visa.md §7 diperbaiki dulu
+  // (visaProductId tidak pernah di-set saat create booking, wizard belum punya step pilih VisaProduct).
+  selectedDurationDays Int?
+  hppSnapshotRupiah    Decimal? @db.Decimal(14, 2)
+  sellPriceSnapshot    Decimal? @db.Decimal(14, 2)
+  exchangeRateIdsUsed  Json? // string[] — ExchangeRate.id per komponen HPP yang dipakai
+  vendorIdsUsed        Json? // string[] — Vendor.id per komponen HPP yang dipakai
+
+  pilgrim     BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
+  visaProduct VisaProduct?   @relation(fields: [visaProductId], references: [id])
+
+  @@map("visa_applications")
+}
+
+enum VisaStatus {
+  pending_documents
+  documents_complete
+  submitted_to_syarikah
+  in_review
+  issued
+  rejected
+
+  @@map("visa_status")
+}
+
+model Document {
+  id               String   @id @default(uuid())
+  bookingPilgrimId String
+  docType          String
+  fileName         String
+  filePath         String
+  fileSizeBytes    Int?
+  uploadedAt       DateTime @default(now())
+
+  pilgrim BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
+
+  @@index([bookingPilgrimId])
+  @@map("documents")
+}
+
+// ─── BOOKING COMPONENTS ───────────────────────────────────────
+
+model BookingHotel {
+  id                  String   @id @default(uuid())
+  bookingId           String
+  hotelRoomScheduleId String
+  checkIn             DateTime @db.Date
+  checkOut            DateTime @db.Date
+  nights              Int
+  numRooms            Int      @default(1)
+  numGuests           Int
+  pricePerNight       Decimal  @db.Decimal(12, 2) // snapshot — di-set SERVER-SIDE dari HotelRoomSchedule.price
+  totalPrice          Decimal  @db.Decimal(14, 2)
+
+  booking           Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  hotelRoomSchedule HotelRoomSchedule @relation(fields: [hotelRoomScheduleId], references: [id])
+
+  @@map("booking_hotels")
+}
+
+model BookingTransport {
+  id               String   @id @default(uuid())
+  bookingId        String
+  transportQuotaId String
+  travelDate       DateTime @db.Date
+  numPassengers    Int      @default(1)
+  unitPrice        Decimal  @db.Decimal(12, 2)
+  totalPrice       Decimal  @db.Decimal(14, 2)
+  pickupDetail     String?
+  dropoffDetail    String?
+
+  booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  transportQuota TransportQuota @relation(fields: [transportQuotaId], references: [id])
+
+  @@map("booking_transports")
+}
+
+model BookingMuthowif {
+  id         String    @id @default(uuid())
+  bookingId  String
+  muthowifId String? // nullable — null = belum di-assign admin (docs/arsitektur-muthowif.md §9)
+  startDate  DateTime  @db.Date
+  endDate    DateTime  @db.Date
+  numDays    Int
+  numPeople  Int
+  totalPrice Decimal   @db.Decimal(14, 2)
+  assignedAt DateTime?
+
+  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  muthowif Muthowif? @relation(fields: [muthowifId], references: [id])
+
+  @@map("booking_muthowif")
+}
+
+model BookingCatering {
+  id               String   @id @default(uuid())
+  bookingId        String
+  cateringOptionId String
+  startDate        DateTime @db.Date
+  endDate          DateTime @db.Date
+  numDays          Int
+  numPeople        Int
+  totalPrice       Decimal  @db.Decimal(14, 2)
+
+  booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  cateringOption CateringOption @relation(fields: [cateringOptionId], references: [id])
+
+  @@map("booking_catering")
+}
+
+model BookingTourPackage {
+  id               String   @id @default(uuid())
+  bookingId        String
+  tourPackageId    String
+  // Kendaraan — dipakai untuk mode included (auto-resolve, §12.6) MAUPUN user_choice (dipilih
+  // pilgrim di wizard). Null kalau transportMode = none.
+  transportQuotaId String?
+  tourDate         DateTime @db.Date // dari TransportQuota.travelDate, atau fallback departureDate booking
+  numPeople        Int
+  totalPrice       Decimal  @db.Decimal(14, 2) // dihitung server-side, bukan dari client
+
+  // Hotel user_choice (docs/arsitektur-ziarah.md §12.3) — diisi kalau pilgrim memilih opsi hotel
+  // saat booking. Null kalau hotelMode included/none (hotel included pakai TourPackageHotel di
+  // level template, tidak butuh dicatat per-booking).
+  chosenHotelRoomScheduleId String?
+  chosenHotelNumRooms       Int?
+
+  booking                 Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  tourPackage             TourPackage        @relation(fields: [tourPackageId], references: [id])
+  transportQuota          TransportQuota?    @relation(fields: [transportQuotaId], references: [id])
+  chosenHotelRoomSchedule HotelRoomSchedule? @relation(fields: [chosenHotelRoomScheduleId], references: [id])
+
+  @@map("booking_tour_packages")
+}
+
+model BookingService {
+  id             String    @id @default(uuid())
+  bookingId      String
+  hotelServiceId String
+  serviceDate    DateTime? @db.Date
+  quantity       Int       @default(1)
+  totalPrice     Decimal   @db.Decimal(14, 2)
+
+  booking      Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  hotelService HotelService @relation(fields: [hotelServiceId], references: [id])
+
+  @@map("booking_services")
+}
+
+model BookingHaji {
+  id            String  @id @default(uuid())
+  bookingId     String
+  hajiProductId String
+  numPersons    Int     @default(1)
+  totalPrice    Decimal @db.Decimal(14, 2)
+
+  booking     Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  hajiProduct HajiProduct @relation(fields: [hajiProductId], references: [id])
+
+  @@map("booking_haji")
+}
+
+model BookingVisa {
+  id            String  @id @default(uuid())
+  bookingId     String
+  visaProductId String
+  numPersons    Int     @default(1)
+  totalPrice    Decimal @db.Decimal(14, 2)
+
+  booking     Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  visaProduct VisaProduct @relation(fields: [visaProductId], references: [id])
+
+  @@map("booking_visa")
+}
+
+// ─── PAYMENTS & REFUNDS ───────────────────────────────────────
+
+model Payment {
+  id                      String        @id @default(uuid())
+  bookingId               String
+  amount                  Decimal       @db.Decimal(14, 2)
+  method                  String
+  status                  PaymentStatus @default(pending)
+  buktiTransferPath       String?
+  buktiTransferUploadedAt DateTime?
+  confirmedById           String?
+  confirmedAt             DateTime?
+  notes                   String?
+  createdAt               DateTime      @default(now())
+
+  booking     Booking @relation(fields: [bookingId], references: [id])
+  confirmedBy User?   @relation("ConfirmedBy", fields: [confirmedById], references: [id])
+
+  @@index([bookingId])
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  pending
+  confirmed
+  rejected
+
+  @@map("payment_status")
+}
+
+model Refund {
+  id             String       @id @default(uuid())
+  bookingId      String
+  amount         Decimal      @db.Decimal(14, 2)
+  reason         String
+  isForceMajeure Boolean      @default(false)
+  status         RefundStatus @default(pending)
+  approvedById   String?
+  approvedAt     DateTime?
+  paidAt         DateTime?
+  notes          String?
+  createdAt      DateTime     @default(now())
+
+  booking    Booking @relation(fields: [bookingId], references: [id])
+  approvedBy User?   @relation("ApprovedBy", fields: [approvedById], references: [id])
+
+  @@map("refunds")
+}
+
+enum RefundStatus {
+  pending
+  approved
+  paid
+  rejected
+
+  @@map("refund_status")
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────
+
+model NotificationLog {
+  id             String   @id @default(uuid())
+  userId         String
+  bookingId      String?
+  channel        String
+  type           String
+  recipient      String
+  messagePreview String?
+  status         String   @default("sent")
+  sentAt         DateTime @default(now())
+  error          String?
+
+  user    User     @relation(fields: [userId], references: [id])
+  booking Booking? @relation(fields: [bookingId], references: [id])
+
+  @@index([userId])
+  @@index([bookingId])
+  @@map("notification_logs")
+}
+
+// ─── PRICING / HPP ────────────────────────────────────────────
+// Infrastruktur harga & HPP universal — lihat docs/arsitektur-harga.md untuk desain lengkap.
+// Scope awal: Visa saja (docs/arsitektur-visa.md §9). Skema generik untuk modul lain nanti.
+
+model Vendor {
+  id          String   @id @default(uuid())
+  name        String // "Syarikah BRN", dll — bebas, tidak hardcode
+  category    String? // "syarikah" | "maskapai" | dll — bebas teks, filter UI saja, lihat docs/arsitektur-harga.md §18
+  country     String   @default("Saudi Arabia")
+  contactInfo String?
+  addressId   String?  @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat bisnis vendor
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  address Address?      @relation(fields: [addressId], references: [id])
+  costs   ProductCost[]
+
+  @@map("vendors")
+}
+
+model ExchangeRate {
+  id            String   @id @default(uuid())
+  fromCurrency  String // "USD" | "SAR"
+  toCurrency    String   @default("IDR")
+  midRate       Decimal  @db.Decimal(12, 4)
+  spreadPercent Decimal  @db.Decimal(5, 2)
+  sellRate      Decimal  @db.Decimal(12, 4)
+  source        String // "EXCHANGERATE_API" | "BI_JISDOR" | dll
+  fetchedAt     DateTime @default(now())
+
+  @@index([fromCurrency, toCurrency, fetchedAt])
+  @@map("exchange_rates")
+}
+
+model ProductCost {
+  id            String  @id @default(uuid())
+  productType   String // "visa" | dst — sama konvensi dengan PackageItem.productType
+  productId     String // FK polimorfik, tidak di-enforce di DB, sama seperti PackageItem
+  vendorId      String
+  costComponent String // "individu" | "biaya_non_hotel" | dll — bebas, tidak hardcode
+  currency      String // "USD" | "SAR" | dll
+  costTiers     Json // [{ minDays, maxDays, cost }] — flat per tier, lihat docs/arsitektur-harga.md §3.3
+  isActive      Boolean @default(true)
+  notes         String?
+
+  vendor Vendor @relation(fields: [vendorId], references: [id])
+
+  @@map("product_costs")
+}
+
+model PricingRule {
+  id                String   @id @default(uuid())
+  productType       String? // null = default global, "visa" = override khusus tipe itu
+  minMarginPercent  Decimal  @db.Decimal(5, 2)
+  roundingIncrement Int      @default(50000)
+  updatedAt         DateTime @updatedAt
+
+  @@unique([productType])
+  @@map("pricing_rules")
+}
+
+model PreferredVendor {
+  id            String @id @default(uuid())
+  productType   String
+  productId     String
+  costComponent String
+  vendorId      String
+
+  @@unique([productType, productId, costComponent])
+  @@map("preferred_vendors")
+}
+
+// ─── ALAMAT (docs/arsitektur-alamat.md) ────────────────────────
+// Data wilayah resmi Indonesia (Kemendagri, via cahyadsn/wilayah) + entitas Address reusable
+// lintas modul. 4 tabel wilayah = data referensi murni, tidak pernah diedit lewat aplikasi.
+
+model AddressProvince {
+  id   String @id // kode wilayah Kemendagri, mis. "11"
+  name String
+
+  regencies AddressRegency[]
+  addresses Address[]
+
+  @@map("address_provinces")
+}
+
+// Kabupaten & kota — level administratif SAMA (paralel), dibedakan `type`. type 100% reliable
+// diturunkan dari prefix nama sumber ("Kabupaten "/"Kota ") saat impor — docs/arsitektur-alamat.md §2.
+model AddressRegency {
+  id         String @id // mis. "11.01"
+  provinceId String
+  name       String
+  type       String // 'kabupaten' | 'kota'
+
+  province  AddressProvince   @relation(fields: [provinceId], references: [id])
+  districts AddressDistrict[]
+  addresses Address[]
+
+  @@index([provinceId])
+  @@map("address_regencies")
+}
+
+model AddressDistrict {
+  id        String @id // mis. "11.01.01"
+  regencyId String
+  name      String
+
+  regency   AddressRegency   @relation(fields: [regencyId], references: [id])
+  villages  AddressVillage[]
+  addresses Address[]
+
+  @@index([regencyId])
+  @@map("address_districts")
+}
+
+// Desa & kelurahan — TIDAK ADA field `type`: data sumber tidak reliably membedakan keduanya
+// (cuma 21 dari 83.762 baris punya penanda eksplisit) — docs/arsitektur-alamat.md §2.
+model AddressVillage {
+  id         String @id // mis. "11.01.01.2001"
+  districtId String
+  name       String
+
+  district  AddressDistrict @relation(fields: [districtId], references: [id])
+  addresses Address[]
+
+  @@index([districtId])
+  @@map("address_villages")
+}
+
+// Entitas nilai alamat — dipakai lintas modul lewat FK `addressId` biasa (BUKAN tabel pivot,
+// 1 pemilik = 1 Address, tidak di-share). docs/arsitektur-alamat.md §3.1.
+model Address {
+  id          String      @id @default(uuid())
+  type        AddressType // 'domestic' (Indonesia) | 'international' — tab mana yang dipakai
+  fullAddress String // "Alamat Lengkap" — jalan/nomor rumah/RT-RW/patokan, dipakai KEDUA tipe
+  postalCode  String?
+
+  // Domestik (tab "Alamat Indonesia") — diisi HANYA kalau type='domestic'
+  provinceId String?
+  regencyId  String?
+  districtId String?
+  villageId  String?
+
+  // Internasional (tab "Alamat Luar Negeri") — diisi HANYA kalau type='international'
+  countryCode String? // ISO 3166-1 alpha-2 — lib/constants/countries.ts, TIDAK di-FK ke tabel DB
+  city        String?
+  stateRegion String?
+
+  province AddressProvince? @relation(fields: [provinceId], references: [id])
+  regency  AddressRegency?  @relation(fields: [regencyId], references: [id])
+  district AddressDistrict? @relation(fields: [districtId], references: [id])
+  village  AddressVillage?  @relation(fields: [villageId], references: [id])
+
+  // Back-relation 1:1 — docs/arsitektur-alamat.md §9. Tiap entity beda tipe, tidak di-share.
+  user   User?
+  vendor Vendor?
+  hotel  Hotel?
+
+  @@map("addresses")
+}
+
+enum AddressType {
+  domestic
+  international
+
+  @@map("address_type")
+}

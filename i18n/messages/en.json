@@ -1,0 +1,67 @@
+{
+  "common": {
+    "loading": "Loading...",
+    "error": "An error occurred",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "back": "Back",
+    "next": "Next",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "edit": "Edit",
+    "view": "View"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "phone": "WhatsApp Number",
+    "otp": "OTP Code",
+    "sendOtp": "Send OTP",
+    "verifyOtp": "Verify",
+    "logout": "Logout",
+    "name": "Full Name",
+    "email": "Email"
+  },
+  "booking": {
+    "new": "New Booking",
+    "dates": "Travel Dates",
+    "hotel": "Select Hotel",
+    "transport": "Select Transport",
+    "muthowif": "Select Muthowif",
+    "addons": "Add-ons",
+    "pilgrims": "Pilgrim Data",
+    "payment": "Payment",
+    "summary": "Summary",
+    "status": {
+      "awaiting_payment": "Awaiting Payment",
+      "payment_review": "Payment Under Review",
+      "confirmed": "Confirmed",
+      "active": "Active",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    }
+  },
+  "visa": {
+    "status": {
+      "pending_documents": "Pending Documents",
+      "documents_complete": "Documents Complete",
+      "submitted_to_syarikah": "Submitted to Syarikah",
+      "in_review": "In Review",
+      "issued": "Issued",
+      "rejected": "Rejected"
+    }
+  },
+  "nav": {
+    "home": "Home",
+    "hotels": "Hotels",
+    "transport": "Transport",
+    "muthowif": "Muthowif",
+    "catering": "Catering",
+    "tours": "Tours",
+    "dashboard": "Dashboard",
+    "bookings": "My Bookings",
+    "admin": "Admin",
+    "superadmin": "Super Admin"
+  }
+}

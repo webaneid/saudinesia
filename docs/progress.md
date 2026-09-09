@@ -1,0 +1,616 @@
+# Saudinesia — Development Progress
+
+Track every major milestone here. Check off items as they are completed.
+See `docs/spec.md` for full feature descriptions. Append decisions to `docs/decisions.md`.
+
+---
+
+## M1 — Project Foundation
+- [x] Bun project initialized
+- [x] Next.js 15 + TypeScript strict configured
+- [x] Tailwind CSS configured with shadcn/ui color tokens
+- [x] Prisma schema (28 tables) created and client generated
+- [x] Folder structure scaffolded (pages, API routes, components, lib)
+- [x] i18n setup (next-intl, id + en message files)
+- [x] Middleware (auth guard + role check + intl)
+- [x] docker-compose.yml (app + postgres + redis + minio)
+- [x] Dockerfile (Bun standalone build)
+- [x] `.env.example` with all required variables
+- [x] Run `prisma migrate dev` on a live DB to generate first migration (`20260509174718_init`)
+- [x] Migration `add_haji_visa_package` — tambah HajiProduct, VisaProduct, Package, PackageItem, BookingHaji, BookingVisa
+- [x] Bucket `saudinesia-docs` dibuat manual via `mc mb local/saudinesia-docs` (dev local)
+- [ ] Set up Nginx reverse proxy on Hostinger VPS
+- [ ] Configure Let's Encrypt TLS (certbot)
+
+---
+
+## M2 — Authentication ✓
+- [x] Email + password login (`POST /api/v1/auth/login`)
+- [x] Registration with WA OTP verification (`POST /api/v1/auth/register` + `POST /api/v1/auth/verify-phone`)
+- [x] Forgot password via WA OTP, 3-step (`forgot-password` → `verify-reset-otp` → `reset-password`)
+- [x] Logout (`POST /api/v1/auth/logout`)
+- [x] Password strength: min 8 char + huruf + angka + karakter spesial (Zod)
+- [x] Login page UI — email + password + show/hide + lupa password link
+- [x] Register page UI — multi-step: form → OTP verify dengan dev banner
+- [x] Forgot password page UI — 3-step: email → OTP → password baru
+- [x] Admin login UI — dark theme, email + password, no registration
+- [x] OTP components reused: `OtpInput`, `OtpCountdown`, `useOtpCountdown`
+- [x] Dev mode: `devCode` dikembalikan di response OTP (tidak perlu GOWA/Redis)
+- [x] DB schema: email unique, passwordHash (bcrypt), phoneVerifiedAt, resetToken
+- [x] Superadmin seed: `bun run db:seed` (email + password dari .env.local)
+- [x] Auth guard: middleware + `requireSession/requireAdmin/requireSuperAdmin` per route handler
+
+---
+
+## M3 — Public Catalog ✓
+- [x] Landing page — hero, service grid, featured hotels & muthowif
+- [x] Hotel catalog page — filter kota & bintang, sort jarak Haram, harga per season
+- [x] Hotel detail page — tipe kamar + quota badge, layanan hotel *(catatan audit 2026-07-19: bagian "layanan hotel" cuma benar dari sisi render — tidak pernah ada jalur admin untuk mengisi `HotelService`, jadi section itu selalu kosong di praktik. Lihat `docs/arsitektur-hotel.md` §8 Gap #3.)*
+- [x] `GET /api/v1/catalog/hotels` — season pricing, quota availability
+- [x] Transport catalog page — armada kendaraan + rute tersedia
+- [x] `GET /api/v1/catalog/transport` — per seat & charter, quota-aware
+- [x] Muthowif catalog page — profil, rating, bahasa, harga per season
+- [x] Muthowif detail page
+- [x] `GET /api/v1/catalog/muthowif` — ketersediaan per date range
+- [x] Catering options page
+- [x] Heritage tours page — paket ziarah dengan durasi & harga
+- [x] Season detection wired ke semua pricing (Regular / Ramadan / Hajj)
+- [x] Header navigation dengan auth state (Dashboard / Masuk / Daftar)
+- [x] Button `asChild` support via Radix Slot
+- [x] Badge component (success / warning / muted variants)
+
+---
+
+## M4 — Booking Wizard (7 Steps) ✓
+
+> Arsitektur & audit lengkap booking core (wizard, payment, cancellation, cron): `docs/arsitektur-umroh.md` (source of truth, per 2026-07-08).
+
+- [x] `useDraft` hook — localStorage persistence, auto-compute total, survive refresh/close browser
+- [x] `WizardShell` layout — progress bar 7 step, price sidebar sticky
+- [x] `PriceSidebar` — itemized running total dari draft
+- [x] Step 1: Date picker, nights auto-compute, season badge, individual/group toggle
+- [x] Step 2: Hotel picker Makkah + Madinah, pilih tipe kamar, kuota tersisa
+- [x] Step 3: Transport, per seat vs charter, multi-route selection
+- [x] Step 4: Muthowif picker dengan availability check, opsional/skip
+- [x] Step 5: Add-ons — katering + ziarah, semua opsional
+- [x] Step 6: Data jamaah — nama, gender, email, phone, visa type (NO dokumen di wizard)
+- [x] Step 7: Ringkasan + instruksi bayar + tombol konfirmasi booking
+- [x] `POST /api/v1/bookings` — atomic `prisma.$transaction(Serializable)`, reserve semua quota
+- [x] Booking confirmation page — kode booking, status, detail layanan, instruksi bayar
+- [x] UX decision: dokumen diupload dari dashboard setelah booking, tidak memblok wizard
+- [ ] `POST /api/v1/bookings/[id]/payment/bukti` — upload bukti (M8, butuh MinIO)
+- [ ] **BUG kritis ditemukan saat audit (`docs/arsitektur-umroh.md` §7 Gap #1):** Haji tidak bisa dibooking sama sekali — `createBookingSchema` tidak punya field `haji`, tidak ada `reserveHajiQuota()`, tidak ada `tx.bookingHaji.create()`. `HajiProduct` juga tidak punya kolom `pendingQuota` (beda dari pola Hotel/Transport) — risiko overbooking jika fitur ini dibangun tanpa perbaikan skema dulu.
+- [ ] **BUG kritis (Gap #2):** Self-cancel jamaah (`DELETE /api/v1/bookings/[id]`) tidak pernah melepas kuota hotel/transport/muthowif yang sudah direservasi — beda dengan auto-cancel cron yang benar. Kuota bocor permanen setiap self-cancel.
+- [ ] **BUG kritis (Gap #3):** Tidak ada satu pun record `Refund` yang pernah dibuat di kode — model lengkap ada di schema tapi fondasi datanya belum ada, bukan cuma UI-nya yang belum ada.
+- [ ] **Gap (Gap #4):** `totalAmount` dipercaya dari payload klien di `POST /api/v1/bookings`, tidak dihitung ulang server-side.
+- [ ] **Gap (kecil, dead code):** `app/api/v1/internal/autocancel/route.ts` dan `.../internal/reminders/route.ts` — stub tak terpakai, mekanisme aktual node-cron via `instrumentation.ts`
+
+---
+
+## M5 — Pilgrim Dashboard ✓
+- [x] `/dashboard` — booking list, status badge dari constants, link buat booking baru
+- [x] `/bookings/[id]` — detail: hotel, payment notice, jamaah + visa status, upload bukti CTA
+- [x] `GET /api/v1/bookings` — list my bookings
+- [x] `GET /api/v1/bookings/[id]` — full booking detail dengan semua relasi
+- [x] `DELETE /api/v1/bookings/[id]` — cancel + refund amount dari `cancellationPolicy.ts`
+- [x] `POST /api/v1/bookings/[id]/payment/bukti` — upload bukti (dev: skip MinIO, prod: upload MinIO)
+- [x] Profile page — edit nama, lihat email + phone, badge verifikasi WA
+- [x] Pilgrim layout dengan nav (Dashboard, Buat Booking, Profil, Keluar)
+- [x] Semua status label dari `lib/constants/booking.ts` — tidak hardcode
+- [x] Bank account dari env `NEXT_PUBLIC_BANK_*` — tidak hardcode, ganti env saja
+- [ ] `GET /api/v1/bookings/[id]/invoice` — PDF invoice (M11, butuh @react-pdf/renderer)
+
+---
+
+
+## Admin Dashboard Redesign ✓
+- [x] Role `manager` ditambah ke Prisma enum + migration `add_manager_role`
+- [x] `lib/auth/session.ts` — `SessionPayload.role` pakai `UserRole` dari Prisma (auto-update)
+- [x] `requireManager()` ditambah — manager | superadmin
+- [x] `ADMIN_ROLES`, `MANAGER_ROLES`, `SUPERADMIN_ROLES` constant arrays
+- [x] Middleware diperbarui — hapus `/superadmin` path, semua admin ke `/admin`
+- [x] `/superadmin/*` dihapus total — digabung ke `/admin/products/*` dan `/admin/system/*`
+- [x] Unified admin layout — sidebar 3 section conditional per role (Operasional / Produk / Sistem)
+- [x] API routes: `/api/v1/superadmin/*` → `/api/v1/admin/products/*` + `/api/v1/admin/system/*`
+- [x] Guard produk: `requireSuperAdmin()` → `requireManager()` di semua product routes
+- [x] Admin overview diperbarui — stat operasional + stat produk (hanya tampil untuk manager+)
+- [x] Login redirect: semua admin role → `/admin` (satu URL)
+- [x] Seed: tambah demo user `manager@saudinesia.local` dan `ops@saudinesia.local`
+- [x] CLAUDE.md folder structure diperbarui
+- [x] decisions.md diperbarui
+
+---
+## M6 — Group Booking
+- [ ] Group creation flow (group name, size)
+- [ ] Mode A: leader fills all pilgrim data in one session
+- [ ] Mode B: leader generates invite links per member
+- [ ] Member invite page (unique token-based) for self-service data entry
+- [ ] Group dashboard: per-member document status, overall payment status
+- [ ] `POST /api/v1/groups` + `GET /api/v1/groups/[id]`
+- [ ] `POST /api/v1/groups/[id]/invite` — generate member invite link
+- [ ] Consolidated group invoice
+
+---
+
+## M7 — Visa Documentation Module ✓ (partial)
+
+> Arsitektur & audit lengkap modul Visa: `docs/arsitektur-visa.md` (source of truth, per 2026-07-08).
+
+- [x] Document upload popup per jamaah — `components/shared/media/UploadModal.tsx`
+- [x] Document grid dengan status per docType — `components/shared/media/DocumentGrid.tsx`
+- [x] Document card (upload, preview, replace, delete) — `components/shared/media/DocumentCard.tsx`
+- [x] Document viewer fullscreen (image + PDF embed) via presigned URL — `components/shared/media/PreviewModal.tsx`
+- [x] `useDocuments` hook — fetch list, XHR upload with progress, delete, preview URL
+- [x] `GET /api/v1/pilgrims/[bookingId]/[pilgrimId]/documents` — list + missing docTypes
+- [x] `POST /api/v1/pilgrims/[bookingId]/[pilgrimId]/documents` — upload ke MinIO, simpan DB
+- [x] `GET /api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/[docId]` — presigned URL (15m pilgrim / 60m admin)
+- [x] `DELETE /api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/[docId]` — hapus MinIO + DB
+- [x] Status auto-advance: `pending_documents` → `documents_complete` saat semua dokumen uploaded
+- [x] Status revert: `documents_complete` → `pending_documents` saat dokumen dihapus
+- [x] Admin view readonly — `components/admin/PilgrimDocuments.tsx` (accordion, ZIP download)
+- [x] `GET /api/v1/admin/bookings/[id]/documents/zip` — ZIP semua dokumen satu booking
+- [x] `lib/storage/minio.ts` — tambah `deleteObject()` dan `getObjectBuffer()`
+- [x] Dipasang di pilgrim booking detail + admin booking detail
+- [x] `next.config.ts` — bodySizeLimit 6mb untuk upload 5MB + overhead
+- [ ] Visa status timeline per pilgrim (visual stepper)
+- [ ] Visa type selection per pilgrim (Umroh / Visit / Business / Work)
+- [x] `PUT /api/v1/admin/visa/[pilgrimId]/status` — admin updates status (sudah ada, sudah di-wire di M9 VisaActions)
+- [x] WhatsApp notification on each visa status change — wired ke route handler
+- [ ] **Gap ditemukan saat audit (`docs/arsitektur-visa.md` §7):** `POST /api/v1/bookings` tidak set `visaApplication.visaProductId` — `app/api/v1/bookings/route.ts:146-156`
+- [ ] **Gap:** wizard belum punya step pilih `VisaProduct` dari katalog — `app/[locale]/(pilgrim)/bookings/new/pilgrims/page.tsx`
+- [ ] **Gap:** `visaType` di validator booking masih `z.enum([...])`, kontradiksi dengan `VisaProduct.visaType` free text — `lib/validators/booking.ts:64`
+- [ ] **Gap:** `DocumentGrid`/`PilgrimDocuments` dipanggil tanpa prop `requirements` sehingga requirements dinamis per produk visa tidak pernah terlihat user — `app/[locale]/(pilgrim)/bookings/[id]/page.tsx:147-151`, `app/[locale]/admin/(protected)/bookings/[id]/page.tsx:118-124`
+- [ ] **Gap (ditemukan lewat sweep kelengkapan, `docs/arsitektur-visa.md` §7 Gap #5):** validasi transisi status visa hanya ada di client (`VisaActions.tsx` `TRANSITIONS` map) — `PUT /api/v1/admin/visa/[pilgrimId]/status` menerima lompatan status apa pun tanpa cek status saat ini
+- [ ] **Gap (Gap #6):** semua 5 handler CRUD produk visa collapse semua error jadi `403 Forbidden` polos, termasuk error DB non-auth — melanggar konvensi API sendiri di `CLAUDE.md`, akan menyamarkan error FK constraint begitu `BookingVisa` mulai diisi (lihat rencana `docs/arsitektur-booking.md`)
+
+---
+
+## M8 — Payments
+- [x] Payment queue page (admin): list bookings with uploaded bukti — di M9
+- [x] `POST /api/v1/admin/payments/[id]/confirm` — confirm or reject
+- [x] Booking status updated to `confirmed` on payment confirmation
+- [x] Quota moved from pending → booked on confirmation
+- [x] `startAutoCancelJob()` wired into app startup via `instrumentation.ts`
+- [x] T+12h and T+22h payment reminder notifications (cron) — `startPaymentReminderJob()`
+- [x] Auto-cancel notification + quota release (cron) — `startAutoCancelJob()`
+- [x] WA notification on payment confirmed / rejected — wired ke `POST /api/v1/admin/payments/[id]/confirm`
+- [ ] Refund request form + `RefundStatus` tracking — lihat `docs/arsitektur-umroh.md` §7 Gap #3: bahkan `prisma.refund.create()` belum pernah dipanggil di mana pun, jadi ini butuh fondasi data dulu sebelum UI
+- [ ] Force-majeure flag + super admin approval for overrides
+- [x] **Booking engine universal** (`docs/arsitektur-booking.md`) — adapter registry kuota + satu fungsi cancel + `items[]` generik + `totalAmount` server-computed + checkout pendek + invoice PDF. **Seluruh 8 step SELESAI & TERVERIFIKASI (2026-07-24/25)**, menutup Gap #1 (parsial — API/skema, UI Haji sengaja dikeluarkan), #2-#4 `arsitektur-umroh.md` §7. Dokumen sekarang SOURCE OF TRUTH as-built, bukan lagi rencana — lihat entri Booking Engine Step 1-8 di atas.
+
+---
+
+## Arsitektur Harga / HPP (`docs/arsitektur-harga.md`) — Eksekusi Bertahap
+
+Mengikuti "Fase Eksekusi SOP" di `CLAUDE.md`. Scope awal: Visa saja.
+
+- [x] **Fase 1 — Schema** (2026-07-17): 5 model baru ditambahkan ke `prisma/schema.prisma` — `Vendor`, `ExchangeRate`, `ProductCost` (dengan `costComponent`), `PricingRule`, `PreferredVendor`. Migrasi `20260717065932_add_pricing_hpp_infrastructure` dibuat & diterapkan. `bun run build` — 0 error.
+  - Migrasi ini juga menangkap drift skema Transport v3 & Visa Product v2 (`country`) yang sebelumnya cuma diterapkan via `db push`, belum pernah ter-migrate resmi — lihat `docs/decisions.md` untuk detail.
+  - DB lokal di-reset penuh (`prisma migrate reset`, konsensus eksplisit user) untuk menyamakan riwayat migrasi sebelum migrasi baru bisa diterapkan, lalu di-seed ulang.
+- [x] **Fase 2 — Cron kurs** (2026-07-17): `lib/cron/exchangeRateJob.ts` — fetch USD/IDR & SAR/IDR dari ExchangeRate-API (`open.er-api.com`, gratis tanpa API key), jadwal `0 8,16 * * *` dengan timezone eksplisit `Asia/Jakarta`. Didaftarkan di `instrumentation.ts`. Sanity-check peg SAR/USD (~3.75) — log warning kalau menyimpang >2%, tidak mengubah data. Diverifikasi manual: kurs asli berhasil ter-fetch & tersimpan dengan sellRate terhitung benar (spread 1.5%). `bun run build` — 0 error.
+  - **Deviasi dari rencana (dicatat, bukan bug):** `spreadPercent` untuk sementara hardcode (`DEFAULT_SPREAD_PERCENT = 1.5` di kode) karena halaman admin settings (Fase 3) belum ada — akan dipindah jadi baca dari setting admin begitu Fase 3 selesai. Lihat `docs/decisions.md`.
+- [x] **Fase 3 — Admin Settings** (2026-07-17): `app/[locale]/admin/(protected)/system/settings/page.tsx` — halaman baru (link sidebar sudah ada sejak awal, halamannya baru sekarang dibuat). 2 section: "Margin & Pembulatan Harga" (GET-or-create baris global `PricingRule`, PUT update) dan "Vendor/Syarikah" (list, create, toggle aktif/nonaktif — bukan hapus fisik, sama pola dengan Transport vehicle). API: `admin/system/settings/pricing-rule` (GET/PUT), `admin/system/settings/vendors` (GET/POST), `admin/system/settings/vendors/[id]` (PUT/DELETE=soft), semua `requireSuperAdmin()` dengan error handling yang benar (401/403/500 dibedakan, tidak collapse semua ke 403 seperti bug yang ditemukan di CRUD Visa). Diverifikasi end-to-end lewat browser: login superadmin → margin default 20%/Rp50rb otomatis ter-buat → tambah vendor "BRN" → toggle nonaktif → update margin ke 25%, semua berfungsi, tanpa console error. `bun run build` — 0 error.
+- [x] **Fase 4 — Admin: HPP per produk Visa** (2026-07-17): section baru "HPP & Komponen Biaya" di `/products/visa/[id]` — builder untuk `ProductCost` per komponen (nama bebas, mis. `individu`/`biaya_non_hotel`), vendor, mata uang, dan tarif per durasi (`costTiers`, tombol "Jadikan Pilihan" per komponen untuk `PreferredVendor`). API baru: `admin/products/visa/[id]/costs` (GET/POST), `.../costs/[costId]` (PUT/DELETE), `.../costs/preferred` (PUT). Auto-set `PreferredVendor` kalau baru 1 vendor untuk komponen itu (UX: tidak perlu klik dua kali). Diverifikasi end-to-end via browser: buat produk "Visa Non-Hotel Umroh", tambah komponen "biaya_non_hotel" dari vendor "BRN" (20-30 hari, Rp1.500.000), tersimpan benar dan otomatis jadi Vendor Pilihan — dikonfirmasi juga lewat query DB langsung. `bun run build` — 0 error.
+- [x] **Fase 5 — Fungsi `computeSellPrice()`** (2026-07-17): `lib/pricing/computeSellPrice.ts` — implementasi persis §5 `docs/arsitektur-harga.md`: jumlahkan HPP semua komponen aktif yang vendornya sedang preferred untuk komponen itu, konversi tiap komponen ke IDR pakai kurs `sellRate` terbaru sesuai currency-nya, tambah margin (`PricingRule` override per productType atau fallback global), bulatkan ke kelipatan (`roundToNearest`, bukan `roundUp`). Komponen tanpa tier yang cocok untuk `jumlahHari` dilewati (bukan error) — mendukung komponen yang memang cuma berlaku rentang hari tertentu. Diverifikasi dengan data nyata dari Fase 4: hari-25 (cocok tier 20-30) menghasilkan HPP & harga jual yang matematis benar (termasuk pembulatan tepat ke kelipatan Rp50.000); hari-5 (di luar semua tier) menghasilkan 0 tanpa error. `bun run build` — 0 error.
+- [x] **Fase 6 — Mekanisme Cache Refresh** (2026-07-17): migrasi tambahan `add_visa_pricing_cache_fields` (field `requiredComponents`, `durationFeeRules` di `VisaProduct`, didesain di `arsitektur-visa.md` §9.2 tapi belum ter-migrate sebelumnya). `lib/pricing/refreshVisaProductCache.ts` — `refreshVisaProductCache(productId)` (hitung ulang cache 1 produk) dan `refreshAllVisaProductCaches(currencies?)` (semua produk, opsional filter by currency yang baru berubah). Disambungkan ke 5 titik pemicu: create/update/delete `ProductCost`, update `PreferredVendor`, update `PricingRule` global, dan akhir cron kurs. Diverifikasi end-to-end: cron kurs → cache produk visa ter-refresh otomatis → `durationFeeRules`/`price` konsisten matematis dengan `computeSellPrice()` langsung. `bun run build` — 0 error.
+  - **Insiden saat eksekusi:** `prisma migrate diff --shadow-database-url` sempat salah dipakai mengarah ke DB asli (bukan DB sementara terpisah), menyebabkan seluruh data lokal (termasuk data uji Fase 3-5) terhapus tanpa sengaja. Direseed ulang. Lihat `docs/decisions.md` untuk detail & perbaikan proses ke depan.
+- [x] **Fase 7 — Field Snapshot (schema saja)** (2026-07-17): migrasi `add_visa_application_price_snapshot` — `VisaApplication` dapat 5 field baru: `selectedDurationDays`, `hppSnapshotRupiah`, `sellPriceSnapshot`, `exchangeRateIdsUsed`, `vendorIdsUsed` (docs/arsitektur-harga.md §7). **Field ada tapi BELUM DIISI kode manapun** — pengisiannya butuh `POST /api/v1/bookings` benar-benar men-set `visaProductId` dan menjalankan `computeSellPrice()` saat create booking, yang menunggu Gap #1/#2 di `docs/arsitektur-visa.md` §7 diperbaiki (di luar scope eksekusi arsitektur harga ini). `bun run build` — 0 error. Migrasi kali ini pakai database shadow terpisah yang benar (`saudinesia_shadow`, dibuat & dihapus khusus untuk keperluan ini) — tidak ada data hilang, beda dari insiden Fase 6.
+
+**SEMUA 7 FASE ARSITEKTUR HARGA SELESAI.** Ringkasan status: infrastruktur HPP/kurs/margin/vendor lengkap dan berfungsi untuk Visa; yang masih bergantung pada modul lain (wizard pilih VisaProduct, isi snapshot saat booking) menunggu perbaikan Gap #1/#2 `docs/arsitektur-visa.md` §7 — dicatat eksplisit, bukan diklaim selesai.
+
+- [x] **Audit sinkronisasi arsitektur vs kode** (2026-07-17): `docs/arsitektur-harga.md` dicek ulang menyeluruh terhadap kode aktual (bukan cuma dipercaya dari draf saat eksekusi). Ditemukan & diperbaiki: (1) status banner dokumen masih bilang "RENCANA — belum diimplementasikan" padahal semua 7 fase sudah selesai — diperbaiki jadi "DIIMPLEMENTASIKAN & TERVERIFIKASI"; (2) tidak ada tabel API Routes maupun seksi Admin UI di dokumen padahal 6 route dan 2 halaman admin sudah dibangun — ditambahkan §11 dan §12; (3) beberapa klaim "belum didesain"/"belum ada" di §3.4, §6.2, §7 sudah stale, diperbaiki. **5 gap nyata ditemukan** dan didokumentasikan di §13 dokumen itu (belum diperbaiki kodenya): `spreadPercent` kurs hardcode, field snapshot booking belum diisi, `PricingRule` override per-tipe belum ada UI, nuansa `@@unique` nullable, dan **yang paling penting**: route lama `PUT /api/v1/admin/products/visa/[id]` masih menerima `price` manual tanpa validasi dan tanpa memicu cache refresh — bisa diam-diam ter-overwrite begitu ada perubahan HPP berikutnya.
+- [x] **Audit sinkronisasi arsitektur vs kode, ronde 2** (2026-07-18): dicek ulang `docs/arsitektur-harga.md` (§1-18) dan `docs/arsitektur-visa.md` (§1-10) menyeluruh terhadap kode aktual, sebelum lanjut ke fitur berikutnya.
+  - **`docs/arsitektur-harga.md`: 100% sinkron**, tidak ada perbaikan diperlukan — tiap endpoint (`cost-tiers`, `preview`, `simulate`, `PUT`/`POST` visa product, `catalog/visa`), tiap fungsi (`computeSellPrice`, `simulateSellPrice`, `pricingHelpers`, `refreshVisaProductCache`), tiap halaman (admin edit/create, katalog publik), dan schema Prisma dicek satu-satu, semua cocok persis dengan yang didokumentasikan.
+  - **`docs/arsitektur-visa.md`: ditemukan stale signifikan**, diperbaiki: dokumen masih menggambarkan Gap #1/#2/#3 (§7) sebagai masalah yang belum diperbaiki — padahal ketiganya **sudah ditutup** sejak "Visa Step 1" (2026-07-17), dikonfirmasi ulang langsung ke kode (`lib/validators/booking.ts` pakai `visaProductId` bukan enum, `pilgrims/page.tsx` fetch katalog dinamis, `bookings/route.ts` men-set `visaProductId` + panggil `computeSellPrice()`). Diperbaiki: banner status dokumen, §2 (skema `VisaProduct`/`VisaApplication` ditambah field yang sudah ada tapi belum tercatat: `requiredComponents`/`durationFeeRules`/5 field snapshot), §3 (snippet validator diperbarui — `createSchema` tanpa `price`, validator wizard pakai `visaProductId`), §6 (diagram alur digambar ulang), §7 (tabel Gap ditandai DITUTUP untuk #1/#2/#3), §9 (status banner, §9.5, Step 1 & Step 4 di §9.6 ditandai selesai, termasuk catatan deviasi urutan karena Step 4 tereksekusi lewat `docs/arsitektur-harga.md` §17, bukan lewat urutan §9.6 aslinya).
+  - Gap #4/#5/#6 (§7 `arsitektur-visa.md`) dan Step 2/3/5/6 (§9.6) dikonfirmasi **masih genuinely terbuka** (dicek langsung ke kode: tidak ada `requirements` passthrough, tidak ada validasi transisi status server-side, `catch{...403}` polos masih ada di 5 handler CRUD visa) — bukan ikut-ikutan ditandai selesai tanpa verifikasi.
+
+---
+
+## Perbaikan Gap Modul Visa (`docs/arsitektur-visa.md` §7 & §9) — Eksekusi Bertahap
+
+Mengikuti Fase Eksekusi SOP `CLAUDE.md`, rencana ditulis di `docs/arsitektur-visa.md` §9.6 sebelum eksekusi.
+
+- [x] **Step 1 — Validator + Wizard + Booking Creation, satu unit** (2026-07-17): menutup Gap #1, #2, #3 sekaligus (ditemukan saling terkait erat saat eksekusi, digabung dari 3 step rencana awal jadi 1 — lihat catatan revisi di §9.6).
+  - `lib/validators/booking.ts` — `pilgrims[].visaType: z.enum([...])` diganti `visaProductId: z.string().uuid()` + `selectedDurationDays?`, divalidasi via `.superRefine()` async terhadap `VisaProduct` aktif di database, plus validasi silang `requiredComponents` (hotel/transport wajib) vs payload
+  - `lib/booking/draft.ts` — `PilgrimData.visaType` → `visaProductId`/`visaProductName`/`selectedDurationDays?`
+  - `app/[locale]/(pilgrim)/bookings/new/pilgrims/page.tsx` — toggle 4 tombol hardcode diganti fetch `GET /api/v1/catalog/visa`, render daftar dinamis
+  - `app/[locale]/(pilgrim)/bookings/new/payment/page.tsx` — payload kirim `visaProductId`
+  - `app/api/v1/bookings/route.ts` — `safeParse` → `safeParseAsync`; set `visaApplication.visaProductId`; panggil `computeSellPrice()` dan isi field snapshot (`selectedDurationDays`, `hppSnapshotRupiah`, `sellPriceSnapshot`, `exchangeRateIdsUsed`, `vendorIdsUsed`) — **field yang sejak Fase 7 arsitektur harga ada di schema tapi belum pernah diisi, sekarang terisi**
+  - Diverifikasi: `bun run build` 0 error; script langsung ke validator+DB konfirmasi (a) `visaProductId` valid lolos, (b) `visaProductId` fiktif ditolak dengan pesan jelas, (c) booking simulasi penuh menghasilkan `VisaApplication` dengan snapshot terisi benar (angka identik dengan `computeSellPrice()` manual); browser konfirmasi wizard step Jamaah menampilkan produk visa asli ("Visa Non-Hotel Umroh") sebagai tombol pilihan, bukan toggle lama, dan state terpilih berfungsi
+- [x] **UX Fix — Panel "HPP & Komponen Biaya" admin Visa** (2026-07-18): 3 gap usability ditemukan langsung oleh user via screenshot admin panel, diperbaiki sekaligus di `app/[locale]/admin/(protected)/products/visa/[id]/page.tsx`:
+  - Tidak ada cara menambah vendor baru dari halaman ini → tombol "+ Vendor Baru" inline di sebelah dropdown vendor, POST ke `/api/v1/admin/system/settings/vendors` yang sudah ada, auto-refresh & auto-select vendor baru tanpa pindah halaman
+  - Tidak ada visibilitas HPP/harga jual/konversi kurs → endpoint baru `GET /api/v1/admin/products/visa/[id]/preview?days=N` (memanggil `computeSellPrice()` langsung, tidak menunggu cache `VisaProduct` di-refresh) + panel "Preview Harga" baru menampilkan HPP terkonversi Rupiah, harga jual minimum (margin), harga jual dibulatkan, dan detail kurs (mid vs sell) yang dipakai
+  - Tidak jelas bisa menambah komponen HPP kedua (mis. vendor BRN sebagai komponen tambahan) → teks penjelas ditambahkan begitu ≥1 komponen sudah tersimpan, menjelaskan tombol "+ Tambah Komponen" bisa dipakai berulang dan fungsi badge "Vendor Pilihan"
+  - Diverifikasi: `bun run build` 0 error; alur penuh dicoba langsung di browser (dev server nyata di port 6260, bukan simulasi) — buat vendor baru inline berhasil & auto-terpilih, simpan komponen HPP berhasil & otomatis jadi "Vendor Pilihan" (vendor pertama untuk komponen itu), panel Preview Harga menampilkan angka benar (HPP USD→Rupiah, margin, pembulatan, kurs mid/sell) sesuai `computeSellPrice()`; data uji (vendor & komponen percobaan) dibersihkan lagi dari database setelah verifikasi
+- [x] **Step 2 — Requirements dinamis ke `DocumentGrid`/`PilgrimDocuments`** (2026-07-18): menutup Gap #4 §7.
+  - `app/[locale]/(pilgrim)/bookings/[id]/page.tsx` — Prisma include `visaApplication: { include: { visaProduct: true } }`, `DocumentGrid` sekarang terima `requirements={parseRequirements(p.visaApplication.visaProduct.requirements)}`
+  - `app/[locale]/admin/(protected)/bookings/[id]/page.tsx` — include sama, `PilgrimDocuments` terima `requirements` yang sama; badge counter "X/Y dok" juga diperbaiki (sebelumnya `REQUIRED_DOCUMENTS.length` hardcode di semua kasus, sekarang hitung dari requirements produk yang sebenarnya, fallback ke hardcode kalau produk tidak punya `visaProduct` ter-link)
+  - Diverifikasi: `bun run build` 0 error; dibuat booking uji langsung di database (produk "Visa Reguler" yang punya 3 requirements: Passport/KTP/KK) → halaman admin booking detail dikonfirmasi tampil **"0/3 dok"** (bukan "0/5" dari fallback hardcode); `GET /api/v1/pilgrims/[bookingId]/[pilgrimId]/documents` dikonfirmasi mengembalikan 3 `requirements` yang sama persis. Halaman pilgrim (`DocumentGrid`) tidak dites langsung di browser (tidak ada akun pilgrim aktif untuk login) — tapi query Prisma dan pola passing prop **identik** dengan halaman admin yang sudah terverifikasi langsung, dan `DocumentGrid`/`PilgrimDocuments` berbagi pola `requirements` prop yang sama persis (dikonfirmasi baca kode kedua komponen). Data uji dibersihkan (cascade delete) setelah verifikasi.
+- [ ] Step 3 — Fitur varian: `requiredComponents` kondisional wizard + input durasi (§9.1-9.4) — **DITUNDA**, menyentuh wizard lintas-modul, lihat `docs/decisions.md` 2026-07-18
+- [x] **Step 4 — Pembersihan legacy form harga manual** (`docs/arsitektur-harga.md` §13 Gap #5) — dieksekusi via `docs/arsitektur-harga.md` §17 (2026-07-18), lihat entri "Komponen Harga Jadi Satu-Satunya Sumber Kebenaran" di atas — dicatat lagi di sini supaya tidak terlihat masih pending di section ini
+- [x] **Step 5 — Validasi transisi status server-side** (2026-07-18): menutup Gap #5 §7.
+  - `lib/validators/visaStatus.ts` (baru) — `VISA_STATUS_TRANSITIONS` map + `isValidVisaStatusTransition()`, satu sumber kebenaran dipakai client dan server (sebelumnya cuma ada di `VisaActions.tsx`, endpoint bisa dipanggil langsung untuk melompat status sembarangan)
+  - `VisaActions.tsx` — `TRANSITIONS` lokal dihapus, pakai `VISA_STATUS_TRANSITIONS` dari modul bersama
+  - `app/api/v1/admin/visa/[pilgrimId]/status/route.ts` — include `visaApplication` untuk baca status saat ini, validasi `isValidVisaStatusTransition(current, baru)` sebelum update, 422 kalau tidak valid; ditambah 404 eksplisit kalau `visaApplication` belum ada (sebelumnya akan jadi Prisma error yang tertangkap generic 500)
+  - Diverifikasi: `bun run build` 0 error; test langsung ke endpoint dengan booking uji — transisi tidak valid (`pending_documents` → `issued`, melompati 3 tahap) ditolak **422** dengan pesan jelas; transisi valid (`pending_documents` → `documents_complete`) berhasil **200**, status ter-update di database. Data uji dibersihkan setelah verifikasi.
+- [x] **Step 6 — Perbaikan error handling CRUD visa** (2026-07-18): menutup Gap #6 §7.
+  - `app/api/v1/admin/products/visa/route.ts` (GET, POST) dan `.../[id]/route.ts` (GET, PUT, DELETE) — 5 `catch { return err('Forbidden'), 403 }` polos diganti pola yang sudah dipakai route lain sejak Fase harga: bedakan `Unauthorized`/`Forbidden` (403) dari error lain (`console.error` + 500), tanpa bocorkan detail Prisma ke client.
+  - Diverifikasi: `bun run build` 0 error; test langsung ke endpoint — GET list & GET by id (happy path) tetap **200**; GET id yang tidak ada tetap **404** "Tidak ditemukan" (tidak terpengaruh, itu explicit check bukan dari catch block); **DELETE id yang tidak ada** (memicu Prisma P2025, error non-auth asli) sekarang benar **500** "Internal server error" — sebelumnya perbaikan ini akan salah dilaporkan sebagai 403 "Forbidden" walau bukan masalah izin akses sama sekali. Server log dikonfirmasi mencatat `[admin/products/visa/[id]/DELETE]` dengan detail error asli.
+
+---
+
+## Redesain UI Input HPP: Tabel Tier Gabungan (`docs/arsitektur-harga.md` §14) — Eksekusi Bertahap
+
+Mengikuti Fase Eksekusi SOP `CLAUDE.md`, rencana ditulis di §14 sebelum eksekusi (dipicu laporan user langsung: bentuk input "Tambah Komponen" bikin bingung karena rentang hari harus diinput dobel untuk Harga Visa + Harga BRN).
+
+- [x] **Fase 1 — Endpoint `GET`+`PUT` `/api/v1/admin/products/visa/[id]/cost-tiers`** (2026-07-18): backend murni, UI belum diubah.
+  - File baru: `app/api/v1/admin/products/visa/[id]/cost-tiers/route.ts`. `GET` menggabungkan (join by row `id` yang disimpan di dalam JSON `costTiers`) komponen `individu` (Harga Visa, wajib) dan `biaya_non_hotel` (Harga BRN, opsional) jadi satu array `rows` bentuk tabel. `PUT` replace-seluruh: upsert `ProductCost` untuk kedua komponen dari body, auto-`PreferredVendor`, soft-deactivate (`isActive:false`, bukan hapus fisik) komponen BRN kalau body mengosongkannya, panggil `refreshVisaProductCache()`.
+  - Diverifikasi: `bun run build` 0 error; test langsung ke endpoint lewat `fetch()` di console browser tab admin yang sudah login (bukan lewat UI form) — PUT dengan payload persis skenario user (2-7 hari: visa 70 + BRN 30; 10 hari: visa 100 saja) tersimpan benar; GET setelahnya menggabungkan kembali jadi bentuk `rows` yang sama; `computeSellPrice()` (dicek lewat `/preview`) menghasilkan **HPP 100 USD → Rp 2.200.000 di kedua skenario** (dengan BRN maupun tanpa BRN) — cocok persis dengan contoh kasus user. Test toggle BRN mati (kirim `brn: null`) dicek: `product_costs.biaya_non_hotel.isActive` jadi `false` (bukan terhapus, data histori tetap ada), `preferred_vendors` baris BRN terhapus, `/preview` otomatis hanya menghitung komponen visa. Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase 2 — UI tabel tier baru** (2026-07-18): mengganti total section "HPP & Komponen Biaya" di `app/[locale]/admin/(protected)/products/visa/[id]/page.tsx` dari form "Tambah Komponen" bebas teks jadi tabel tier gabungan — 2 vendor-picker tetap (Harga Visa wajib, Harga BRN opsional lewat checkbox), baris tier dengan 4 kolom (Min Hari, Maks Hari, Harga Visa, Harga BRN), preview HPP/Harga Jual per baris muncul setelah simpan (panggil `/preview?days=<minDays baris>`), satu tombol "Simpan Tabel HPP" untuk seluruh grid.
+  - Diverifikasi: `bun run build` 0 error; alur penuh dicoba di browser nyata — isi baris "2-7 hari: visa 70 + BRN 30" dan "10 hari: visa 100 saja" dalam satu tabel (rentang hari cukup diketik sekali per baris, tidak dobel), simpan → kedua baris menampilkan **"HPP Rp 1.826.219 → Harga Jual Rp 2.200.000"** (identik di kedua baris, cocok persis dengan contoh kasus user); vendor terpilih ("BRN") persisten setelah reload; toggle checkbox BRN off + simpan lewat UI (bukan API langsung) dicek ke database — `product_costs.biaya_non_hotel.isActive` jadi `false`, baris `preferred_vendors` untuk BRN terhapus, sesuai desain. Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase 3 — Hapus kode lama** (2026-07-18): folder `app/api/v1/admin/products/visa/[id]/costs/` (route `GET`/`POST` costs, `PUT`/`DELETE` costs/[costId], `PUT` costs/preferred) dihapus total — dicek dulu lewat grep tidak direferensikan kode lain (hanya dipakai UI lama yang sudah diganti Fase 2). Diverifikasi: `bun run build` 0 error, halaman produk Visa dicek ulang di browser (tanpa console error) setelah route lama dihapus.
+- [x] **Fase 4 — Dokumentasi final** (2026-07-18): `docs/arsitektur-harga.md` §11 (API Routes) dan §12 (Admin UI) diperbarui reflect struktur baru — endpoint `/costs*` lama dihapus dari tabel, endpoint `/cost-tiers` baru ditambahkan, deskripsi UI diganti dari "form Tambah Komponen" jadi "tabel tier gabungan".
+
+---
+
+## Override Manual Harga Jual per Tier (`docs/arsitektur-harga.md` §15) — Eksekusi Bertahap
+
+Lanjutan langsung dari redesain tabel tier di atas — user minta kolom HPP & Harga Jual jadi kolom tabel (bukan teks di bawah baris), dan Harga Jual bisa diedit manual (override), HPP tetap read-only. Keputusan dikonfirmasi lewat 2 pertanyaan eksplisit sebelum eksekusi (lihat `docs/decisions.md`).
+
+- [x] **Fase A — `computeSellPrice()` + endpoint `cost-tiers`** (2026-07-18): backend murni.
+  - `lib/pricing/computeSellPrice.ts` — `findTier()` dibuat generic, tambah tipe `IndividuTier` (`CostTier & {sellPriceOverride}`). Setelah `minSellPrice`/rounding dihitung seperti biasa, cari tier `individu` yang cocok `jumlahHari`; kalau ada `sellPriceOverride` terisi, itu jadi `sellPrice` final — `hppRupiah`/`minSellPrice` tidak ikut di-override (tetap angka asli formula).
+  - `app/api/v1/admin/products/visa/[id]/cost-tiers/route.ts` — `sellPriceOverride?: number|null` ditambahkan ke Zod schema tier row, disimpan di tiap entry `costTiers` komponen `individu`, dikembalikan di `GET`.
+  - Diverifikasi: `bun run build` 0 error; test langsung lewat `fetch()` di console browser (tanpa UI) — PUT dengan `sellPriceOverride: 2500000` tersimpan, `/preview` mengembalikan `sellPrice: 2500000` sementara `hppRupiah`/`minSellPrice` tetap angka asli (1.278.353 / 1.534.024); PUT lagi dengan `sellPriceOverride: null` mengembalikan `/preview` ke hasil rounding otomatis (Rp 1.550.000). Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase B — UI kolom HPP + Harga Jual** (2026-07-18): tabel tier di `app/[locale]/admin/(protected)/products/visa/[id]/page.tsx` dapat 2 kolom baru menggantikan teks preview di bawah baris — "HPP" (read-only, format Rupiah) dan "Harga Jual" (`<input>` editable, `value` = override tersimpan atau kosong, `placeholder` = harga otomatis dari `/preview` saat kosong). Baris dengan override aktif diberi highlight kuning (`bg-amber-50 ring-1 ring-amber-200`) supaya beda jelas dari baris yang masih ikut hitungan otomatis. Teks penjelas ditambahkan di bawah tabel.
+  - Diverifikasi: `bun run build` 0 error; alur penuh di browser nyata — isi baris (visa 70 USD, 2-7 hari), simpan → kolom HPP tampil "Rp 1.278.353", kolom Harga Jual kosong dengan placeholder "Rp 1.550.000" (murni hasil formula, tanpa override); isi Harga Jual manual "2500000", simpan → value persisten "2500000" setelah reload, placeholder ikut jadi "Rp 2.500.000" (karena `/preview` sekarang mengembalikan override), baris ter-highlight kuning; kosongkan lagi + simpan → kembali ke placeholder "Rp 1.550.000", highlight hilang, value backend `sellPriceOverride: null` dikonfirmasi lewat query database langsung. Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase C — Dokumentasi final** (2026-07-18): `docs/arsitektur-harga.md` §15 status diubah dari RENCANA jadi tercatat selesai (lihat status banner section), `docs/decisions.md` ditambah entri.
+- [x] **Bug fix — HPP tampil Rp 0 kalau Min/Maks Hari dikosongkan** (2026-07-18): user melaporkan langsung (screenshot) HPP menghitung Rp 0 walau Harga Visa sudah diisi. Root cause: bukan bug konversi kurs — `canSaveTiers` cuma cek `maxDays >= minDays` yang tetap `true` untuk `0 >= 0`, jadi tombol "Simpan Tabel HPP" tidak ter-disable walau Min/Maks Hari belum diisi (default `0`). Baris tersimpan dengan tier `{minDays:0, maxDays:0}`, lalu `loadRowPreviews` memanggil `/preview?days=${row.minDays || 1}` — fallback `|| 1` membuatnya query hari ke-1, yang tidak cocok dengan tier `[0,0]` tersimpan, jadi HPP dihitung 0 (bukan salah kurs, kursnya benar).
+  - Fix: `canSaveTiers` di `app/[locale]/admin/(protected)/products/visa/[id]/page.tsx` ditambah syarat `r.minDays >= 1` — tombol simpan sekarang benar-benar disabled sampai Min Hari diisi. Fallback `|| 1` di `loadRowPreviews` dihapus (sudah tidak dibutuhkan karena validasi menjamin `minDays >= 1`).
+  - Diverifikasi: `bun run build` 0 error; direproduksi persis skenario laporan (vendor terpilih, Harga Visa=114, Min/Maks Hari kosong) → tombol "Simpan Tabel HPP" konfirmasi `disabled: true`; isi Min=2 Maks=7 → tombol `disabled: false`; simpan → kolom HPP tampil **Rp 2.081.890** (114 USD × kurs 18.262,19 — benar). Data uji dibersihkan dari database setelah verifikasi.
+
+---
+
+## Preview HPP & Harga Jual Live (`docs/arsitektur-harga.md` §16) — Eksekusi Bertahap
+
+Lanjutan langsung dari bug fix di atas — user tanya kenapa preview harus nunggu "Simpan" dulu, lalu minta dibuat live (langsung muncul saat mengetik) sekaligus selalu tampil (tidak pernah hilang) karena HPP/Harga Jual dianggap data penting, bukan sekadar bantuan visual.
+
+- [x] **Fase A — `pricingHelpers.ts` + `simulateSellPrice.ts` + endpoint `/simulate`** (2026-07-18): backend murni.
+  - `lib/pricing/pricingHelpers.ts` (baru) — `getLatestRate()`, `getMarginRule()`, `roundToNearest()` dipindah dari `computeSellPrice.ts` (refactor, bukan duplikasi).
+  - `lib/pricing/computeSellPrice.ts` — diperbarui import dari `pricingHelpers.ts`, perilaku tidak berubah.
+  - `lib/pricing/simulateSellPrice.ts` (baru) — hitung HPP→harga jual dari komponen yang dikasih langsung (bukan baca `ProductCost` tersimpan), pakai helper yang sama. Kurs tidak ditemukan → kembalikan `null` (bukan diam-diam skip).
+  - `app/api/v1/admin/products/visa/simulate/route.ts` (baru, **bukan** di bawah `[id]/` — kalkulasinya tidak bergantung produk spesifik) — `GET` dengan query `visaCost`/`visaCurrency`/`brnCost?`/`brnCurrency?`.
+  - Diverifikasi: `bun run build` 0 error (termasuk konfirmasi route statis `visa/simulate` hidup berdampingan dengan route dinamis `visa/[id]` tanpa konflik); `/simulate?visaCost=114&visaCurrency=USD` → **Rp 2.081.890 → Rp 2.500.000** dan `/simulate?visaCost=70&...&brnCost=30&...` → **Rp 1.826.219 → Rp 2.200.000**, keduanya identik dengan hasil `computeSellPrice()` yang sudah diverifikasi sebelumnya (regresi 0); test regresi langsung: `cost-tiers` PUT + `/preview` untuk skenario yang sama sebelum refactor menghasilkan angka **identik** (Rp 1.278.353 / Rp 1.550.000) — konfirmasi refactor `pricingHelpers.ts` tidak mengubah perilaku `computeSellPrice()`. Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase B — UI live-preview dengan debounce** (2026-07-18): `loadRowPreviews` (lama, dipanggil sekali setelah GET/save via `/preview`) dihapus, diganti `useEffect` yang mengamati `rows`/`visaCurrency`/`brnEnabled`/`brnCurrency`, debounce 500ms, panggil `/simulate` untuk tiap baris `hargaVisa > 0`. Efek ini jalan otomatis baik saat mengetik maupun saat data dimuat dari server — tidak ada 2 jalur kode terpisah.
+  - Diverifikasi: `bun run build` 0 error; browser nyata — pilih vendor, tambah baris, ketik Harga Visa=114 **tanpa mengisi Min/Maks Hari dan tanpa klik Simpan** → setelah ±1 detik, kolom HPP tampil "Rp 2.081.890" dan placeholder Harga Jual "Rp 2.500.000"; dikonfirmasi ke database **0 baris tersimpan** saat itu (murni live di client, belum ada side-effect apa pun) — membuktikan preview benar-benar tidak butuh simpan lagi, dan otomatis menutup kelas bug "HPP Rp 0" sebelumnya karena simulate tidak pernah mencocokkan hari ke tier. Isi Min=2 Maks=7, klik Simpan → HPP & placeholder Harga Jual tetap tampil identik sebelum dan sesudah simpan (tidak pernah hilang/reset), memenuhi permintaan "selalu ditampilkan". Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase C — Dokumentasi final** (2026-07-18): `docs/arsitektur-harga.md` §16 status diperbarui jadi SELESAI & TERVERIFIKASI, `docs/decisions.md` ditambah entri. Ditemukan & diperbaiki juga gap penomoran §15 yang sempat terlewat saat menulis §16/§17 di sesi sebelumnya (headings sempat loncat 14→16 tanpa 15) — dirapikan jadi berurutan 1-17 lagi, termasuk semua referensi silang di `docs/decisions.md`/`docs/progress.md` yang menyebut nomor section itu.
+
+---
+
+## Komponen Harga Jadi Satu-Satunya Sumber Kebenaran (`docs/arsitektur-harga.md` §17) — Eksekusi Bertahap
+
+User menyetujui 3 rekomendasi (`VisaProduct.price` = harga termurah bukan probe hari-1, hapus jalur edit manual, "Mulai dari" di katalog kalau harga bervariasi) dan minta dieksekusi *strict* sesuai rencana yang ditulis dulu di §17.
+
+- [x] **Fase 1 — `refreshVisaProductCache()`: `Math.min()` + backfill** (2026-07-18): `DEFAULT_PROBE_DAY` (probe hari-1) dihapus, `price` sekarang `Math.min(...durationFeeRules.map(r => r.fee))` — dihitung setelah `durationFeeRules` lengkap terkumpul. Kalau `durationFeeRules` kosong, `price` tidak diupdate (behavior lama dipertahankan, bukan direset ke 0).
+  - Diverifikasi: `bun run build` 0 error (sempat ketemu `.next` korup gara-gara `bun run build` dijalankan bareng `bun run dev` — `rm -rf .next` lalu build ulang bersih); test langsung: buat 2 tier sengaja **hari-1 BUKAN yang termurah** (1-3 hari @ 200 USD, 10-15 hari @ 50 USD) → `VisaProduct.price` tersimpan **Rp 1.100.000** (dari tier 50 USD yang termurah), bukan Rp 4.400.000 (dari tier 200 USD hari-1) — membuktikan bug lama (probe hari-1 ≠ termurah) benar-benar tertutup. Backfill lewat script sekali-jalan (`refreshAllVisaProductCaches()`) dijalankan terhadap data produksi nyata — "Visa Non-Hotel Umroh" tetap Rp 2.750.000 (kebetulan hari-1 memang sudah termurah untuk produk ini, jadi tidak berubah, tapi sekarang benar KARENA memang termurah, bukan kebetulan probe hari-1). Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Fase 2 — Hapus jalur edit harga manual** (2026-07-18): field `price` dihapus dari `updateSchema` (`PUT /api/v1/admin/products/visa/[id]/route.ts`) dan `createSchema` (`POST /api/v1/admin/products/visa/route.ts`, produk baru dibuat dengan `price:0` hardcode). Input "Harga (Rp)" dihapus dari halaman edit (`[id]/page.tsx`, diganti kartu read-only "Harga saat ini: Rp X — dihitung otomatis...") dan halaman buat produk baru (`page.tsx`, diganti teks penjelas). `loadCostTiers()` di halaman edit sekarang juga re-fetch produk supaya kartu harga tidak basi setelah HPP diubah.
+  - Diverifikasi: `bun run build` 0 error; browser nyata — kedua form dikonfirmasi tidak ada lagi input harga; test langsung kirim `PUT .../visa/[id]` dengan `{price: 99999999}` di body → response tetap `price: "1500000"` (tidak berubah), membuktikan Gap #5 (§13) benar-benar tertutup, bukan cuma disembunyikan di UI.
+- [x] **Fase 3 — "Mulai dari" di katalog publik** (2026-07-18): `GET /api/v1/catalog/visa` tambah field turunan `priceIsRange` (`true` kalau ≥2 harga berbeda di `durationFeeRules`; `durationFeeRules` sendiri tidak di-expose ke publik). `app/[locale]/(public)/visa/page.tsx` (server component, query Prisma langsung — bukan lewat API route) tampilkan prefix "Mulai dari " kalau `priceIsRange` true.
+  - Diverifikasi: `bun run build` 0 error; browser nyata — "Visa Non-Hotel Umroh" (3 tier harga beda: 2.750.000/2.800.000/2.850.000) tampil **"Mulai dari Rp 2.750.000"**; "Visa Reguler" (1 harga flat) tampil polos "Rp 1.500.000" tanpa prefix; API response dicek langsung — `priceIsRange` benar per produk, `durationFeeRules` terkonfirmasi tidak ada di response publik.
+- [x] **Fase 4 — Dokumentasi final** (2026-07-18): `docs/arsitektur-harga.md` §13 Gap #5 statusnya diubah dari "DITUNDA" jadi "DITUTUP" (dicoret di tabel, ditambah ringkasan penutupan); §11 (API Routes) & §12 (Admin UI) diperbarui reflect endpoint/UI final (`/simulate` baru, `/cost-tiers` dengan `sellPriceOverride`, `price` dihapus dari `PUT`/`POST` visa product, `priceIsRange` di katalog); status banner §17 diubah dari RENCANA jadi SELESAI & TERVERIFIKASI; `docs/decisions.md` ditambah entri.
+- [x] **UX fix — warna teks kolom HPP & Harga Jual terlalu pudar** (2026-07-18): user melaporkan kolom "HPP" di tabel tier terlihat "berbayang tipis" (waktu itu `text-slate-500`, warna abu-abu muda). Sempat salah duga awal (dikira soal kartu "Harga saat ini" di Informasi Dasar) — diklarifikasi dulu lewat `AskUserQuestion` sebelum ubah kode, supaya tidak salah sasaran (opsi lain di pertanyaan itu berisiko membuka lagi jalur edit harga manual yang baru saja ditutup di Gap #5). User konfirmasi: cuma kolom HPP, tetap read-only. Diperbaiki: `text-slate-500` → `font-semibold text-ink`.
+  - **Susulan**: user tunjuk lagi lewat screenshot bahwa kolom "Harga Jual" (placeholder harga otomatis, warna abu-abu default browser) juga terkena masalah yang sama, sempat tidak tercakup di fix pertama karena scope sebelumnya sudah eksplisit dipersempit ke "HPP saja" oleh user sendiri. Diperbaiki: input Harga Jual ditambah `font-semibold text-ink placeholder:font-semibold placeholder:text-ink placeholder:opacity-70` — placeholder (angka otomatis, saat belum ada override) jadi gelap & tebal, tetap dibedakan dari nilai yang benar-benar diketik lewat opacity 70%, field **tetap `<input>` yang genuinely editable** (bukan diganti teks statis).
+  - Diverifikasi: `bun run build` 0 error; browser nyata — computed style placeholder dikonfirmasi berubah dari abu-abu default jadi `rgb(15,27,45)` (warna `text-ink`) dengan `font-semibold`; dikonfirmasi juga field tetap `disabled:false`, `readOnly:false`, dan bisa diketik (test isi manual "3000000" berhasil masuk ke `value`). Data uji dibersihkan dari database setelah verifikasi.
+- [x] **Kategori Vendor** (`docs/arsitektur-harga.md` §18) (2026-07-19): dipicu pertanyaan user soal kenapa Visa (syarikah) dan Flight (maskapai) berbagi satu tabel `Vendor` — dijawab (entitas generik, reuse `ProductCost`/`computeSellPrice()` lintas modul), lalu user tunjuk konsekuensi nyata (dropdown vendor tercampur) dan minta solusi yang tetap murah + siap dipakai Hotel nanti. Ditambah field `Vendor.category: String?` (bebas teks, sama pola `costComponent`), API `vendors` terima filter `?category=` + field `category` di create/update, quick-add vendor dari Visa/Flight otomatis kirim `category` sesuai konteksnya (`'syarikah'`/`'maskapai'`), Settings tampilkan kolom Kategori + badge.
+  - **Insiden migrasi tertangani tanpa dampak**: percobaan pertama shadow-database-url gagal ke-generate dengan benar (`sed` gagal diam-diam, hasilnya identik `DATABASE_URL` produksi) — terdeteksi sebelum lanjut, diverifikasi row count 7 tabel kunci (termasuk data Flight nyata milik user) utuh, `\d vendors` konfirmasi belum ada perubahan bocor, `migrate diff --script` ternyata cuma generate file tanpa eksekusi apa pun. Diulang dengan shadow URL yang dicek eksplisit benar-benar terpisah sebelum dipakai. Detail lengkap: `docs/arsitektur-harga.md` §18.7.
+  - Diverifikasi: migrasi `20260719143142_add_vendor_category` (murni `ADD COLUMN`) — row count sebelum/sesudah identik; backfill 3 vendor lama jadi `category:'syarikah'`. Browser: Settings tampilkan badge kategori benar; dibuat rute+jadwal+vendor uji baru di Flight (tidak menyentuh data nyata) → dropdown maskapai Flight kosong sebelum quick-add (benar, semua vendor lama "syarikah") → quick-add "Saudia TESTCAT" otomatis ter-kategori `'maskapai'` di database → dicek balik ke halaman edit produk Visa nyata ("Visa Reguler", **tanpa klik simpan**) → dropdown vendor Visa tetap cuma 3 vendor syarikah, "Saudia TESTCAT" tidak muncul — filter dua arah bekerja benar. Data uji dibersihkan, data nyata (rute Flight, 3 vendor, 2 produk Visa) dicek ulang tetap utuh.
+  - `bun run build` — 0 error.
+- [x] **Bug fix — HPP mata uang IDR gagal dihitung** (`docs/arsitektur-harga.md` §19) (2026-07-19): user coba fitur kategori vendor barusan pakai vendor maskapai bermata uang IDR, HPP/Harga Jual tampil "—" (padahal USD normal) — dilaporkan lewat 2 screenshot perbandingan. Root cause: `computeSellPrice()`/`simulateSellPrice()` selalu lookup `ExchangeRate` IDR→IDR yang memang tidak pernah ada (cron kurs cuma fetch USD/IDR & SAR/IDR). Bug lama di fungsi inti (bukan regresi kerja hari ini), baru ketahuan karena belum pernah dicoba pakai IDR sebelumnya di modul manapun. Fix: `currency==='IDR'` di-treat sebagai identity, skip lookup kurs sama sekali, diterapkan di kedua fungsi (dipakai bersama Visa & Flight, supaya Visa tidak kena bug sama nanti).
+  - Diverifikasi langsung ke **data nyata milik user** (bukan data uji): jadwal Flight "Cengkareng (CGK) → Madinah (MED)" vendor "Saudinesia Air" Rp 19.150.000 IDR — sebelum fix HPP/Harga Jual "—", sesudah fix HPP **Rp 19.150.000** (identik input, tanpa konversi) dan Harga Jual **Rp 23.000.000**; disimpan ulang lewat "Simpan Harga Tiket" supaya cache `FlightSchedule.price` yang sempat macet di Rp 0 ikut terkoreksi — dikonfirmasi tersimpan benar di database.
+  - `bun run build` — 0 error.
+
+---
+
+## Modul Tiket Pesawat (`docs/arsitektur-tiket-pesawat.md`) — Eksekusi Bertahap
+
+Modul baru dari nol, atas permintaan eksplisit user 2026-07-19. Rencana lengkap ditulis dulu di `docs/arsitektur-tiket-pesawat.md` (Fase Eksekusi SOP poin 1) sebelum eksekusi kode apa pun. Reuse penuh arsitektur harga (`docs/arsitektur-harga.md`) untuk HPP/kurs/margin — modul kedua setelah Visa yang pakai sistem itu. Integrasi wizard booking eksplisit di luar scope (lihat §2.1 dokumen arsitektur) — kuota dibangun lengkap tapi belum ada pemanggil, didokumentasikan dari awal (bukan gap yang ditemukan lewat audit nanti, beda dari insiden Muthowif).
+
+- [x] **Fase 1 — Schema** (2026-07-19): `FlightRoute`, `FlightSchedule` (kuota + cache `price`), `BookingFlight` (siap, belum ada pemanggil) ditambahkan ke `prisma/schema.prisma`, relasi `Booking.flights` ditambahkan.
+  - Migrasi `20260719062647_add_flight_module` dibuat via workaround non-interaktif (memori sesi): shadow database **genuinely terpisah** (`saudinesia_shadow`, dibuat & dihapus khusus untuk diff ini, bukan pakai `DATABASE_URL` asli) → `migrate diff --script` → tulis `migration.sql` manual → `migrate deploy`.
+  - Diverifikasi: diff dikonfirmasi murni `CREATE TABLE` + FK (3 tabel baru), tidak ada `DROP`/`ALTER` pada tabel manapun; row count 5 tabel kunci (bookings/users/hotels/visa_products/vendors) dicek **sebelum dan sesudah** migrasi — identik persis, tidak ada data hilang; struktur 3 tabel baru dikonfirmasi via `\d` langsung ke database (kolom, FK, default value semua sesuai schema); `bun run build` 0 error setelah `prisma generate`.
+- [x] **Fase 2 — Integrasi harga** (2026-07-19): reuse penuh `Vendor`/`ExchangeRate`/`ProductCost`/`PricingRule`/`PreferredVendor`/`computeSellPrice()`/`simulateSellPrice()` tanpa sentuh kode.
+  - `lib/pricing/refreshFlightScheduleCache.ts` (baru) — adapter tipis, `computeSellPrice('flight', scheduleId, PROBE_DAY)`, update `FlightSchedule.price` kalau `hppRupiah > 0` (pola sama "jangan reset ke 0").
+  - `lib/cron/exchangeRateJob.ts` — dipanggil `refreshAllFlightScheduleCaches(updatedCurrencies)` setelah cron kurs jalan, sama pola `refreshAllVisaProductCaches`.
+  - `app/api/v1/admin/products/flight/schedules/[id]/cost/route.ts` (baru) — kelola 1 komponen HPP `"tiket"` (vendor/maskapai, mata uang, harga), jauh lebih simpel dari `cost-tiers` Visa (1 baris flat, bukan tabel tier).
+  - `app/api/v1/admin/products/flight/simulate/route.ts` (baru) — reuse `simulateSellPrice('flight', ...)`, pola identik endpoint simulate Visa.
+  - Diverifikasi: `bun run build` 0 error, kedua route terkonfirmasi terdaftar di build output; dibuat rute+jadwal uji langsung di database — `/simulate?hargaTiket=500&currency=USD` menghasilkan **Rp 10.950.000** (500×18.262,19×1.2, dibulatkan ke kelipatan 50rb); `PUT .../cost` dengan data sama → `FlightSchedule.price` di database ter-update jadi **Rp 10.950.000 persis sama** dengan hasil simulate, `ProductCost`/`PreferredVendor` terkonfirmasi tersimpan benar (`costComponent:"tiket"`, tier flat `[{minDays:0,maxDays:9999,cost:500}]`). Data uji dibersihkan setelah verifikasi.
+- [x] **Fase 3 — Admin UI** (2026-07-19): `app/[locale]/admin/(protected)/products/flight/page.tsx` (listing, client component) — section "Rute" (badge list + form tambah inline) dan section "Jadwal Penerbangan" (tabel Rute/Periode/Harga/Kuota/Status, tombol "Tambah Jadwal" langsung redirect ke halaman edit setelah simpan, meniru pola "Simpan & Lanjut" supaya admin langsung isi HPP). `app/[locale]/admin/(protected)/products/flight/[id]/page.tsx` (edit jadwal) — meniru struktur `products/visa/[id]/page.tsx` tapi HPP jauh lebih simpel (1 vendor/maskapai + 1 mata uang + 1 harga tiket, bukan tabel tier BRN+Visa) sesuai keputusan cakupan di `docs/arsitektur-tiket-pesawat.md` §2; live preview HPP/Harga Jual didebounce 500ms ke `/simulate`, `price` tetap read-only (di-refresh lewat `loadCost()` setelah simpan cost, sama pola `loadCostTiers()` Visa). 4 route API baru (`routes`, `routes/[id]`, `schedules`, `schedules/[id]`) — semua sudah dari Fase 2 pola safe-coding (`requireManager()`, Zod, `price` dikecualikan dari schema tulis, soft-delete kalau masih direferensikan). Nav sidebar: `components/admin/AdminSidebar.tsx` tambah item "Pesawat" (ikon `Plane`) di `productItems`, antara Visa Produk dan Hotel.
+  - Diverifikasi end-to-end lewat browser (superadmin, sesi sudah login): buat rute uji "Cengkareng (CGK) - TEST → Madinah (MED) - TEST" → buat jadwal uji (periode 1–15 Agu 2026, 150 kursi) → redirect otomatis ke halaman edit → tambah maskapai uji "Saudia TEST" lewat quick-add inline → isi Harga Tiket 800 USD → preview live muncul benar (HPP Rp 14.589.080, Harga Jual Rp 17.500.000) → simpan → kartu "Harga saat ini" di halaman edit ter-refresh jadi Rp 17.500.000 (persis sama dengan preview) → kembali ke listing, baris tabel menampilkan rute/periode terformat/harga/kuota (0/150)/status Aktif dengan benar. Tidak ada console error. Data uji (rute, jadwal, vendor, `ProductCost`) dibersihkan langsung dari database setelah verifikasi — tidak ada sisa data tes.
+  - `bun run build` — 0 error (dev server dimatikan dulu, `.next` dibersihkan, sesuai catatan lingkungan di `CLAUDE.md`); kedua halaman baru (`products/flight` dan `products/flight/[id]`) dan seluruh route API Flight terkonfirmasi terdaftar di build output.
+- [x] **Fase 4 — Publik** (2026-07-19): `app/[locale]/(public)/flight/page.tsx` (server component) — query `FlightSchedule` aktif (+ rute aktif) `orderBy: { departureFrom: 'asc' }`, satu data source untuk dua presentasi lewat breakpoint Tailwind (`hidden md:block` untuk tabel, `md:hidden` untuk card) sesuai rencana §8. Kolom/field: Maskapai (di-resolve dari `ProductCost` `costComponent:"tiket"` → `Vendor.name`, di-batch-query sekali pakai `productId: {in: [...]}` — bukan N+1 per jadwal), Rute, Periode (format `id-ID` tanggal pendek), Harga. Nav link "Pesawat" ditambahkan ke `components/shared/Header.tsx` (`navLinks`, antara Visa dan Hotel).
+  - Diverifikasi lewat browser: buat rute+jadwal+HPP uji lagi (data baru, bukan sisa Fase 3) → halaman publik `/id/flight` menampilkan baris dengan maskapai/rute/harga/periode benar → resize viewport ke mobile (375×812) → tabel otomatis berganti jadi card vertikal dengan info yang sama, tidak ada elemen terpotong. Nav "Pesawat" tampil di header publik. Data uji dibersihkan dari database (termasuk `preferred_vendors`, sempat ada 1 baris sisa dari verifikasi Fase 3 yang terlewat — sekarang sudah bersih, dicek ulang seluruh tabel terkait Flight kosong sebelum lanjut).
+  - `bun run build` — 0 error, route `/[locale]/flight` terkonfirmasi terdaftar di build output.
+- [x] **Fase 5 — Kuota** (2026-07-19): `reserveFlightQuota`/`confirmFlightQuota`/`releaseFlightQuota` ditambahkan ke `lib/quota/index.ts`, meniru pola persis `reserveTransportQuota`/dst. (seats-based, precedent terdekat). **Belum ada pemanggil** — didokumentasikan eksplisit di kode & di sini dari awal (bukan gap ditemukan lewat audit nanti, beda dari insiden `confirmMuthowifQuota()` yang hilang tanpa catatan), integrasi wizard booking di luar scope sesi ini (`docs/arsitektur-tiket-pesawat.md` §2.1).
+  - Diverifikasi lewat script langsung (bukan lewat API/UI, karena belum ada pemanggil) di dalam `prisma.$transaction()`: buat rute+jadwal uji (10 kursi) → `reserveFlightQuota(4)` → `pendingSeats` naik jadi 4, `bookedSeats` tetap 0 → `confirmFlightQuota(4)` → `pendingSeats` turun ke 0, `bookedSeats` naik ke 4 → `reserveFlightQuota(3)` lalu `releaseFlightQuota(3)` → `pendingSeats` kembali 0 tanpa menaikkan `bookedSeats` → `reserveFlightQuota(7)` saat kapasitas tersisa cuma 6 → `throw` dengan pesan `"Flight quota insufficient: need 7, have 6"`, dan state di database tidak berubah (transaksi rollback benar). Semua 4 skenario lolos. Data & script uji dibersihkan setelah verifikasi.
+  - `bun run build` — 0 error.
+- [x] **Fase 6 — Dokumentasi final** (2026-07-19): `docs/arsitektur-tiket-pesawat.md` status banner diupdate SELESAI & TERVERIFIKASI (Fase 1-6 lengkap, kuota infrastruktur-saja dicatat eksplisit sebagai keputusan cakupan bukan gap). `docs/decisions.md` ditambah entri modul Tiket Pesawat selesai. `CLAUDE.md` diupdate merujuk status baru.
+- [x] **Audit ulang rencana vs kode** (2026-07-19), diminta user setelah Fase 6 — cek tiap section `docs/arsitektur-tiket-pesawat.md` (§3-§9) satu-satu terhadap kode aktual (schema, guard tiap route API, checklist safe-coding, struktur UI admin/publik). Mayoritas sinkron persis, **2 gap ditemukan**:
+  1. `GET /api/v1/catalog/flight` yang direncanakan di §6 belum pernah dibuat — halaman publik query Prisma langsung tanpa lewat API (beda dari Visa yang punya keduanya, dan `/api/v1/catalog/visa` benar-benar dipakai `bookings/new/pilgrims/page.tsx`).
+  2. Kolom "Maskapai" hilang dari tabel listing admin (`products/flight/page.tsx`) — §7 rencanakan kolom Rute/Maskapai/Periode/Harga/Kuota/Status, implementasi cuma Rute/Periode/Harga/Kuota/Status.
+  - **Kedua gap ditutup langsung** (user pilih "perbaiki sekarang"): `lib/pricing/flightAirlines.ts` (baru) — helper `getFlightAirlineNames()` batch-lookup `ProductCost`→`Vendor` per sekumpulan `scheduleId`, dipakai di 2 tempat supaya tidak duplikasi. `GET /api/v1/admin/products/flight/schedules` sekarang menyertakan `airlineName` per baris (dipakai kolom Maskapai baru di listing admin). `app/api/v1/catalog/flight/route.ts` (baru) — endpoint publik, sama pola `catalog/visa` (tanpa auth guard, `price` di-`Number()`-kan, `airlineName` disertakan) untuk konsumen client-side di masa depan (mis. kalau integrasi wizard dikerjakan nanti).
+  - **Dicatat, sengaja tidak diperbaiki** (di luar scope 2 gap yang disetujui user): `PUT schedules/[id]` tidak punya validasi silang `departureTo >= departureFrom` (POST punya). Bukan bug aktif — UI admin selalu kirim kedua field bersamaan — tapi endpoint sendiri tidak menegakkannya kalau dipanggil langsung dengan tanggal terbalik.
+  - Diverifikasi lewat browser: buat rute+jadwal+HPP uji baru → listing admin sekarang tampil kolom Maskapai "BRN" dengan benar → `GET /api/v1/catalog/flight` diakses langsung, respons JSON berisi `route`, `price` (number, bukan Decimal string), dan `airlineName:"BRN"` sesuai. Data uji dibersihkan.
+  - `bun run build` — 0 error, route baru (`api/v1/catalog/flight`) terkonfirmasi terdaftar di build output.
+
+---
+
+## Modul Hotel (`docs/arsitektur-hotel.md`) — Audit As-Built
+
+- [x] **Audit as-built** (2026-07-19), diminta user sebelum lanjut ke migrasi harga Hotel — mengikuti pola "bertahap": Pesawat & Visa dulu, baru modul lain. `docs/arsitektur-hotel.md` ditulis dari nol (belum pernah ada dokumen terpisah untuk Hotel sebelumnya, cuma dirujuk di `docs/architecture.md`/`docs/spec.md` yang sebagian sudah basi). Beda dari Flight (rencana ditulis dulu baru kode) — di sini kode sudah lama ada, jadi urutannya audit dulu, rencana migrasi menyusul setelah user baca dokumennya. Tidak ada kode yang diubah di fase ini — murni dokumentasi.
+  - **Konfirmasi status pricing**: `HotelRoom` masih pakai 3 kolom harga manual per musim (`priceRegular`/`priceRamadan`/`priceHajj`), nol integrasi ke `Vendor`/`ProductCost`/`computeSellPrice()` — dikonfirmasi lewat `grep` langsung, tidak ada satu pun referensi `productType:'hotel'` di codebase.
+  - **9 gap ditemukan lewat baca kode langsung** (bukan asumsi dari dokumen lama), 2 di antaranya serius:
+    - 🔴 Gap #1 (KRITIS): `BookingHotel.pricePerNight` dipercaya mentah dari body request client (`hotelSelectionSchema.pricePerNight`), tidak pernah di-re-validasi server terhadap harga aktual `HotelRoom` — celah manipulasi harga booking. Pola sama kemungkinan ada di Transport (`unitPrice`), belum dikonfirmasi (di luar scope audit ini).
+    - 🔴 Gap #2: `PUT /api/v1/admin/products/hotels/[id]` terima `data: body` mentah tanpa Zod — mass-assignment risk.
+    - 🟡 Gap #3: `HotelService`/"Layanan Hotel" tidak punya jalur admin untuk diisi — section publik selalu kosong di praktik meski render-nya benar (lihat catatan di checklist M3 di atas).
+    - 🟡 Gap #4: tipe kamar & kuota create-only, tidak ada PUT/DELETE, form kuota tidak tampilkan riwayat.
+    - 🟡 Gap #5: `HotelPicker.tsx` dead code (pola sama `MuthowifPicker.tsx`).
+    - 🟡 Gap #6: semua route admin (kecuali `images`) collapse error ke 403 polos (pola sama Visa Gap #6 lama, belum ditutup di Hotel).
+    - 🟢 Gap #7-8: inkonsistensi resolusi musim/kuota antar halaman publik, filter kota hardcode 2 nilai.
+    - Gap #9 (referensi silang, bukan temuan baru): self-cancel tidak lepas kuota hotel — sudah tercatat di `docs/arsitektur-umroh.md` §7 Gap #2.
+  - Detail lengkap tiap gap (lokasi file:line, kode aktual, dampak): `docs/arsitektur-hotel.md` §8.
+  - `CLAUDE.md` diupdate — Hotel masuk daftar modul yang sudah punya dokumen arsitektur sendiri; 3 temuan paling kritis (Gap #1/#2/#3) ditambahkan ke section "Perhatian" bareng bug kritis lama.
+  - **Belum ada rencana migrasi harga Hotel ke arsitektur HPP universal** — menunggu arahan user setelah baca dokumen ini, sesuai instruksi eksplisit ("tulis dulu aja agar nanti saya tulis apa yang saya mau").
+
+## Modul Hotel — Refactor Total ke Arsitektur Harga Universal (`docs/arsitektur-hotel.md` §10) — SELESAI
+
+User minta refactor total setelah baca audit as-built — 4 keputusan struktural dikonfirmasi lewat `AskUserQuestion` sebelum rencana ditulis (Vendor terpisah pola Maskapai, ganti 3-musim-tetap jadi periode bebas per hotel×tipe kamar, fasilitas level Hotel checkbox hardcode, generalisasi override `computeSellPrice()`). Rencana 7 fase ditulis lengkap di §10 sebelum eksekusi.
+
+- [x] **Fase 0 — Generalisasi `computeSellPrice()` override** (2026-07-19): `lib/pricing/computeSellPrice.ts` — pencarian `sellPriceOverride` dipindah dari hardcode `costComponent==='individu'` jadi cari di komponen HPP manapun yang preferred untuk produk itu, digabung ke loop utama (satu pass, bukan lookup terpisah). Dikerjakan & diverifikasi terisolasi dulu sebelum skema Hotel disentuh — supaya kalau ada regresi, gampang di-revert.
+  - Diverifikasi: `bun run build` 0 error. Regresi ke **data produksi nyata**: `computeSellPrice()` untuk semua `VisaProduct`/`FlightSchedule` aktif dibandingkan dengan cache tersimpan — identik persis sebelum & sesudah. Test fungsional: `ProductCost` uji dengan `costComponent:'kamar'` (bukan `'individu'`) + `sellPriceOverride:999000` → `computeSellPrice()` mengembalikan `999000` dengan benar. Data & vendor uji dibersihkan.
+  - `docs/arsitektur-harga.md` §20 baru (SELESAI & TERVERIFIKASI).
+- [x] **Fase 1-6 — Schema, Integrasi Harga, Admin UI, Publik, Wizard & Booking, Dokumentasi** (2026-07-19): dikerjakan sebagai satu rangkaian (bukan checkpoint terpisah per fase seperti rencana awal) — begitu skema Fase 1 diubah, build langsung merah di ±18 file konsumen lintas modul (API bookings, payment confirm, cron auto-cancel, quota dashboard, wizard, halaman booking detail), yang sebagian besar justru scope Fase 2-5. Diputuskan selesaikan seluruh rantai sampai build hijau, checkpoint di akhir — **deviasi dicatat eksplisit**, lihat `docs/decisions.md` 2026-07-19 "Deviasi Fase Eksekusi", tidak ada isi fase yang dilewati/disingkat.
+  - **Schema**: `RoomType` (seed 5: Single/Double/Triple/Quad/Quint), `HotelRoomSchedule` (baru, gantikan `HotelRoom`+`HotelQuota`, satu baris = hotel×tipe×periode, kuota+HPP+harga cache jadi satu), `Hotel` (+`featuredImageKey`/`facilities`), `BookingHotel` (FK `hotelRoomScheduleId`). Migrasi `20260719160050_hotel_refactor_room_schedule` — shadow DB diverifikasi eksplisit terpisah (pelajaran insiden nyaris sebelumnya di sesi sama). Row count 7 tabel non-Hotel identik sebelum/sesudah; 20 `hotel_rooms`+20 `hotel_quotas` dihapus (aman, `booking_hotels:0`).
+  - **Integrasi Harga**: `lib/pricing/refreshHotelRoomScheduleCache.ts`, endpoint `cost`+`simulate` (komponen HPP tunggal `"kamar"`), hook cron kurs.
+  - **Admin UI**: listing + edit hotel ditulis ulang total — checkbox fasilitas (15 opsi standar), foto sampul (thumbnail-picker dari galeri), section "Jadwal Kamar" expandable per baris untuk HPP (quick-add `RoomType` & `Vendor` category `'hotel'`, live preview debounce). Semua route API ditulis ulang dengan Zod (menutup Gap #2 mass-assignment lama) + validasi overlap periode (409) + soft-delete.
+  - **Publik**: katalog + detail hotel + featured hotels beranda — semua resolve harga/kuota dari `HotelRoomSchedule` sesuai periode tanggal dicari, `detectSeason()` dihapus total dari jalur Hotel. Detail page tambah section Fasilitas.
+  - **Wizard & Booking — tutup Gap #1 KRITIS**: `pricePerNight` dihapus total dari `hotelSelectionSchema` (client cuma kirim `hotelRoomScheduleId`), `bookings/route.ts` hitung harga server-side dari `HotelRoomSchedule.price`. Dead code `HotelPicker.tsx` dihapus.
+  - **Diverifikasi lengkap** (browser + script, data uji dibersihkan): buka hotel nyata → centang fasilitas → simpan → reload tetap tersimpan; buat jadwal kamar (Single, Jan 2027, 15 kamar) → quick-add vendor otomatis `category:'hotel'` → isi harga 450 USD → live preview HPP Rp 8.202.521/Harga Jual Rp 9.850.000 → simpan → `HotelRoomSchedule.price` di database persis sama; `GET /api/v1/catalog/hotels?check_in=...&check_out=...` mengembalikan harga/fasilitas/ketersediaan benar; Dashboard Kuota admin tampil benar; **script keamanan** membuktikan `pricePerNight` client (disimulasikan Rp 1) tidak pernah terpakai — hasil selalu dari `HotelRoomSchedule.price` asli, dikuatkan juga secara statis (field itu sudah tidak ada di schema Zod, build sukses 0 error membuktikan tidak ada kode yang bergantung padanya).
+  - `bun run build` — 0 error (checkpoint akhir).
+- [x] **§11 — Periode Sebagai Entitas Terpisah, Input Massal per Periode** (2026-07-19): user tunjukkan rate sheet vendor hotel nyata (screenshot) — berbentuk matriks 1 periode × banyak tipe kamar sekaligus, sementara UI §10 memaksa admin isi satu tipe kamar per satu periode setiap kali. 3 keputusan dikonfirmasi `AskUserQuestion` (vendor+currency per periode bukan per tipe kamar, meal plan jadi checkbox fasilitas bukan dimensi harga baru, 1 data nyata yang sudah ada dihapus & diinput ulang manual). Blast radius dicek dulu via `grep` sebelum tulis rencana (pelajaran §10) — terbukti terkontrol, 2 checkpoint cukup.
+  - **Schema**: `HotelPricePeriod` baru (periode independen, dipakai bersama banyak `HotelRoomSchedule`), `HotelRoomSchedule` direstruktur (`periodStart`/`periodEnd` diganti `periodId`, tambah `@@unique([periodId,roomTypeId])`). Vendor/currency TETAP lewat `ProductCost`/`PreferredVendor` per baris (tidak ada field baru redundan) — "satu vendor per periode" ditegakkan di API, bukan skema. Migrasi `20260719170340_hotel_price_period`, shadow DB diverifikasi eksplisit terpisah, row count 7 tabel non-Hotel identik.
+  - **API baru**: `.../periods` (list+create dengan validasi overlap 409), `.../periods/[periodId]` (edit/soft-delete), `.../periods/[periodId]/prices` (**endpoint inti** — bulk PUT `{vendorId, currency, rooms:[{roomTypeId,cost,totalQuota}]}`, upsert N `HotelRoomSchedule`+`ProductCost`+`PreferredVendor` sekaligus dengan vendor/currency seragam). 3 route lama (`schedules*`) dihapus.
+  - **Katalog publik dijaga tidak berubah bentuk** — response `schedules:[...]` di-flatten dari `pricePeriods.flatMap()` di server, supaya wizard/konsumen publik lain (`bookings/new/hotel/page.tsx`, `lib/validators/booking.ts`, `bookings/route.ts`, dll.) **tidak perlu disentuh sama sekali** — dikonfirmasi lewat estimasi blast radius sebelum eksekusi, dan terbukti akurat setelah build (cuma 3 file booking-detail yang meleset dari estimasi, karena masih include `hotelRoomSchedule.hotel` langsung dari §10 — diperbaiki jadi `hotelRoomSchedule.period.hotel`).
+  - **Admin UI**: section "Jadwal Kamar" (§10) diganti total "Periode & Harga Kamar" — buat periode (tanggal saja) → grid 1 baris per `RoomType` (Single/Double/Triple/Quad/Quint) dengan input harga+kuota+live preview HPP/Harga Jual per baris, vendor+currency dipilih SEKALI di atas grid, satu tombol "Simpan Semua Harga" untuk bulk-save.
+  - **Diverifikasi lewat browser di hotel nyata** ("Anwar Al Madinah Mövenpick Hotel"): buat periode 1 Jul–15 Agu 2027 → grid tampil 5 tipe kamar sekaligus → pilih vendor nyata "Mas Adam" sekali → isi 4 harga berbeda (440/490/535/520 USD) → live preview per baris benar → simpan sekali → database konfirmasi 4 `HotelRoomSchedule` dengan harga BEDA tapi `vendorId`+`currency` SAMA persis di semua `ProductCost`-nya. Ringkasan periode (collapsed) tampil "4 tipe kamar terisi, Rp 9.600.000 – Rp 11.700.000". Katalog publik & Dashboard Kuota tampil 4 baris terpisah dengan benar tanpa perubahan kode di sisi itu. Data uji dibersihkan; vendor "Mas Adam" & fasilitas WiFi+Sarapan (data nyata milik user) dipertahankan.
+  - `bun run build` — 0 error.
+- [x] **§11.9 — Tabel rate sheet di halaman publik** (2026-07-19): user minta tampilan publik yang bentuknya sama dengan rate sheet vendor. `(public)/hotels/[id]/page.tsx` — section "Tipe Kamar" (cards, cuma periode hari-ini) diganti "Harga per Periode": tampilkan **semua** periode aktif (bukan cuma yang mencakup hari ini), kolom = union semua `RoomType` yang pernah dipakai hotel itu. Desktop: tabel (Dari/Sampai/kolom per tipe kamar). Mobile: kartu per periode.
+  - Diverifikasi di data nyata milik user ("Anwar Al Madinah Mövenpick Hotel", 2 periode × 4 tipe kamar yang sudah diinput user sendiri) — tabel desktop persis format rate sheet yang dilampirkan user, kartu mobile rapi, tanpa console error. Tidak ada data yang diubah.
+  - `bun run build` — 0 error.
+
+---
+
+## Modul Transportasi — Sync-Check Sebelum Upgrade (`docs/arsitektur-transportasi.md` §7)
+
+- [x] **Recheck dokumen vs kode aktual** (2026-07-19), diminta user sebelum upgrade Transport (pola sama Visa/Flight/Hotel: audit dulu, baru rencana). Skema (§2), API routes (§3), season pricing (§4), admin UI (§5), katalog publik & wizard (§6) semua dicek langsung ke kode — **masih akurat 100%**, tidak ada drift sejak audit 2026-07-08.
+  - Gap #2 lama (dead code `admin/transport/route.ts` + `TransportPicker.tsx`) **DITUTUP** — dikonfirmasi kedua file sudah tidak ada di codebase.
+  - Gap #1 lama (`pickupDetail`/`dropoffDetail` selalu kosong dari wizard) **masih terbuka**, dikonfirmasi ulang.
+  - **2 gap baru ditemukan**, tidak pernah tercatat sebelumnya:
+    - 🔴 **Gap #4 KRITIS**: `unitPrice`/`totalPrice` booking transport dipercaya mentah dari client (`transportSelectionSchema`), tidak pernah di-re-validasi server terhadap `TransportPricing` aktual — persis pola Gap #1 Hotel yang sudah ditutup. Ini yang sebelumnya cuma "dicurigai, belum dikonfirmasi" di beberapa catatan sesi — sekarang terkonfirmasi lewat baca langsung `app/api/v1/bookings/route.ts:114-125`.
+    - 🟡 **Gap #5**: semua route admin Transport (kecuali `vehicles/[id]/images`) masih pakai `catch{...403}` polos — pola yang sudah ditutup di Visa/Flight/Hotel, belum pernah disentuh di Transport.
+  - `docs/arsitektur-transportasi.md` §7 diupdate lengkap dengan lokasi file:line dan cross-reference ke preseden Hotel. `CLAUDE.md` diupdate — Gap #4 dipindah dari "kemungkinan ada" jadi terkonfirmasi.
+
+- [x] **Rencana upgrade ditulis** (2026-07-19) — `docs/arsitektur-transportasi.md` §9: harga per rute×kendaraan terstruktur (meniru Tiket Pesawat), musiman & charter/per-kursi dihapus total (satu harga flat per kombinasi), terintegrasi `docs/arsitektur-harga.md` (komponen HPP `"kendaraan"`, pola sama Flight). Blast radius dicek via grep dulu (~11 file).
+- [x] **Eksekusi Fase 0-6 SELESAI & TERVERIFIKASI** (2026-07-19, `docs/arsitektur-transportasi.md` §9.10) — schema+migrasi (shadow DB terverifikasi terpisah), `refreshTransportPricingCache` + cron kurs, API routes (trips/pricing/cost/simulate/catalog, sekaligus rapikan error handling), booking creation server-side price (tutup **Gap #4 KRITIS**), admin UI (form trip origin/destination wajib + cost editor per kendaraan), publik & wizard (katalog, wizard 1-tombol, draft type). Verifikasi: `bun run build` 0 error, browser end-to-end (admin cost editor → DB → katalog publik menampilkan harga terbaru), script test Gap #4 (client kirim harga manipulasi, server tetap pakai `TransportPricing.price` asli). Gap #4 dan Gap #5 (error handling) di `docs/arsitektur-transportasi.md` §7 **DITUTUP**. Gap #1 (pickupDetail/dropoffDetail kosong) tetap terbuka — di luar scope, tidak diminta.
+
+---
+
+## M9 — Admin Panel (Ops) ✓
+- [x] Admin layout: dark sidebar, nav (Overview, Booking, Pembayaran, Visa, Quota, Notifikasi)
+- [x] Overview dashboard: 4 stat cards, tabel booking terbaru
+- [x] Booking list: filter by status, tabel dengan kode/nama/tanggal/total
+- [x] Booking detail: trip summary, PaymentActions, VisaActions per jamaah, PassportForm
+- [x] `PaymentActions`: konfirmasi/tolak bayar → update quota pending→booked via `$transaction`
+- [x] `VisaActions`: update status visa dengan transisi yang valid
+- [x] `PassportForm`: admin input data paspor per jamaah (no. paspor, expiry, DOB)
+- [x] Payment queue page: list booking dengan status `payment_review`
+- [x] Visa management page: filter by status, tabel semua visa application
+- [x] Quota dashboard: tabel hotel quota (total/pending/booked/sisa), muthowif
+- [x] Notification log: tabel semua sent notifications
+- [x] `PUT /api/v1/admin/visa/[pilgrimId]/status` — visa status update
+- [x] `PUT /api/v1/admin/pilgrims/[pilgrimId]/passport` — passport data entry
+- [x] `POST /api/v1/admin/payments/[id]/confirm` — confirm/reject + confirm quota
+- [x] `GET /api/v1/admin/bookings` — list bookings with status filter
+- [x] `GET /api/v1/admin/quotas` — quota overview
+- [ ] ZIP download dokumen (butuh MinIO)
+- [ ] Manual WhatsApp send
+
+---
+
+## M10 — Super Admin Panel ✓
+- [x] Super admin layout: dark sidebar amber-accent, nav 8 section
+- [x] Overview: 7 stat card dengan link ke masing-masing section
+- [x] Hotel CRUD: tambah/edit/nonaktifkan, nama, kota, bintang, jarak
+- [x] Hotel room types: tambah tipe kamar dengan harga per 3 season
+- [x] Hotel quota: set total kamar per room type per periode
+- [x] **Hotel Media Library** — upload/hapus/preview foto hotel via MinIO
+  - `GET|POST|DELETE /api/v1/admin/products/hotels/[id]/images`
+  - `components/admin/media/ProductMediaGallery.tsx` — grid thumbnail + lightbox
+  - `components/admin/media/ImageUploadModal.tsx` — drag-drop + progress bar
+  - Flow: create hotel → redirect ke edit page → upload foto inline
+  - Foto pertama otomatis jadi cover (badge UTAMA), max 10 foto per hotel
+  - Disimpan sebagai array object key di `Hotel.images` (JSON field)
+- [x] **Hotel images di public catalog** — foto tampil di frontend
+  - `/hotels` — cover photo per card (foto pertama), placeholder ikon jika belum ada foto
+  - `/hotels/[id]` — gallery adaptif: 1 foto = hero, 2 = split, 3+ = besar-kiri + 2 thumbnail kanan + overlay "+N foto"
+  - Presigned URL di-generate server-side (TTL 1 jam), paralel via `Promise.all`
+- [x] Transport vehicles CRUD v2: nama, tipe, kapasitas, jumlah armada, toggle per-kursi, foto gallery via MinIO
+  - Halaman edit terpisah `/products/transport/vehicles/[id]` dengan `ProductMediaGallery`
+  - `PUT /api/v1/admin/products/transport/vehicles/[id]`
+  - `GET|POST|DELETE /api/v1/admin/products/transport/vehicles/[id]/images`
+- [x] **Transport v3 — Pricing per Trip × Vehicle** *(rewrite arsitektur)* — arsitektur & audit lengkap: `docs/arsitektur-transportasi.md` (source of truth, per 2026-07-08)
+  - Harga tidak melekat di kendaraan, tapi di paket trip: `TransportPricing` junction table (`tripId × vehicleId`)
+  - `TransportVehicle` — tidak ada kolom harga (dihapus); hanya fisik kendaraan
+  - `TransportTrip` — paket perjalanan (Airport Transfer, City Tour, dll.) dengan category, originHint, destinationHint
+  - `TransportPricing` — harga charter + per-seat per 3 musim (Regular/Ramadan/Hajj), `perSeatEnabled` per kombinasi
+  - `TransportQuota` — referensi `pricingId` (bukan vehicleId + routeId)
+  - Admin UI: 2 tab (Kendaraan / Trip & Harga), halaman edit trip `/trips/[id]` dengan pricing builder per kendaraan
+  - Public catalog: group by category, vehicle cards dengan foto + harga charter & per-seat
+  - API: `GET|POST /api/v1/admin/products/transport/trips`, `GET|PUT|DELETE /trips/[id]`
+  - API: `GET|POST /api/v1/admin/products/transport/pricing`, `PUT|DELETE /pricing/[id]`
+  - Old `routes/` API folder dihapus (referensi `prisma.transportRoute` yang sudah tidak ada)
+  - [ ] **Gap ditemukan saat audit (`docs/arsitektur-transportasi.md` §7):** wizard tidak punya input field untuk `pickupDetail`/`dropoffDetail` walau trip punya `originHint`/`destinationHint` — selalu terkirim string kosong. `app/[locale]/(pilgrim)/bookings/new/transport/page.tsx:91-92,119-120`
+  - [ ] **Gap (kecil, dead code):** `app/api/v1/admin/transport/route.ts` (stub tak terpakai) dan `components/booking/TransportPicker.tsx` (`return null`, tak ter-import) — sisa refactor v2, aman dihapus
+  - Seed: 5 kendaraan, 6 trip, 20 pricing rows, 186 quota slot (90 hari ke depan)
+- [x] Muthowif — arsitektur & audit as-built: `docs/arsitektur-muthowif.md` §1-§7 (per 2026-07-08)
+- [x] **Muthowif: Booking Generik + Assignment Admin — SELESAI & TERVERIFIKASI (2026-07-20)** — `docs/arsitektur-muthowif.md` §9. Perombakan model bisnis: jamaah tidak lagi pilih muthowif by name saat booking (dulu marketplace-style), Saudinesia (admin) yang menentukan siapa bertugas setelah booking masuk, sesuai positioning "curated operator". Harga pindah dari per-orang jadi satu layanan flat (`MuthowifServicePrice`). Kapasitas jadi 2 lapis: pool (gabungan semua muthowif aktif, dicek saat booking dibuat) + individual (dicek saat admin assign). Detail lengkap fase eksekusi: §9.10.
+  - Menutup **Gap #1 KRITIS** (`confirmMuthowifQuota()` tidak ada) sebagai efek samping struktural — payment confirm sekarang confirm pool+individual quota dengan benar.
+  - Menutup Gap #4 (tidak ada PUT/edit/isActive toggle), Gap #8 (quotas page tidak ada breakdown), Gap #9 (dead code `MuthowifPicker.tsx`).
+  - Gap #3 (`languages` tanpa type formal), #5 (`rating` statis) **tetap terbuka** — di luar scope, tidak diminta.
+  - Verifikasi: `bun run build` 0 error, browser end-to-end (admin panel harga → edit roster → katalog publik showcase → wizard toggle → PriceSidebar label generik), script test siklus penuh booking→assign→confirm (pool & individual quota konsisten di tiap tahap).
+- [x] **Gap kecil di 3 modul yang sudah dirombak — SELESAI (2026-07-20)**, dipilih user setelah rekap status sesi:
+  - **Muthowif Gap #7**: `reservePoolMuthowifQuota()` sekarang sertakan tanggal spesifik + sisa kapasitas di pesan error (dulu generik tanpa bilang hari mana), otomatis terusan ke user lewat mekanisme forward-error yang sudah ada.
+  - **Transport Gap #1**: wizard (`bookings/new/transport/page.tsx`) sekarang punya 2 input teks (titik jemput/antar) per trip yang dipilih — dulu selalu terkirim string kosong meski kolom DB & payload sudah mendukung.
+  - **Hotel Gap #3**: `HotelService`/"Layanan Hotel" dapat jalur admin CRUD lengkap (`admin/products/hotels/[id]/services/**` + section di halaman edit hotel) — dulu section publik selalu kosong karena tidak ada cara mengisi datanya. Integrasi ke wizard booking (`BookingService`) tetap di luar scope.
+  - **Muthowif Gap #2**: field `photoUrl` direname `photoKey` (menyimpan object key MinIO sesuai konvensi, bukan URL — field lama tidak pernah dipakai sehingga aman di-rename tanpa migrasi data), upload/hapus foto lewat admin edit page, dirender di katalog publik + homepage (presigned URL, fallback ikon kalau kosong).
+  - Verifikasi: `bun run build` 0 error tiap fix, browser end-to-end (termasuk uji upload foto sungguhan via MinIO lalu dibersihkan).
+- [x] **Muthowif: Integrasi HPP Universal — SELESAI & TERVERIFIKASI (2026-07-20)** — `docs/arsitektur-muthowif.md` §10. User: "tidak ada harga HPP untuk muthowif" — `MuthowifServicePrice` tadinya harga jual diketik admin langsung (3 kolom season), sekarang dihitung dari HPP+kurs+margin (`computeSellPrice()`) sama seperti Visa/Flight/Hotel/Transport. Struktur 3-season dihapus jadi satu harga flat (dikonfirmasi user via AskUserQuestion) — `MuthowifServicePrice.price` jadi cache, `costComponent` tunggal `"layanan"` (pola sama Flight, tidak day-based). Cost editor (vendor+currency+harga+preview live) menggantikan panel 3-input harga manual di admin. `detectSeason()` dihapus dari catalog & booking creation untuk muthowif.
+  - Verifikasi: `bun run build` sempat merah (seed.ts masih pakai field lama), diperbaiki, lalu 0 error. Browser end-to-end: admin isi HPP (vendor baru, IDR 350.000) → preview live benar → simpan → `price` ter-update di DB → katalog publik langsung menampilkan harga baru.
+  - **Koreksi (2026-07-20)**: user menunjukkan Muthowif tidak punya vendor pihak ketiga sungguhan (personal/internal, beda dari Visa/Flight/Hotel/Transport) — diganti pakai satu vendor tetap "Saudinesia" (kategori `internal`, dibuat otomatis server-side), dropdown/quick-add vendor dihapus dari form admin, vendor cuma tampil read-only. Currency tetap bisa dipilih (dikonfirmasi user).
+- [x] **Ziarah & Paket — Audit As-Built Ditulis (2026-07-20)** — `docs/arsitektur-ziarah.md` (baru). User minta cek sinkronisasi "ziarah" dan "paket". **Temuan utama: keduanya bukan satu sistem yang perlu disinkronkan — dua model terpisah total yang kebetulan berbagi kata "paket" di label UI.** "Paket Ziarah" (judul admin, label wizard) = `HeritageTour`, produk nyata terintegrasi ke booking. "Paket & Bundle"/"Paket Lengkap" = `Package`, secara fungsional cuma kartu marketing statis — `PackageItem` tidak direferensikan di satu pun kode selain schema (dikonfirmasi grep menyeluruh), tidak ada endpoint kelola item, CTA publik tidak membawa konteks ke wizard.
+  - Gap ditemukan (belum ditutup, murni dokumentasi sesi ini): #1 harga tur client-trusted (pola sama Hotel/Transport/Muthowif sebelum ditutup), #2 tidak ada kuota/kapasitas tur, #3 admin `HeritageTour` create-only, #4 `booking.tours`/`booking.catering` fetched-tapi-tak-dirender di detail booking admin, #5 `Package` non-fungsional (detail di atas), #6 error handling `catch{403}` polos + tanpa Zod, #7 belum terintegrasi arsitektur harga universal.
+- [x] **Ziarah: Paket Ziarah Terintegrasi Transport — SELESAI & TERVERIFIKASI (2026-07-21)** — `docs/arsitektur-ziarah.md` §8-§9. `HeritageTour`/`BookingTour` dihapus total, diganti `TourismSite` (master data situs, foto+deskripsi+gmaps) + `TourPackage` (referensi `TransportTrip` yang sudah ada — reuse penuh kendaraan/harga/kuota) + `TourPackageSite` + `BookingTourPackage`. Margin dihitung PER KOMPONEN lalu dijumlah — fungsi baru `computeTourPackagePrice()`, deviasi sengaja dari pola `computeSellPrice()` standar (didokumentasikan §8.3). Semua 7 fase (schema/migrasi, fungsi harga, API routes, booking lifecycle, admin UI, publik & wizard, verifikasi) dieksekusi dan `bun run build` 0 error.
+  - Verifikasi browser end-to-end: admin buat situs wisata + paket (referensi trip `city_tour`) + komponen biaya "Guide Lokal" (vendor quick-add) → breakdown benar (HPP Rp 200.000 → Harga Jual Rp 250.000, total per kendaraan Rp 1.350.000/2.250.000/4.250.000) → katalog publik tampilkan harga cache yang sama → booking dibuat → `BookingTourPackage.totalPrice` dihitung ulang server-side identik dengan preview admin (client tidak bisa pengaruhi harga), `tourDate` diambil dari `TransportQuota`, kuota `TransportQuota.pendingSeats` bertambah lewat fungsi `reserveTransportQuota()` yang SAMA dipakai booking Transport biasa (dikonfirmasi tidak ada kuota terpisah/duplikat untuk kendaraan fisik yang sama).
+  - Gap ditemukan saat verifikasi, sengaja TIDAK diperbaiki (di luar scope Ziarah): modul Transport belum punya admin UI untuk generate `TransportQuota` ad-hoc trip kategori `city_tour` (seed 90-hari hanya cakup airport/intercity); modul Hotel tampil harga Rp 0/mlm untuk rentang tanggal 2026-08 di wizard (kemungkinan gap seed `HotelPricePeriod`). Keduanya dicatat di `docs/decisions.md` 2026-07-21 untuk kerja mendatang.
+- [x] **Ziarah: Hotel sebagai Komponen Add-on Pass-through — SELESAI & TERVERIFIKASI (2026-07-21)** — `docs/arsitektur-ziarah.md` §10. User klarifikasi: catatan "Hotel Rp 0/mlm" bukan permintaan mewajibkan hotel — malah mengusulkan Hotel jadi salah satu pilihan komponen add-on (referensi `HotelRoomSchedule` untuk kemudahan harga, sejajar komponen custom Guide/Makan/Minum), tetap opsional sepenuhnya. Model baru `TourPackageHotel` (tourPackageId, hotelRoomScheduleId, nights, numRooms). Harga **pass-through** (nights × numRooms × `HotelRoomSchedule.price`, TIDAK dimargin lagi — sama alasan kendaraan pass-through) — dikonfirmasi user via AskUserQuestion.
+  - Verifikasi browser: tambah hotel Double 1 malam × 1 kamar (Rp 14.200.000) ke paket yang sudah ada komponen Guide (Rp 250.000) → breakdown tampilkan total hotel identik tanpa margin tambahan → total per kendaraan bertambah tepat (Rp 4.250.000 → Rp 18.450.000) → hapus hotel → kembali ke angka semula, komponen lain tidak terganggu. `bun run build` 0 error.
+  - **Keputusan sadar TIDAK reserve kuota hotel nyata** meski fungsi `reserveHotelQuota()` dkk sudah ada dan reusable — hotel dipilih di level template paket (statis), sedangkan kuota hotel terikat periode/tanggal spesifik. Didokumentasikan sebagai gap yang diketahui sejak desain (§10.7), bukan diminta user.
+  - **Koreksi (2026-07-21)**: user menekankan harga yang direferensikan dari modul lain (bukan cuma Hotel) harus selalu sebatas referensi/default, bukan angka statis — admin harus bisa edit lagi. `TourPackageHotel` ditambah field tersimpan `pricePerNight` (snapshot server-side dari `HotelRoomSchedule.price` saat baris dibuat, lalu admin bisa PUT untuk mengubahnya kapan saja). Breakdown pakai nilai tersimpan ini, bukan live dari modul Hotel. Diverifikasi: edit harga Rp 14.200.000 → Rp 10.000.000 langsung mengubah total per kendaraan, tanpa menyentuh harga asli di modul Hotel.
+  - **Konsistensi UI (2026-07-21)**: editor "Komponen Biaya" direstyle total supaya identik dengan pola HPP editor Flight/Muthowif/Visa/Transport/Hotel (panel teal, ikon Wallet, caption docs, kotak "Vendor & Mata Uang", live preview HPP/Harga Jual via debounce+`/simulate`) — sebelumnya pakai tampilan berbeda sendiri. Endpoint baru `tour-packages/simulate`, `GET .../costs` diperkaya `hppRupiah`/`sellPrice` per baris, tabel "Komponen" di Preview Harga dihapus (redundan dengan tampilan inline per-baris).
+- [x] **Ziarah: Kendaraan (Transport) Jadi Opsional, Sejajar Hotel — SELESAI & TERVERIFIKASI (2026-07-21)** — `docs/arsitektur-ziarah.md` §11. User: transport jangan jadi "kunci utama" — harus opsional sejajar Hotel, atau diisi manual lewat Komponen Biaya. `TourPackage.transportTripId` dan `BookingTourPackage.transportQuotaId` diubah jadi nullable (migrasi non-destruktif). Admin bisa buat paket tanpa kendaraan sama sekali; kalau butuh biaya transport tanpa integrasi Trip/Vehicle, tinggal tambah "Komponen Biaya" manual (jalur yang sudah ada).
+  - Verifikasi: buat paket tanpa kendaraan → tambah komponen manual "Sewa Mobil Manual" (Rp 500rb) → breakdown "Total Harga Paket (tanpa kendaraan)" = Rp 600.000 (margin 20%) → katalog publik tampil tanpa badge rute → booking langsung via API tanpa `transportQuotaId` berhasil, `tourDate` fallback ke `departureDate` booking. Paket lama yang pakai kendaraan (§8-§10) tetap normal. `bun run build` 0 error.
+  - **Bug ditemukan & DITUTUP (2026-07-21)**: `PUT .../tour-packages/[id]` (form Info Paket) tidak pernah memanggil `refreshTourPackagePriceCache()` — kalau kendaraan diganti/dilepas lewat form itu, cache `TourPackage.price` jadi basi (harga publik "Mulai dari" bisa beda dari harga aktual). Ditemukan konkret saat user melapor harga admin vs publik "tidak sinkron" — paket "Ziarah Makkah — Sejarah Islam" sempat ter-unlink dari kendaraannya (kemungkinan besar akibat testing browser sesi ini), data dipulihkan + cache di-refresh, dan PUT sekarang ikut memanggil refresh kalau `transportTripId` berubah.
+- [x] **Ziarah: Variable Harga 3-Mode (Included / User Choice / None) — SELESAI & TERVERIFIKASI (2026-07-21)** — `docs/arsitektur-ziarah.md` §12 (menggantikan §11). User menunjukkan bug konsep: implementasi opsional/wajib (§11) tidak cukup — kendaraan/hotel butuh 3 mode eksplisit: `included` (admin kunci 1 pilihan, harga baku masuk harga jual paket, pilgrim tidak pilih), `user_choice` (admin cuma hubungkan sumber, pilgrim pilih & bayar sendiri saat booking, harga TIDAK masuk harga jual paket dasar), `none` (tidak dipakai/manual). Sebelumnya `cheapestTotal()` SELALU membakukan kendaraan termurah begitu trip terhubung — "tiba2 masuk harga publish" meski niatnya cuma jadi opsi.
+  - Skema baru: enum `PriceVariableMode`, `TourPackage.transportMode`/`includedTransportPricingId`/`includedTransportPrice` (snapshot/editable), `hotelMode`, model baru `TourPackageHotelOption` (opsi hotel mode user_choice), `BookingTourPackage.chosenHotelRoomScheduleId`/`chosenHotelNumRooms`.
+  - Booking lifecycle: mode `included` kendaraan tetap reservasi `TransportQuota` NYATA (auto-resolve dari tanggal keberangkatan, pilgrim tidak pilih apa pun) — cegah overbooking. Mode `user_choice` HOTEL sekarang JUGA reservasi kuota nyata (beda dari hotel `included` §10.7 yang sengaja statis, tidak reservasi).
+  - Migrasi data: paket existing "Ziarah Makkah — Sejarah Islam" di-set `user_choice` (dikonfirmasi user) — harga "Mulai dari" katalog TURUN dari Rp 1.350.000 ke Rp 250.000 (disengaja).
+  - Verifikasi: breakdown 2-blok benar (dasar vs opsi tambahan bertanda "+"), ganti ke mode Included → kunci kendaraan → harga dasar naik jadi termasuk kendaraan, booking API mode Included tanpa `transportQuotaId` dari client berhasil auto-resolve quota. Katalog publik sinkron persis dengan admin. `bun run build` 0 error di setiap fase.
+- [x] **Paket Umroh: Variable Harga 3-Mode diperluas ke `Package` — SELESAI & TERVERIFIKASI (2026-07-22)** — `docs/arsitektur-paket-umroh.md` (baru). User: "Paket Umroh" (`Package`/`PackageItem`) logikanya persis Paket Ziarah tapi fokus di produk dulu, booking engine diabaikan (akan direfactor total terpisah). `PackageItem` (generik, tidak pernah dipakai kode manapun — Gap #5 lama `docs/arsitektur-ziarah.md` §6) dihapus, diganti 7 komponen 3-mode: Hotel Makkah, Hotel Madinah, Transport, Muthowif (singleton, tanpa daftar opsi), Visa, Tiket Pesawat, Katering — plus Komponen Biaya custom (pola sama Ziarah §8.3). Fungsi baru `computePackageBreakdown()`/`baseTotal()` di `lib/pricing/computePackagePrice.ts`, cache `refreshPackagePriceCache()` dipanggil di semua field mempengaruhi harga + masuk cron kurs. Halaman admin builder BARU `admin/products/packages/[id]/page.tsx` (tidak ada sebelumnya). Cakupan sengaja TIDAK termasuk `BookingPackage`/wizard/reservasi kuota (di luar scope, menyusul saat `docs/arsitektur-booking.md` dieksekusi).
+  - Verifikasi: dibuat paket test, set Hotel Madinah `included` (3 malam × 2 kamar × Rp14.200.000/mlm) → Preview Harga & `Package.price` cache DB keduanya `Rp85.200.000`, konsisten. Katalog publik state kosong benar setelah data test dihapus. `bun run build` 0 error di setiap fase (6 fase total).
+- [x] **Komponen Alamat Standar Indonesia — SELESAI & TERVERIFIKASI (2026-07-23)** — `docs/arsitektur-alamat.md` (baru), komponen universal ke-4 sejajar harga/dokumen/manifest. 4 tabel referensi wilayah (`AddressProvince`/`Regency`/`District`/`Village`) diisi dari [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah) (MIT, Kepmendagri No 300.2.2-2430/2025) — 38 provinsi, 514 kab/kota, 7.285 kecamatan, 83.762 desa/kelurahan, dikonfirmasi PERSIS cocok sumber. Model `Address` (bukan tabel pivot — FK `addressId` biasa dari modul mana pun) dengan 2 mode (`domestic`/`international`, tab terpisah) — internasional pakai daftar statis 195 negara ISO 3166-1 (`lib/constants/countries.ts`), bukan tabel DB. Komponen frontend reusable `AddressPicker`/`AutocompleteSelect` (`components/shared/`) — combobox berjenjang, bukan `<select>` polos. **Sengaja berdiri sendiri, belum diwire ke form manapun** (Manifest sendiri, `docs/arsitektur-manifest.md`, juga belum dieksekusi) — dibangun duluan sesuai arahan user.
+  - Bug ditemukan & diperbaiki saat impor: regex parser awal tidak menangani eskape apostrof gaya SQL standar (`''`) di nama tempat, menyebabkan FK violation — diperbaiki, data diverifikasi ulang PERSIS cocok. Verifikasi end-to-end: cascading Provinsi→Kab/Kota→Kecamatan berfungsi di browser (Jawa Barat→Kota Bandung→Bandung Kidul), API create/validasi hierarki/GET diuji via curl, tab switch domestik/internasional berfungsi. `bun run build` 0 error di setiap fase (6 fase total).
+- [x] **Komponen Alamat — Wiring ke form nyata — SELESAI & TERVERIFIKASI (2026-07-23)** — `docs/arsitektur-alamat.md` §9. User: "eksekusi" alamat berarti dipakai (bukan cuma berdiri sendiri), scope "semua yang membutuhkan alamat". 3 entity diwire: `User` (profil pilgrim, `app/[locale]/(pilgrim)/profile/`), `Vendor` (`admin/system/settings`), `Hotel` (`admin/products/hotels/[id]`) — masing-masing dapat `addressId String? @unique` + relasi, dan API create/update-nya menerima `address` nested lewat helper baru `upsertAddress()` (`lib/address/prepare.ts`) yang create/update `Address` ATOMIK dalam request yang sama (hindari row `Address` yatim). Settings Vendor sekaligus naik level dari create-only jadi create+edit penuh (pola `openVendorForm(existing?)`) supaya alamat vendor bisa dikoreksi lagi setelah dibuat.
+  - **Bug ditemukan & DITUTUP saat verifikasi browser end-to-end**: `addressSchema` (`lib/validators/address.ts`) pakai `.optional()` polos di semua field turunan (provinceId, regencyId, dst.) — hanya terima `undefined`, padahal `AddressPicker` (form terkontrol) selalu kirim `null` untuk field yang belum dipilih. Akibatnya PUT vendor/hotel/profile manapun dengan alamat SELALU gagal 400 "Expected string, received null" — bug ini ada di ketiga entity sejak awal wiring, baru ketahuan begitu benar-benar dicoba simpan lewat browser (bukan cuma baca-balik API via curl). Diperbaiki dengan `.nullish()` di semua field opsional; `bun run build` 0 error, ulang percobaan simpan vendor (Jawa Barat, alamat lengkap) berhasil 200 OK dan tersimpan benar di DB (diverifikasi query langsung), lalu data test dibersihkan.
+  - Pelajaran: verifikasi "API jalan via curl" tidak menjamin form React yang mengirim `null` benar-benar kompatibel dengan Zod schema `.optional()` — kalau ada value opsional yang bisa `null` dari state form terkontrol, pakai `.nullish()`/`.nullable().optional()`, bukan `.optional()` saja.
+- [x] **Komponen Kontak (Nomor HP/WhatsApp/Email) — SELESAI & TERVERIFIKASI (2026-07-23)** — `docs/arsitektur-komponen-kontak.md` (baru), komponen universal ke-5. User minta blok "Data Kontak" reusable: kode negara autocomplete (default Indonesia, dial code dari `COUNTRIES` yang diperluas §3.1) + Nomor HP + Nomor WhatsApp dengan checkbox "Sama dengan nomor HP" (sinkron termasuk kode negara) + Email (prefill dari akun). `BookingPilgrim` +3 kolom (`phoneCountryCode`, `whatsapp`, `whatsappCountryCode`, migrasi additive) — komponen frontend baru `components/shared/ContactPicker.tsx`, diwire ke wizard booking (`bookings/new/pilgrims`), jamaah #1 (Pemesan) di-prefill email (dan WhatsApp kalau sudah terverifikasi OTP) dari `GET /api/v1/auth/profile` (endpoint GET baru). **Sengaja TIDAK menyentuh registrasi/profil akun/`Vendor.contactInfo`** — nomor WA akun tetap identitas OTP Indonesia-only, dianggap beda konsep dari "data kontak" biasa (lihat §5/§6 dokumen).
+  - **Bug #1 ditemukan & DITUTUP**: checkbox "Sama dengan nomor HP" awalnya cuma dihitung dari perbandingan `phone`/`whatsapp` (tanpa state independen) — melepas centang tidak mengubah apa pun, jadi checkbox otomatis balik tercentang di render berikutnya dan field WhatsApp TIDAK PERNAH bisa lepas dari Nomor HP. Ditemukan saat mencoba uncheck di browser. Diperbaiki dengan state lokal `unlocked` di `ContactPicker` yang menang atas nilai turunan sampai pengguna centang ulang secara eksplisit.
+  - **Bug #2 ditemukan & DITUTUP**: `app/.../bookings/new/payment/page.tsx` membangun payload `POST /api/v1/bookings` manual dari draft dan lupa meneruskan 3 field baru (`phoneCountryCode`/`whatsapp`/`whatsappCountryCode`) — celah di titik integrasi yang terlewat walau `PilgrimData`/validator/route sudah benar. Ditemukan saat mencoba submit booking asli, ditutup dengan menambah 3 field itu ke payload.
+  - Verifikasi akhir: browser (render, prefill email otomatis, sinkronisasi checkbox 2 arah termasuk lepas-sinkron ke kode negara Arab Saudi) + curl end-to-end (`POST /api/v1/bookings` dengan `phone`/`phoneCountryCode="ID"` DAN `whatsapp`/`whatsappCountryCode="SA"` berbeda → 201 → `BookingPilgrim` di DB dikonfirmasi menyimpan keduanya independen persis) — data test dibersihkan. `bun run build` 0 error di 5 fase.
+- [x] **Booking Engine Universal — Step 1-3 SELESAI & TERVERIFIKASI (2026-07-24)** — `docs/arsitektur-booking.md` §6 Step 1-3 (dari 8 step total; Step 4-8 masih rencana). Recheck kode aktual 2026-07-24 mengonfirmasi baseline §0 dokumen masih akurat (4 Gap kritis persis terbuka, 15 fungsi `lib/quota/index.ts`, belum ada `lib/quota/adapters/`) — 1 drift dicatat: `BookingPilgrim` dapat 3 kolom baku baru dari Kontak (relevan untuk Step 4/Manifest nanti, tidak menghalangi Step 1-3). **Step 1**: adapter layer baru `lib/quota/adapters/{types,hotel,transport,muthowif,catering,tourPackage,visa}.ts` + `index.ts` — object literal registry (bukan `Record<>` generik seragam, tiap tipe beroperasi atas baris tabelnya sendiri) yang tetap dijamin lengkap oleh TypeScript. Murni bungkus fungsi `lib/quota/index.ts` existing (zero behavior change), 3 titik orkestrasi (`bookings/route.ts` reserve, `payments/[id]/confirm/route.ts` confirm, `autocancelJob.ts` release) direfactor pakai adapter. **Step 2**: migrasi `20260724100000_haji_pending_quota` (`HajiProduct.pendingQuota`, pola identik Hotel) + `hajiAdapter` baru (`lib/quota/adapters/haji.ts`) — terdaftar di registry tapi belum dipanggil (booking Haji sendiri belum ada, itu Step 5). **Step 3**: `lib/booking/cancel.ts` — `cancelBooking()` satu fungsi dipakai `DELETE /api/v1/bookings/[id]` (self-cancel, sebelumnya TIDAK transaksional & TIDAK lepas kuota sama sekali) DAN `autocancelJob.ts` (sebelumnya implementasi terpisah) — **menutup Gap #2 (docs/arsitektur-umroh.md §7) & Gap #3 sekaligus**, plus selalu bikin row `Refund` kalau nominal refund > 0.
+  - Verifikasi end-to-end via curl + query DB langsung (server dev nyata): booking dengan hotel 2 kamar → `pendingQuota` naik 0→2 → self-cancel → `pendingQuota` balik ke 0, status `cancelled`, refund 0 (sesuai kebijakan <30 hari karena tanggal test sudah lewat) → tidak ada row `Refund` dibuat (benar). Booking kedua dengan `departureDate` >60 hari + `totalAmount` 20 juta → self-cancel → row `Refund` tercipta persis `amount: 20000000, status: pending`. Data test dibersihkan. `bun run build` 0 error di tiap fase (isu `.next` corrupt akibat build bersamaan dev server terjadi lagi, sudah diketahui, restart bersih menyelesaikannya).
+  - `docs/arsitektur-umroh.md` §7 Gap #2 dan #3 ditandai **DITUTUP**; Gap #1 (Haji) prasyarat skemanya (pendingQuota) **DITUTUP**, tapi booking Haji sendiri masih terbuka (Step 5). Gap #4 (`totalAmount` client-trusted) masih terbuka, di luar scope Step 1-3.
+  - **Belum dikerjakan** (Step 4-8): Manifest + Dokumen universal, redesain `createBookingSchema` jadi `items[]` generik, booking Haji itu sendiri, checkout pendek Visa-only/Transport-only/Haji, invoice generik — semua tetap rencana di `docs/arsitektur-booking.md`.
+- [x] **Booking Engine — Step 4 Dokumen Universal SELESAI & TERVERIFIKASI (2026-07-24)** — `docs/arsitektur-dokumen.md` (rencana 2026-07-22, dieksekusi hari ini). Audit blast radius dulu (bukan langsung eksekusi): 11 file bergantung kolom baku `BookingPilgrim`, 9 file bergantung `VisaProduct.requirements` — ternyata notifikasi WA & invoice TIDAK menyentuh field pilgrim sama sekali (invoice masih stub, WA pakai `User.phone`), jadi blast radius lebih kecil dari perkiraan awal. Model baru `DocumentRequirement` (polimorfik productType+productId+docType, migrasi additive `20260724110000_document_requirement`) + `lib/documents/getRequirements.ts` (`getDocumentRequirements()`) menggantikan `parseRequirements(visaProduct.requirements)` di **9 file**: endpoint upload dokumen pilgrim (3 titik: GET, validasi POST, auto-advance status), booking detail admin+pilgrim (dihitung via `Map` sebelum render karena server component tidak bisa panggil async di dalam `.map()`), katalog publik visa. Admin builder Visa (create+update) sekarang **dual-write** — `VisaProduct.requirements` (Json lama, deprecated) dan `DocumentRequirement` (replace-all pattern) ditulis dari input array yang sama dalam satu request, tidak ada risiko drift. `parseRequirements()` (fungsi) dihapus dari `lib/types/visa.ts` — sudah tidak ada pemanggil.
+  - Data existing dimigrasi 1:1 (3 baris requirements "Visa Reguler" → `DocumentRequirement`). Verifikasi end-to-end via curl+DB: GET/PUT builder admin cocok DB, booking test dengan visa berequirements → endpoint dokumen pilgrim mengembalikan `missing`/`requirements` persis dari tabel baru (bukan lagi Json lama), katalog publik tetap render benar. `bun run build` 0 error di tiap fase.
+  - **Baru Visa yang benar-benar pakai** — Paket Umroh/Tiket Pesawat/Haji belum punya baris `DocumentRequirement` sama sekali, menyusul begitu masing-masing diintegrasikan ke booking engine (di luar scope). Lanjut ke Step 4 bagian Manifest (`docs/arsitektur-manifest.md` — jauh lebih besar, collapse `BookingPilgrim` jadi `fieldValues: Json`).
+- [x] **Booking Engine — Step 4 Manifest Universal SELESAI & TERVERIFIKASI (2026-07-24)** — `docs/arsitektur-manifest.md` (rencana 2026-07-22, dieksekusi hari ini) — bagian TERBESAR Step 4, langsung merombak `BookingPilgrim`. Model baru `ManifestFieldRequirement` (polimorfik, +`role` untuk tag sistem seperti `display_name`/`whatsapp`) + migrasi seed 9 field default (meniru kolom baku lama) untuk kedua `VisaProduct` existing. **`BookingPilgrim` kolom baku DIHAPUS TOTAL** (`fullName`, `gender`, `email`, `phone(CountryCode)`, `whatsapp(CountryCode)`, `passportNumber`, `passportExpiry`, `nationality`, `dateOfBirth`) diganti SATU kolom `fieldValues: Json` (migrasi `20260724130000_manifest_collapse_booking_pilgrim`, aman karena tabel 0 baris saat itu — dicek dulu, bukan diasumsikan). `isLeader` tetap kolom struktural (bukan form field).
+  - **11 file konsumen** direwrite: `bookings/route.ts` (create), `admin/pilgrims/[id]/passport/route.ts` (jadi MERGE ke `fieldValues`, bukan replace kolom), `admin/bookings/[id]/page.tsx`+`PassportForm.tsx`, `admin/visa/page.tsx`, `(pilgrim)/bookings/[id]/page.tsx`, `admin/bookings/[id]/documents/zip/route.ts`, `lib/booking/draft.ts`, `lib/validators/booking.ts` (`pilgrims[].fieldValues` generik + validasi required-field DINAMIS dari `ManifestFieldRequirement` di `superRefine`, bukan hardcode zod per field lagi), `payment/page.tsx` — semua baca nama/kontak jamaah lewat `getFieldByRole()` (`lib/manifest/getRequirements.ts`), bukan kolom langsung.
+  - Komponen frontend baru `components/booking/ManifestFieldsForm.tsx` (render generik 8 fieldType: text/textarea/select/date/email/number/phone/address) diwire ke wizard (`pilgrims/page.tsx`, direstruktur — pemilihan Jenis Visa dipindah ke atas karena field manifest bergantung produk yang dipilih). **Keputusan sadar**: field `fieldType='phone'` di form generik ini TIDAK memakai `ContactPicker` (checkbox "Sama dengan nomor HP" hilang di sini) — tiap field phone berdiri sendiri, trade-off yang diterima demi render benar-benar generik per konfigurasi admin, bukan terlewat. Nilai disimpan sebagai objek `{countryCode, number}` per field phone di `fieldValues`.
+  - Verifikasi end-to-end via curl+DB: booking dibuat dengan `fieldValues` (nama, kontak beda kode negara ID vs SA) → tersimpan persis; admin bookings detail + admin visa list merender nama via `getFieldByRole`; endpoint passport mengonfirmasi MERGE (field lama utuh, field baru ditambah); endpoint dokumen jamaah + ZIP tetap berfungsi. 1 bug tipe ditemukan & ditutup saat build (`typeof booking.pilgrims` gagal null-narrowing di 2 halaman — `NonNullable<>` fix). `bun run build` 0 error tiap fase.
+  - **Booking Engine Step 1-4 (dari 8 total) sekarang SELESAI.** Belum dikerjakan: Step 5 (redesain `items[]` generik + refactor final orkestrasi), Step 6 (checkout pendek Haji/Visa-only/Transport-only), Step 7 (invoice generik), Step 8 (final docs) — semua tetap rencana di `docs/arsitektur-booking.md`.
+- [x] **Booking Engine — Step 5 SELESAI & TERVERIFIKASI (2026-07-25)** — `docs/arsitektur-booking.md` §6 Step 5 (dari 8 step total; Step 6-8 masih rencana). `lib/validators/booking.ts`: `createBookingSchema` diredesain dari field tetap jadi `items: z.array(bookingItemSchema)` (discriminated union 6 tipe: hotel/transport/muthowif/catering/tourPackage/haji), `totalAmount` dihapus dari input client, `totalPilgrims.max(500)` → `.max(2000)` (batas teknis, bukan bisnis). `app/api/v1/bookings/route.ts`: reserve loop + create loop jadi satu `switch` generik atas `items[]` (TypeScript menolak build kalau ada `itemType` belum ditangani), `totalAmount` **sekarang 100% dihitung server-side** dari `totalPrice` tiap item baru + `sellPriceSnapshot` visa tiap pilgrim — **menutup Gap #4 KRITIS (`docs/arsitektur-umroh.md` §7)**, gap terakhir dari 4 yang belum tertutup Step 1-4. `app/api/v1/admin/payments/[id]/confirm/route.ts`: tambah `haji` ke include+confirm loop. Wizard: HANYA `payment/page.tsx` diubah (translasi `draft` → `items[]` saat submit) — `lib/booking/draft.ts` dan seluruh step wizard TIDAK disentuh.
+  - **Deviasi dari rencana, dicatat sengaja** (`docs/decisions.md` 2026-07-25): visa TETAP WAJIB per pilgrim (bukan dihapus/opsional seperti draf awal) dan TETAP field `pilgrims[]` terpisah (bukan `itemType='visa'`) — karena `ManifestFieldRequirement` hari ini di-keyed oleh `visaProductId`, membuat visa opsional sekarang akan membuat pilgrim tanpa visa kehilangan SEMUA field manifest termasuk nama. Decoupling manifest dari visa adalah pekerjaan terpisah, belum dijadwalkan.
+  - Verifikasi end-to-end via curl (JWT session dibuat manual dari `JWT_SECRET`) + query DB langsung terhadap server dev nyata: (1) booking kombinasi hotel+transport+visa → `totalAmount` server cocok persis jumlah manual; (2) booking Haji-only via `itemType='haji'` (jalur yang genuinely tidak bisa diakses sebelum Step 5) → kuota reserve jalan, total cocok; (3) confirm route dengan Haji → `pendingQuota`→`bookedQuota` pindah benar, `booking.status: confirmed`; (4) self-cancel booking lain (regresi check) → kuota rilis benar, tidak terpengaruh perubahan schema. Semua data test dibersihkan. `bun run build` 0 error di tiap sub-step (5a/5b+5c/5d terpisah).
+  - **Booking Engine Step 1-5 (dari 8 total) sekarang SELESAI.** Belum dikerjakan: Step 6 (checkout pendek Haji/Visa-only/Transport-only), Step 7 (invoice generik), Step 8 (final docs) — tetap rencana di `docs/arsitektur-booking.md`.
+- [x] **Booking Engine — Step 6 SELESAI & TERVERIFIKASI (2026-07-25, Visa-only & Transport-only saja — Haji dikeluarkan dari scope)** — `docs/arsitektur-booking.md` §6 Step 6 (dari 8 total; Step 7-8 masih rencana). **Step 6a (prasyarat baru, ditemukan saat perencanaan)**: user eksplisit — "tidak ada satupun product mewajibkan product lain ketika checkout .. standard onlineshop" — men-supersede keputusan Step 5 yang mewajibkan `visaProductId`. `lib/manifest/constants.ts` (baru, sentinel `productType='core'`/`productId='default'`), 5 field core di-seed lewat `prisma/seed.ts`. `pilgrims[].visaProductId` jadi opsional, `superRefine` direstrukturisasi (early-return lama DIHAPUS — kalau dibiarkan, booking 0-visa skip semua validasi termasuk core-field wajib). `bookings/route.ts`: `VisaApplication` + kontribusi total cuma kalau `visaProductId` ada. **Step 6b**: `bookings/checkout/visa/page.tsx` + `VisaCheckoutForm.tsx` (state lokal, reuse `ManifestFieldsForm`). **Step 6c**: `bookings/checkout/transport/page.tsx` + `TransportCheckoutForm.tsx` (manifest "core", TANPA `visaProductId` sama sekali di payload). **Step 6d**: CTA katalog Visa ("Ajukan Sekarang") & Transport ("Pesan sekarang") — sebelumnya KEDUANYA ke `/register` tanpa terhubung booking apa pun — sekarang ke checkout baru dengan produk pre-selected.
+  - **Bug ditemukan & ditutup lewat verifikasi browser nyata** (bukan direncanakan): `DocumentGrid`/`PilgrimDocuments` jatuh ke `REQUIRED_DOCUMENTS` hardcode kalau `requirements` undefined — dulu dead code (pilgrim selalu punya visa), Step 6a membuatnya genuinely tereksekusi untuk Transport-only (sempat tampil "0 dari 5 dokumen wajib" yang salah). Fix: `[]` eksplisit di kedua halaman detail booking.
+  - **Haji dikeluarkan total** (kata user: "visa haji dengan visa yang tersedia berbeda sama sekali .. catat saja bahwa itu kesalahan .. kita blm sentuh haji") — dicatat sebagai bug/gap terpisah di `CLAUDE.md`, bukan pekerjaan yang terlewat.
+  - Verifikasi: curl (JWT manual) + **browser sungguhan** untuk 2 halaman checkout baru (bukan cuma API) — transport-only tanpa visa (0 `VisaApplication`, total cocok), booking 0-visa dengan core field kosong → 400, booking campur (visa+non-visa) tidak saling bocor requirement, checkout Visa-only & Transport-only end-to-end via browser (submit → redirect → render benar), redirect logged-out ke `/login` (307), CTA katalog mengarah ke checkout baru untuk semua produk/trip. Data test dibersihkan tiap sub-fase. `bun run build` 0 error di tiap sub-fase (6a/6b/6c/6d).
+  - **Booking Engine Step 1-6 (dari 8 total, minus Haji) sekarang SELESAI.** Belum dikerjakan: Step 7 (invoice generik), Step 8 (final docs), checkout Haji (sengaja dikeluarkan) — tetap rencana di `docs/arsitektur-booking.md`.
+- [x] **Booking Engine — Step 7 SELESAI & TERVERIFIKASI (2026-07-25, Invoice PDF profesional)** — `docs/arsitektur-booking.md` §6 Step 7 (dari 8 total; Step 8 satu-satunya sisa). `lib/pdf/invoiceData.ts` (baru): `buildInvoiceData()` normalisasi 7 relasi per-tipe existing (Opsi B) jadi bentuk seragam — visa diambil dari `pilgrims[].visaApplication`, BUKAN `booking.visa`/`BookingVisa` yang ternyata dead model (tidak pernah dipakai kode manapun, ditemukan lewat recheck sebelum eksekusi). `lib/pdf/invoice.tsx`: implementasi nyata menggantikan stub, `@react-pdf/renderer` (layout profesional: kop+logo opsional, Bill To, status badge berwarna, tabel item, subtotal/total/sisa tagihan TANPA discount/tax — platform tidak punya konsep itu). Nomor invoice = turunan `bookingCode` (`INV-...`), tanpa field/migrasi baru. `app/api/v1/bookings/[id]/invoice/route.ts`: GET mengembalikan `application/pdf` langsung, auth pola sama `pilgrims/[bookingId]/[pilgrimId]/documents/route.ts`. Tombol "Unduh Invoice" ditambah di halaman detail booking pilgrim & admin.
+  - **Insiden ditemukan saat eksekusi**: `@react-pdf/renderer@3.4.4` (versi terinstall sebelumnya) crash total saat dipanggil — peer dep cuma React 16-18, project ini React 19. Fix: upgrade ke v4.5.1 (mendukung React 19 resmi).
+  - **Bug ditemukan & ditutup lewat verifikasi PDF sungguhan** (baca file PDF langsung sebagai gambar, bukan cuma cek "tidak error"): kolom Item/Deskripsi terlalu rapat (fix padding); "Sisa Tagihan Rp 0" berwarna merah saat lunas (fix jadi hijau kondisional); label visa "Visa Visa Non-Hotel Umroh" dobel kata (fix regex check nama produk).
+  - Verifikasi end-to-end: curl (unpaid & paid state, total/badge/tanggal semua cocok), auth (401 unauthenticated, 401 pilgrim lain, 200 admin), browser (tombol ter-render benar). Data test dibersihkan. `bun run build` 0 error di tiap sub-fase (7a/7b/7c/7d).
+  - **Booking Engine Step 1-7 (dari 8 total) sekarang SELESAI.** Belum dikerjakan: Step 8 (dokumentasi akhir penutup) — satu-satunya sisa.
+- [x] **Booking Engine — Step 8 SELESAI (2026-07-25, dokumentasi akhir) — SELURUH 8 STEP RENCANA `docs/arsitektur-booking.md` TUNTAS** — `docs/arsitektur-umroh.md` §7 Gap #1 diupdate akurat: DITUTUP di sisi API/skema (Step 5, `itemType='haji'` di `createBookingSchema` + `bookingHaji.create()`), TAPI UI/wizard checkout Haji SENGAJA belum ada (Step 6 exclude Haji, kata user Haji butuh "Visa Haji" tersendiri — bukan pekerjaan terlewat). Gap #2/#3/#4 sudah DITUTUP sejak Step 1-3/5. Status banner `docs/arsitektur-booking.md` diubah dari "SEBAGIAN DIEKSEKUSI" jadi "SELESAI & TERVERIFIKASI — kecuali checkout Haji, sengaja di luar scope" — dokumen ini sekarang SOURCE OF TRUTH as-built (bukan lagi rencana murni), sejajar `docs/arsitektur-visa.md`/`docs/arsitektur-transportasi.md`/dst.
+  - **Booking Engine Universal (docs/arsitektur-booking.md, dimulai 2026-07-08, dipertegas 2026-07-22) SELESAI PENUH per 2026-07-25** — 8 step, ~2 minggu kalender: adapter registry kuota (Step 1-2), `cancelBooking()` universal (Step 3), Dokumen + Manifest Universal (Step 4), `items[]` generik + `totalAmount` server-computed (Step 5), checkout pendek Visa-only/Transport-only (Step 6), invoice PDF profesional (Step 7), dokumentasi akhir (Step 8). Satu pengecualian eksplisit yang TETAP terbuka: checkout Haji (API/skema siap sejak Step 5, UI belum ada, sengaja dikeluarkan Step 6) — follow-up terpisah, belum dijadwalkan.
+- [x] **Wizard booking 7-langkah lama DIHAPUS TOTAL (2026-07-25)** — `docs/arsitektur-booking.md` §10. User eksplisit minta dihapus (bukan dinonaktifkan) supaya lebih mudah improve booking engine baru — dikonfirmasi dulu lewat pertanyaan langsung (ambigu antara hapus kode UI/data DB/dead code saja) sebelum eksekusi. Dihapus: `app/[locale]/(pilgrim)/bookings/new/*` (8 file), `lib/booking/draft.ts`+`DraftProvider.tsx`, `components/booking/PriceSidebar.tsx`+`WizardShell.tsx`. TIDAK dihapus (dicek dulu genuinely independen): `lib/booking/cancel.ts`, `app/api/v1/bookings/route.ts` (backend generik, dipakai checkout Step 6 juga), `ManifestFieldsForm.tsx`/`VisaCheckoutForm.tsx`/`TransportCheckoutForm.tsx`. 2 link mati (nav "Buat Booking" + 2 CTA dashboard) diupdate ke homepage (`/${locale}`) sebagai hub katalog sementara.
+  - **KONSEKUENSI dicatat eksplisit**: booking paket kombinasi (hotel+transport+muthowif+catering+visa) dan Hotel-only/Muthowif-only/Catering-only/TourPackage-only TIDAK BISA lagi dilakukan lewat UI apa pun — HANYA Visa-only dan Transport-only (checkout Step 6) yang masih punya jalur booking. Keputusan sadar, bukan regresi.
+  - Verifikasi: `bun run build` 0 error, grep ulang seluruh repo nol referensi tersisa, browser (dashboard nav + CTA ke homepage bukan 404, checkout Visa-only regresi check tetap jalan normal).
+- [x] Katering CRUD: board type, menu style, harga/org/hari per 3 season
+- [x] Heritage tour CRUD: nama, kota, durasi, maks grup, harga/org
+- [x] Season management: tambah/hapus periode Ramadan/Haji
+- [x] User management: tambah akun admin, change role, toggle aktif
+- [x] Semua API di `/api/v1/superadmin/*` dengan `requireSuperAdmin()` guard
+- [x] **Haji Product CRUD** — nama, jenis (furoda/khusus/reguler/plus), tahun, tanggal, harga, kuota, includes
+- [x] **Visa Product CRUD v2** — nama, country (multi-negara), jenis visa (free text), harga, estimasi proses
+  - `GET|POST /api/v1/admin/products/visa` — list + create
+  - `GET|PUT|DELETE /api/v1/admin/products/visa/[id]` — single product management
+  - Halaman edit terpisah `/products/visa/[id]` dengan requirements builder
+  - **Requirements Builder** — dynamic list: docType + label + description + required toggle
+  - `VisaRequirement` type di `lib/types/visa.ts` — machine-readable, linked ke document system
+  - `VisaProduct.country` — default "Saudi Arabia", future-proof untuk multi-negara
+  - `VisaProduct.visaType` — free text (tidak dropdown), admin tambah jenis baru tanpa deploy
+  - **Document system jadi dinamis** — `DocumentGrid`, `UploadModal`, `PilgrimDocuments` terima `requirements?: VisaRequirement[]`
+  - `DocumentCard` terima `label` + `required` prop — badge "Opsional" jika required=false
+  - `VisaApplication.visaProductId` — nullable FK ke VisaProduct untuk load requirements dinamis
+  - Auto-advance `pending_documents` → `documents_complete` berdasarkan `required: true` docs saja
+  - Documents GET API kembalikan `requirements` dari visaProduct (atau null jika belum linked)
+  - **Public catalog /visa** — group by country, badge jenis, required vs opsional section, icons
+- [x] **Package/Bundle CRUD** — nama, deskripsi, harga tetap, highlights, featured toggle
+- [x] Super admin layout diperbarui: 11 nav items, termasuk Haji, Visa, Paket
+- [x] Overview diperbarui: 10 stat card
+- [x] Public catalog: `/haji`, `/visa`, `/packages` — halaman browsing untuk user
+- [x] Header diperbarui: nav tambah Paket, Haji, Visa
+- [x] Catalog API: `GET /api/v1/catalog/haji`, `/visa`, `/packages`
+- [x] DB migration: `add_haji_visa_package` — 6 tabel baru
+- [ ] Financial reports (M11)
+- [ ] Refund approval (M8)
+
+---
+
+## M11 — Notifications
+- [ ] WhatsApp templates wired to all 11 trigger events (see `docs/spec.md` §8)
+- [ ] Email templates (Resend) for booking confirmed, visa update, auto-cancel
+- [ ] Notification log entries written for every send attempt
+- [ ] Delivery failure logged with error field (never throws)
+- [ ] Admin: notification log page with manual re-send
+
+---
+
+## M12 — PWA & Performance
+- [ ] `public/manifest.json` (name, icons, theme color)
+- [ ] Service worker (basic offline cache for public pages)
+- [x] Hotel catalog images via `next/image` (presigned URL, unoptimized) — selesai
+- [x] Transport catalog images — cover photo kendaraan, hapus emoji, route display tanpa tripType
+- [ ] Lazy-load heavy components (Tiptap, PDF renderer) with `next/dynamic`
+- [ ] Paginate all admin list views
+- [ ] Core Web Vitals audit (LCP < 2.5s on mobile 4G)
+
+---
+
+## M13 — i18n
+- [ ] All UI strings extracted to `i18n/messages/id.json` and `en.json`
+- [ ] Language switcher in header
+- [ ] Date format localised (DD MMMM YYYY in ID, MMMM DD YYYY in EN)
+- [ ] Currency formatted as `Rp 1.250.000` (IDR, no decimals)
+
+---
+
+## M14 — Security Hardening
+- [ ] Server-side MIME + size validation on every file upload
+- [ ] Rate limiting on OTP (Redis) + payment confirmation endpoints
+- [ ] Role check inside every admin/superadmin Route Handler (beyond middleware)
+- [ ] No PII in application logs (audit all console.log calls)
+- [ ] UU PDP compliance notice on registration and document upload screens
+- [ ] Penetration-test checklist (OWASP Top 10)
+
+---
+
+## M15 — Production Deployment
+- [ ] Hostinger VPS provisioned
+- [ ] Docker Compose deployed and running
+- [ ] Nginx configured as reverse proxy
+- [ ] TLS certificate (Let's Encrypt) issued and auto-renewed
+- [ ] First `prisma migrate deploy` run against production DB
+- [ ] MinIO bucket created (`saudinesia-docs`)
+- [ ] GOWA (Sumopod) connected and tested with a real WhatsApp number
+- [ ] Smoke test: end-to-end booking flow in production

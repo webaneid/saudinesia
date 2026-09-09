@@ -1,0 +1,324 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { ArrowLeft, Save, Plus, Wallet } from 'lucide-react'
+import { formatRupiah } from '@/lib/utils'
+
+const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
+
+type Vendor = { id: string; name: string; country: string; isActive: boolean }
+type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
+type Schedule = {
+  id: string; routeId: string; departureFrom: string; departureTo: string
+  price: number; totalSeats: number; pendingSeats: number; bookedSeats: number; isActive: boolean
+  route: FlightRoute
+}
+type Preview = { hppRupiah: number; sellPrice: number }
+
+type Props = { params: Promise<{ locale: string; id: string }> }
+
+function toDateInput(d: string) {
+  return d.slice(0, 10)
+}
+
+export default function FlightEditPage({ params }: Props) {
+  const router = useRouter()
+  const [id, setId] = useState('')
+  const [locale, setLocale] = useState('id')
+  const [schedule, setSchedule] = useState<Schedule | null>(null)
+  const [routes, setRoutes] = useState<FlightRoute[]>([])
+  const [form, setForm] = useState({ routeId: '', departureFrom: '', departureTo: '', totalSeats: '0', isActive: true })
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const [vendors, setVendors] = useState<Vendor[]>([])
+  const [vendorId, setVendorId] = useState('')
+  const [currency, setCurrency] = useState('USD')
+  const [hargaTiket, setHargaTiket] = useState('')
+  const [preview, setPreview] = useState<Preview | null>(null)
+  const [savingCost, setSavingCost] = useState(false)
+  const [costSaved, setCostSaved] = useState(false)
+
+  const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
+  const [newVendorName, setNewVendorName] = useState('')
+  const [savingVendor, setSavingVendor] = useState(false)
+
+  // Live preview harga jual — debounce 500ms, sama pola docs/arsitektur-visa.md tapi hanya
+  // 1 komponen HPP ("tiket") karena flight tidak punya BRN-equivalent (arsitektur-tiket-pesawat.md §4).
+  useEffect(() => {
+    const cost = Number(hargaTiket)
+    if (!cost || cost <= 0) { setPreview(null); return }
+    const timer = setTimeout(async () => {
+      const params = new URLSearchParams({ hargaTiket: String(cost), currency })
+      const r = await fetch(`/api/v1/admin/products/flight/simulate?${params}`)
+      const j = await r.json()
+      setPreview(j.data ? { hppRupiah: j.data.hppRupiah, sellPrice: j.data.sellPrice } : null)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [hargaTiket, currency])
+
+  async function loadCost(scheduleId: string) {
+    const r = await fetch(`/api/v1/admin/products/flight/schedules/${scheduleId}/cost`)
+    const j = await r.json()
+    if (j.data) {
+      setVendorId(j.data.vendorId ?? '')
+      setCurrency(j.data.currency ?? 'USD')
+      setHargaTiket(j.data.hargaTiket ? String(j.data.hargaTiket) : '')
+    }
+    // FlightSchedule.price adalah cache turunan komponen HPP — refresh juga setelah cost berubah.
+    const sr = await fetch(`/api/v1/admin/products/flight/schedules/${scheduleId}`)
+    const sj = await sr.json()
+    if (sj.data) setSchedule(sj.data)
+  }
+
+  useEffect(() => {
+    params.then(async (p) => {
+      setId(p.id); setLocale(p.locale)
+      const r = await fetch(`/api/v1/admin/products/flight/schedules/${p.id}`)
+      const j = await r.json()
+      if (j.data) {
+        const s: Schedule = j.data
+        setSchedule(s)
+        setForm({
+          routeId: s.routeId,
+          departureFrom: toDateInput(s.departureFrom),
+          departureTo: toDateInput(s.departureTo),
+          totalSeats: String(s.totalSeats),
+          isActive: s.isActive,
+        })
+      }
+      const rr = await fetch('/api/v1/admin/products/flight/routes')
+      const rj = await rr.json()
+      setRoutes(rj.data ?? [])
+      const vr = await fetch('/api/v1/admin/system/settings/vendors?category=maskapai')
+      const vj = await vr.json()
+      setVendors(vj.data ?? [])
+      await loadCost(p.id)
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params])
+
+  async function handleQuickAddVendor() {
+    if (!newVendorName.trim()) return
+    setSavingVendor(true)
+    const r = await fetch('/api/v1/admin/system/settings/vendors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: newVendorName.trim(), category: 'maskapai' }),
+    })
+    const j = await r.json()
+    setSavingVendor(false)
+    if (j.data?.id) {
+      setVendors(v => [...v, j.data].sort((a, b) => a.name.localeCompare(b.name)))
+      setVendorId(j.data.id)
+      setNewVendorName('')
+      setShowQuickAddVendor(false)
+    }
+  }
+
+  async function handleSaveBasic() {
+    setSaving(true)
+    await fetch(`/api/v1/admin/products/flight/schedules/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...form, totalSeats: +form.totalSeats }),
+    })
+    const sr = await fetch(`/api/v1/admin/products/flight/schedules/${id}`)
+    const sj = await sr.json()
+    if (sj.data) setSchedule(sj.data)
+    setSaving(false); setSaved(true)
+    setTimeout(() => setSaved(false), 2000)
+  }
+
+  const canSaveCost = !!vendorId && Number(hargaTiket) > 0
+
+  async function handleSaveCost() {
+    setSavingCost(true)
+    await fetch(`/api/v1/admin/products/flight/schedules/${id}/cost`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ vendorId, currency, hargaTiket: Number(hargaTiket) }),
+    })
+    await loadCost(id)
+    setSavingCost(false); setCostSaved(true)
+    setTimeout(() => setCostSaved(false), 2000)
+  }
+
+  async function handleDelete() {
+    if (!schedule) return
+    if (!confirm(`Hapus jadwal ${schedule.route.origin} → ${schedule.route.destination}? Tindakan ini tidak bisa dibatalkan.`)) return
+    await fetch(`/api/v1/admin/products/flight/schedules/${id}`, { method: 'DELETE' })
+    router.push(`/${locale}/admin/products/flight`)
+  }
+
+  if (!schedule) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={() => router.push(`/${locale}/admin/products/flight`)}
+          className="text-slate-400 hover:text-ink transition-colors"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </button>
+        <h1 className="admin-h1">Edit Jadwal Penerbangan</h1>
+      </div>
+
+      {/* Basic info */}
+      <div className="admin-form-panel space-y-4">
+        <p className="text-sm font-semibold text-ink">Informasi Dasar</p>
+        <div className="grid md:grid-cols-2 gap-3">
+          <div className="md:col-span-2">
+            <p className="text-xs text-slate-500 mb-1">Rute</p>
+            <select className="admin-inp" value={form.routeId} onChange={e => setForm(f => ({ ...f, routeId: e.target.value }))}>
+              {routes.map(r => <option key={r.id} value={r.id}>{r.origin} → {r.destination}</option>)}
+            </select>
+            <p className="text-[11px] text-slate-400 mt-1">Rute baru dikelola dari halaman daftar jadwal.</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Periode Mulai</p>
+            <input type="date" className="admin-inp" value={form.departureFrom} onChange={e => setForm(f => ({ ...f, departureFrom: e.target.value }))} />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Periode Akhir</p>
+            <input type="date" className="admin-inp" value={form.departureTo} onChange={e => setForm(f => ({ ...f, departureTo: e.target.value }))} />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Total Kursi</p>
+            <input type="number" className="admin-inp" value={form.totalSeats} onChange={e => setForm(f => ({ ...f, totalSeats: e.target.value }))} />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Kuota Terpakai</p>
+            <p className="admin-inp bg-slate-50 text-slate-500">{schedule.bookedSeats + schedule.pendingSeats} kursi (booked {schedule.bookedSeats}, pending {schedule.pendingSeats})</p>
+          </div>
+        </div>
+
+        <label className="flex items-center gap-2.5 cursor-pointer w-fit">
+          <div
+            onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
+          </div>
+          <span className="text-sm font-medium text-ink">Aktif (tampil di katalog)</span>
+        </label>
+
+        <div className="admin-card p-3 flex items-center gap-3">
+          <p className="text-xs text-slate-500">Harga saat ini:</p>
+          <p className="text-sm font-bold text-ink">{formatRupiah(schedule.price)}</p>
+          <p className="text-xs text-slate-400">/ orang — dihitung otomatis dari HPP di bawah</p>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSaveBasic}
+            disabled={saving || !form.routeId || !form.departureFrom || !form.departureTo}
+            className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan'}
+          </button>
+        </div>
+      </div>
+
+      {/* HPP */}
+      <div className="admin-form-panel space-y-4">
+        <div>
+          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Harga Tiket</p>
+          <p className="text-[11px] text-slate-400 mt-0.5">
+            Satu komponen: Harga Tiket dari maskapai, dikonversi ke Rupiah pakai kurs, ditambah margin jadi Harga Jual — lihat docs/arsitektur-tiket-pesawat.md §4
+          </p>
+        </div>
+
+        <div className="border border-line rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-ink">Maskapai &amp; Mata Uang</p>
+          {vendors.length === 0 && !showQuickAddVendor && (
+            <p className="text-[11px] text-amber-600">Belum ada vendor/maskapai — tambah dulu.</p>
+          )}
+          <div className="flex items-center gap-2">
+            {!showQuickAddVendor ? (
+              <>
+                <select className="admin-inp flex-1" value={vendorId} onChange={e => setVendorId(e.target.value)}>
+                  <option value="">Pilih maskapai…</option>
+                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
+                </select>
+                <button
+                  type="button" onClick={() => setShowQuickAddVendor(true)}
+                  className="admin-btn-ghost text-xs shrink-0 flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Maskapai Baru
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  autoFocus className="admin-inp flex-1" placeholder="Nama maskapai, mis. Saudia"
+                  value={newVendorName} onChange={e => setNewVendorName(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddVendor() } }}
+                />
+                <button
+                  type="button" onClick={handleQuickAddVendor}
+                  disabled={savingVendor || !newVendorName.trim()}
+                  className="admin-btn-sm text-xs shrink-0 disabled:opacity-50"
+                >
+                  {savingVendor ? '...' : 'Simpan'}
+                </button>
+                <button
+                  type="button" onClick={() => { setShowQuickAddVendor(false); setNewVendorName('') }}
+                  className="admin-btn-ghost text-xs shrink-0"
+                >
+                  Batal
+                </button>
+              </>
+            )}
+            <select className="admin-inp w-20 shrink-0" value={currency} onChange={e => setCurrency(e.target.value)}>
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-3 items-end">
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Harga Tiket ({currency})</p>
+            <input type="number" className="admin-inp" value={hargaTiket} onChange={e => setHargaTiket(e.target.value)} placeholder="0" />
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">HPP (Rupiah)</p>
+            <p className="admin-inp bg-slate-50 font-semibold text-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
+          </div>
+          <div>
+            <p className="text-xs text-slate-500 mb-1">Harga Jual (otomatis)</p>
+            <p className="admin-inp bg-slate-50 font-semibold text-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={handleSaveCost}
+            disabled={savingCost || !canSaveCost}
+            className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5"
+          >
+            <Save className="h-3.5 w-3.5" />
+            {savingCost ? 'Menyimpan...' : costSaved ? 'Tersimpan ✓' : 'Simpan Harga Tiket'}
+          </button>
+        </div>
+      </div>
+
+      {/* Danger zone */}
+      <div className="admin-form-panel border-rose-100 space-y-3">
+        <p className="text-sm font-semibold text-rose-600">Zona Berbahaya</p>
+        <p className="text-[12px] text-slate-500">
+          Hapus jadwal ini secara permanen. Jika sudah ada booking terkait, jadwal akan dinonaktifkan (bukan dihapus).
+        </p>
+        <button
+          onClick={handleDelete}
+          className="px-4 py-2 rounded-xl border border-rose-200 text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors"
+        >
+          Hapus Jadwal
+        </button>
+      </div>
+    </div>
+  )
+}

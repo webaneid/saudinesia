@@ -1,0 +1,5 @@
+[install]
+frozen-lockfile = false
+
+[run]
+bun = true
