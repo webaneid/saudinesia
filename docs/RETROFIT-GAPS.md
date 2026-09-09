@@ -74,6 +74,32 @@ sebelumnya cuma menghasilkan laporan gap ini. Sudah ditutup di sesi ini:
   ini pekerjaan infrastruktur nyata (bukan sekadar copy file), tetap tercatat sebagai
   gap #5 (Staging) di atas, bukan dieksekusi di sesi audit ini.
 
+## Update 2026-09-10 — Follow-up: 4 "Referensi Mati" dari `check-docs-consistency.sh`
+
+Dicek satu per satu — **bukan bug**, semuanya catatan riwayat yang memang benar
+di `docs/decisions.md` (append-only log, tidak boleh diedit/dihapus):
+- `docs/arsitektur-transport.md` / `docs/transport-architecture.md` — nama file
+  lama Transport, sudah di-rename lalu dihapus & diserap ke
+  `docs/arsitektur-transportasi.md` (dicatat 2026-07-08). Referensi di
+  `docs/decisions.md` sengaja menyebut nama lama ini sebagai riwayat.
+- `docs/visa-architecture.md` — sama, sudah dihapus & diserap ke
+  `docs/arsitektur-visa.md` (dicatat di 2 tempat: `decisions.md` dan header
+  `arsitektur-visa.md` sendiri — konsisten).
+- `docs/arsitektur-visa-varian.md` — file ini **tidak pernah dibuat**, ini
+  opsi yang secara eksplisit DITOLAK saat itu (dicatat sebagai
+  "Alternatives considered" di `decisions.md`).
+
+Satu polish kecil dilakukan: `docs/arsitektur-harga.md` baris 3 memakai nama
+file lama (`arsitektur-transport.md`) sebagai analogi pola tanpa penjelasan
+"sudah dihapus" — diperjelas supaya pembaca baru tidak salah sangka itu link
+aktif. Tidak ada perubahan lain — `docs/decisions.md` sengaja TIDAK disentuh
+(mengedit log historis akan merusak audit trail-nya).
+
+`check-docs-consistency.sh` sendiri sudah punya disclaimer soal ini di
+outputnya ("MISSING belum tentu bug") — perilaku ini memang disengaja
+(tool naif secara sadar, butuh judgment manusia/Claude buat filter), bukan
+sesuatu yang perlu "diperbaiki" di skrip itu sendiri.
+
 ## Catatan Terpisah (Bukan Bagian Checklist Template, Tapi Layak Diketahui)
 
 `docs/decisions.md` (319 KB) dan `docs/progress.md` (122 KB) sudah tumbuh besar
