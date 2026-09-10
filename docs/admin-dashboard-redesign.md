@@ -1,7 +1,8 @@
 # Admin Dashboard Redesign — Unified Panel
 
-**Status:** Planning  
-**Trigger:** Dua dashboard terpisah (`/admin` dan `/superadmin`) tidak user-friendly dan tidak scalable untuk tim.
+**Status:** SELESAI & TERVERIFIKASI (dieksekusi sebelum retrofit 2026-09-10; status "Planning" di bawah ini sudah basi, dikoreksi saat audit retrofit — dokumen ini sebelumnya orphan/tidak dirujuk `CLAUDE.md`, ketemu lewat pertanyaan user).
+**Verifikasi 2026-09-10** (cek langsung ke kode, bukan asumsi): `enum UserRole` di `prisma/schema.prisma` sudah punya `manager`; `requireManager()` ada di `lib/auth/session.ts`; tidak ada lagi folder `app/[locale]/superadmin/` di mana pun; `app/[locale]/admin/(protected)/products/*` dan `.../system/{users,settings}` sudah ada (malah lebih banyak modul produk dari rencana awal — ada tambahan `flight`, `tourism-sites`, `tour-packages`); `app/[locale]/admin/(protected)/layout.tsx` sudah pakai `MANAGER_ROLES`/`isSuperAdmin` buat sidebar conditional; `prisma/seed.ts` sudah ada user demo role `manager`. Redirect `/superadmin/*` → `/admin/*` (§8 di bawah) tidak ditemukan di `middleware.ts` — kemungkinan tidak pernah diperlukan (tidak ada histori git dari sebelum migrasi ini), bukan berarti terlewat.
+**Trigger (riwayat, sudah tidak relevan):** Dua dashboard terpisah (`/admin` dan `/superadmin`) tidak user-friendly dan tidak scalable untuk tim.
 
 ---
 

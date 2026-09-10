@@ -100,6 +100,28 @@ outputnya ("MISSING belum tentu bug") — perilaku ini memang disengaja
 (tool naif secara sadar, butuh judgment manusia/Claude buat filter), bukan
 sesuatu yang perlu "diperbaiki" di skrip itu sendiri.
 
+## Update 2026-09-10 — Follow-up: `docs/admin-dashboard-redesign.md` Juga Basi
+
+User bertanya apakah "arsitektur admin" sudah masuk audit walau belum
+dieksekusi. Dicek ke kode — **ternyata SUDAH dieksekusi penuh**, cuma
+statusnya masih tertulis "Planning" di dokumennya sendiri. Dokumen ini
+**tidak** ketemu di audit `retrofit-adopt` pertama (2026-09-10 pagi) karena
+orphan — tidak pernah dirujuk dari `CLAUDE.md`, sama seperti kasus
+`docs/media-library-plan.md` sebelumnya. Pola yang sama terulang: rencana
+lama yang statusnya tidak diupdate begitu dieksekusi.
+
+Sudah dikoreksi: status di `docs/admin-dashboard-redesign.md` diperbarui +
+bukti verifikasi 6 poin (enum `manager`, `requireManager()`, tidak ada lagi
+`/superadmin`, folder `products`/`system` ada, sidebar role-conditional,
+seed user manager) dicatat langsung di file itu; ditambah pointer dari
+`CLAUDE.md` supaya tidak orphan lagi.
+
+**Pelajaran untuk audit berikutnya**: sebelum menganggap audit retrofit
+"selesai", cek juga file `.md` di `docs/` yang TIDAK match pola
+`arsitektur-*.md`/`decisions.md`/`progress.md` — dokumen plan lepas
+(`*-plan.md`, `*-redesign.md`, dst.) gampang jadi orphan dan status basi
+kalau tidak ada disiplin update status begitu eksekusi selesai.
+
 ## Catatan Terpisah (Bukan Bagian Checklist Template, Tapi Layak Diketahui)
 
 `docs/decisions.md` (319 KB) dan `docs/progress.md` (122 KB) sudah tumbuh besar

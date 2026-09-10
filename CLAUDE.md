@@ -60,6 +60,8 @@ Status per 2026-07-25: `docs/arsitektur-visa.md`, `docs/arsitektur-transportasi.
 
 Saat membuat dokumen baru untuk modul lain, ikuti struktur `docs/arsitektur-visa.md` sebagai template.
 
+`docs/admin-dashboard-redesign.md` — **SELESAI & TERVERIFIKASI** (dieksekusi sebelum retrofit, status "Planning" di dokumen itu basi/dikoreksi 2026-09-10): admin dashboard unified (`/admin`, bukan `/admin`+`/superadmin` terpisah), role `manager` ditambahkan, sidebar role-based (`MANAGER_ROLES`/`SUPERADMIN_ROLES` di `lib/auth/session.ts` + `app/[locale]/admin/(protected)/layout.tsx`).
+
 **Audit retrofit (2026-09-10):** lihat `docs/RETROFIT-GAPS.md` untuk daftar gap infra/operasional yang ditemukan lewat audit langsung ke kode (backup, observability, kepatuhan UU PDP, SEO/sitemap, staging, dst.) — belum ada yang dieksekusi, murni laporan untuk dipilih user.
 
 **Tooling retrofit (2026-09-10):** project ini sekarang punya hooks enforcement (`.claude/hooks/`), skill `security-review`/`new-api-route`, subagent `security-auditor`, dan `docs/architecture/architecture-security.md` — semua diadaptasi dari template `master-typescript` ke stack asli project ini (Next.js Route Handler + Prisma, bukan Elysia/Drizzle). Detail lengkap di `.claude/hooks/README.md`. Skill `phase-workflow` template **sengaja tidak diadopsi** — isinya sudah redundan dengan § "Fase Eksekusi SOP"/"Milestone SOP" di bawah.
