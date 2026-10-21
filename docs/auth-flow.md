@@ -1,3 +1,7 @@
+> **DISUPERSEDE 2026-10-21 oleh `docs/arsitektur-auth.md` dan ADR-0001** (auth berbasis email, tanpa OTP WhatsApp).
+> Dokumen ini dipertahankan sebagai riwayat; bagian verifikasi akun / reset password / peran WhatsApp di bawah sudah TIDAK berlaku
+> setelah Fase 1 dieksekusi.
+
 # Saudinesia — Auth Flow (Final)
 
 ## Prinsip

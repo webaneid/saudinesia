@@ -84,7 +84,7 @@ Saat membuat dokumen baru untuk modul lain, ikuti struktur `docs/arsitektur-visa
 | Styling | Tailwind CSS — utility-first only |
 | Icons | Lucide React — no emojis anywhere in UI |
 | Rich text | Tiptap |
-| Auth | Email + password (`bcryptjs`) for login; WhatsApp OTP via GOWA (aldinokemal, hosted on Sumopod) for account verification at registration — no NextAuth |
+| Auth | Email is the identity (ADR-0001, `docs/arsitektur-auth.md`): email + password (`bcryptjs`) with email-link verification (Resend), or Google OAuth (own PKCE implementation, Fase 2); password reset by email link; staff = password only. **No WhatsApp OTP anywhere in auth.** WhatsApp (GOWA) is a notification channel only — no NextAuth |
 | Storage | MinIO — self-hosted, Hostinger VPS |
 | Images | `next/image` with custom MinIO loader |
 | Package manager | Bun — `bun add`, `bun run` — never npm or yarn |
@@ -125,7 +125,7 @@ components/
   admin/
   shared/                     # layout, header, locale switcher
 lib/
-  auth/                       # JWT session (httpOnly cookie), OTP helpers
+  auth/                       # JWT session (httpOnly cookie), email tokens, accounts, rate limit
   whatsapp/client.ts          # GOWA HTTP client — only place that calls GOWA
   storage/minio.ts            # MinIO client, upload, presigned URL — only place that calls MinIO
   notifications/              # dispatch, WA templates, email templates
@@ -233,7 +233,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Message templates in `lib/notifications/templates/whatsapp.ts`, keyed by notification type and locale
 - Retry: 2 attempts, 2 s delay on network error — log failure to `notification_logs`, then continue
 - GOWA is best-effort: a WA failure must **never** block a booking confirmation or status update
-- Auth rate limiting: `lib/auth/rateLimit.ts` (Redis fixed-window counters, atomic Lua; falls back to in-process memory when Redis is unreachable — the app runs a single replica). All numbers live in `LIMITS` there: OTP max 3 per phone/email per 10 min, 10 OTP-triggering requests per IP per hour, wrong OTP attempts capped at 5 per phone (then the OTP is invalidated), login failures capped per account+IP and per account, plus a per-IP ceiling. Applied in `auth/login`, `register`, `forgot-password`, `verify-phone`, `verify-reset-otp`, `reset-password` (SEC-04). A new auth/OTP endpoint must use it too
+- Auth rate limiting: `lib/auth/rateLimit.ts` (Redis fixed-window counters, atomic Lua; falls back to in-process memory when Redis is unreachable — the app runs a single replica). All numbers live in `LIMITS` there: auth emails max 3 per address per 10 min and 10 per IP per hour, token preview/complete capped per IP, login failures capped per account+IP and per account, plus a per-IP ceiling. Applied in `auth/login`, `register`, `forgot-password`, `registration/preview`, `registration/complete`, `reset-password` (SEC-04). A new auth endpoint that sends email or consumes a token must use it too
 
 ---
 
@@ -255,9 +255,10 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Session JWT stored in `httpOnly; Secure; SameSite=Strict` cookie
 - Enforce role check inside every admin/superadmin Route Handler — do not rely on middleware alone
 - Never log pilgrim PII (passport numbers, DOB, KTP) to application logs
-- Dev-only behaviour (OTP in the response/log, skipping WhatsApp, rate-limit bypass, `/api/v1/dev/*`) is enabled **only when `NODE_ENV === 'development'` exactly** — fail-closed. Never `!== 'production'`: a wrong/empty `NODE_ENV` on any deployed environment must not leak OTPs (docs/lessons-learned.md SEC-02)
+- Dev-only behaviour (auth email links printed to the server log, default `APP_URL`, rate-limit bypass) is enabled **only when `NODE_ENV === 'development'` exactly** — fail-closed. Never `!== 'production'`: a wrong/empty `NODE_ENV` on any deployed environment must not leak account-takeover links (docs/lessons-learned.md SEC-02). Links/tokens never go in an HTTP response
 - Never pass a request body straight into Prisma (`data: body`) — parse it with a `.strict()` Zod schema from `lib/validators/` so unknown fields are rejected (mass assignment, SEC-03)
-- Sensitive endpoints (login, register, forgot/reset password, OTP verify) need rate limiting **and** a cap on wrong attempts. A protection function must have a caller you can `grep` — documenting a control is not the same as running it (SEC-04: `checkRateLimit()` was never called)
+- Auth tokens (`lib/auth/tokens.ts`): 256-bit random, only the SHA-256 hash is stored, single-use via atomic claim, short expiry; the page that shows a link must not consume it (email scanners GET links) — consume on POST. Account creation never precedes email ownership proof (no password set before the mailbox owner clicks). Email is the account identity: never let a profile endpoint change it without verifying the new address (SEC-17)
+- Sensitive endpoints (login, register, forgot/reset password, token consumption) need rate limiting **and** a cap on wrong attempts. A protection function must have a caller you can `grep` — documenting a control is not the same as running it (SEC-04: `checkRateLimit()` was never called)
 - Admin routes distinguish errors: `Unauthorized`/`Forbidden` → 401/403, invalid input → 400, everything else → 500 + log. Never `catch { return 403 }` for all errors
 - `bun audit --audit-level=critical` blocks CI; new high advisories brought in by a dependency added in a phase must be triaged in that phase
 - Dockerfile, compose, Caddyfile, GitHub workflows, `scripts/*` and `.env*.example` are security surface too — they go through the same review (non-root, no secrets in images/layers, no published ports beyond the proxy, least-privilege workflow `permissions`)
