@@ -14,7 +14,9 @@ docs/
 docker-compose*.yml
 Caddyfile*
 infra/
-scripts/
+# scripts/ dikecualikan, KECUALI skrip pembuat superadmin yang memang dijalankan di dalam container web
+scripts/*
+!scripts/create-superadmin.ts
 
 # Git & CI
 .git/
