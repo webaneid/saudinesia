@@ -264,6 +264,9 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Branches: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`
 - One logical change per commit — do not mix feature work with refactors
 - Link PRs to a `docs/decisions.md` entry for any architectural choice
+- Repo: `github.com/webaneid/saudinesia` (private). Alur: branch → **PR ke `main`** → CI `validate` (`.github/workflows/ci.yml`) harus hijau → merge. Tidak ada commit langsung ke `main` (dijaga hook; proteksi sungguhan = branch protection GitHub)
+- `prisma/migrations/` WAJIB di-commit, di PR yang sama dengan perubahan `schema.prisma` — CI gagal bila skema dan migrasi tidak sinkron
+- Production/deploy/versioning: `docs/deployment.md` (alur git, CI, perbandingan dengan smart-ai, keputusan yang menunggu pemilik)
 
 ---
 

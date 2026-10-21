@@ -1,0 +1,8 @@
+# Konfigurasi gitleaks (CI). Semua aturan bawaan tetap aktif.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Nilai dummy khusus CI/test — bukan rahasia sungguhan"
+# Hanya nilai PERSIS ini yang dikecualikan (bukan seluruh file ci.yml).
+regexes = ['''ci-secret-yang-panjangnya-lebih-dari-32-karakter''']
