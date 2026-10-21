@@ -12,7 +12,7 @@ const intlMiddleware = createIntlMiddleware({
   defaultLocale: DEFAULT_LOCALE,
 })
 
-const PROTECTED       = ['/dashboard', '/bookings', '/groups', '/profile']
+const PROTECTED       = ['/dashboard', '/bookings', '/groups', '/profile', '/lengkapi-data']
 const ADMIN_PATHS     = ['/admin']
 const PUBLIC_OVERRIDES = ['/admin/login']
 

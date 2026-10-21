@@ -87,6 +87,11 @@ export const profileSchema = z
   })
   .strict()
 
+// Telepon + WhatsApp akun. `whatsappConsent` hanya wajib bila akun belum pernah menyetujui (dicek server — lib/auth/contact.ts).
+export const contactSchema = z
+  .object({ phone: e164Schema, whatsapp: e164Schema, whatsappConsent: z.boolean().optional() })
+  .strict()
+
 export type RegisterInput = z.infer<typeof registerSchema>
 export type LoginInput = z.infer<typeof loginSchema>
 export type ProfileInput = z.infer<typeof profileSchema>

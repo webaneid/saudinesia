@@ -20,6 +20,8 @@ export const LIMITS = {
   googleIp:           { limit: 30, windowSec: 600 },  // start/callback/complete login Google per IP (menahan pembuatan akun massal & pemanggilan token endpoint Google)
   authTokenIp:        { limit: 30, windowSec: 600 },  // pratinjau/penyelesaian tautan per IP (token 256-bit tak bisa ditebak; ini pembatas kasar)
   resetIp:        { limit: 10, windowSec: 3600 }, // reset password per IP
+  contactUpdateUser:  { limit: 5,  windowSec: 86400 }, // ubah telepon/WhatsApp per akun — nomor tak terverifikasi tak boleh jadi alat mengirim pesan ke nomor orang lain berulang-ulang
+  bookingCreateUser:  { limit: 20, windowSec: 3600 },  // booking baru per akun (tiap booking memicu 3 WhatsApp ke nomor akun)
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
 } as const satisfies Record<string, { limit: number; windowSec: number }>
 

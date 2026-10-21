@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { safeLocale } from '@/lib/utils/locale'
 import { getSession, ADMIN_ROLES, MANAGER_ROLES } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { Sidebar } from '@/components/admin/shell/Sidebar'
@@ -11,7 +12,7 @@ export default async function AdminLayout({ children, params }: Props) {
   const session = await getSession()
 
   if (!session || !ADMIN_ROLES.includes(session.role)) {
-    redirect(`/${locale}/admin/login`)
+    redirect(`/${safeLocale(locale)}/admin/login`)
   }
 
   const role         = session.role

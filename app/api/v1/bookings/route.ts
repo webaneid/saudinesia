@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
 import { createBookingSchema } from '@/lib/validators/booking'
 import { generateBookingCode } from '@/lib/utils/bookingCode'
+import { requireContactForBooking } from '@/lib/auth/contact'
+import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { notify } from '@/lib/notifications/notify'
 import { formatDeadline } from '@/lib/notifications/events'
 import { ok, err } from '@/lib/validators'
@@ -40,7 +42,15 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireSession()
-    const body = await request.json()
+
+    // Notifikasi pembayaran/pembaruan bergantung pada nomor ini — gerbang UI saja tidak cukup (docs/arsitektur-auth.md §3.5).
+    if (!(await requireContactForBooking(session.userId, session.role))) {
+      return NextResponse.json(err('Lengkapi nomor telepon dan WhatsApp Anda sebelum memesan.'), { status: 422 })
+    }
+    const limit = await consume(policy('bookingCreateUser', session.userId))
+    if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
+
+    const body = await request.json().catch(() => null)
     const parsed = await createBookingSchema.safeParseAsync(body)
     if (!parsed.success) {
       const msg = parsed.error.errors[0]?.message ?? 'Data tidak valid'
@@ -300,7 +310,7 @@ export async function POST(request: Request) {
         return NextResponse.json(err(error.message), { status: 409 })
       }
     }
-    console.error('[bookings/POST]', error)
+    console.error('[bookings/POST]', error instanceof Error ? error.name : error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

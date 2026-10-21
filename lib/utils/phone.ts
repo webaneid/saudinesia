@@ -44,3 +44,16 @@ export function maskE164(digits: string): string {
   if (digits.length <= 6) return '+' + '•'.repeat(digits.length)
   return `+${digits.slice(0, 2)}${'•'.repeat(digits.length - 5)}${digits.slice(-3)}`
 }
+
+/**
+ * Kebalikan e164FromCountry: pecah digit E.164 tersimpan jadi kode negara ISO + nomor lokal untuk mengisi ulang komponen Kontak.
+ * Kode panggilan dicocokkan dari yang TERPANJANG (mis. '1268' Antigua sebelum '1' AS). Tidak dikenal → Indonesia dengan angka apa adanya.
+ */
+export function splitE164(digits: string): { countryCode: string; local: string } {
+  const clean = digits.replace(/\D/g, '')
+  let best: (typeof COUNTRIES)[number] | undefined
+  for (const c of COUNTRIES) {
+    if (clean.startsWith(c.dialCode) && clean.length > c.dialCode.length && (!best || c.dialCode.length > best.dialCode.length)) best = c
+  }
+  return best ? { countryCode: best.code, local: clean.slice(best.dialCode.length) } : { countryCode: 'ID', local: clean }
+}

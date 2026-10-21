@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { safeLocale } from '@/lib/utils/locale'
 import { getSession, ADMIN_ROLES } from '@/lib/auth/session'
 import { AdminAuthShell } from '@/components/admin/shell/AdminAuthShell'
 import { AdminLoginForm } from './AdminLoginForm'
@@ -11,7 +12,7 @@ export default async function AdminLoginPage({ params }: { params: Promise<{ loc
 
   // Already authenticated as an admin role — go straight to dashboard
   if (session && ADMIN_ROLES.includes(session.role)) {
-    redirect(`/${locale}/admin`)
+    redirect(`/${safeLocale(locale)}/admin`)
   }
 
   return (

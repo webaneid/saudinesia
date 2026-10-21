@@ -1,4 +1,5 @@
 import React from 'react'
+import { safeLocale } from '@/lib/utils/locale'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
@@ -20,7 +21,7 @@ export default async function BookingDetailPage({ params }: Props) {
   const { locale, id } = await params
   const { banks, businessName } = getPaymentConfig()
   const session = await getSession()
-  if (!session) redirect(`/${locale}/login`)
+  if (!session) redirect(`/${safeLocale(locale)}/login`)
 
   const booking = await prisma.booking.findFirst({
     where: { id, userId: session.userId },

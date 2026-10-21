@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { safeLocale } from '@/lib/utils/locale'
 import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
@@ -13,7 +14,7 @@ type Props = { params: Promise<{ locale: string }> }
 export default async function DashboardPage({ params }: Props) {
   const { locale } = await params
   const session = await getSession()
-  if (!session) redirect(`/${locale}/login`)
+  if (!session) redirect(`/${safeLocale(locale)}/login`)
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },

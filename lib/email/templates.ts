@@ -113,6 +113,17 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         facts: [['Kode booking', e.code], ['Status visa', e.status]],
         cta: bookingCta,
       }
+    case 'contact_changed':
+      return {
+        subject: 'Nomor kontak akun Saudinesia Anda diubah',
+        preheader: 'Periksa bila perubahan ini bukan dari Anda.',
+        heading: 'Nomor kontak akun diubah',
+        paragraphs: [
+          `Halo ${ctx.name}, nomor telepon atau WhatsApp pada akun Saudinesia Anda baru saja diubah.`,
+          'Jika ini bukan Anda, segera atur ulang password Anda dan hubungi kami.',
+        ],
+        cta: { label: 'Periksa profil', path: '/id/profile' },
+      }
     case 'welcome':
       return {
         subject: 'Selamat datang di Saudinesia',
