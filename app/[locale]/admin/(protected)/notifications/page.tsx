@@ -1,55 +1,54 @@
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { Badge } from '@/components/admin/ui/Badge'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Pagination } from '@/components/admin/data-table/Pagination'
 
-type Props = { params: Promise<{ locale: string }> }
+type Props = {
+  params: Promise<{ locale: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
 
-export default async function AdminNotifications({}: Props) {
-  const logs = await prisma.notificationLog.findMany({
-    orderBy: { sentAt: 'desc' },
-    take: 50,
-    include: { user: { select: { fullName: true, phone: true } } },
-  })
+type LogRow = Prisma.NotificationLogGetPayload<{ include: { user: { select: { fullName: true; phone: true } } } }>
+
+const columns: Column<LogRow>[] = [
+  { key: 'time', header: 'Waktu', cell: l => <span className="text-[12px] text-admin-muted">{new Date(l.sentAt).toLocaleString('id-ID')}</span> },
+  { key: 'user', header: 'User', mobile: 'title', cell: l => <span className="text-[13px]">{l.user.fullName ?? l.recipient}</span> },
+  { key: 'channel', header: 'Kanal', cell: l => <Badge tone={l.channel === 'whatsapp' ? 'ok' : 'accent'}>{l.channel}</Badge> },
+  { key: 'type', header: 'Tipe', cell: l => <span className="text-[12px] text-admin-muted">{l.type.replace(/_/g, ' ')}</span> },
+  { key: 'status', header: 'Status', cell: l => <Badge tone={l.status === 'sent' ? 'ok' : 'danger'}>{l.status}</Badge> },
+]
+
+export default async function AdminNotifications({ params, searchParams }: Props) {
+  const { locale } = await params
+  const sp = await searchParams
+  const list = parseListParams(sp)
+
+  const { items: logs, meta } = await paginate<LogRow>(
+    list,
+    () => prisma.notificationLog.count(),
+    range => prisma.notificationLog.findMany({
+      orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: sentAt bisa kembar, halaman harus stabil
+      ...range,
+      include: { user: { select: { fullName: true, phone: true } } },
+    }),
+  )
+
+  const hrefFor = (page: number) =>
+    buildListHref(`/${locale}/admin/notifications`, { page, limit: sp.limit === undefined ? undefined : list.limit })
 
   return (
-    <div className="space-y-5 max-w-5xl">
-      <h1 className="admin-h1">Log Notifikasi</h1>
-
-      <div className="admin-card overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="border-b border-line bg-canvas/60">
-            <tr>
-              <th className="admin-th">Waktu</th>
-              <th className="admin-th">User</th>
-              <th className="admin-th">Kanal</th>
-              <th className="admin-th">Tipe</th>
-              <th className="admin-th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {logs.map(l => (
-              <tr key={l.id} className="hover:bg-canvas/40 transition-colors">
-                <td className="px-4 py-3 text-slate-500 text-[12px]">
-                  {new Date(l.sentAt).toLocaleString('id-ID')}
-                </td>
-                <td className="px-4 py-3 text-ink text-[13px]">{l.user.fullName ?? l.recipient}</td>
-                <td className="px-4 py-3">
-                  <span className={l.channel === 'whatsapp' ? 'admin-badge-green' : 'admin-badge-blue'}>
-                    {l.channel}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-slate-500 text-[12px]">{l.type.replace(/_/g, ' ')}</td>
-                <td className="px-4 py-3">
-                  <span className={l.status === 'sent' ? 'admin-badge-green' : 'admin-badge-red'}>
-                    {l.status}
-                  </span>
-                </td>
-              </tr>
-            ))}
-            {logs.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm">Belum ada log.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+    <div className="space-y-5">
+      <PageHeader title="Log Notifikasi" />
+      <DataTable
+        columns={columns}
+        rows={logs}
+        getRowId={l => l.id}
+        empty="Belum ada log."
+        footer={meta.total > 0 ? <Pagination {...meta} hrefFor={hrefFor} /> : undefined}
+      />
     </div>
   )
 }

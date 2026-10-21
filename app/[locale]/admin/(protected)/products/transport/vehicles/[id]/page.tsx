@@ -57,13 +57,13 @@ export default function VehicleEditPage({ params }: Props) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  if (!vehicle) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+  if (!vehicle) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/${locale}/admin/products/transport`)}
-          className="text-slate-400 hover:text-ink transition-colors">
+          className="text-admin-muted/70 hover:text-admin-ink transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h1 className="admin-h1">Edit Kendaraan</h1>
@@ -76,32 +76,32 @@ export default function VehicleEditPage({ params }: Props) {
       />
 
       <div className="admin-form-panel space-y-4">
-        <p className="text-sm font-semibold text-ink">Informasi Kendaraan</p>
-        <p className="text-[11px] text-slate-400">
+        <p className="text-sm font-semibold text-admin-ink">Informasi Kendaraan</p>
+        <p className="text-[11px] text-admin-muted/70">
           Harga diatur di halaman <strong>Trip</strong> — setiap trip punya harga berbeda per kendaraan.
         </p>
 
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <p className="text-xs text-slate-500 mb-1">Nama Kendaraan</p>
+            <p className="text-xs text-admin-muted mb-1">Nama Kendaraan</p>
             <input className="admin-inp" value={form.name} onChange={set('name')} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Tipe</p>
+            <p className="text-xs text-admin-muted mb-1">Tipe</p>
             <select className="admin-select" value={form.vehicleType} onChange={set('vehicleType')}>
               {TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
             </select>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Kapasitas (orang)</p>
+            <p className="text-xs text-admin-muted mb-1">Kapasitas (orang)</p>
             <input type="number" min={1} className="admin-inp" value={form.capacity} onChange={set('capacity')} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Jumlah Armada (unit)</p>
+            <p className="text-xs text-admin-muted mb-1">Jumlah Armada (unit)</p>
             <input type="number" min={1} className="admin-inp" value={form.fleetCount} onChange={set('fleetCount')} />
           </div>
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Deskripsi (opsional)</p>
+            <p className="text-xs text-admin-muted mb-1">Deskripsi (opsional)</p>
             <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
           </div>
         </div>
@@ -109,11 +109,11 @@ export default function VehicleEditPage({ params }: Props) {
         <label className="flex items-center gap-2.5 cursor-pointer w-fit pt-1">
           <div
             onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif (tampil di catalog)</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di catalog)</span>
         </label>
 
         <div className="flex gap-2 pt-1">

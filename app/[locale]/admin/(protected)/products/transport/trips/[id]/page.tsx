@@ -105,27 +105,27 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
   }
 
   return (
-    <div className="border border-line rounded-xl p-4 space-y-3 bg-canvas/40">
+    <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[13px] font-semibold text-ink capitalize">{pricing.vehicle.name}</p>
-          <p className="text-[11px] text-slate-500">{pricing.vehicle.capacity} kursi · {pricing.vehicle.vehicleType}</p>
+          <p className="text-[13px] font-semibold text-admin-ink capitalize">{pricing.vehicle.name}</p>
+          <p className="text-[11px] text-admin-muted">{pricing.vehicle.capacity} kursi · {pricing.vehicle.vehicleType}</p>
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
-            <p className="text-[10px] text-slate-400">Harga saat ini</p>
-            <p className="text-sm font-bold text-ink">{formatRupiah(pricing.price)}</p>
+            <p className="text-[10px] text-admin-muted/70">Harga saat ini</p>
+            <p className="text-sm font-bold text-admin-ink">{formatRupiah(pricing.price)}</p>
           </div>
           <button onClick={handleDelete} disabled={deleting}
-            className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors disabled:opacity-50">
+            className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors disabled:opacity-50">
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
 
-      <div className="border border-line rounded-lg p-3 space-y-2">
+      <div className="border border-admin-line rounded-lg p-3 space-y-2">
         {vendors.length === 0 && !showQuickAdd && (
-          <p className="text-[11px] text-amber-600">Belum ada vendor transport — tambah dulu.</p>
+          <p className="text-[11px] text-admin-warning">Belum ada vendor transport — tambah dulu.</p>
         )}
         <div className="flex items-center gap-2">
           {!showQuickAdd ? (
@@ -164,17 +164,17 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
 
       <div className="grid md:grid-cols-3 gap-2 items-end">
         <div>
-          <p className="text-[11px] text-slate-500 mb-1">Harga Kendaraan ({currency})</p>
+          <p className="text-[11px] text-admin-muted mb-1">Harga Kendaraan ({currency})</p>
           <input type="number" className="admin-inp text-sm" value={hargaKendaraan}
             onChange={e => setHargaKendaraan(e.target.value)} placeholder="0" />
         </div>
         <div>
-          <p className="text-[11px] text-slate-500 mb-1">HPP (Rupiah)</p>
-          <p className="admin-inp bg-slate-50 font-semibold text-ink text-sm">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
+          <p className="text-[11px] text-admin-muted mb-1">HPP (Rupiah)</p>
+          <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink text-sm">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
         </div>
         <div>
-          <p className="text-[11px] text-slate-500 mb-1">Harga Jual (otomatis)</p>
-          <p className="admin-inp bg-slate-50 font-semibold text-ink text-sm">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
+          <p className="text-[11px] text-admin-muted mb-1">Harga Jual (otomatis)</p>
+          <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink text-sm">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
         </div>
       </div>
 
@@ -272,13 +272,13 @@ export default function TripEditPage({ params }: Props) {
   const usedVehicleIds = new Set(trip?.pricing.map(p => p.vehicleId) ?? [])
   const availableVehicles = allVehicles.filter(v => !usedVehicleIds.has(v.id))
 
-  if (!trip) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+  if (!trip) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/${locale}/admin/products/transport`)}
-          className="text-slate-400 hover:text-ink transition-colors">
+          className="text-admin-muted/70 hover:text-admin-ink transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h1 className="admin-h1">Edit Trip</h1>
@@ -286,14 +286,14 @@ export default function TripEditPage({ params }: Props) {
 
       {/* Trip info */}
       <div className="admin-form-panel space-y-4">
-        <p className="text-sm font-semibold text-ink">Informasi Trip</p>
+        <p className="text-sm font-semibold text-admin-ink">Informasi Trip</p>
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Nama Trip</p>
+            <p className="text-xs text-admin-muted mb-1">Nama Trip</p>
             <input className="admin-inp" value={form.name} onChange={setField('name')} placeholder="Airport Transfer — Bandara ke Hotel" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Kategori</p>
+            <p className="text-xs text-admin-muted mb-1">Kategori</p>
             <input className="admin-inp" value={form.category} onChange={setField('category')}
               list="category-suggestions" placeholder="airport / intercity / city_tour / …" />
             <datalist id="category-suggestions">
@@ -301,16 +301,16 @@ export default function TripEditPage({ params }: Props) {
             </datalist>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Deskripsi (opsional)</p>
+            <p className="text-xs text-admin-muted mb-1">Deskripsi (opsional)</p>
             <input className="admin-inp" value={form.description} onChange={setField('description')} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Origin (titik jemput)</p>
+            <p className="text-xs text-admin-muted mb-1">Origin (titik jemput)</p>
             <input className="admin-inp" value={form.origin} onChange={setField('origin')}
               placeholder="Bandara King Abdulaziz Jeddah" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Destination (titik tujuan)</p>
+            <p className="text-xs text-admin-muted mb-1">Destination (titik tujuan)</p>
             <input className="admin-inp" value={form.destination} onChange={setField('destination')}
               placeholder="Hotel Makkah/Madinah" />
           </div>
@@ -318,10 +318,10 @@ export default function TripEditPage({ params }: Props) {
 
         <label className="flex items-center gap-2.5 cursor-pointer w-fit">
           <div onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}>
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}>
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif (tampil di catalog)</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di catalog)</span>
         </label>
 
         <div className="flex gap-2">
@@ -337,8 +337,8 @@ export default function TripEditPage({ params }: Props) {
       <div className="admin-form-panel space-y-5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Harga per Kendaraan</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Harga per Kendaraan</p>
+            <p className="text-[11px] text-admin-muted/70 mt-0.5">
               Satu harga flat per kombinasi rute×kendaraan, dihitung dari HPP — docs/arsitektur-transportasi.md §9
             </p>
           </div>
@@ -360,7 +360,7 @@ export default function TripEditPage({ params }: Props) {
         </div>
 
         {trip.pricing.length === 0 && (
-          <p className="text-[13px] text-slate-400 py-4 text-center border border-dashed border-line rounded-xl">
+          <p className="text-[13px] text-admin-muted/70 py-4 text-center border border-dashed border-admin-line rounded-xl">
             Belum ada kendaraan. Pilih kendaraan di atas untuk menambahkan harga.
           </p>
         )}
@@ -379,11 +379,11 @@ export default function TripEditPage({ params }: Props) {
       </div>
 
       {/* Danger zone */}
-      <div className="admin-form-panel border-rose-100 space-y-3">
-        <p className="text-sm font-semibold text-rose-600">Zona Berbahaya</p>
-        <p className="text-[12px] text-slate-500">Hapus trip dan semua pricing yang terkait secara permanen.</p>
+      <div className="admin-form-panel border-admin-danger/20 space-y-3">
+        <p className="text-sm font-semibold text-admin-danger">Zona Berbahaya</p>
+        <p className="text-[12px] text-admin-muted">Hapus trip dan semua pricing yang terkait secara permanen.</p>
         <button onClick={handleDeleteTrip}
-          className="px-4 py-2 rounded-xl border border-rose-200 text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors">
+          className="px-4 py-2 rounded-xl border border-admin-danger/30 text-[13px] font-medium text-admin-danger hover:bg-admin-danger/10 transition-colors">
           Hapus Trip
         </button>
       </div>

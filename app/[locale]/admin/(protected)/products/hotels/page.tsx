@@ -5,6 +5,9 @@ import { useRouter, useParams } from 'next/navigation'
 import { Plus, Images } from 'lucide-react'
 import { formatDistance } from '@/lib/utils'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Badge } from '@/components/admin/ui/Badge'
 
 type Hotel = {
   id: string; name: string; city: string; stars: number | null
@@ -17,6 +20,7 @@ export default function HotelsPage() {
   const [hotels,   setHotels]   = useState<Hotel[]>([])
   const [showForm, setShowForm] = useState(false)
   const [saving,   setSaving]   = useState(false)
+  const [loading,  setLoading]  = useState(true)
   const [form, setForm] = useState({
     name: '', city: 'makkah', stars: 4, distanceToHaramM: 500, description: '',
     facilities: [] as string[],
@@ -26,6 +30,7 @@ export default function HotelsPage() {
     const r = await fetch('/api/v1/admin/products/hotels')
     const j = await r.json()
     setHotels(j.data ?? [])
+    setLoading(false)
   }
   useEffect(() => { load() }, [])
 
@@ -63,54 +68,88 @@ export default function HotelsPage() {
     await load()
   }
 
+  const columns: Column<Hotel>[] = [
+    {
+      key: 'name', header: 'Nama', mobile: 'title',
+      cell: h => (
+        <span className="text-[13px] font-medium">
+          {h.name}
+          <span className="ml-2 text-[11px] text-admin-gold-strong">{'★'.repeat(h.stars ?? 0)}</span>
+        </span>
+      ),
+    },
+    { key: 'city', header: 'Kota', cell: h => <span className="text-[12px] capitalize text-admin-muted">{h.city}</span> },
+    {
+      key: 'distance', header: 'Jarak', hideBelowLg: true,
+      cell: h => <span className="whitespace-nowrap text-[12px] text-admin-muted">{h.distanceToHaramM ? formatDistance(h.distanceToHaramM) : '-'}</span>,
+    },
+    { key: 'periods', header: 'Periode', cell: h => <span className="whitespace-nowrap text-[12px] text-admin-muted">{h._count.pricePeriods} periode</span> },
+    { key: 'status', header: 'Status', cell: h => <Badge tone={h.isActive ? 'ok' : 'neutral'}>{h.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
+    {
+      key: 'actions', header: '',
+      cell: h => (
+        <div className="flex items-center gap-2">
+          <a
+            href={`/${locale}/admin/products/hotels/${h.id}`}
+            className="flex h-7 items-center gap-1 rounded-lg border border-admin-line px-2.5 text-[11px] font-medium text-admin-ink/80 transition-colors hover:bg-admin-spot"
+            title="Edit hotel & kelola foto"
+          >
+            <Images className="h-3 w-3" /> Kelola
+          </a>
+          <button onClick={() => toggleActive(h.id, h.isActive)} className="admin-btn-ghost px-2 py-1 text-[11px]">
+            {h.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+          </button>
+        </div>
+      ),
+    },
+  ]
+
   return (
-    <div className="space-y-5 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <h1 className="admin-h1">Hotel</h1>
-        <button onClick={() => setShowForm(!showForm)} className="admin-btn">
-          <Plus className="h-4 w-4" /> Tambah Hotel
-        </button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        title="Hotel"
+        actions={<button onClick={() => setShowForm(!showForm)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Hotel</button>}
+      />
 
       {showForm && (
         <div className="admin-form-panel space-y-4">
           <div>
-            <p className="text-sm font-semibold text-ink">Hotel Baru</p>
-            <p className="text-[12px] text-slate-500 mt-0.5">
+            <p className="text-sm font-semibold text-admin-ink">Hotel Baru</p>
+            <p className="text-[12px] text-admin-muted mt-0.5">
               Isi data dasar dulu — foto, fasilitas detail & jadwal kamar dapat diatur setelah simpan.
             </p>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-slate-500 mb-1">Nama Hotel</p>
+              <p className="text-xs text-admin-muted mb-1">Nama Hotel</p>
               <input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Nama lengkap hotel" />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Kota</p>
+              <p className="text-xs text-admin-muted mb-1">Kota</p>
               <select className="admin-select" value={form.city} onChange={set('city')}>
                 <option value="makkah">Makkah</option>
                 <option value="madinah">Madinah</option>
               </select>
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Bintang</p>
+              <p className="text-xs text-admin-muted mb-1">Bintang</p>
               <input type="number" min={1} max={5} className="admin-inp" value={form.stars} onChange={set('stars')} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Jarak ke Haram (meter)</p>
+              <p className="text-xs text-admin-muted mb-1">Jarak ke Haram (meter)</p>
               <input type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
             </div>
             <div className="md:col-span-2">
-              <p className="text-xs text-slate-500 mb-1">Deskripsi</p>
+              <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
               <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
             </div>
           </div>
 
           <div>
-            <p className="text-xs text-slate-500 mb-2">Fasilitas</p>
+            <p className="text-xs text-admin-muted mb-2">Fasilitas</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
               {HOTEL_FACILITIES.map(f => (
-                <label key={f.code} className="flex items-center gap-2 text-[13px] text-ink2 cursor-pointer">
+                <label key={f.code} className="flex items-center gap-2 text-[13px] text-admin-ink/80 cursor-pointer">
                   <input
                     type="checkbox" className="h-3.5 w-3.5"
                     checked={form.facilities.includes(f.code)}
@@ -131,64 +170,14 @@ export default function HotelsPage() {
         </div>
       )}
 
-      <div className="admin-card overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="border-b border-line bg-canvas/60">
-            <tr>
-              <th className="admin-th">Nama</th>
-              <th className="admin-th">Kota</th>
-              <th className="admin-th hidden md:table-cell">Jarak</th>
-              <th className="admin-th">Periode</th>
-              <th className="admin-th">Status</th>
-              <th className="admin-th"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {hotels.map(h => (
-              <tr key={h.id} className={`hover:bg-canvas/40 transition-colors ${!h.isActive ? 'opacity-50' : ''}`}>
-                <td className="px-4 py-3 font-medium text-ink text-[13px]">
-                  {h.name}
-                  <span className="ml-2 text-gold-600 text-[11px]">{'★'.repeat(h.stars ?? 0)}</span>
-                </td>
-                <td className="px-4 py-3 text-slate-500 capitalize text-[12px]">{h.city}</td>
-                <td className="px-4 py-3 text-slate-500 hidden md:table-cell text-[12px]">
-                  {h.distanceToHaramM ? formatDistance(h.distanceToHaramM) : '-'}
-                </td>
-                <td className="px-4 py-3 text-slate-500 text-[12px]">{h._count.pricePeriods} periode</td>
-                <td className="px-4 py-3">
-                  <span className={h.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>
-                    {h.isActive ? 'Aktif' : 'Nonaktif'}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <a
-                      href={`/${locale}/admin/products/hotels/${h.id}`}
-                      className="h-7 px-2.5 rounded-lg border border-line text-[11px] font-medium text-ink2 hover:bg-canvas flex items-center gap-1 transition-colors"
-                      title="Edit hotel & kelola foto"
-                    >
-                      <Images className="h-3 w-3" /> Kelola
-                    </a>
-                    <button
-                      onClick={() => toggleActive(h.id, h.isActive)}
-                      className="admin-btn-ghost text-[11px] px-2 py-1"
-                    >
-                      {h.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {hotels.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-12 text-center text-slate-400 text-sm">
-                  Belum ada hotel. Klik &quot;Tambah Hotel&quot; untuk mulai.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={hotels}
+        getRowId={h => h.id}
+        loading={loading}
+        empty='Belum ada hotel. Klik "Tambah Hotel" untuk mulai.'
+        rowClassName={h => (h.isActive ? undefined : 'opacity-50')}
+      />
     </div>
   )
 }

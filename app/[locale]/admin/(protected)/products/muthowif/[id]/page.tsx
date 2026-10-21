@@ -82,13 +82,13 @@ export default function MuthowifEditPage({ params }: Props) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  if (!loaded) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+  if (!loaded) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   return (
     <div className="space-y-6 max-w-2xl">
       <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/${locale}/admin/products/muthowif`)}
-          className="text-slate-400 hover:text-ink transition-colors">
+          className="text-admin-muted/70 hover:text-admin-ink transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h1 className="admin-h1">Edit Muthowif</h1>
@@ -96,12 +96,12 @@ export default function MuthowifEditPage({ params }: Props) {
 
       <div className="admin-form-panel space-y-4">
         <div className="flex items-center gap-4">
-          <div className="h-20 w-20 rounded-full bg-canvas border border-line overflow-hidden shrink-0 grid place-items-center">
+          <div className="h-20 w-20 rounded-full bg-admin-spot border border-admin-line overflow-hidden shrink-0 grid place-items-center">
             {photoUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={photoUrl} alt="Foto profil" className="h-full w-full object-cover" />
             ) : (
-              <UserRound className="h-8 w-8 text-slate-300" />
+              <UserRound className="h-8 w-8 text-admin-muted/50" />
             )}
           </div>
           <div className="space-y-1.5">
@@ -112,44 +112,44 @@ export default function MuthowifEditPage({ params }: Props) {
               </button>
               {photoUrl && (
                 <button type="button" onClick={handlePhotoDelete} disabled={uploadingPhoto}
-                  className="admin-btn-ghost text-xs disabled:opacity-50 flex items-center gap-1.5 text-rose-600">
+                  className="admin-btn-ghost text-xs disabled:opacity-50 flex items-center gap-1.5 text-admin-danger">
                   <Trash2 className="h-3.5 w-3.5" /> Hapus
                 </button>
               )}
             </div>
-            <p className="text-[11px] text-slate-400">JPG/PNG/WebP, maks 5 MB</p>
-            {photoError && <p className="text-[11px] text-rose-600">{photoError}</p>}
+            <p className="text-[11px] text-admin-muted/70">JPG/PNG/WebP, maks 5 MB</p>
+            {photoError && <p className="text-[11px] text-admin-danger">{photoError}</p>}
             <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
           </div>
         </div>
 
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Nama</p>
+            <p className="text-xs text-admin-muted mb-1">Nama</p>
             <input className="admin-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Bio</p>
+            <p className="text-xs text-admin-muted mb-1">Bio</p>
             <textarea className="admin-inp" rows={3} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Bahasa (pisah koma)</p>
+            <p className="text-xs text-admin-muted mb-1">Bahasa (pisah koma)</p>
             <input className="admin-inp" value={form.languages} onChange={e => setForm(f => ({ ...f, languages: e.target.value }))} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Kapasitas/hari</p>
+            <p className="text-xs text-admin-muted mb-1">Kapasitas/hari</p>
             <input type="number" className="admin-inp" value={form.dailyCapacity} onChange={e => setForm(f => ({ ...f, dailyCapacity: +e.target.value }))} />
           </div>
         </div>
 
         <label className="flex items-center gap-2.5 cursor-pointer w-fit">
           <div onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}>
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}>
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif (tampil di katalog & tersedia untuk assignment)</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di katalog & tersedia untuk assignment)</span>
         </label>
-        <p className="text-[11px] text-slate-400">
+        <p className="text-[11px] text-admin-muted/70">
           Kapasitas muthowif nonaktif tidak dihitung ke pool kuota harian (docs/arsitektur-muthowif.md §9.2).
         </p>
 

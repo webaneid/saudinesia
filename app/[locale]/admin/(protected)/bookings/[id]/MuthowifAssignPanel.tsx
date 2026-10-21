@@ -35,10 +35,10 @@ export function MuthowifAssignPanel({ bookingId }: { bookingId: string }) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[12px] text-amber-600 flex items-center gap-1.5">
+      <p className="text-[12px] text-admin-warning flex items-center gap-1.5">
         <UserRound className="h-3.5 w-3.5" /> Belum di-assign — pilih muthowif dari roster aktif
       </p>
-      {error && <p className="text-[12px] text-rose-600">{error}</p>}
+      {error && <p className="text-[12px] text-admin-danger">{error}</p>}
       <div className="flex gap-2">
         <select className="admin-select flex-1 text-sm" value={selected} onChange={e => setSelected(e.target.value)}>
           <option value="">— pilih muthowif —</option>

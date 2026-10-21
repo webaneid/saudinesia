@@ -22,6 +22,42 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --radius: 0.5rem;
+
+    /*
+     * Admin UI Kit (docs/admin-ui-kit.md) — palet brand hijau + emas, mengikuti admin smart-ai.
+     * SATU-SATUNYA tempat warna brand didefinisikan; nilai berupa channel RGB ("R G B") supaya
+     * modifier opacity Tailwind (bg-admin-danger/10) jalan. Ganti brand = ubah blok --brand-* saja.
+     *   primary (hijau)  → aksi utama, menu aktif, ikon sorotan   (admin-accent / -strong)
+     *   accent (emas)    → CTA menonjol, ikon di atas hijau       (admin-gold / -strong)
+     *   light (krem)     → kanvas halaman                         (admin-canvas)
+     * Teks di atas emas pakai hijau tua (kontras AA); teks putih hanya di atas hijau.
+     */
+    --brand-primary: 4 84 62;          /* #04543e */
+    --brand-primary-dark: 3 56 41;     /* #033829 */
+    --brand-primary-medium: 67 127 110; /* #437f6e */
+    --brand-accent: 177 149 72;        /* #b19548 */
+    --brand-accent-dark: 118 99 48;    /* #766330 */
+    --brand-light: 248 245 236;        /* #f8f5ec */
+
+    --admin-canvas: var(--brand-light);
+    --admin-spot: 238 232 213;         /* chip/ubin ikon krem keemasan */
+    --admin-ink: 21 36 30;
+    --admin-muted: 92 106 100;
+    --admin-accent: var(--brand-primary);
+    --admin-accent-strong: var(--brand-primary-dark);
+    --admin-primary-medium: var(--brand-primary-medium);
+    --admin-gold: var(--brand-accent);
+    --admin-gold-strong: var(--brand-accent-dark);
+    --admin-danger: 180 35 24;         /* #b42318 */
+    --admin-warning: 196 106 18;       /* #c46a12 */
+    --admin-ok: 47 133 90;             /* #2f855a */
+  }
+
+  /* Komponen bersama (AddressPicker, ContactPicker, AutocompleteSelect) memakai token shadcn `primary`/`ring`
+     (biru). Di dalam area admin diarahkan ke hijau brand (#04543e); pilgrim & publik tetap biru. */
+  .admin-canvas {
+    --primary: 164 91% 17%;
+    --ring: 164 91% 17%;
   }
 
   * {
@@ -36,24 +72,76 @@
 @layer components {
   /* Shared layout primitives — add reusable class combos here */
 
-  /* === Admin Dashboard Design System === */
-  .admin-card        { @apply bg-white rounded-2xl border border-line shadow-soft; }
-  .admin-h1          { @apply text-2xl font-extrabold tracking-tight text-ink; }
-  .admin-section     { @apply text-xs font-bold uppercase tracking-[0.12em] text-slate-500; }
-  .admin-th          { @apply px-4 py-3 text-[10.5px] tracking-[0.1em] text-slate-500 font-bold uppercase; }
-  .admin-inp         { @apply bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 w-full; }
-  .admin-inp-xs      { @apply bg-white border border-line rounded-md px-2 py-1 text-xs text-ink placeholder:text-slate-400 focus:outline-none focus:ring-1 focus:ring-teal-500/20 focus:border-teal-500/50 w-full; }
-  .admin-select      { @apply bg-white border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500/50 w-full; }
-  .admin-select-xs   { @apply bg-white border border-line rounded-md px-2 py-0.5 text-xs text-ink focus:outline-none focus:ring-1 focus:ring-teal-500/20 focus:border-teal-500/50; }
-  .admin-form-panel  { @apply bg-teal-50/50 border border-teal-200 rounded-2xl p-4 space-y-3; }
-  .admin-btn         { @apply inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-ink hover:bg-ink2 text-sm text-white font-medium transition-colors; }
-  .admin-btn-sm      { @apply inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-ink hover:bg-ink2 text-xs text-white font-medium transition-colors; }
-  .admin-btn-ghost   { @apply inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-line text-sm text-ink2 hover:bg-canvas transition-colors; }
-  .admin-pill-on     { @apply px-3 py-1.5 rounded-xl text-xs font-semibold bg-ink text-white border border-ink; }
-  .admin-pill-off    { @apply px-3 py-1.5 rounded-xl text-xs font-medium border border-line text-slate-500 hover:bg-canvas transition-colors; }
-  .admin-badge-green { @apply text-xs px-2 py-0.5 rounded-full bg-mint-50 text-mint-700 font-semibold; }
-  .admin-badge-red   { @apply text-xs px-2 py-0.5 rounded-full bg-rose-50 text-rose-600 font-semibold; }
-  .admin-badge-blue  { @apply text-xs px-2 py-0.5 rounded-full bg-teal-50 text-teal-700 font-semibold; }
-  .admin-badge-amber { @apply text-xs px-2 py-0.5 rounded-full bg-gold-50 text-gold-600 font-semibold; }
-  .admin-badge-gray  { @apply text-xs px-2 py-0.5 rounded-full bg-canvas text-slate-500 font-semibold; }
+  /* === Admin UI Kit — pola dipakai ulang (docs/admin-ui-kit.md) === */
+
+  /* Kanvas halaman admin: krem dengan semburat hijau & emas. */
+  .admin-canvas {
+    background-color: rgb(var(--admin-canvas));
+    background-image:
+      radial-gradient(circle at top left, rgb(var(--admin-accent) / 0.09), transparent 34%),
+      radial-gradient(circle at right 12% top 18%, rgb(var(--admin-gold) / 0.12), transparent 28%);
+    background-attachment: fixed;
+  }
+  /* Permukaan hijau brand (halaman login, banner) — isi di atasnya teks putih & .glass. */
+  .panel-brand {
+    position: relative;
+    overflow: hidden;
+    color: white;
+    background:
+      radial-gradient(circle at 12% 8%, rgb(var(--brand-primary-medium) / 0.45), transparent 50%),
+      radial-gradient(circle at 100% 100%, rgb(var(--brand-accent) / 0.22), transparent 46%),
+      linear-gradient(120deg, rgb(var(--brand-primary)) 0, rgb(var(--brand-primary-medium)) 60%, rgb(var(--brand-primary-dark)) 100%);
+  }
+  /* Rel sidebar admin (desktop & drawer mobile): hijau tua bergradien. */
+  .admin-rail {
+    background:
+      linear-gradient(180deg, transparent 60%, rgb(var(--admin-accent-strong) / 0.7) 100%),
+      radial-gradient(circle at 14% 4%, rgb(var(--admin-primary-medium) / 0.55), transparent 52%),
+      radial-gradient(circle at 106% 96%, rgb(var(--admin-gold) / 0.3), transparent 48%),
+      rgb(var(--admin-accent-strong));
+  }
+  /* Kaca: kartu/tombol transparan di atas permukaan hijau (sidebar, panel-brand). */
+  .glass {
+    background: rgb(255 255 255 / 0.1);
+    border: 1px solid rgb(255 255 255 / 0.2);
+    backdrop-filter: blur(14px);
+  }
+  /* Kaca terang di atas kanvas krem (topbar). */
+  .glass-light {
+    background: rgb(255 255 255 / 0.65);
+    border: 1px solid rgb(255 255 255 / 0.8);
+    backdrop-filter: blur(14px);
+  }
+  .kartu      { @apply rounded-2xl border border-admin-line bg-white shadow-admin; }
+  .ubin       { @apply rounded-xl border border-admin-line bg-white p-3; }
+  .label-kecil { @apply text-[11px] font-bold uppercase tracking-[0.06em] text-admin-muted; }
+  .admin-input { @apply min-h-11 w-full rounded-xl border border-admin-line bg-white px-3 text-sm text-admin-ink outline-none placeholder:text-admin-muted focus:border-admin-accent focus:ring-2 focus:ring-admin-accent/15; }
+
+  /* === Kelas komponen admin (permanen) — kombinasi class padat untuk form/tabel/badge yang dipakai ratusan kali.
+     Komponen React (Button, Card, Badge, FormField) dipakai untuk kode baru; kelas ini untuk markup form padat. === */
+  .admin-card        { @apply kartu; }
+  .admin-h1          { @apply text-2xl font-extrabold tracking-tight text-admin-ink; }
+  .admin-section     { @apply text-xs font-bold uppercase tracking-[0.12em] text-admin-muted; }
+  .admin-th          { @apply px-4 py-3 text-[10.5px] tracking-[0.1em] text-admin-muted font-bold uppercase; }
+  .admin-inp         { @apply bg-white border border-admin-line rounded-lg px-3 py-2 text-sm text-admin-ink placeholder:text-admin-muted/70 focus:outline-none focus:ring-2 focus:ring-admin-accent/15 focus:border-admin-accent/60 w-full; }
+  .admin-inp-xs      { @apply bg-white border border-admin-line rounded-md px-2 py-1 text-xs text-admin-ink placeholder:text-admin-muted/70 focus:outline-none focus:ring-1 focus:ring-admin-accent/15 focus:border-admin-accent/60 w-full; }
+  .admin-select      { @apply bg-white border border-admin-line rounded-lg px-3 py-2 text-sm text-admin-ink focus:outline-none focus:ring-2 focus:ring-admin-accent/15 focus:border-admin-accent/60 w-full; }
+  .admin-select-xs   { @apply bg-white border border-admin-line rounded-md px-2 py-0.5 text-xs text-admin-ink focus:outline-none focus:ring-1 focus:ring-admin-accent/15 focus:border-admin-accent/60; }
+  .admin-form-panel  { @apply bg-admin-spot/50 border border-admin-line-strong rounded-2xl p-4 space-y-3; }
+  .admin-btn         { @apply inline-flex items-center gap-1.5 px-3 py-2 rounded-xl bg-admin-accent hover:bg-admin-accent-strong text-sm text-white font-medium transition-colors; }
+  .admin-btn-sm      { @apply inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-admin-accent hover:bg-admin-accent-strong text-xs text-white font-medium transition-colors; }
+  .admin-btn-ghost   { @apply inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-admin-line text-sm text-admin-ink hover:bg-admin-spot transition-colors; }
+  .admin-pill-on     { @apply px-3 py-1.5 rounded-xl text-xs font-semibold bg-admin-accent text-white border border-admin-accent; }
+  .admin-pill-off    { @apply px-3 py-1.5 rounded-xl text-xs font-medium border border-admin-line text-admin-muted hover:bg-admin-spot transition-colors; }
+  .admin-badge-green { @apply text-xs px-2 py-0.5 rounded-full bg-admin-ok/12 text-admin-ok font-semibold; }
+  .admin-badge-red   { @apply text-xs px-2 py-0.5 rounded-full bg-admin-danger/10 text-admin-danger font-semibold; }
+  .admin-badge-blue  { @apply text-xs px-2 py-0.5 rounded-full bg-admin-accent/10 text-admin-accent-strong font-semibold; }
+  .admin-badge-amber { @apply text-xs px-2 py-0.5 rounded-full bg-admin-warning/10 text-admin-warning font-semibold; }
+  .admin-badge-gray  { @apply text-xs px-2 py-0.5 rounded-full bg-admin-spot text-admin-muted font-semibold; }
+}
+
+@layer utilities {
+  /* Gulir tanpa scrollbar terlihat (menu samping) — tetap bisa digulir dengan roda/sentuh/keyboard. */
+  .scrollbar-none { scrollbar-width: none; }
+  .scrollbar-none::-webkit-scrollbar { display: none; }
 }

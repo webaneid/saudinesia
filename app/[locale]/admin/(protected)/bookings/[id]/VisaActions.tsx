@@ -31,17 +31,17 @@ export function VisaActions({ pilgrimId, visaAppId: _, currentStatus }: VisaActi
 
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[11px] text-slate-500 font-medium">Update visa:</span>
+      <span className="text-[11px] text-admin-muted font-medium">Update visa:</span>
       {nextStatuses.length === 0
-        ? <span className="text-[11px] text-slate-400">Tidak ada transisi</span>
+        ? <span className="text-[11px] text-admin-muted/70">Tidak ada transisi</span>
         : nextStatuses.map(s => (
           <button key={s} onClick={() => updateStatus(s)} disabled={loading}
-            className="px-2.5 py-1 rounded-lg border border-line text-[11px] font-medium text-ink2 hover:bg-canvas disabled:opacity-50 transition-colors">
+            className="px-2.5 py-1 rounded-lg border border-admin-line text-[11px] font-medium text-admin-ink/80 hover:bg-admin-spot disabled:opacity-50 transition-colors">
             → {VISA_STATUS[s as keyof typeof VISA_STATUS]?.label}
           </button>
         ))
       }
-      {error && <span className="text-[11px] text-rose-600">{error}</span>}
+      {error && <span className="text-[11px] text-admin-danger">{error}</span>}
     </div>
   )
 }

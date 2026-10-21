@@ -1,105 +1,118 @@
-import { prisma } from '@/lib/db'
 import Link from 'next/link'
+import type { BookingStatus, Prisma } from '@prisma/client'
+import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
+import { BOOKING_TONE } from '@/lib/admin/statusTone'
+import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { Badge } from '@/components/admin/ui/Badge'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { FilterPills } from '@/components/admin/data-table/FilterPills'
+import { Pagination } from '@/components/admin/data-table/Pagination'
+import { SearchForm } from '@/components/admin/data-table/SearchForm'
 
-type Props = { params: Promise<{ locale: string }>; searchParams: Promise<{ status?: string; q?: string }> }
+type Props = {
+  params: Promise<{ locale: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
+
+type BookingRow = Prisma.BookingGetPayload<{
+  include: { user: { select: { fullName: true; phone: true } }; _count: { select: { pilgrims: true } } }
+}>
+
+// hasOwnProperty, bukan `in` — `in` meloloskan "toString"/"constructor" dari prototype.
+const isBookingStatus = (v: string | undefined): v is BookingStatus =>
+  !!v && Object.prototype.hasOwnProperty.call(BOOKING_STATUS, v)
 
 export default async function AdminBookings({ params, searchParams }: Props) {
   const { locale } = await params
-  const { status, q } = await searchParams
+  const sp = await searchParams
+  const list = parseListParams(sp)
+  const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
+  const status = isBookingStatus(rawStatus) ? rawStatus : undefined
+  const q = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 100)
 
-  const bookings = await prisma.booking.findMany({
-    where: {
-      status: status ? (status as import('@prisma/client').BookingStatus) : undefined,
-      OR: q ? [
-        { bookingCode: { contains: q, mode: 'insensitive' } },
-        { user: { fullName: { contains: q, mode: 'insensitive' } } },
-      ] : undefined,
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 50,
-    include: { user: { select: { fullName: true, phone: true } }, _count: { select: { pilgrims: true } } },
-  })
-
-  const statuses = Object.keys(BOOKING_STATUS)
-
-  const STATUS_BADGE: Record<string, string> = {
-    payment_review:   'admin-badge-blue',
-    awaiting_payment: 'admin-badge-amber',
-    confirmed:        'admin-badge-green',
-    cancelled:        'admin-badge-red',
-    documents_pending:'admin-badge-gray',
+  const where: Prisma.BookingWhereInput = {
+    status,
+    OR: q ? [
+      { bookingCode: { contains: q, mode: 'insensitive' } },
+      { user: { fullName: { contains: q, mode: 'insensitive' } } },
+    ] : undefined,
   }
 
-  return (
-    <div className="space-y-5 max-w-5xl">
-      <h1 className="admin-h1">Daftar Booking</h1>
+  const { items: bookings, meta } = await paginate<BookingRow>(
+    list,
+    () => prisma.booking.count({ where }),
+    range => prisma.booking.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
+      ...range,
+      include: { user: { select: { fullName: true, phone: true } }, _count: { select: { pilgrims: true } } },
+    }),
+  )
 
-      {/* Filter pills */}
-      <div className="flex flex-wrap gap-2">
-        <Link href={`/${locale}/admin/bookings`}
-          className={!status ? 'admin-pill-on' : 'admin-pill-off'}>
-          Semua
+  const base = `/${locale}/admin/bookings`
+  const hrefFor = (over: Record<string, string | number | undefined>) =>
+    buildListHref(base, { status, q, limit: sp.limit === undefined ? undefined : list.limit, ...over })
+
+  const columns: Column<BookingRow>[] = [
+    {
+      key: 'code', header: 'Kode', mobile: 'title',
+      cell: b => (
+        <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">
+          {b.bookingCode}
         </Link>
-        {statuses.map(s => (
-          <Link key={s} href={`/${locale}/admin/bookings?status=${s}`}
-            className={status === s ? 'admin-pill-on' : 'admin-pill-off'}>
-            {BOOKING_STATUS[s as keyof typeof BOOKING_STATUS]?.label}
-          </Link>
-        ))}
-      </div>
+      ),
+    },
+    {
+      key: 'pilgrim', header: 'Jamaah',
+      cell: b => (
+        <>
+          <div className="text-[13px] font-medium">{b.user.fullName ?? '-'}</div>
+          <div className="text-[11px] text-admin-muted">{b._count.pilgrims} jamaah</div>
+        </>
+      ),
+    },
+    {
+      key: 'departure', header: 'Berangkat',
+      cell: b => <span className="text-[12px] text-admin-muted">{new Date(b.departureDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span>,
+    },
+    {
+      key: 'total', header: 'Total', hideBelowLg: true,
+      cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(Number(b.totalAmount))}</span>,
+    },
+    {
+      key: 'status', header: 'Status',
+      cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge>,
+    },
+  ]
 
-      <div className="admin-card overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="border-b border-line bg-canvas/60">
-            <tr>
-              <th className="admin-th">Kode</th>
-              <th className="admin-th">Jamaah</th>
-              <th className="admin-th hidden md:table-cell">Berangkat</th>
-              <th className="admin-th hidden lg:table-cell">Total</th>
-              <th className="admin-th">Status</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {bookings.map(b => {
-              const cfg = BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]
-              return (
-                <tr key={b.id} className="hover:bg-canvas/40 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link href={`/${locale}/admin/bookings/${b.id}`}
-                      className="font-mono text-[12px] font-semibold text-teal-700 hover:text-teal-800">
-                      {b.bookingCode}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="text-ink font-medium text-[13px]">{b.user.fullName ?? '-'}</div>
-                    <div className="text-[11px] text-slate-500">{b._count.pilgrims} jamaah</div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500 text-[12px] hidden md:table-cell">
-                    {new Date(b.departureDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}
-                  </td>
-                  <td className="px-4 py-3 text-ink2 font-medium text-[12px] hidden lg:table-cell tabular-nums">
-                    {formatRupiah(Number(b.totalAmount))}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className={STATUS_BADGE[b.status] ?? 'admin-badge-gray'}>
-                      {cfg?.label ?? b.status}
-                    </span>
-                  </td>
-                </tr>
-              )
-            })}
-            {bookings.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-12 text-center text-slate-400 text-sm">
-                  Tidak ada booking ditemukan.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+  return (
+    <div className="space-y-5">
+      <PageHeader title="Daftar Booking" description="Cari berdasarkan kode booking atau nama pemesan." />
+
+      <SearchForm
+        action={base}
+        q={q}
+        placeholder="Cari kode booking / nama…"
+        preserve={{ status, limit: sp.limit === undefined ? undefined : String(list.limit) }}
+        clearHref={hrefFor({ q: undefined, page: 1 })}
+      />
+
+      <FilterPills
+        options={Object.entries(BOOKING_STATUS).map(([value, v]) => ({ value, label: v.label }))}
+        current={status ?? ''}
+        hrefFor={value => hrefFor({ status: value || undefined, page: 1 })}
+      />
+
+      <DataTable
+        columns={columns}
+        rows={bookings}
+        getRowId={b => b.id}
+        empty="Tidak ada booking ditemukan."
+        footer={meta.total > 0 ? <Pagination {...meta} hrefFor={page => hrefFor({ page })} /> : undefined}
+      />
     </div>
   )
 }

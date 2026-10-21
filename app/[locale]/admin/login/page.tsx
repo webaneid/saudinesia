@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
-import { getSession } from '@/lib/auth/session'
+import { getSession, ADMIN_ROLES } from '@/lib/auth/session'
+import { AdminAuthShell } from '@/components/admin/shell/AdminAuthShell'
 import { AdminLoginForm } from './AdminLoginForm'
 
 export const metadata = { title: 'Admin Login' }
@@ -8,14 +9,14 @@ export default async function AdminLoginPage({ params }: { params: Promise<{ loc
   const { locale } = await params
   const session = await getSession()
 
-  // Already authenticated as admin/superadmin — go straight to dashboard
-  if (session && ['admin', 'superadmin'].includes(session.role)) {
+  // Already authenticated as an admin role — go straight to dashboard
+  if (session && ADMIN_ROLES.includes(session.role)) {
     redirect(`/${locale}/admin`)
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950 p-4">
+    <AdminAuthShell title="Masuk" description="Masuk dengan akun admin Anda">
       <AdminLoginForm locale={locale} />
-    </main>
+    </AdminAuthShell>
   )
 }

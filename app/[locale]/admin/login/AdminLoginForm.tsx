@@ -2,10 +2,10 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ShieldCheck, AlertCircle, Eye, EyeOff } from 'lucide-react'
-import { cn } from '@/lib/utils'
-
-const ADMIN_ROLES = ['admin', 'superadmin']
+import { AlertCircle, Eye, EyeOff } from 'lucide-react'
+import { ADMIN_ROLES } from '@/lib/auth/roles'
+import { Button } from '@/components/admin/ui/Button'
+import { FormField } from '@/components/admin/ui/FormField'
 
 interface AdminLoginFormProps { locale: string }
 
@@ -47,74 +47,53 @@ export function AdminLoginForm({ locale }: AdminLoginFormProps) {
   }
 
   return (
-    <div className="w-full max-w-sm space-y-6">
-      <div className="text-center space-y-2">
-        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-800">
-          <ShieldCheck className="h-7 w-7 text-slate-300" />
-        </div>
-        <h1 className="text-xl font-semibold text-white">Saudinesia Admin</h1>
-        <p className="text-sm text-slate-400">Masuk dengan akun admin Anda</p>
-      </div>
+    <form onSubmit={handleSubmit} className="grid gap-4">
+      <FormField label="Email" htmlFor="email" required>
+        <input
+          id="email" type="email" autoComplete="username" placeholder="admin@saudinesia.com"
+          value={email} onChange={(e) => setEmail(e.target.value)}
+          required autoFocus className="admin-input"
+        />
+      </FormField>
 
-      <div className="rounded-xl border border-slate-800 bg-slate-900 p-6">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-1.5">
-            <label className="text-sm font-medium text-slate-300" htmlFor="email">Email</label>
-            <input
-              id="email" type="email" placeholder="admin@saudinesia.com"
-              value={email} onChange={(e) => setEmail(e.target.value)}
-              required autoFocus
-              className="flex h-10 w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between">
-              <label className="text-sm font-medium text-slate-300" htmlFor="password">Password</label>
-              <a href={`/${locale}/forgot-password`} className="text-xs text-slate-400 hover:text-slate-200">
-                Lupa password?
-              </a>
-            </div>
-            <div className="relative">
-              <input
-                id="password" type={showPassword ? 'text' : 'password'}
-                placeholder="••••••••" value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="flex h-10 w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 pr-10 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-slate-500"
-              />
-              <button type="button" onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200">
-                {showPassword
-                  ? <EyeOff className="h-4 w-4" />
-                  : <Eye className="h-4 w-4" />}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <div className="flex items-start gap-2 rounded-md border border-red-800 bg-red-950/50 p-3">
-              <AlertCircle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-              <p className="text-sm text-red-300">{error}</p>
-            </div>
-          )}
-
+      <FormField
+        label="Password" htmlFor="password" required
+        labelAside={
+          <a href={`/${locale}/forgot-password`} className="text-xs font-semibold text-admin-accent-strong hover:underline">
+            Lupa password?
+          </a>
+        }
+      >
+        <div className="relative">
+          <input
+            id="password" type={showPassword ? 'text' : 'password'} autoComplete="current-password"
+            placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)}
+            required className="admin-input pr-11"
+          />
           <button
-            type="submit" disabled={loading || !email || !password}
-            className={cn(
-              'w-full h-10 rounded-md text-sm font-medium transition-colors',
-              'bg-slate-100 text-slate-900 hover:bg-white',
-              'disabled:opacity-50 disabled:cursor-not-allowed',
-            )}
+            type="button" onClick={() => setShowPassword(!showPassword)}
+            aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-admin-muted hover:text-admin-ink"
           >
-            {loading ? 'Memverifikasi...' : 'Masuk'}
+            {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
           </button>
-        </form>
-      </div>
+        </div>
+      </FormField>
 
-      <p className="text-center text-xs text-slate-600">
+      {error && (
+        <p role="alert" className="m-0 flex items-start gap-2 rounded-xl bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          {error}
+        </p>
+      )}
+
+      <Button type="submit" loading={loading} disabled={!email || !password} className="w-full">
+        {loading ? 'Memverifikasi...' : 'Masuk'}
+      </Button>
+
+      <p className="m-0 border-t border-admin-line pt-4 text-center text-xs text-admin-muted">
         Akun hanya dapat dibuat oleh Super Admin
       </p>
-    </div>
+    </form>
   )
 }

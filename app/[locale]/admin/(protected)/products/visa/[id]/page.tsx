@@ -235,7 +235,7 @@ export default function VisaEditPage({ params }: Props) {
     router.push(`/${locale}/admin/products/visa`)
   }
 
-  if (!product) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+  if (!product) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   function VendorPicker({ target, vendorId, onSelect, currency, onCurrency }: {
     target: 'visa' | 'brn'; vendorId: string; onSelect: (id: string) => void
@@ -291,7 +291,7 @@ export default function VisaEditPage({ params }: Props) {
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.push(`/${locale}/admin/products/visa`)}
-          className="text-slate-400 hover:text-ink transition-colors"
+          className="text-admin-muted/70 hover:text-admin-ink transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -300,18 +300,18 @@ export default function VisaEditPage({ params }: Props) {
 
       {/* Basic info */}
       <div className="admin-form-panel space-y-4">
-        <p className="text-sm font-semibold text-ink">Informasi Dasar</p>
+        <p className="text-sm font-semibold text-admin-ink">Informasi Dasar</p>
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <p className="text-xs text-slate-500 mb-1">Nama Produk</p>
+            <p className="text-xs text-admin-muted mb-1">Nama Produk</p>
             <input className="admin-inp" value={form.name} onChange={setField('name')} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Negara</p>
+            <p className="text-xs text-admin-muted mb-1">Negara</p>
             <input className="admin-inp" value={form.country} onChange={setField('country')} placeholder="Saudi Arabia" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Jenis Visa (teks bebas)</p>
+            <p className="text-xs text-admin-muted mb-1">Jenis Visa (teks bebas)</p>
             <input
               className="admin-inp" value={form.visaType} onChange={setField('visaType')}
               placeholder="Umroh / Visitor / Bisnis…" list="visa-type-suggestions"
@@ -321,11 +321,11 @@ export default function VisaEditPage({ params }: Props) {
             </datalist>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Estimasi Proses (hari)</p>
+            <p className="text-xs text-admin-muted mb-1">Estimasi Proses (hari)</p>
             <input type="number" className="admin-inp" value={form.processDays} onChange={setField('processDays')} />
           </div>
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Deskripsi (opsional)</p>
+            <p className="text-xs text-admin-muted mb-1">Deskripsi (opsional)</p>
             <textarea className="admin-inp" rows={2} value={form.description} onChange={setField('description')} />
           </div>
         </div>
@@ -333,17 +333,17 @@ export default function VisaEditPage({ params }: Props) {
         <label className="flex items-center gap-2.5 cursor-pointer w-fit">
           <div
             onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif (tampil di katalog)</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di katalog)</span>
         </label>
 
         <div className="admin-card p-3 flex items-center gap-3">
-          <p className="text-xs text-slate-500">Harga saat ini:</p>
-          <p className="text-sm font-bold text-ink">{formatRupiah(product.price)}</p>
-          <p className="text-xs text-slate-400">/ orang · proses ~{form.processDays} hari kerja — dihitung otomatis dari HPP &amp; Komponen Biaya di bawah</p>
+          <p className="text-xs text-admin-muted">Harga saat ini:</p>
+          <p className="text-sm font-bold text-admin-ink">{formatRupiah(product.price)}</p>
+          <p className="text-xs text-admin-muted/70">/ orang · proses ~{form.processDays} hari kerja — dihitung otomatis dari HPP &amp; Komponen Biaya di bawah</p>
         </div>
 
         <div className="flex gap-2 pt-1">
@@ -362,8 +362,8 @@ export default function VisaEditPage({ params }: Props) {
       <div className="admin-form-panel space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-ink">Persyaratan Dokumen</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-sm font-semibold text-admin-ink">Persyaratan Dokumen</p>
+            <p className="text-[11px] text-admin-muted/70 mt-0.5">
               Dokumen yang wajib/opsional diupload jamaah untuk visa ini
             </p>
           </div>
@@ -373,22 +373,22 @@ export default function VisaEditPage({ params }: Props) {
         </div>
 
         {reqs.length === 0 && (
-          <p className="text-[13px] text-slate-400 py-4 text-center border border-dashed border-line rounded-xl">
+          <p className="text-[13px] text-admin-muted/70 py-4 text-center border border-dashed border-admin-line rounded-xl">
             Belum ada persyaratan. Klik Tambah untuk menambah dokumen.
           </p>
         )}
 
         <div className="space-y-3">
           {reqs.map((req, i) => (
-            <div key={i} className="border border-line rounded-xl p-4 space-y-3 bg-canvas/40">
+            <div key={i} className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
               <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-2 text-slate-300">
+                <div className="flex items-center gap-2 text-admin-muted/50">
                   <GripVertical className="h-4 w-4 shrink-0" />
-                  <span className="text-[11px] font-semibold text-slate-500">Dokumen #{i + 1}</span>
+                  <span className="text-[11px] font-semibold text-admin-muted">Dokumen #{i + 1}</span>
                 </div>
                 <button
                   onClick={() => removeReq(i)}
-                  className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+                  className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -396,7 +396,7 @@ export default function VisaEditPage({ params }: Props) {
 
               <div className="grid md:grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">docType (kunci mesin)</p>
+                  <p className="text-xs text-admin-muted mb-1">docType (kunci mesin)</p>
                   <input
                     className="admin-inp font-mono text-[13px]"
                     value={req.docType}
@@ -409,7 +409,7 @@ export default function VisaEditPage({ params }: Props) {
                   </datalist>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Label (tampil ke jamaah)</p>
+                  <p className="text-xs text-admin-muted mb-1">Label (tampil ke jamaah)</p>
                   <input
                     className="admin-inp"
                     value={req.label}
@@ -418,7 +418,7 @@ export default function VisaEditPage({ params }: Props) {
                   />
                 </div>
                 <div className="md:col-span-2">
-                  <p className="text-xs text-slate-500 mb-1">Instruksi detail (opsional)</p>
+                  <p className="text-xs text-admin-muted mb-1">Instruksi detail (opsional)</p>
                   <input
                     className="admin-inp"
                     value={req.description}
@@ -431,14 +431,14 @@ export default function VisaEditPage({ params }: Props) {
               <label className="flex items-center gap-2.5 cursor-pointer w-fit">
                 <div
                   onClick={() => updateReq(i, 'required', !req.required)}
-                  className={`relative w-9 h-5 rounded-full transition-colors ${req.required ? 'bg-teal-600' : 'bg-slate-200'}`}
+                  className={`relative w-9 h-5 rounded-full transition-colors ${req.required ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}
                 >
                   <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${req.required ? 'translate-x-4' : ''}`} />
                 </div>
-                <span className="text-[13px] font-medium text-ink">
+                <span className="text-[13px] font-medium text-admin-ink">
                   {req.required ? 'Wajib' : 'Opsional'}
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className="text-[11px] text-admin-muted/70">
                   {req.required ? '— harus diupload sebelum bisa lanjut' : '— tidak memblokir proses'}
                 </span>
               </label>
@@ -463,22 +463,22 @@ export default function VisaEditPage({ params }: Props) {
       {/* HPP & Komponen Biaya */}
       <div className="admin-form-panel space-y-4">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Komponen Biaya</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Komponen Biaya</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">
             Satu baris = satu rentang hari. Harga Visa wajib, Harga BRN opsional. HPP = Harga Visa + Harga BRN, dikonversi ke Rupiah pakai kurs, ditambah margin jadi Harga Jual — lihat docs/arsitektur-harga.md §14
           </p>
         </div>
 
         <div className="grid md:grid-cols-2 gap-3">
-          <div className="border border-line rounded-xl p-3 space-y-2">
-            <p className="text-xs font-semibold text-ink">Vendor &amp; Mata Uang — Harga Visa</p>
+          <div className="border border-admin-line rounded-xl p-3 space-y-2">
+            <p className="text-xs font-semibold text-admin-ink">Vendor &amp; Mata Uang — Harga Visa</p>
             {vendors.length === 0 && vendorQuickAddTarget !== 'visa' && (
-              <p className="text-[11px] text-amber-600">Belum ada vendor — tambah dulu.</p>
+              <p className="text-[11px] text-admin-warning">Belum ada vendor — tambah dulu.</p>
             )}
             <VendorPicker target="visa" vendorId={visaVendorId} onSelect={setVisaVendorId} currency={visaCurrency} onCurrency={setVisaCurrency} />
           </div>
-          <div className="border border-line rounded-xl p-3 space-y-2">
-            <label className="flex items-center gap-2 text-xs font-semibold text-ink cursor-pointer w-fit">
+          <div className="border border-admin-line rounded-xl p-3 space-y-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-admin-ink cursor-pointer w-fit">
               <input type="checkbox" checked={brnEnabled} onChange={e => setBrnEnabled(e.target.checked)} className="h-3.5 w-3.5" />
               Produk ini pakai komponen BRN (opsional)
             </label>
@@ -489,7 +489,7 @@ export default function VisaEditPage({ params }: Props) {
         </div>
 
         <div className="space-y-2">
-          <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium px-1">
+          <div className="flex items-center gap-2 text-[11px] text-admin-muted/70 font-medium px-1">
             <span className="w-16">Min Hari</span>
             <span className="w-16">Maks Hari</span>
             <span className="w-24">Harga Visa</span>
@@ -504,40 +504,40 @@ export default function VisaEditPage({ params }: Props) {
             return (
               <div
                 key={row.id}
-                className={`flex items-center gap-2 rounded-lg ${isOverridden ? 'bg-amber-50 ring-1 ring-amber-200' : ''}`}
+                className={`flex items-center gap-2 rounded-lg ${isOverridden ? 'bg-admin-warning/10 ring-1 ring-admin-warning/30' : ''}`}
               >
                 <input type="number" className="admin-inp w-16" placeholder="Min" value={row.minDays || ''} onChange={e => updateRow(row.id, 'minDays', e.target.value)} />
                 <input type="number" className="admin-inp w-16" placeholder="Maks" value={row.maxDays || ''} onChange={e => updateRow(row.id, 'maxDays', e.target.value)} />
                 <input type="number" className="admin-inp w-24" placeholder="Harga Visa" value={row.hargaVisa || ''} onChange={e => updateRow(row.id, 'hargaVisa', e.target.value)} />
                 <input
-                  type="number" className="admin-inp w-24 disabled:opacity-40 disabled:bg-slate-50" placeholder={brnEnabled ? 'Harga BRN' : '—'}
+                  type="number" className="admin-inp w-24 disabled:opacity-40 disabled:bg-admin-spot/50" placeholder={brnEnabled ? 'Harga BRN' : '—'}
                   value={row.hargaBrn ?? ''} disabled={!brnEnabled}
                   onChange={e => updateRow(row.id, 'hargaBrn', e.target.value)}
                 />
-                <span className="w-28 text-[13px] font-semibold text-ink truncate" title={preview ? formatRupiah(Math.round(preview.hppRupiah)) : undefined}>
+                <span className="w-28 text-[13px] font-semibold text-admin-ink truncate" title={preview ? formatRupiah(Math.round(preview.hppRupiah)) : undefined}>
                   {preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}
                 </span>
                 <input
-                  type="number" className="admin-inp w-32 font-semibold text-ink placeholder:font-semibold placeholder:text-ink placeholder:opacity-70"
+                  type="number" className="admin-inp w-32 font-semibold text-admin-ink placeholder:font-semibold placeholder:text-admin-ink placeholder:opacity-70"
                   placeholder={preview ? formatRupiah(preview.sellPrice) : 'Otomatis'}
                   value={row.sellPriceOverride ?? ''}
                   onChange={e => updateRow(row.id, 'sellPriceOverride', e.target.value)}
                   title={isOverridden ? 'Harga manual — menggantikan hasil hitung otomatis' : 'Kosongkan untuk pakai hasil hitung otomatis'}
                 />
-                <button onClick={() => removeRow(row.id)} className="h-8 w-8 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors shrink-0">
+                <button onClick={() => removeRow(row.id)} className="h-8 w-8 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors shrink-0">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
             )
           })}
           <button onClick={addRow} className="admin-btn-ghost text-xs flex items-center gap-1"><Plus className="h-3 w-3" /> Tambah Baris</button>
-          <p className="text-[11px] text-slate-400">
+          <p className="text-[11px] text-admin-muted/70">
             Kolom Harga Jual bisa diisi manual (baris berwarna kuning) untuk override harga publish per rentang hari — kosongkan untuk kembali ke hasil hitung otomatis (HPP + margin, dibulatkan).
           </p>
         </div>
 
         {rows.length === 0 && (
-          <p className="text-[13px] text-slate-400 py-4 text-center border border-dashed border-line rounded-xl">
+          <p className="text-[13px] text-admin-muted/70 py-4 text-center border border-dashed border-admin-line rounded-xl">
             Belum ada tarif HPP. Klik &quot;Tambah Baris&quot; untuk mulai isi rentang hari + harga.
           </p>
         )}
@@ -555,14 +555,14 @@ export default function VisaEditPage({ params }: Props) {
       </div>
 
       {/* Danger zone */}
-      <div className="admin-form-panel border-rose-100 space-y-3">
-        <p className="text-sm font-semibold text-rose-600">Zona Berbahaya</p>
-        <p className="text-[12px] text-slate-500">
+      <div className="admin-form-panel border-admin-danger/20 space-y-3">
+        <p className="text-sm font-semibold text-admin-danger">Zona Berbahaya</p>
+        <p className="text-[12px] text-admin-muted">
           Hapus produk visa ini secara permanen. Data jamaah yang sudah memesan tidak terpengaruh.
         </p>
         <button
           onClick={handleDelete}
-          className="px-4 py-2 rounded-xl border border-rose-200 text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors"
+          className="px-4 py-2 rounded-xl border border-admin-danger/30 text-[13px] font-medium text-admin-danger hover:bg-admin-danger/10 transition-colors"
         >
           Hapus Produk Visa
         </button>

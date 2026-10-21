@@ -81,15 +81,14 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,27,45,0.45)', backdropFilter: 'blur(2px)' }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-admin-ink/40 backdrop-blur-[2px]"
       onClick={e => { if (e.target === e.currentTarget) onClose() }}
     >
-      <div className="w-full max-w-sm bg-white rounded-2xl shadow-card border border-line/70 flex flex-col overflow-hidden font-jakarta">
+      <div className="w-full max-w-sm bg-white rounded-2xl shadow-admin border border-admin-line flex flex-col overflow-hidden font-jakarta">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-          <h2 className="text-[15px] font-bold text-ink">Upload Foto</h2>
-          <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-canvas grid place-items-center text-slate-400 transition-colors">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-admin-line">
+          <h2 className="text-[15px] font-bold text-admin-ink">Upload Foto</h2>
+          <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-admin-spot grid place-items-center text-admin-muted/70 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -103,10 +102,10 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
             onClick={() => !uploading && fileRef.current?.click()}
             className={`border-2 border-dashed rounded-2xl cursor-pointer transition-colors select-none overflow-hidden ${
               dragOver
-                ? 'border-teal-400 bg-teal-50'
+                ? 'border-admin-accent/50 bg-admin-accent/10'
                 : file
-                ? 'border-mint-300 bg-mint-50/30'
-                : 'border-line hover:border-teal-300 hover:bg-canvas/50'
+                ? 'border-admin-ok/30 bg-admin-ok/5'
+                : 'border-admin-line hover:border-admin-accent/30 hover:bg-admin-spot/40'
             } ${uploading ? 'pointer-events-none' : ''}`}
           >
             <input ref={fileRef} type="file" accept=".jpg,.jpeg,.png,.webp" className="hidden" onChange={handleInput} />
@@ -114,22 +113,22 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
             {preview ? (
               <div className="relative">
                 <img src={preview} alt="preview" className="w-full h-48 object-cover" />
-                <div className="absolute inset-0 bg-ink/20 flex items-end p-3">
+                <div className="absolute inset-0 bg-admin-ink/20 flex items-end p-3">
                   <div className="bg-white/90 rounded-lg px-2 py-1 backdrop-blur-sm">
-                    <p className="text-[11px] font-medium text-ink truncate max-w-[180px]">{file!.name}</p>
-                    <p className="text-[10px] text-slate-500">{formatBytes(file!.size)}</p>
+                    <p className="text-[11px] font-medium text-admin-ink truncate max-w-[180px]">{file!.name}</p>
+                    <p className="text-[10px] text-admin-muted">{formatBytes(file!.size)}</p>
                   </div>
                   {!uploading && (
-                    <p className="ml-auto text-[11px] text-white font-medium bg-ink/60 rounded-lg px-2 py-1">Klik ganti</p>
+                    <p className="ml-auto text-[11px] text-white font-medium bg-admin-ink/60 rounded-lg px-2 py-1">Klik ganti</p>
                   )}
                 </div>
               </div>
             ) : (
               <div className="p-8 flex flex-col items-center gap-2">
-                <UploadCloud className="h-10 w-10 text-slate-300" />
-                <p className="text-[13px] font-medium text-ink2">Seret foto ke sini</p>
-                <p className="text-[11px] text-slate-400">atau klik untuk pilih</p>
-                <p className="text-[11px] text-slate-400">{ALLOWED_LABEL} · Maks 5 MB</p>
+                <UploadCloud className="h-10 w-10 text-admin-muted/50" />
+                <p className="text-[13px] font-medium text-admin-ink/80">Seret foto ke sini</p>
+                <p className="text-[11px] text-admin-muted/70">atau klik untuk pilih</p>
+                <p className="text-[11px] text-admin-muted/70">{ALLOWED_LABEL} · Maks 5 MB</p>
               </div>
             )}
           </div>
@@ -137,12 +136,12 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
           {/* Progress */}
           {uploading && (
             <div className="space-y-1.5">
-              <div className="flex justify-between text-[11px] text-slate-500">
+              <div className="flex justify-between text-[11px] text-admin-muted">
                 <span>Mengupload…</span><span>{progress}%</span>
               </div>
-              <div className="h-2 rounded-full bg-canvas overflow-hidden">
+              <div className="h-2 rounded-full bg-admin-spot overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-teal-500 to-teal-600 transition-all duration-200"
+                  className="h-full rounded-full bg-gradient-to-r from-admin-primary-medium to-admin-accent transition-all duration-200"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -151,16 +150,16 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
 
           {/* Success */}
           {done && (
-            <div className="flex items-center gap-2 text-mint-700 text-[13px] font-medium">
+            <div className="flex items-center gap-2 text-admin-ok text-[13px] font-medium">
               <CheckCircle2 className="h-4 w-4" /> Foto berhasil diupload!
             </div>
           )}
 
           {/* Error */}
           {activeErr && !done && (
-            <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 rounded-xl p-3">
-              <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-              <p className="text-[12px] text-rose-700">{activeErr}</p>
+            <div className="flex items-start gap-2 bg-admin-danger/10 border border-admin-danger/20 rounded-xl p-3">
+              <AlertCircle className="h-4 w-4 text-admin-danger/80 shrink-0 mt-0.5" />
+              <p className="text-[12px] text-admin-danger">{activeErr}</p>
             </div>
           )}
         </div>
@@ -169,13 +168,13 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
         <div className="px-5 pb-5 flex gap-2">
           <button
             onClick={onClose} disabled={uploading}
-            className="flex-1 h-10 rounded-xl border border-line text-[13px] font-medium text-ink2 hover:bg-canvas disabled:opacity-50 transition-colors"
+            className="flex-1 h-10 rounded-xl border border-admin-line text-[13px] font-medium text-admin-ink/80 hover:bg-admin-spot disabled:opacity-50 transition-colors"
           >
             Batal
           </button>
           <button
             onClick={handleSubmit} disabled={!file || uploading || done}
-            className="flex-1 h-10 rounded-xl bg-ink text-white text-[13px] font-semibold hover:bg-ink2 disabled:opacity-40 transition-colors"
+            className="flex-1 h-10 rounded-xl bg-admin-accent text-white text-[13px] font-semibold hover:bg-admin-accent-strong disabled:opacity-40 transition-colors"
           >
             {uploading ? 'Mengupload…' : 'Upload'}
           </button>

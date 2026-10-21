@@ -77,15 +77,15 @@ export function DocumentGrid({ bookingId, pilgrimId, pilgrimName, requirements }
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-[14px] font-bold text-ink">Dokumen {pilgrimName}</h3>
-          <p className={`text-[12px] mt-0.5 font-medium ${uploaded === total ? 'text-mint-700' : 'text-slate-500'}`}>
+          <h3 className="text-[14px] font-bold text-admin-ink">Dokumen {pilgrimName}</h3>
+          <p className={`text-[12px] mt-0.5 font-medium ${uploaded === total ? 'text-admin-ok' : 'text-admin-muted'}`}>
             {uploaded} dari {total} dokumen wajib telah diupload
           </p>
         </div>
         <button
           onClick={() => docs.refresh()}
           disabled={docs.loading}
-          className="h-8 w-8 rounded-lg border border-line grid place-items-center text-slate-400 hover:text-ink hover:bg-canvas transition-colors disabled:opacity-50"
+          className="h-8 w-8 rounded-lg border border-admin-line grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors disabled:opacity-50"
           title="Refresh"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${docs.loading ? 'animate-spin' : ''}`} />
@@ -93,14 +93,14 @@ export function DocumentGrid({ bookingId, pilgrimId, pilgrimName, requirements }
       </div>
 
       {docs.error && (
-        <div className="flex items-center gap-2 bg-rose-50 border border-rose-100 rounded-xl p-3 text-[12px] text-rose-700">
+        <div className="flex items-center gap-2 bg-admin-danger/10 border border-admin-danger/20 rounded-xl p-3 text-[12px] text-admin-danger">
           <AlertCircle className="h-4 w-4 shrink-0" />
           {docs.error}
         </div>
       )}
 
       {docs.loading && !docs.error && (
-        <div className="flex items-center justify-center py-10 text-slate-400">
+        <div className="flex items-center justify-center py-10 text-admin-muted/70">
           <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       )}
@@ -142,24 +142,23 @@ export function DocumentGrid({ bookingId, pilgrimId, pilgrimName, requirements }
 
       {deleteTarget && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          style={{ background: 'rgba(15,27,45,0.45)', backdropFilter: 'blur(2px)' }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-admin-ink/40 backdrop-blur-[2px]"
         >
-          <div className="w-full max-w-sm bg-white rounded-2xl border border-line shadow-card p-6 space-y-4 font-jakarta">
-            <h3 className="text-[15px] font-bold text-ink">Hapus Dokumen</h3>
-            <p className="text-[13px] text-slate-500">
-              Hapus <strong className="text-ink">{deleteTarget.label}</strong>? Tindakan ini tidak bisa dibatalkan.
+          <div className="w-full max-w-sm bg-white rounded-2xl border border-admin-line shadow-admin p-6 space-y-4 font-jakarta">
+            <h3 className="text-[15px] font-bold text-admin-ink">Hapus Dokumen</h3>
+            <p className="text-[13px] text-admin-muted">
+              Hapus <strong className="text-admin-ink">{deleteTarget.label}</strong>? Tindakan ini tidak bisa dibatalkan.
             </p>
             <div className="flex gap-2">
               <button
                 onClick={() => setDeleteTarget(null)}
-                className="flex-1 h-10 rounded-xl border border-line text-[13px] font-medium text-ink2 hover:bg-canvas transition-colors"
+                className="flex-1 h-10 rounded-xl border border-admin-line text-[13px] font-medium text-admin-ink/80 hover:bg-admin-spot transition-colors"
               >
                 Batal
               </button>
               <button
                 onClick={handleDelete}
-                className="flex-1 h-10 rounded-xl bg-rose-600 text-white text-[13px] font-semibold hover:bg-rose-700 transition-colors"
+                className="flex-1 h-10 rounded-xl bg-admin-danger text-white text-[13px] font-semibold hover:bg-admin-danger/90 transition-colors"
               >
                 Hapus
               </button>

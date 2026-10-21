@@ -152,14 +152,14 @@ export default function FlightEditPage({ params }: Props) {
     router.push(`/${locale}/admin/products/flight`)
   }
 
-  if (!schedule) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+  if (!schedule) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center gap-3">
         <button
           onClick={() => router.push(`/${locale}/admin/products/flight`)}
-          className="text-slate-400 hover:text-ink transition-colors"
+          className="text-admin-muted/70 hover:text-admin-ink transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />
         </button>
@@ -168,47 +168,47 @@ export default function FlightEditPage({ params }: Props) {
 
       {/* Basic info */}
       <div className="admin-form-panel space-y-4">
-        <p className="text-sm font-semibold text-ink">Informasi Dasar</p>
+        <p className="text-sm font-semibold text-admin-ink">Informasi Dasar</p>
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Rute</p>
+            <p className="text-xs text-admin-muted mb-1">Rute</p>
             <select className="admin-inp" value={form.routeId} onChange={e => setForm(f => ({ ...f, routeId: e.target.value }))}>
               {routes.map(r => <option key={r.id} value={r.id}>{r.origin} → {r.destination}</option>)}
             </select>
-            <p className="text-[11px] text-slate-400 mt-1">Rute baru dikelola dari halaman daftar jadwal.</p>
+            <p className="text-[11px] text-admin-muted/70 mt-1">Rute baru dikelola dari halaman daftar jadwal.</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Periode Mulai</p>
+            <p className="text-xs text-admin-muted mb-1">Periode Mulai</p>
             <input type="date" className="admin-inp" value={form.departureFrom} onChange={e => setForm(f => ({ ...f, departureFrom: e.target.value }))} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Periode Akhir</p>
+            <p className="text-xs text-admin-muted mb-1">Periode Akhir</p>
             <input type="date" className="admin-inp" value={form.departureTo} onChange={e => setForm(f => ({ ...f, departureTo: e.target.value }))} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Total Kursi</p>
+            <p className="text-xs text-admin-muted mb-1">Total Kursi</p>
             <input type="number" className="admin-inp" value={form.totalSeats} onChange={e => setForm(f => ({ ...f, totalSeats: e.target.value }))} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Kuota Terpakai</p>
-            <p className="admin-inp bg-slate-50 text-slate-500">{schedule.bookedSeats + schedule.pendingSeats} kursi (booked {schedule.bookedSeats}, pending {schedule.pendingSeats})</p>
+            <p className="text-xs text-admin-muted mb-1">Kuota Terpakai</p>
+            <p className="admin-inp bg-admin-spot/50 text-admin-muted">{schedule.bookedSeats + schedule.pendingSeats} kursi (booked {schedule.bookedSeats}, pending {schedule.pendingSeats})</p>
           </div>
         </div>
 
         <label className="flex items-center gap-2.5 cursor-pointer w-fit">
           <div
             onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif (tampil di katalog)</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di katalog)</span>
         </label>
 
         <div className="admin-card p-3 flex items-center gap-3">
-          <p className="text-xs text-slate-500">Harga saat ini:</p>
-          <p className="text-sm font-bold text-ink">{formatRupiah(schedule.price)}</p>
-          <p className="text-xs text-slate-400">/ orang — dihitung otomatis dari HPP di bawah</p>
+          <p className="text-xs text-admin-muted">Harga saat ini:</p>
+          <p className="text-sm font-bold text-admin-ink">{formatRupiah(schedule.price)}</p>
+          <p className="text-xs text-admin-muted/70">/ orang — dihitung otomatis dari HPP di bawah</p>
         </div>
 
         <div className="flex gap-2 pt-1">
@@ -226,16 +226,16 @@ export default function FlightEditPage({ params }: Props) {
       {/* HPP */}
       <div className="admin-form-panel space-y-4">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Harga Tiket</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Harga Tiket</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">
             Satu komponen: Harga Tiket dari maskapai, dikonversi ke Rupiah pakai kurs, ditambah margin jadi Harga Jual — lihat docs/arsitektur-tiket-pesawat.md §4
           </p>
         </div>
 
-        <div className="border border-line rounded-xl p-3 space-y-2">
-          <p className="text-xs font-semibold text-ink">Maskapai &amp; Mata Uang</p>
+        <div className="border border-admin-line rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-admin-ink">Maskapai &amp; Mata Uang</p>
           {vendors.length === 0 && !showQuickAddVendor && (
-            <p className="text-[11px] text-amber-600">Belum ada vendor/maskapai — tambah dulu.</p>
+            <p className="text-[11px] text-admin-warning">Belum ada vendor/maskapai — tambah dulu.</p>
           )}
           <div className="flex items-center gap-2">
             {!showQuickAddVendor ? (
@@ -281,16 +281,16 @@ export default function FlightEditPage({ params }: Props) {
 
         <div className="grid md:grid-cols-3 gap-3 items-end">
           <div>
-            <p className="text-xs text-slate-500 mb-1">Harga Tiket ({currency})</p>
+            <p className="text-xs text-admin-muted mb-1">Harga Tiket ({currency})</p>
             <input type="number" className="admin-inp" value={hargaTiket} onChange={e => setHargaTiket(e.target.value)} placeholder="0" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">HPP (Rupiah)</p>
-            <p className="admin-inp bg-slate-50 font-semibold text-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
+            <p className="text-xs text-admin-muted mb-1">HPP (Rupiah)</p>
+            <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Harga Jual (otomatis)</p>
-            <p className="admin-inp bg-slate-50 font-semibold text-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
+            <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
+            <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
           </div>
         </div>
 
@@ -307,14 +307,14 @@ export default function FlightEditPage({ params }: Props) {
       </div>
 
       {/* Danger zone */}
-      <div className="admin-form-panel border-rose-100 space-y-3">
-        <p className="text-sm font-semibold text-rose-600">Zona Berbahaya</p>
-        <p className="text-[12px] text-slate-500">
+      <div className="admin-form-panel border-admin-danger/20 space-y-3">
+        <p className="text-sm font-semibold text-admin-danger">Zona Berbahaya</p>
+        <p className="text-[12px] text-admin-muted">
           Hapus jadwal ini secara permanen. Jika sudah ada booking terkait, jadwal akan dinonaktifkan (bukan dihapus).
         </p>
         <button
           onClick={handleDelete}
-          className="px-4 py-2 rounded-xl border border-rose-200 text-[13px] font-medium text-rose-600 hover:bg-rose-50 transition-colors"
+          className="px-4 py-2 rounded-xl border border-admin-danger/30 text-[13px] font-medium text-admin-danger hover:bg-admin-danger/10 transition-colors"
         >
           Hapus Jadwal
         </button>
