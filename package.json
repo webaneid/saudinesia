@@ -12,7 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "bun prisma/seed.ts",
-    "test": "bun scripts/test-rate-limit.ts"
+    "test": "bun scripts/test-rate-limit.ts && bun scripts/test-email.ts && bun scripts/test-notify.ts"
   },
   "prisma": {
     "seed": "bun prisma/seed.ts"
@@ -41,7 +41,6 @@
     "node-cron": "^3.0.3",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "resend": "^4.0.1",
     "sharp": "^0.33.5",
     "tailwind-merge": "^2.5.5",
     "zod": "^3.24.1"

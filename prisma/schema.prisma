@@ -24,16 +24,16 @@ model User {
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
-  address           Address?          @relation(fields: [addressId], references: [id])
-  bookings          Booking[]
-  ledGroups         Group[]           @relation("GroupLeader")
-  groupMemberships  GroupMember[]
-  confirmedPayments Payment[]         @relation("ConfirmedBy")
-  approvedRefunds   Refund[]          @relation("ApprovedBy")
-  notifications     NotificationLog[]
-  consentLogs                ConsentLog[]
-  deletionRequests           AccountDeletionRequest[] @relation("DeletionRequestUser")
-  processedDeletionRequests  AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
+  address                   Address?                 @relation(fields: [addressId], references: [id])
+  bookings                  Booking[]
+  ledGroups                 Group[]                  @relation("GroupLeader")
+  groupMemberships          GroupMember[]
+  confirmedPayments         Payment[]                @relation("ConfirmedBy")
+  approvedRefunds           Refund[]                 @relation("ApprovedBy")
+  notifications             NotificationLog[]
+  consentLogs               ConsentLog[]
+  deletionRequests          AccountDeletionRequest[] @relation("DeletionRequestUser")
+  processedDeletionRequests AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
 
   @@map("users")
 }
@@ -1101,12 +1101,15 @@ model NotificationLog {
   status         String   @default("sent")
   sentAt         DateTime @default(now())
   error          String?
+  // 'sent' | 'failed' | 'skipped' — JUJUR: 'sent' hanya bila provider menerima (docs/arsitektur-notifikasi.md §1)
+  externalId     String? // id pesan dari Resend
 
   user    User     @relation(fields: [userId], references: [id])
   booking Booking? @relation(fields: [bookingId], references: [id])
 
   @@index([userId])
   @@index([bookingId])
+  @@index([bookingId, type, channel, status])
   @@map("notification_logs")
 }
 
@@ -1175,13 +1178,15 @@ model PricingRule {
 // default/kontak publik. Sengaja TIDAK termasuk rekening bank (tetap env-only,
 // lihat lib/constants/payment.ts) — docs/RETROFIT-GAPS.md #6.
 model SiteSetting {
-  id              String   @id @default(uuid())
-  platformName    String?
-  metaTitle       String?
-  metaDescription String?
-  contactEmail    String?
-  contactPhone    String?
-  updatedAt       DateTime @updatedAt
+  id                        String   @id @default(uuid())
+  platformName              String?
+  metaTitle                 String?
+  metaDescription           String?
+  contactEmail              String?
+  contactPhone              String?
+  // Saklar global notifikasi email (docs/arsitektur-notifikasi.md §6). Kredensial tetap di env, bukan di sini.
+  emailNotificationsEnabled Boolean  @default(true)
+  updatedAt                 DateTime @updatedAt
 
   @@map("site_settings")
 }
