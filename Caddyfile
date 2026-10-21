@@ -36,6 +36,10 @@
 
 {$APP_DOMAIN} {
     import keamanan
+    # Anti-clickjacking: aplikasi hanya boleh di-frame oleh dirinya sendiri. CSP penuh (script-src dst.) belum —
+    # Next.js/Tiptap butuh nonce; lihat docs/lessons-learned.md SEC-06.
+    header Content-Security-Policy "frame-ancestors 'self'"
+    header X-Frame-Options "SAMEORIGIN"
     encode zstd gzip
     # Unggah dokumen maks 5 MB (+ overhead multipart); Server Actions dibatasi 6 MB di next.config.ts.
     request_body {

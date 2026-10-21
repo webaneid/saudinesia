@@ -1,8 +1,8 @@
 # Git, CI & Production — Saudinesia
 
 > Status per 2026-10-21: **alur git + CI berjalan; berkas production (compose, Caddyfile, Dockerfile, env) sudah ditulis dan diuji di CI; workflow DEPLOY dan server VPS BELUM ada.**
-> Pola acuan: project `smartai` (`.github/workflows/`, `docs/conventions.md`, `docs/deployment-server-setup.md`,
-> `docs/decisions/adr-0002-versioning-strategy.md`). Dokumen ini mencatat apa yang diambil, apa yang sengaja belum, dan
+> Pola acuan: project **smart-ai** (repo terpisah di `/Users/webane/sites/smartai`: folder `.github/workflows/`, dokumen
+> conventions, deployment-server-setup, dan ADR versioning-nya). Dokumen ini mencatat apa yang diambil, apa yang sengaja belum, dan
 > keputusan yang masih menunggu pemilik project.
 
 Repo: `https://github.com/webaneid/saudinesia` (private).

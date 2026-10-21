@@ -92,3 +92,12 @@ Hooks didaftarkan di `.claude/settings.json`, di-map ke event tertentu
 event terbaru kalau ada perubahan versi).
 
 > Jangan taruh logic bisnis di hooks — hooks untuk *enforcement*, bukan business logic.
+
+## Perluasan 2026-10-21 — `security-review-reminder.sh`
+
+Selain Route Handler/auth/upload/webhook/payment/middleware, hook ini kini juga mengingatkan (exit 1 = peringatan, bukan
+blok) untuk: `lib/auth/*`/OTP/session, `lib/storage/*`, serta file **infra/pipeline** — `Dockerfile*`,
+`docker-compose*.yml`, `Caddyfile*`, `.github/workflows/*.yml`, `.github/dependabot.yml`, `scripts/*.sh|*.ts`,
+`.env*.example`, `.dockerignore`, `next.config.ts`, `instrumentation*.ts`. Pengingat ini lapisan kenyamanan; kewajiban
+sebenarnya ada di `CLAUDE.md` § Fase Eksekusi SOP langkah 5 (Security check) dan CI (`bun audit --audit-level=critical`,
+gitleaks).

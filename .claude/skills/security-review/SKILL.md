@@ -16,13 +16,18 @@ merujuk baris kode spesifik, bukan asumsi.
 ## Langkah
 
 1. Identifikasi file yang baru diubah di sesi ini (Route Handler, auth,
-   upload handler, `middleware.ts`, Prisma schema). Kalau tidak jelas, tanya
-   user file mana yang mau di-review.
+   upload handler, `middleware.ts`, Prisma schema, **dan** Dockerfile/compose/
+   Caddyfile/workflow/skrip/`.env*.example`/`package.json`). Pakai
+   `git diff --name-only <base>..HEAD` bila review mencakup satu fase/PR. Kalau
+   tidak jelas, tanya user file mana yang mau di-review.
 
 2. Baca `docs/architecture/architecture-security.md` untuk checklist lengkap
    (jangan hafal dari memori, checklist project bisa sudah diupdate).
    Project ini **bukan** multi-tenant (satu operator, lihat `CLAUDE.md`
    intro) — jangan cari checklist tenant isolation yang tidak relevan.
+   Baca juga **Register Temuan Security** di `docs/lessons-learned.md` — jangan
+   melaporkan ulang temuan yang sudah tercatat Terbuka (rujuk ID-nya), dan
+   periksa apakah pola yang sama muncul di kode baru.
 
 3. Untuk TIAP file yang direview, cek poin yang relevan:
 
@@ -76,24 +81,86 @@ merujuk baris kode spesifik, bukan asumsi.
    - [ ] `totalAmount`/`amount` selalu dihitung ulang/divalidasi server-side,
          tidak pernah dipercaya mentah dari body request client
 
+   **Kalau file menulis ke database dari body request (create/update):**
+   - [ ] Tidak ada `data: body` / `data: b` / `...body` ke Prisma — body diparse
+         dulu dengan Zod schema `.strict()` dari `lib/validators/` (mass
+         assignment: field seperti `passwordHash`, `role`, `bookedQuota`,
+         `pendingQuota` tidak boleh bisa diubah dari body)
+   - [ ] Field yang dikelola mesin lain (kuota booking, status pembayaran,
+         harga hasil `computeSellPrice`) tidak ada di schema update
+   - [ ] Error dibedakan: `Unauthorized`/`Forbidden` → 401/403, input tidak
+         valid → 400, tidak ditemukan (`P2025`) → 404, sisanya 500 + log. BUKAN
+         `catch { return 403 }` untuk semua error
+
+   **Kalau file adalah endpoint sensitif (login, register, forgot/reset password, OTP, kirim WhatsApp):**
+   - [ ] Ada rate limit per identitas (nomor/email) DAN per IP, dan ada batas
+         percobaan salah untuk kode yang bisa ditebak (OTP 6 digit)
+   - [ ] **Fungsi proteksinya punya pemanggil.** `grep -rn "<namaFungsi>"` —
+         fungsi rate limit yang tidak dipanggil siapa pun sama dengan tidak ada
+         (SEC-04). Jangan puas dengan "ada fungsinya / ada di dokumen"
+   - [ ] Perilaku jatuh ke aman bila Redis/penyimpan counter mati (fail-closed
+         untuk endpoint yang memicu biaya/pengambilalihan akun), atau
+         keputusan fail-open dicatat sadar
+
+   **Kalau ada perilaku khusus development (OTP di response/log, bypass limit, endpoint `/dev/*`, `NODE_ENV`):**
+   - [ ] Kondisi aktifnya `NODE_ENV === 'development'` persis. `!== 'production'`
+         = fail-open → lingkungan dengan NODE_ENV salah/kosong membocorkan OTP
+         (SEC-02). Uji dengan `NODE_ENV` = `test`, `staging`, kosong → harus mati
+
+   **Kalau file infra (Dockerfile, docker-compose*.yml, Caddyfile, `.github/workflows/*`, `scripts/*`, `.env*.example`, `next.config.ts`, `instrumentation*.ts`):**
+   - [ ] Image berjalan non-root; tidak ada rahasia di layer/`ARG`/`ENV` (`ARG`
+         terlihat di `docker history`; `NEXT_PUBLIC_*` memang publik); `.dockerignore`
+         mengecualikan `.env*`, `.git`, `docs`, `.claude`
+   - [ ] Compose: tidak ada `ports:` selain reverse proxy (Postgres/Redis/MinIO
+         hanya jaringan internal); batas resource; tidak ada `privileged`/mount `docker.sock`
+   - [ ] Caddy/header: HSTS, `nosniff`, anti-clickjacking (`frame-ancestors`),
+         host file hanya GET/HEAD; `X-Forwarded-For` ditimpa
+   - [ ] Workflow: `permissions:` minimum (`contents: read`), tidak memakai
+         `pull_request_target` dengan checkout kode PR, rahasia tidak di-`echo`,
+         action dipin versi; langkah deploy tidak menerima input tak tepercaya
+         di `run:` (injeksi `${{ github.event... }}`)
+   - [ ] Skrip: tidak mengambil rahasia dari argumen (riwayat shell/`ps`), tidak
+         menimpa data yang ada, tidak mencetak rahasia; uji pada database
+         sekali pakai, bukan DB dev
+   - [ ] Berkas yang berisi rahasia asli (`.env.production`, `.env.deploy`) ada
+         di `.gitignore`; hanya `*.example` yang boleh ter-commit
+   - [ ] File yang dikompilasi untuk Edge (`instrumentation.ts`, `middleware.ts`)
+         tidak menarik modul Node — dibuktikan oleh `bun run build`, bukan typecheck
+
+   **Kalau `package.json` / `bun.lock` berubah:**
+   - [ ] `bun audit --audit-level=critical` bersih; catat jumlah high/moderate
+         dan apakah ada yang **baru** karena dependency yang ditambah
+   - [ ] Dependency baru benar-benar perlu (bukan satu pemanggilan yang bisa
+         dilakukan runtime bawaan) dan berasal dari maintainer/nama yang benar
+
    **Kalau ada secret/config baru:**
    - [ ] Diambil dari `process.env`, bukan hardcoded
    - [ ] Ada di `.env.example` (tanpa nilai asli) kalau memang perlu didokumentasikan
 
-4. Laporkan hasil dalam format:
+4. Laporkan hasil dalam format (severity sama dengan `.claude/agents/security-auditor.md`):
    ```
    ## Security Review — [nama file/fitur]
 
    ✅ Lolos: [poin yang sudah benar]
-   ⚠️  Perlu diperbaiki: [poin bermasalah + baris kode + saran fix]
+   ⚠️  Perlu diperbaiki:
+      - [CRITICAL/HIGH/MEDIUM/LOW] [judul] — file:baris — masalah — saran fix — [baru di fase ini | pre-existing]
    ❓ Perlu dicek manual: [hal yang tidak bisa dipastikan dari kode saja]
    ```
+   Jangan melebih-lebihkan severity; akurasi klasifikasi lebih penting daripada daftar panjang.
 
-5. Kalau ketemu masalah kategori "⚠️ Perlu diperbaiki", JANGAN anggap task selesai
-   — perbaiki dulu atau tanya user mau prioritaskan fix sekarang atau dicatat
-   sebagai technical debt di `docs/decisions.md`.
+5. Tindak lanjut (aturan lengkap: `CLAUDE.md` § Fase Eksekusi SOP langkah 5):
+   - **Critical/High pada kode yang diubah/ditambah fase ini → WAJIB diperbaiki
+     sebelum task/fase dianggap selesai.** Buktikan perbaikannya dengan uji
+     nyata (curl/skrip, termasuk kasus yang harus ditolak), bukan hanya typecheck.
+   - **Medium/Low → catat** di Register Temuan Security
+     (`docs/lessons-learned.md`: ID berikutnya, severity, status, lokasi) — boleh
+     ditunda, tidak boleh hilang.
+   - **Pre-existing** (kode lama yang ditemukan sambil lalu): catat severity
+     apa adanya dan beri tahu user. Critical/High pre-existing dijadwalkan
+     sebagai fase hardening, wajib Selesai sebelum go-live.
 
-6. Kalau reviewnya kompleks/menyentuh banyak file sekaligus (misal audit
-   seluruh `app/api/v1/admin/`), pertimbangkan delegasikan ke subagent
-   `security-auditor` (lihat `.claude/agents/security-auditor.md`) supaya
-   tidak menghabiskan context window sesi utama.
+6. Kalau reviewnya kompleks/menyentuh banyak file sekaligus (lebih dari ±10
+   file, lintas modul, atau menyentuh auth/pembayaran/upload/infra),
+   delegasikan ke subagent `security-auditor` (lihat
+   `.claude/agents/security-auditor.md`) supaya tidak menghabiskan context
+   window sesi utama.

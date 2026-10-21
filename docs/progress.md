@@ -608,6 +608,7 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 ## M15 — Production Deployment
 - [ ] Hostinger VPS provisioned
 - [ ] Docker Compose deployed and running
+- [ ] **Hardening security sebelum go-live** — SEC-04 (rate limit login/register/OTP + batas percobaan OTP, **High**) dan SEC-05 (17 advisory high dependency) **wajib Selesai**; Medium/Low lainnya di Register Temuan Security (`docs/lessons-learned.md`). SEC-01/02/03/06 sudah Selesai 2026-10-21
 - [~] ~~Nginx~~ **Caddy** configured as reverse proxy — diputuskan 2026-10-21 (mengikuti smart-ai); `Caddyfile` + `docker-compose.prod.yml` + `Dockerfile` sudah ditulis dan diuji di CI, **belum dijalankan di server**. Lihat `docs/deployment.md` §4–§6
 - [ ] TLS certificate (Let's Encrypt) issued and auto-renewed
 - [ ] First `prisma migrate deploy` run against production DB
