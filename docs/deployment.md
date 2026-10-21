@@ -46,7 +46,7 @@ date, block force push, block deletion. Tanpa ini, hook dan CI hanya pengingat �
 | Versi & changelog otomatis | semantic-release (`release.yml`, `.releaserc.json`), `feat`→minor, `fix`→patch | belum ada; `package.json` versi `0.1.0` manual |
 | Build image | GitHub Actions → GHCR (`ghcr.io/<repo>/web:<tag>`) | `Dockerfile` multi-stage sudah ada (bun standalone); belum ada workflow build/push |
 | Compose production | `docker-compose.prod.yml` — memakai image GHCR, tidak membangun di server | `docker-compose.yml` **membangun di server** (`build:`), publish `3001:3000`, MinIO console `9001` terbuka — bentuk dev/awal |
-| Reverse proxy + TLS | Caddy (`Caddyfile`, reload tiap deploy) | **Nginx + Let's Encrypt** tertulis di `docs/progress.md` M15 |
+| Reverse proxy + TLS | Caddy (`Caddyfile`, reload tiap deploy) | **Caddy (diputuskan 2026-10-21, sama seperti smart-ai)**; rencana lama M15 menyebut Nginx + Let's Encrypt — digantikan |
 | Deploy | `deploy.yml`: scp compose → SSH → `docker compose pull && up -d` → health check; bisa **rollback** manual ke tag mana pun | belum ada |
 | Env production | `.env.production` di server (`scripts/buat-env-production.sh`), tidak di repo | hanya `.env.example` |
 | Staging | `develop` → `deploy-staging.yml` (belum diaktifkan di smart-ai sendiri) | belum ada |
@@ -61,8 +61,10 @@ lebih berbahaya daripada tidak ada.
 
 ## 5. Keputusan yang menunggu pemilik project
 
-1. **Reverse proxy: Nginx (rencana M15) atau Caddy (seperti smart-ai)?** Caddy mengurus TLS otomatis dan lebih sedikit
-   konfigurasi; Nginx sudah tertulis di rencana awal. Stack di `CLAUDE.md` hanya menyebut "single Docker container".
+1. ~~Reverse proxy: Nginx atau Caddy?~~ **SELESAI 2026-10-21: Caddy**, mengikuti smart-ai. Alasan: sertifikat TLS diurus
+   otomatis (tanpa certbot + cron perpanjangan), konfigurasi jauh lebih pendek, dan polanya sudah terbukti jalan di
+   production smart-ai. Rencana Nginx di M15 digantikan; `CLAUDE.md` hanya menyebut "single Docker container" jadi tidak
+   ada aturan stack yang dilanggar.
 2. **Pasang semantic-release sekarang atau nanti?** Butuh disiplin Conventional Commits (sudah dijalankan) dan menambah
    devDependency + `release.yml`. smart-ai memakai override "breaking change = minor selama 0.x" (ADR-0002).
 3. **Tambah branch `develop` + staging?** Menambah satu VPS/domain/`.env.staging`. smart-ai sendiri belum mengaktifkannya.
