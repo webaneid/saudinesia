@@ -1,6 +1,6 @@
 # Git, CI & Production — Saudinesia
 
-> Status per 2026-10-21: **alur git + CI sudah berjalan; pipeline production BELUM dibangun.**
+> Status per 2026-10-21: **alur git + CI berjalan; berkas production (compose, Caddyfile, Dockerfile, env) sudah ditulis dan diuji di CI; workflow DEPLOY dan server VPS BELUM ada.**
 > Pola acuan: project `smartai` (`.github/workflows/`, `docs/conventions.md`, `docs/deployment-server-setup.md`,
 > `docs/decisions/adr-0002-versioning-strategy.md`). Dokumen ini mencatat apa yang diambil, apa yang sengaja belum, dan
 > keputusan yang masih menunggu pemilik project.
@@ -31,6 +31,9 @@ Diuji pada clone bersih sebelum di-commit (tanpa `.env.local`, hanya `DATABASE_U
 selain gitleaks lolos. **gitleaks belum pernah dijalankan** (tidak terpasang lokal) — kalau menemukan false positive di
 riwayat lama, tambahkan ke allowlist `.gitleaks.toml`, jangan matikan langkahnya.
 
+Job kedua, **`docker`**, menguji jalur production tanpa server (lihat §4): validasi `docker-compose.prod.yml` dan `Caddyfile`,
+build image `web` dan `migrate`, uji skrip env, lalu smoke test aplikasi sungguhan.
+
 Sengaja **tidak ada**: `lint` (project belum punya konfigurasi ESLint; `next lint` meminta input interaktif) dan test suite
 (belum ada). Keduanya menyusul bila diadopsi.
 
@@ -39,38 +42,67 @@ Sengaja **tidak ada**: `lint` (project belum punya konfigurasi ESLint; `next lin
 Settings → Branches → rule untuk `main`: require pull request, require status check **`validate`**, require branch up to
 date, block force push, block deletion. Tanpa ini, hook dan CI hanya pengingat — siapa pun masih bisa `git push` langsung.
 
-## 4. Production — perbandingan dengan smart-ai
+## 4. Production — status per komponen
 
-| Komponen | smart-ai | Saudinesia hari ini |
+Dibangun 2026-10-21 di branch `feat/production-compose-caddy`. **Belum pernah dijalankan di server sungguhan** (VPS belum
+disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — jadi seluruh jalur dibuktikan oleh job
+`docker` di CI (`.github/workflows/ci.yml`): validasi compose + Caddyfile, build 2 image, uji skrip env, lalu smoke test
+(migrasi → web → `/api/v1/health` menyentuh DB, halaman publik 200, log bebas error Prisma/openssl).
+
+| Komponen | Berkas | Keterangan |
 |---|---|---|
-| Versi & changelog otomatis | semantic-release (`release.yml`, `.releaserc.json`), `feat`→minor, `fix`→patch | belum ada; `package.json` versi `0.1.0` manual |
-| Build image | GitHub Actions → GHCR (`ghcr.io/<repo>/web:<tag>`) | `Dockerfile` multi-stage sudah ada (bun standalone); belum ada workflow build/push |
-| Compose production | `docker-compose.prod.yml` — memakai image GHCR, tidak membangun di server | `docker-compose.yml` **membangun di server** (`build:`), publish `3001:3000`, MinIO console `9001` terbuka — bentuk dev/awal |
-| Reverse proxy + TLS | Caddy (`Caddyfile`, reload tiap deploy) | **Caddy (diputuskan 2026-10-21, sama seperti smart-ai)**; rencana lama M15 menyebut Nginx + Let's Encrypt — digantikan |
-| Deploy | `deploy.yml`: scp compose → SSH → `docker compose pull && up -d` → health check; bisa **rollback** manual ke tag mana pun | belum ada |
-| Env production | `.env.production` di server (`scripts/buat-env-production.sh`), tidak di repo | hanya `.env.example` |
-| Staging | `develop` → `deploy-staging.yml` (belum diaktifkan di smart-ai sendiri) | belum ada |
-| Migrasi saat deploy | role DB pemilik terpisah (`scripts/pisah-role-db.sh`), `migrate deploy` | belum ada; `migrate deploy` perlu jadi langkah deploy |
-| Backup | `backup-produksi.sh` harian ke Drive, uji restore | `backup-db.sh`/`backup-minio.sh` ada, **belum dijadwalkan** di VPS |
-| Secret scan | gitleaks di CI | gitleaks di CI (belum terbukti jalan) |
-| Update dependency | Dependabot mingguan | belum ada |
+| Compose production | `docker-compose.prod.yml` | web, migrate (sekali jalan), postgres, redis, minio, caddy. Image dari GHCR. Tanpa port terbuka kecuali Caddy 80/443. **web = 1 replika** (cron node-cron di dalam proses). `docker-compose.yml` lama = bentuk dev, jangan dipakai di production |
+| Reverse proxy | `Caddyfile` | TLS otomatis; domain dari env (`APP_DOMAIN`, `FILES_DOMAIN`), tidak ada domain di repo. Host file hanya GET/HEAD dan `frame-ancestors` (preview PDF memakai iframe — `X-Frame-Options: DENY` akan memblokirnya) |
+| Image aplikasi | `Dockerfile` | 2 target: `runner` (standalone Next.js, non-root) dan `migrate` (CLI Prisma). `NEXT_PUBLIC_*` masuk sebagai build-arg |
+| `.dockerignore` | `.dockerignore` | Sebelumnya tidak ada → `COPY . .` menyalin `.env.local` ke layer build |
+| Env production | `.env.production.example`, `scripts/buat-env-production.sh` | Skrip membuat `.env.production` dengan rahasia acak di server; tidak menimpa, izin 600, tidak menampilkan rahasia |
+| Image MinIO | `infra/minio/Dockerfile`, `.github/workflows/minio-image.yml` | MinIO tidak lagi menerbitkan image publik (pengalaman smart-ai) → dibangun sendiri ke GHCR. **Workflow harus dijalankan sekali sebelum deploy pertama** |
+| Health | `GET /api/v1/health` | Publik, hanya status + ping DB |
 
-Server VPS Hostinger **belum disiapkan** (`docs/progress.md` M15 semua belum dicentang), jadi tidak ada yang bisa
-diverifikasi end-to-end. Itu sebabnya workflow deploy belum ditulis: konfigurasi production yang tak pernah dijalankan
-lebih berbahaya daripada tidak ada.
+### Perbaikan kode yang ikut (ditemukan saat merancang production)
 
-## 5. Keputusan yang menunggu pemilik project
+- **URL presigned MinIO** (`lib/storage/minio.ts`): sebelumnya ditandatangani atas `MINIO_ENDPOINT`, yang di Docker bernilai
+  `minio` → semua foto hotel/muthowif/transport dan preview dokumen berisi `http://minio:9000/...` yang tidak bisa dibuka
+  browser. Kini bila `MINIO_PUBLIC_URL` diisi, tanda tangan dibuat atas host publik (offline; `region` diberikan eksplisit).
+  Tanpa variabel itu (dev lokal) perilaku lama tidak berubah. Diuji unit; **belum diverifikasi di browser** karena data lokal
+  tidak punya foto.
+- **Bucket dibuat otomatis** saat server start (`instrumentation.ts`, retry 5×, tidak pernah menjatuhkan boot) — tidak ada
+  langkah manual `mc mb`.
+- `Dockerfile` lama: `COPY bun.lockb*` tidak menyalin `bun.lock`; tanpa `openssl` (Prisma salah mendeteksi libssl di image
+  slim); tanpa jalur migrasi; root user.
+- `CRON_SECRET` dihapus dari `.env.example` — tidak dibaca kode mana pun (rute cron HTTP sudah dihapus).
 
-1. ~~Reverse proxy: Nginx atau Caddy?~~ **SELESAI 2026-10-21: Caddy**, mengikuti smart-ai. Alasan: sertifikat TLS diurus
-   otomatis (tanpa certbot + cron perpanjangan), konfigurasi jauh lebih pendek, dan polanya sudah terbukti jalan di
-   production smart-ai. Rencana Nginx di M15 digantikan; `CLAUDE.md` hanya menyebut "single Docker container" jadi tidak
-   ada aturan stack yang dilanggar.
-2. **Pasang semantic-release sekarang atau nanti?** Butuh disiplin Conventional Commits (sudah dijalankan) dan menambah
-   devDependency + `release.yml`. smart-ai memakai override "breaking change = minor selama 0.x" (ADR-0002).
-3. **Tambah branch `develop` + staging?** Menambah satu VPS/domain/`.env.staging`. smart-ai sendiri belum mengaktifkannya.
-4. **Registry & akses:** GHCR dengan repo private (seperti smart-ai) — server login GHCR memakai token job deploy.
-5. **Rahasia GitHub Actions** yang dibutuhkan saat deploy dibangun: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY`
-   (pola smart-ai). **Jangan** ditempel di chat; isi langsung di GitHub → Settings → Secrets.
+### Yang masih memakai pola smart-ai tapi BELUM ada di sini
 
-Urutan kerja yang disarankan setelah keputusan di atas: (a) `docker-compose.prod.yml` + proxy + `.env.production.example`,
-(b) provisioning VPS (M15), (c) `deploy.yml` dengan health check + rollback, (d) baru semantic-release.
+| Komponen | smart-ai | Saudinesia |
+|---|---|---|
+| Workflow build+push image & deploy | `deploy.yml` (scp compose → SSH → `pull && up -d` → health check; rollback manual ke tag mana pun) | **belum ditulis** — kontrak sudah ada: image `ghcr.io/<repo>/web` & `/migrate`, `.env.deploy`, health endpoint |
+| Versi & changelog otomatis | semantic-release | belum; `package.json` `0.1.0` manual |
+| Staging (`develop`) | `deploy-staging.yml` | belum |
+| Role DB terpisah (pemilik vs aplikasi) | `scripts/pisah-role-db.sh` | belum — satu role `saudinesia` memegang migrasi dan runtime |
+| Backup terjadwal + uji restore | `backup-produksi.sh` ke Drive, dipantau | `backup-db.sh`/`backup-minio.sh` ada, **belum dijadwalkan** |
+| Update dependency | Dependabot | belum |
+
+## 5. Keputusan
+
+1. ~~Reverse proxy: Nginx atau Caddy?~~ **SELESAI 2026-10-21: Caddy**, mengikuti smart-ai (TLS otomatis, konfigurasi pendek,
+   terbukti di production smart-ai). Menggantikan rencana Nginx di M15.
+2. **semantic-release sekarang atau nanti?** Saran: setelah deploy pertama berhasil.
+3. **Staging (`develop`)?** Saran: tidak dulu — smart-ai sendiri belum mengaktifkannya.
+4. Registry: GHCR, repo private (server login GHCR dengan token job deploy).
+
+## 6. Sebelum go-live (blocker, urut)
+
+1. **Pembuatan superadmin pertama.** `bun run db:seed` **menghapus** data hotel/transport/muthowif/katering/ziarah dan
+   mereset harga — TIDAK boleh dijalankan di production. Belum ada skrip yang hanya membuat superadmin; harus ditulis
+   (upsert satu user dari env, tidak menyentuh tabel lain).
+2. GitHub **Variables** (bukan Secrets) untuk build-arg `NEXT_PUBLIC_*` (nama bisnis, WA, alamat, rekening, URL aplikasi,
+   `NEXT_PUBLIC_MINIO_PUBLIC_URL` = `https://<FILES_DOMAIN>/saudinesia-docs`). Image bersifat spesifik-environment.
+3. Jalankan workflow **MinIO Image** (Actions → Run workflow) sekali.
+4. DNS: A record `APP_DOMAIN` dan `FILES_DOMAIN` ke IP VPS **sebelum** Caddy dinyalakan.
+5. Server: Docker + Compose, folder `/opt/app` berisi `docker-compose.prod.yml`, `Caddyfile`, `.env.production.example`,
+   `scripts/buat-env-production.sh`; jalankan skrip env; isi manual `WA_GATEWAY_*`, `RESEND_*`.
+6. Rahasia Actions untuk deploy: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY` — diisi langsung di GitHub, **jangan**
+   ditempel di chat.
+7. Tulis `deploy.yml` (build+push 2 image, scp, SSH, health check, rollback). Baru setelah itu semantic-release.
+8. Jadwalkan backup (`backup-db.sh`, `backup-minio.sh`) dan uji restore.
