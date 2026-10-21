@@ -608,10 +608,11 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 ## M15 — Production Deployment
 - [ ] Hostinger VPS provisioned
 - [ ] Docker Compose deployed and running
-- [ ] Nginx configured as reverse proxy
+- [~] ~~Nginx~~ **Caddy** configured as reverse proxy — diputuskan 2026-10-21 (mengikuti smart-ai); `Caddyfile` + `docker-compose.prod.yml` + `Dockerfile` sudah ditulis dan diuji di CI, **belum dijalankan di server**. Lihat `docs/deployment.md` §4–§6
 - [ ] TLS certificate (Let's Encrypt) issued and auto-renewed
 - [ ] First `prisma migrate deploy` run against production DB
-- [ ] MinIO bucket created (`saudinesia-docs`)
+- [x] First superadmin account — `scripts/create-superadmin.ts` (2026-10-21; pengganti `db:seed` yang destruktif; diuji lokal 15 skenario + login nyata, dan dibuktikan di dalam image oleh job `docker` CI). Lihat `docs/deployment.md` §6
+- [~] MinIO bucket created (`saudinesia-docs`) — dibuat otomatis saat server start (`instrumentation.ts`); image MinIO harus dibangun dulu lewat workflow `minio-image.yml`
 - [ ] GOWA (Sumopod) connected and tested with a real WhatsApp number
 - [ ] Smoke test: end-to-end booking flow in production
 

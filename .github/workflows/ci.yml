@@ -63,3 +63,89 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false" # komentar PR butuh izin tulis — hasil cukup di log CI
+
+  # Membuktikan jalur production TANPA server: Dockerfile (2 target), docker-compose.prod.yml, Caddyfile, skrip env,
+  # dan smoke test aplikasi sungguhan (migrasi → web → /api/v1/health menyentuh DB). Docker tidak ada di mesin dev
+  # (lihat docs/deployment.md), jadi inilah satu-satunya tempat jalur ini diuji.
+  docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      # Nama image lokal mengikuti pola GHCR yang dipakai compose (ghcr.io/<repo>/<service>:<tag>).
+      # Sengaja bukan nama GITHUB_* (awalan itu dicadangkan Actions) — di server nilainya ada di .env.deploy.
+      IMG_REPO: ci/saudinesia
+      IMG_TAG: ci
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Buat .env.production dengan skrip produksi (sekaligus menguji skripnya)
+        run: |
+          bash scripts/buat-env-production.sh ci.example.test files.ci.example.test .
+          test -s .env.production
+          # Sama seperti langkah deploy di server
+          printf 'GITHUB_REPO=%s\nIMAGE_TAG=%s\n' "$IMG_REPO" "$IMG_TAG" > .env.deploy
+
+      - name: Validasi docker-compose.prod.yml
+        run: docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy config --quiet
+
+      - name: Validasi Caddyfile
+        run: |
+          docker run --rm \
+            -e APP_DOMAIN=ci.example.test -e FILES_DOMAIN=files.ci.example.test \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2.11.4-alpine caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Build image web (target runner) dan migrate
+        run: |
+          docker build -t "ghcr.io/$IMG_REPO/web:$IMG_TAG" --target runner .
+          docker build -t "ghcr.io/$IMG_REPO/migrate:$IMG_TAG" --target migrate .
+
+      - name: Image web - tanpa rahasia/dokumentasi, dan bukan root
+        run: |
+          IMG="ghcr.io/$IMG_REPO/web:$IMG_TAG"
+          ! docker run --rm --entrypoint sh "$IMG" -c 'ls -A /app | grep -E "^\.env|^docs$|^\.git$|^\.claude$"' || { echo "image web berisi berkas terlarang"; exit 1; }
+          test "$(docker run --rm --entrypoint id "$IMG" -u)" != "0" || { echo "image web berjalan sebagai root"; exit 1; }
+
+      # Hanya layanan yang tidak butuh image GHCR eksternal: MinIO buatan sendiri baru ada setelah minio-image.yml
+      # dijalankan, jadi di sini tidak dinyalakan (web hanya menyentuh MinIO saat unggah/preview; presign offline).
+      - name: Smoke — postgres, redis, migrate, web
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          $C up -d postgres redis
+          # --exit-code-from: langkah gagal bila migrasi gagal (tanpa ini `up` selalu keluar 0)
+          $C up --exit-code-from migrate migrate
+          # web bergantung pada minio (healthy) di compose production; di CI minio dilewati dengan --no-deps
+          $C up -d --no-deps web
+          for i in $(seq 1 40); do
+            if $C exec -T web bun -e "fetch('http://localhost:3000/api/v1/health').then(async (r) => { console.log(r.status, await r.text()); process.exit(r.ok ? 0 : 1) }, () => process.exit(1))"; then
+              echo "web sehat setelah ~$((i*3))s"; OK=1; break
+            fi
+            sleep 3
+          done
+          [ "${OK:-0}" = "1" ] || { echo "web tidak sehat"; exit 1; }
+          # Halaman publik yang membaca DB harus 200 (bukan 500) pada DB kosong hasil migrasi
+          for path in /id /id/hotels /id/login; do
+            $C exec -T web bun -e "fetch('http://localhost:3000$path').then((r) => { console.log('$path', r.status); process.exit(r.status === 200 ? 0 : 1) })"
+          done
+          # Log tidak boleh memuat kegagalan klasik image: engine Prisma/openssl, modul hilang
+          if $C logs web | grep -E "PrismaClientInitializationError|libssl|Cannot find module|Unable to require"; then
+            echo "log web memuat error fatal"; exit 1
+          fi
+
+      # Skrip superadmin pertama dijalankan DI DALAM image web (bukan di runner): membuktikan skripnya ikut ke image dan
+      # hanya butuh @prisma/client + Bun, lalu login sungguhan lewat route aplikasi dengan akun yang baru dibuat.
+      - name: Smoke - superadmin pertama lalu login
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          PW='Ci-Admin!2345'
+          printf '%s\n' "$PW" | $C exec -T web bun scripts/create-superadmin.ts --email ci-admin@example.test --name "CI Admin" --password-stdin
+          # Kedua kalinya HARUS ditolak (sudah ada superadmin) — penjaga terhadap akun berhak-tinggi ganda.
+          if printf '%s\n' "$PW" | $C exec -T web bun scripts/create-superadmin.ts --email lain@example.test --name Lain --password-stdin; then
+            echo "skrip seharusnya menolak superadmin kedua"; exit 1
+          fi
+          $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
+
+      - name: Log layanan (hanya bila gagal)
+        if: failure()
+        run: docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy logs --no-color --tail=120

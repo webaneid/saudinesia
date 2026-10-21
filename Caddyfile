@@ -1,0 +1,62 @@
+# Caddyfile
+# Caddy mengurus sertifikat HTTPS (Let's Encrypt) otomatis begitu DNS domain mengarah ke IP VPS — tanpa certbot.
+# Domain TIDAK dikeraskan di sini: dibaca dari environment container (docker-compose.prod.yml):
+#   APP_DOMAIN    → aplikasi (Next.js), mis. saudinesia.com
+#   FILES_DOMAIN  → MinIO publik, mis. berkas.saudinesia.com — host yang ditandatangani URL presigned
+#                   (MINIO_PUBLIC_URL harus = https://$FILES_DOMAIN). Bucket tetap PRIVAT: tanpa tanda tangan
+#                   presigned yang valid, MinIO menolak akses.
+# Kedua A record harus sudah mengarah ke VPS sebelum Caddy dinyalakan, kalau tidak penerbitan sertifikat gagal.
+
+# Header keamanan untuk semua host.
+(keamanan) {
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+}
+
+# MinIO publik: HANYA baca objek (GET/HEAD). Unggah & operasi tulis lewat server aplikasi (jaringan internal),
+# bukan dari internet — jadi semua metode lain ditolak di sini.
+(files) {
+    import keamanan
+    @tolak {
+        not method GET HEAD
+    }
+    respond @tolak 405
+    respond /minio/* 404
+    # Preview dokumen memakai <iframe> (components/shared/media/PreviewModal.tsx) dari URL presigned, jadi
+    # X-Frame-Options: DENY akan memblokirnya. Hanya aplikasi sendiri yang boleh menyematkan.
+    header Content-Security-Policy "frame-ancestors https://{$APP_DOMAIN}"
+    request_body {
+        max_size 1KB
+    }
+}
+
+{$APP_DOMAIN} {
+    import keamanan
+    encode zstd gzip
+    # Unggah dokumen maks 5 MB (+ overhead multipart); Server Actions dibatasi 6 MB di next.config.ts.
+    request_body {
+        max_size 8MB
+    }
+    reverse_proxy web:3000 {
+        # IP klien = alamat yang benar-benar terhubung ke Caddy (Caddy adalah tepi, tanpa CDN di depan).
+        # X-Forwarded-For kiriman klien SELALU ditimpa, supaya rate limit & audit per IP tidak bisa diakali dengan
+        # memalsukan header. Bila kelak memakai CDN/Cloudflare: atur trusted_proxies dan hapus baris ini.
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
+{$FILES_DOMAIN} {
+    import files
+    # Host header diteruskan apa adanya (bawaan Caddy) — URL presigned ditandatangani untuk host ini.
+    reverse_proxy minio:9000
+}
+
+# Belum punya domain dan hanya mau uji lewat IP? Ganti dua blok di atas sementara menjadi (HTTP saja, tanpa HTTPS):
+#
+# :80 {
+#     reverse_proxy web:3000
+# }

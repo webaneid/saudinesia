@@ -1,0 +1,148 @@
+# docker-compose.prod.yml
+# Dipakai DI SERVER, bukan dibuild di sana — image ditarik dari GHCR (dibuild workflow, lihat docs/deployment.md).
+# Jalan di server:
+#   docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy up -d
+# (.env.deploy berisi GITHUB_REPO & IMAGE_TAG, ditulis oleh langkah deploy.) docker-compose.yml (tanpa .prod)
+# adalah bentuk awal/dev yang MEMBANGUN image di mesin sendiri dan membuka port — jangan dipakai di production.
+#
+# Pola mengikuti smart-ai (docker-compose.prod.yml), disesuaikan: satu app Next.js (bukan api+web+worker), Redis
+# (OTP), GOWA eksternal di Sumopod (tidak ada service WhatsApp di sini), satu role database.
+#
+# RESOURCE LIMITS: tanpa batas, satu container yang bocor/spike menghabiskan RAM dan memicu OOM-kill container
+# LAIN (termasuk postgres — data berisiko). Angka di bawah titik awal untuk VPS ±4 GB — sesuaikan dengan
+# `docker stats` setelah live.
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # SATU replika saja: cron (auto-cancel, reminder, kurs) jalan di dalam proses lewat node-cron di
+  # instrumentation.ts. Lebih dari satu replika = tiap job berjalan ganda (booking dibatalkan/diingatkan dua kali).
+  web:
+    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env.production
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"] # image bun-slim tanpa curl/wget
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [internal]
+    # Tidak ada "ports:" — hanya Caddy yang menjangkaunya lewat jaringan internal.
+    mem_limit: 1g
+    cpus: 1.0
+    logging: *logging
+
+  # Migrasi skema, sekali jalan tiap deploy (`prisma migrate deploy` — TIDAK PERNAH `db push` di production).
+  # Image terpisah karena CLI Prisma tidak ikut ke image web.
+  migrate:
+    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/migrate:${IMAGE_TAG:-latest}
+    restart: "no"
+    env_file: .env.production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [internal]
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *logging
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: saudinesia
+      POSTGRES_USER: saudinesia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD belum diisi}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saudinesia -d saudinesia"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+    # Sengaja TIDAK ada "ports:" — DB hanya terjangkau dari jaringan internal. Akses manual (DBeaver, dll.)
+    # lewat SSH tunnel, jangan buka port ke internet.
+    # Postgres paling penting diberi RAM cukup (integritas data) — limit paling longgar di antara service.
+    mem_limit: 1g
+    cpus: 1.0
+    logging: *logging
+
+  # OTP & rate limit (lib/auth/otp.ts). Data berumur pendek: kehilangannya hanya membuat pengguna meminta OTP ulang.
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    volumes:
+      - redis_data:/data
+    networks: [internal]
+    mem_limit: 192m
+    cpus: 0.25
+    logging: *logging
+
+  minio:
+    # MinIO tidak lagi menerbitkan image publik → image buatan sendiri (infra/minio, workflow minio-image.yml).
+    # Workflow itu WAJIB dijalankan sekali sebelum deploy pertama. Versi harus sama dengan ARG di infra/minio/Dockerfile.
+    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/minio:RELEASE.2025-10-15T17-29-55Z
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY belum diisi}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY belum diisi}
+      # Harus sama dengan region bucket & tanda tangan presigned di lib/storage/minio.ts (BUCKET_REGION).
+      MINIO_SITE_REGION: ap-southeast-1
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/minio/health/live || exit 1"] # alpine: wget busybox
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+    # Console (:9001) sengaja tidak diekspos. Bila perlu, lewat SSH tunnel atau route Caddy dengan auth tambahan.
+    mem_limit: 512m
+    cpus: 0.5
+    logging: *logging
+
+  caddy:
+    image: caddy:2.11.4-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      # Domain dibaca Caddyfile lewat {$APP_DOMAIN}/{$FILES_DOMAIN} — tidak ada domain yang dikeraskan di repo.
+      APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN belum diisi}
+      FILES_DOMAIN: ${FILES_DOMAIN:?FILES_DOMAIN belum diisi}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data     # sertifikat TLS — jangan dihapus (rate limit Let's Encrypt)
+      - caddy_config:/config
+    depends_on: [web, minio]
+    networks: [internal]
+    mem_limit: 128m
+    cpus: 0.25
+    logging: *logging
+
+networks:
+  internal:
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
