@@ -133,6 +133,19 @@ jobs:
             echo "log web memuat error fatal"; exit 1
           fi
 
+      # Skrip superadmin pertama dijalankan DI DALAM image web (bukan di runner): membuktikan skripnya ikut ke image dan
+      # hanya butuh @prisma/client + Bun, lalu login sungguhan lewat route aplikasi dengan akun yang baru dibuat.
+      - name: Smoke - superadmin pertama lalu login
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          PW='Ci-Admin!2345'
+          printf '%s\n' "$PW" | $C exec -T web bun scripts/create-superadmin.ts --email ci-admin@example.test --name "CI Admin" --password-stdin
+          # Kedua kalinya HARUS ditolak (sudah ada superadmin) — penjaga terhadap akun berhak-tinggi ganda.
+          if printf '%s\n' "$PW" | $C exec -T web bun scripts/create-superadmin.ts --email lain@example.test --name Lain --password-stdin; then
+            echo "skrip seharusnya menolak superadmin kedua"; exit 1
+          fi
+          $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
+
       - name: Log layanan (hanya bila gagal)
         if: failure()
         run: docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy logs --no-color --tail=120
