@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { sendWhatsApp } from '@/lib/notifications/send'
-import { waTemplates } from '@/lib/notifications/templates/whatsapp'
+import { notify } from '@/lib/notifications/notify'
 import { isValidVisaStatusTransition } from '@/lib/validators/visaStatus'
 import { z } from 'zod'
 
@@ -58,17 +57,12 @@ export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimI
       },
     })
 
-    // Send WA notification — best-effort, never blocks response
-    const user = pilgrim.booking.user
-    if (user.phone) {
-      sendWhatsApp({
-        userId: user.id,
-        phone: user.phone,
-        type: 'visa_status_change',
-        message: waTemplates.visaStatusChange(pilgrim.booking.bookingCode, VISA_STATUS_LABELS[status] ?? status),
-        bookingId: pilgrim.bookingId,
-      }).catch(e => console.error('[visa/status] WA send failed:', e))
-    }
+    // Notifikasi (WhatsApp + email) — best-effort, tidak memblokir respons
+    void notify({
+      userId: pilgrim.booking.user.id,
+      bookingId: pilgrim.bookingId,
+      event: { type: 'visa_status_change', code: pilgrim.booking.bookingCode, status: VISA_STATUS_LABELS[status] ?? status },
+    })
 
     return NextResponse.json(ok(updated))
   } catch (e) {

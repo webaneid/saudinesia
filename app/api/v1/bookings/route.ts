@@ -4,6 +4,8 @@ import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
 import { createBookingSchema } from '@/lib/validators/booking'
 import { generateBookingCode } from '@/lib/utils/bookingCode'
+import { notify } from '@/lib/notifications/notify'
+import { formatDeadline } from '@/lib/notifications/events'
 import { ok, err } from '@/lib/validators'
 import { computeSellPrice } from '@/lib/pricing/computeSellPrice'
 import { computeTourPackageBreakdown, baseTotal, totalForVehicle, hotelChoicePrice } from '@/lib/pricing/computeTourPackagePrice'
@@ -279,6 +281,15 @@ export async function POST(request: Request) {
 
       return tx.booking.update({ where: { id: bk.id }, data: { totalAmount } })
     }, { isolationLevel: 'Serializable' })
+
+    // Konfirmasi pesanan (WhatsApp + email) — sebelumnya template WA `bookingSubmitted` ada tapi tidak pernah dipanggil.
+    // Best-effort setelah transaksi commit; notify() tidak pernah melempar dan tidak memblokir respons.
+    void notify({
+      userId: session.userId,
+      bookingId: booking.id,
+      event: { type: 'booking_submitted', code: booking.bookingCode, deadline: formatDeadline(paymentDeadline) },
+      dedupe: true,
+    })
 
     return NextResponse.json(ok({ bookingId: booking.id, bookingCode: booking.bookingCode }), { status: 201 })
   } catch (error) {

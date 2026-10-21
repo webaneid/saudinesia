@@ -1,7 +1,7 @@
 import cron from 'node-cron'
 import { prisma } from '@/lib/db'
-import { sendWhatsApp } from '@/lib/notifications/send'
-import { waTemplates } from '@/lib/notifications/templates/whatsapp'
+import { notify } from '@/lib/notifications/notify'
+import { formatDeadline } from '@/lib/notifications/events'
 import { cancelBooking } from '@/lib/booking/cancel'
 
 const HOUR_MS = 60 * 60 * 1000
@@ -27,15 +27,7 @@ export function startAutoCancelJob(): void {
         // bisa divergen (menutup Gap #2/#3 sekaligus di jalur cron ini juga).
         await prisma.$transaction(tx => cancelBooking(tx, booking, 'Auto-cancel: batas waktu pembayaran terlewat'))
 
-        if (booking.user.phone) {
-          await sendWhatsApp({
-            userId: booking.userId,
-            phone: booking.user.phone,
-            type: 'auto_cancelled',
-            message: waTemplates.autoCancelled(booking.bookingCode),
-            bookingId: booking.id,
-          })
-        }
+        await notify({ userId: booking.userId, bookingId: booking.id, event: { type: 'auto_cancelled', code: booking.bookingCode }, dedupe: true })
 
         console.log(`[cron] Auto-cancelled: ${booking.bookingCode}`)
       } catch (err) {
@@ -65,7 +57,7 @@ export function startPaymentReminderJob(): void {
     })
 
     for (const booking of bookings) {
-      if (!booking.user.phone || !booking.paymentDeadline) continue
+      if (!booking.paymentDeadline) continue
 
       const hoursLeft = (booking.paymentDeadline.getTime() - now.getTime()) / HOUR_MS
       const type =
@@ -75,22 +67,16 @@ export function startPaymentReminderJob(): void {
 
       if (!type) continue
 
-      const alreadySent = await prisma.notificationLog.findFirst({ where: { bookingId: booking.id, type } })
-      if (alreadySent) continue
-
-      const deadlineStr = booking.paymentDeadline.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })
-      try {
-        await sendWhatsApp({
-          userId: booking.userId,
-          phone: booking.user.phone,
-          type,
-          message: waTemplates.paymentReminder(booking.bookingCode, deadlineStr),
-          bookingId: booking.id,
-        })
-        console.log(`[cron] Sent ${type}: ${booking.bookingCode}`)
-      } catch (err) {
-        console.error(`[cron] Reminder failed ${booking.bookingCode}:`, err)
-      }
+      // Dedupe PER KANAL di dalam notify (hanya yang berstatus 'sent'): pengingat yang gagal/dilewati dicoba lagi di siklus
+      // berikutnya. Dulu dedupe memakai log yang selalu 'sent' sehingga pengingat gagal tidak pernah diulang, dan user
+      // tanpa nomor telepon dilewati total (kini tetap dapat email).
+      const outcomes = await notify({
+        userId: booking.userId,
+        bookingId: booking.id,
+        event: { type, code: booking.bookingCode, deadline: formatDeadline(booking.paymentDeadline) },
+        dedupe: true,
+      })
+      console.log(`[cron] ${type} ${booking.bookingCode}: ${outcomes.map(o => `${o.channel}=${o.status}`).join(' ') || 'tidak ada kanal'}`)
     }
   })
 
