@@ -28,6 +28,7 @@ PW_DB="$(acak 24)"
   sed \
     -e "s#^APP_DOMAIN=\$#APP_DOMAIN=$APP_DOMAIN#" \
     -e "s#^FILES_DOMAIN=\$#FILES_DOMAIN=$FILES_DOMAIN#" \
+    -e "s#^APP_URL=\$#APP_URL=https://$APP_DOMAIN#" \
     -e "s#^MINIO_PUBLIC_URL=\$#MINIO_PUBLIC_URL=https://$FILES_DOMAIN#" \
     -e "s#^POSTGRES_PASSWORD=\$#POSTGRES_PASSWORD=$PW_DB#" \
     -e "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://saudinesia:$PW_DB@postgres:5432/saudinesia#" \
