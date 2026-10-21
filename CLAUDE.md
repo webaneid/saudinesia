@@ -295,6 +295,7 @@ Berlaku untuk implementasi apa pun yang dipecah jadi beberapa fase/step (mis. me
 ## Milestone SOP (wajib diikuti setiap selesai milestone)
 
 1. **`bun run build`** — pastikan zero type errors sebelum lanjut. Fix semua error dulu.
+   Typecheck dan dev server (Turbopack) TIDAK menangkap error bundling produksi — mis. kode khusus Node di `instrumentation.ts`/`middleware.ts` yang ikut dikompilasi untuk Edge. Perubahan di file-file itu atau `next.config.ts` hanya terbukti oleh `bun run build`. Kode khusus Node di instrumentation → `instrumentation-node.ts`, di-import dari dalam `if (process.env.NEXT_RUNTIME === 'nodejs')`.
 2. **Update `docs/progress.md`** — centang semua item yang selesai, catat yang masih pending.
 3. **Append `docs/decisions.md`** — jika ada keputusan arsitektur baru selama implementasi.
 4. **Baru lanjut ke milestone berikutnya.**
