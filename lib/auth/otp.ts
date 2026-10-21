@@ -75,8 +75,9 @@ export async function verifyAndConsumeOtp(phone: string, code: string): Promise<
 }
 
 export async function checkRateLimit(phone: string): Promise<boolean> {
-  // No rate limiting in dev — GOWA not running, no cost per request
-  if (process.env.NODE_ENV !== 'production') return true
+  // No rate limiting in dev — GOWA not running, no cost per request.
+  // Hanya 'development' persis: staging/test dengan NODE_ENV lain TETAP dibatasi (dulu semua non-production lolos).
+  if (process.env.NODE_ENV === 'development') return true
 
   const r = await getRedis()
   if (!r) return true

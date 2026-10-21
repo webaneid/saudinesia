@@ -36,7 +36,10 @@ export async function POST(request: Request) {
       data: { phone: user.phone, code, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
     })
 
-    const isDev = process.env.NODE_ENV !== 'production'
+    // FAIL-CLOSED: kemudahan dev (OTP tampil di log & response, WhatsApp tidak dikirim) HANYA bila NODE_ENV persis
+    // 'development'. Dulu `!== 'production'` — lingkungan mana pun yang NODE_ENV-nya salah/kosong (staging, container
+    // salah konfigurasi) akan membocorkan OTP di response HTTP, yang berarti pengambilalihan akun lewat reset password.
+    const isDev = process.env.NODE_ENV === 'development'
     if (isDev) {
       console.log(`\n[DEV] OTP reset password ${user.phone}: ${code}\n`)
     } else {
