@@ -7,16 +7,17 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { GoogleButton, OrDivider } from '@/components/shared/GoogleButton'
 
-interface LoginFormProps { locale: string }
+interface LoginFormProps { locale: string; googleEnabled?: boolean; initialError?: string }
 
-export function LoginForm({ locale }: LoginFormProps) {
+export function LoginForm({ locale, googleEnabled = false, initialError = '' }: LoginFormProps) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialError)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -47,7 +48,13 @@ export function LoginForm({ locale }: LoginFormProps) {
         <CardTitle>Masuk</CardTitle>
         <CardDescription>Masuk ke akun Saudinesia Anda</CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-4">
+        {googleEnabled && (
+          <>
+            <GoogleButton locale={locale} label="Masuk dengan Google" />
+            <OrDivider />
+          </>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>

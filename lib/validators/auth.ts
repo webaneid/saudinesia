@@ -52,6 +52,14 @@ export const registrationPayloadSchema = z.object({
 
 export const tokenOnlySchema = z.object({ token: tokenSchema }).strict()
 
+// Pengguna Google baru: nama boleh disunting (diprefill dari Google); persetujuan privasi wajib sebelum akun dibuat.
+export const googleCompleteSchema = z
+  .object({
+    fullName: fullNameSchema,
+    privacyConsent: z.literal(true, { errorMap: () => ({ message: 'Anda harus menyetujui Kebijakan Privasi' }) }),
+  })
+  .strict()
+
 export const completeRegistrationSchema = z
   .object({
     token: tokenSchema,

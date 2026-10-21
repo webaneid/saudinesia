@@ -3,6 +3,7 @@ import { completeRegistration } from '@/lib/auth/accounts'
 import { createSession } from '@/lib/auth/session'
 import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { completeRegistrationSchema } from '@/lib/validators/auth'
+import { notify } from '@/lib/notifications/notify'
 import { ok, err } from '@/lib/validators'
 
 // Pemilik email memilih password → akun dibuat (email terverifikasi) → langsung masuk.
@@ -24,6 +25,7 @@ export async function POST(request: Request) {
     }
 
     await createSession({ userId: result.user.id, role: result.user.role })
+    void notify({ userId: result.user.id, event: { type: 'welcome', name: result.user.fullName }, dedupe: true })
     return NextResponse.json(ok({ role: result.user.role }))
   } catch (error) {
     console.error('[auth/registration/complete]', error instanceof Error ? error.name : error)

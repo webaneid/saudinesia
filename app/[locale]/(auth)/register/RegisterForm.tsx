@@ -8,13 +8,14 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ContactPicker, EMPTY_CONTACT, type ContactValue } from '@/components/shared/ContactPicker'
 import { useCooldown } from '@/components/shared/useCooldown'
+import { GoogleButton, OrDivider } from '@/components/shared/GoogleButton'
 import { e164FromCountry } from '@/lib/utils/phone'
 
 type Step = 'form' | 'sent'
 
-interface RegisterFormProps { locale: string }
+interface RegisterFormProps { locale: string; googleEnabled?: boolean }
 
-export function RegisterForm({ locale }: RegisterFormProps) {
+export function RegisterForm({ locale, googleEnabled = false }: RegisterFormProps) {
   const [step, setStep] = useState<Step>('form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -68,6 +69,12 @@ export function RegisterForm({ locale }: RegisterFormProps) {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {step === 'form' && googleEnabled && (
+          <>
+            <GoogleButton locale={locale} label="Daftar dengan Google" />
+            <OrDivider />
+          </>
+        )}
         {step === 'form' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
