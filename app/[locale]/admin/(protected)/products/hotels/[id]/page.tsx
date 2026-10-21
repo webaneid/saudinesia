@@ -224,7 +224,7 @@ export default function HotelDetailPage() {
   }
 
   if (!hotel) {
-    return <div className="flex items-center justify-center py-20 text-slate-400 text-sm">Memuat data hotel…</div>
+    return <div className="flex items-center justify-center py-20 text-admin-muted/70 text-sm">Memuat data hotel…</div>
   }
 
   return (
@@ -232,50 +232,50 @@ export default function HotelDetailPage() {
       <div>
         <a
           href={`/${locale}/admin/products/hotels`}
-          className="inline-flex items-center gap-1.5 text-[12px] text-slate-500 hover:text-ink transition-colors mb-3"
+          className="inline-flex items-center gap-1.5 text-[12px] text-admin-muted hover:text-admin-ink transition-colors mb-3"
         >
           <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke daftar hotel
         </a>
         <h1 className="admin-h1 flex items-center gap-2">
           {hotel.name}
-          <span className="text-gold-600 text-lg">{'★'.repeat(form.stars)}</span>
+          <span className="text-admin-gold-strong text-lg">{'★'.repeat(form.stars)}</span>
         </h1>
       </div>
 
       {/* Informasi Dasar */}
       <div className="admin-form-panel space-y-4">
-        <p className="text-sm font-semibold text-ink">Informasi Dasar</p>
+        <p className="text-sm font-semibold text-admin-ink">Informasi Dasar</p>
         <div className="grid md:grid-cols-2 gap-3">
           <div>
-            <p className="text-xs text-slate-500 mb-1">Nama Hotel</p>
+            <p className="text-xs text-admin-muted mb-1">Nama Hotel</p>
             <input className="admin-inp" value={form.name} onChange={set('name')} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Kota</p>
+            <p className="text-xs text-admin-muted mb-1">Kota</p>
             <select className="admin-select" value={form.city} onChange={set('city')}>
               <option value="makkah">Makkah</option>
               <option value="madinah">Madinah</option>
             </select>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Bintang</p>
+            <p className="text-xs text-admin-muted mb-1">Bintang</p>
             <input type="number" min={1} max={5} className="admin-inp" value={form.stars} onChange={set('stars')} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Jarak ke Haram (meter)</p>
+            <p className="text-xs text-admin-muted mb-1">Jarak ke Haram (meter)</p>
             <input type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
           </div>
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Deskripsi</p>
+            <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
             <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
           </div>
         </div>
 
         <div>
-          <p className="text-xs text-slate-500 mb-2">Fasilitas</p>
+          <p className="text-xs text-admin-muted mb-2">Fasilitas</p>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             {HOTEL_FACILITIES.map(f => (
-              <label key={f.code} className="flex items-center gap-2 text-[13px] text-ink2 cursor-pointer">
+              <label key={f.code} className="flex items-center gap-2 text-[13px] text-admin-ink/80 cursor-pointer">
                 <input
                   type="checkbox" className="h-3.5 w-3.5"
                   checked={form.facilities.includes(f.code)}
@@ -288,18 +288,18 @@ export default function HotelDetailPage() {
         </div>
 
         <div>
-          <p className="text-xs text-slate-500 mb-2">Alamat (docs/arsitektur-alamat.md)</p>
+          <p className="text-xs text-admin-muted mb-2">Alamat (docs/arsitektur-alamat.md)</p>
           <AddressPicker value={address} onChange={setAddress} />
         </div>
 
         <label className="flex items-center gap-2.5 cursor-pointer w-fit">
           <div
             onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}
           >
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif (tampil di katalog)</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di katalog)</span>
         </label>
 
         <div className="flex gap-2 pt-1">
@@ -319,14 +319,14 @@ export default function HotelDetailPage() {
           maxImages={10}
         />
         {images.length > 0 && (
-          <div className="border-t border-line pt-4">
-            <p className="text-xs font-semibold text-ink mb-2 flex items-center gap-1.5"><Star className="h-3.5 w-3.5" /> Foto Sampul</p>
+          <div className="border-t border-admin-line pt-4">
+            <p className="text-xs font-semibold text-admin-ink mb-2 flex items-center gap-1.5"><Star className="h-3.5 w-3.5" /> Foto Sampul</p>
             <div className="flex flex-wrap gap-2">
               {images.map(img => (
                 <button
                   key={img.key} type="button" disabled={savingFeatured}
                   onClick={() => handleSetFeatured(img.key)}
-                  className={`h-16 w-16 rounded-lg overflow-hidden border-2 transition-colors ${featuredImageKey === img.key ? 'border-teal-600' : 'border-transparent hover:border-line'}`}
+                  className={`h-16 w-16 rounded-lg overflow-hidden border-2 transition-colors ${featuredImageKey === img.key ? 'border-admin-accent' : 'border-transparent hover:border-admin-line'}`}
                   title={featuredImageKey === img.key ? 'Foto sampul saat ini' : 'Jadikan foto sampul'}
                 >
                   {img.url && <img src={img.url} alt="" className="h-full w-full object-cover" />}
@@ -341,8 +341,8 @@ export default function HotelDetailPage() {
       <div className="admin-form-panel space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-ink">Periode &amp; Harga Kamar</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-sm font-semibold text-admin-ink">Periode &amp; Harga Kamar</p>
+            <p className="text-[11px] text-admin-muted/70 mt-0.5">
               Satu periode tanggal bisa punya harga berbeda untuk banyak tipe kamar sekaligus — sama seperti rate sheet dari vendor.
             </p>
           </div>
@@ -352,19 +352,19 @@ export default function HotelDetailPage() {
         </div>
 
         {showPeriodForm && (
-          <div className="border border-line rounded-xl p-4 space-y-3 bg-canvas/40">
+          <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
             <div className="grid md:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-slate-500 mb-1">Periode Mulai</p>
+                <p className="text-xs text-admin-muted mb-1">Periode Mulai</p>
                 <input type="date" className="admin-inp" value={periodForm.periodStart} onChange={e => setPeriodForm(f => ({ ...f, periodStart: e.target.value }))} />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Periode Akhir</p>
+                <p className="text-xs text-admin-muted mb-1">Periode Akhir</p>
                 <input type="date" className="admin-inp" value={periodForm.periodEnd} onChange={e => setPeriodForm(f => ({ ...f, periodEnd: e.target.value }))} />
               </div>
             </div>
-            {periodError && <p className="text-[12px] text-rose-600">{periodError}</p>}
-            <p className="text-[11px] text-slate-400">Harga tiap tipe kamar diisi setelah periode dibuat.</p>
+            {periodError && <p className="text-[12px] text-admin-danger">{periodError}</p>}
+            <p className="text-[11px] text-admin-muted/70">Harga tiap tipe kamar diisi setelah periode dibuat.</p>
             <div className="flex gap-2">
               <button
                 onClick={handleSavePeriod}
@@ -379,7 +379,7 @@ export default function HotelDetailPage() {
         )}
 
         {periods.length === 0 && !showPeriodForm && (
-          <p className="text-[13px] text-slate-400 py-4 text-center border border-dashed border-line rounded-xl">
+          <p className="text-[13px] text-admin-muted/70 py-4 text-center border border-dashed border-admin-line rounded-xl">
             Belum ada periode harga. Klik &quot;Tambah Periode&quot; untuk mulai.
           </p>
         )}
@@ -405,8 +405,8 @@ export default function HotelDetailPage() {
       <div className="admin-form-panel space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-ink">Layanan Hotel</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Layanan tambahan (mis. airport pickup, laundry) yang tampil di halaman publik hotel ini.</p>
+            <p className="text-sm font-semibold text-admin-ink">Layanan Hotel</p>
+            <p className="text-[11px] text-admin-muted/70 mt-0.5">Layanan tambahan (mis. airport pickup, laundry) yang tampil di halaman publik hotel ini.</p>
           </div>
           <button onClick={() => openServiceForm()} className="admin-btn-sm flex items-center gap-1.5">
             <Plus className="h-3.5 w-3.5" /> Tambah Layanan
@@ -414,27 +414,27 @@ export default function HotelDetailPage() {
         </div>
 
         {showServiceForm && (
-          <div className="border border-line rounded-xl p-4 space-y-3 bg-canvas/40">
+          <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
             <div className="grid md:grid-cols-2 gap-3">
               <div>
-                <p className="text-xs text-slate-500 mb-1">Nama Layanan</p>
+                <p className="text-xs text-admin-muted mb-1">Nama Layanan</p>
                 <input className="admin-inp" value={serviceForm.serviceName}
                   onChange={e => setServiceForm(f => ({ ...f, serviceName: e.target.value }))}
                   placeholder="Airport Pickup" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Tipe (opsional)</p>
+                <p className="text-xs text-admin-muted mb-1">Tipe (opsional)</p>
                 <input className="admin-inp" value={serviceForm.serviceType}
                   onChange={e => setServiceForm(f => ({ ...f, serviceType: e.target.value }))}
                   placeholder="transport / laundry / lainnya" />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Harga (Rupiah)</p>
+                <p className="text-xs text-admin-muted mb-1">Harga (Rupiah)</p>
                 <input type="number" className="admin-inp" value={serviceForm.price}
                   onChange={e => setServiceForm(f => ({ ...f, price: e.target.value }))} placeholder="0" />
               </div>
               <div className="md:col-span-2">
-                <p className="text-xs text-slate-500 mb-1">Deskripsi (opsional)</p>
+                <p className="text-xs text-admin-muted mb-1">Deskripsi (opsional)</p>
                 <input className="admin-inp" value={serviceForm.description}
                   onChange={e => setServiceForm(f => ({ ...f, description: e.target.value }))} />
               </div>
@@ -450,7 +450,7 @@ export default function HotelDetailPage() {
         )}
 
         {services.length === 0 && !showServiceForm && (
-          <p className="text-[13px] text-slate-400 py-4 text-center border border-dashed border-line rounded-xl">
+          <p className="text-[13px] text-admin-muted/70 py-4 text-center border border-dashed border-admin-line rounded-xl">
             Belum ada layanan tambahan untuk hotel ini.
           </p>
         )}
@@ -459,15 +459,15 @@ export default function HotelDetailPage() {
           {services.map(s => (
             <div key={s.id} className={`flex items-center justify-between rounded-lg border px-4 py-2.5 ${!s.isActive ? 'opacity-50' : ''}`}>
               <div>
-                <p className="text-[13px] font-medium text-ink">{s.serviceName}</p>
-                <p className="text-[11px] text-slate-500">{formatRupiah(s.price)}{s.serviceType ? ` · ${s.serviceType}` : ''}</p>
+                <p className="text-[13px] font-medium text-admin-ink">{s.serviceName}</p>
+                <p className="text-[11px] text-admin-muted">{formatRupiah(s.price)}{s.serviceType ? ` · ${s.serviceType}` : ''}</p>
               </div>
               <div className="flex items-center gap-1.5">
                 <span className={s.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>{s.isActive ? 'Aktif' : 'Nonaktif'}</span>
-                <button onClick={() => openServiceForm(s)} className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-ink hover:bg-canvas transition-colors">
+                <button onClick={() => openServiceForm(s)} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
                   <Pencil className="h-3.5 w-3.5" />
                 </button>
-                <button onClick={() => handleDeleteService(s.id)} className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                <button onClick={() => handleDeleteService(s.id)} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -477,9 +477,9 @@ export default function HotelDetailPage() {
       </div>
 
       {/* Danger zone */}
-      <div className="admin-form-panel border-rose-100 space-y-3">
-        <p className="text-sm font-semibold text-rose-600">Zona Berbahaya</p>
-        <p className="text-[12px] text-slate-500">Nonaktifkan hotel ini lewat toggle "Aktif" di atas — hapus permanen belum didukung dari sini.</p>
+      <div className="admin-form-panel border-admin-danger/20 space-y-3">
+        <p className="text-sm font-semibold text-admin-danger">Zona Berbahaya</p>
+        <p className="text-[12px] text-admin-muted">Nonaktifkan hotel ini lewat toggle "Aktif" di atas — hapus permanen belum didukung dari sini.</p>
       </div>
     </div>
   )
@@ -591,23 +591,23 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
     : null
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${!period.isActive ? 'opacity-50 border-line' : 'border-line'}`}>
-      <button type="button" onClick={onToggle} className="w-full flex items-center justify-between px-4 py-3 hover:bg-canvas/40 transition-colors text-left">
+    <div className={`border rounded-xl overflow-hidden ${!period.isActive ? 'opacity-50 border-admin-line' : 'border-admin-line'}`}>
+      <button type="button" onClick={onToggle} className="w-full flex items-center justify-between px-4 py-3 hover:bg-admin-spot/30 transition-colors text-left">
         <div className="flex items-center gap-3">
-          <span className="text-[13px] font-semibold text-ink">
+          <span className="text-[13px] font-semibold text-admin-ink">
             {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
           </span>
-          <span className="text-[11px] text-slate-500">{period.schedules.length} tipe kamar terisi</span>
+          <span className="text-[11px] text-admin-muted">{period.schedules.length} tipe kamar terisi</span>
         </div>
-        <span className="text-[13px] font-bold text-ink">
+        <span className="text-[13px] font-bold text-admin-ink">
           {priceRange
             ? priceRange.min === priceRange.max ? formatRupiah(priceRange.min) : `${formatRupiah(priceRange.min)} – ${formatRupiah(priceRange.max)}`
             : 'Belum ada harga'}
         </span>
       </button>
       {expanded && (
-        <div className="border-t border-line p-4 space-y-3 bg-canvas/20">
-          <p className="text-xs font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Vendor &amp; Mata Uang (berlaku untuk semua tipe kamar di periode ini)</p>
+        <div className="border-t border-admin-line p-4 space-y-3 bg-admin-spot/20">
+          <p className="text-xs font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Vendor &amp; Mata Uang (berlaku untuk semua tipe kamar di periode ini)</p>
           <div className="flex items-center gap-2">
             {!showQuickAddVendor ? (
               <>
@@ -635,7 +635,7 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium px-1">
+            <div className="flex items-center gap-2 text-[11px] text-admin-muted/70 font-medium px-1">
               <span className="w-24">Tipe Kamar</span>
               <span className="w-24">Harga ({currency})</span>
               <span className="w-20">Kuota</span>
@@ -646,7 +646,7 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
               const v = rooms[rt.id] ?? { hargaKamar: '', totalQuota: '10', preview: null }
               return (
                 <div key={rt.id} className="flex items-center gap-2">
-                  <span className="w-24 text-[12.5px] text-ink2 truncate">{rt.name}</span>
+                  <span className="w-24 text-[12.5px] text-admin-ink/80 truncate">{rt.name}</span>
                   <input
                     type="number" className="admin-inp w-24" placeholder="0"
                     value={v.hargaKamar} onChange={e => updateRoom(rt.id, 'hargaKamar', e.target.value)}
@@ -655,10 +655,10 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
                     type="number" className="admin-inp w-20" placeholder="Kuota"
                     value={v.totalQuota} onChange={e => updateRoom(rt.id, 'totalQuota', e.target.value)}
                   />
-                  <span className="w-28 text-[12.5px] font-semibold text-ink truncate">
+                  <span className="w-28 text-[12.5px] font-semibold text-admin-ink truncate">
                     {v.preview ? formatRupiah(Math.round(v.preview.hppRupiah)) : '—'}
                   </span>
-                  <span className="w-32 text-[12.5px] font-semibold text-ink truncate">
+                  <span className="w-32 text-[12.5px] font-semibold text-admin-ink truncate">
                     {v.preview ? formatRupiah(v.preview.sellPrice) : '—'}
                   </span>
                 </div>

@@ -16,10 +16,9 @@ export type SessionPayload = {
   role: UserRole  // sourced from Prisma — auto-updates when enum changes
 }
 
-// Role hierarchy helpers
-export const ADMIN_ROLES: UserRole[]       = ['admin', 'manager', 'superadmin']
-export const MANAGER_ROLES: UserRole[]     = ['manager', 'superadmin']
-export const SUPERADMIN_ROLES: UserRole[]  = ['superadmin']
+// Role hierarchy helpers — didefinisikan di ./roles (client-safe), di-re-export agar import lama tetap jalan
+import { ADMIN_ROLES, MANAGER_ROLES, SUPERADMIN_ROLES } from './roles'
+export { ADMIN_ROLES, MANAGER_ROLES, SUPERADMIN_ROLES }
 
 export async function createSession(payload: SessionPayload): Promise<void> {
   const token = await new SignJWT(payload as Record<string, unknown>)

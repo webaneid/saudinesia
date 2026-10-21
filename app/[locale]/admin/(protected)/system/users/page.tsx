@@ -1,22 +1,37 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus } from 'lucide-react'
+import type { PageMeta } from '@/lib/admin/pagination'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Pagination } from '@/components/admin/data-table/Pagination'
+import { useListPage } from '@/components/admin/data-table/useListPage'
+import { Badge } from '@/components/admin/ui/Badge'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
 
 type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null }
 
 export default function UsersPage() {
+  const { page, limit, setPage } = useListPage()
   const [users,  setUsers]  = useState<User[]>([])
+  const [meta,   setMeta]   = useState<PageMeta | null>(null)
+  const [loading, setLoading] = useState(true)
   const [show,   setShow]   = useState(false)
   const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'admin' })
 
-  async function load() {
-    const r = await fetch('/api/v1/admin/system/users')
-    const j = await r.json()
-    setUsers(j.data ?? [])
-  }
-  useEffect(() => { load() }, [])
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const r = await fetch(`/api/v1/admin/system/users?page=${page}&limit=${limit}`)
+      const j = await r.json()
+      setUsers(j.data ?? [])
+      setMeta(j.meta ?? null)
+    } finally {
+      setLoading(false)
+    }
+  }, [page, limit])
+  useEffect(() => { load() }, [load])
 
   function set(k: string) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
@@ -51,33 +66,56 @@ export default function UsersPage() {
     await load()
   }
 
-  return (
-    <div className="space-y-5 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <h1 className="admin-h1">Manajemen Pengguna</h1>
-        <button onClick={() => setShow(!show)} className="admin-btn">
-          <Plus className="h-4 w-4" /> Tambah Admin
+  const columns: Column<User>[] = [
+    { key: 'name', header: 'Nama', mobile: 'title', cell: u => <span className="text-[13px] font-medium">{u.fullName ?? '-'}</span> },
+    { key: 'email', header: 'Email', cell: u => <span className="text-[12px] text-admin-muted">{u.email}</span> },
+    {
+      key: 'role', header: 'Role',
+      cell: u => (
+        <select value={u.role} onChange={e => changeRole(u.id, e.target.value)} aria-label={`Role ${u.email}`} className="admin-select-xs">
+          <option value="pilgrim">Pilgrim</option>
+          <option value="admin">Admin</option>
+          <option value="manager">Manager</option>
+          <option value="superadmin">Superadmin</option>
+        </select>
+      ),
+    },
+    { key: 'status', header: 'Status', cell: u => <Badge tone={u.isActive ? 'ok' : 'neutral'}>{u.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
+    {
+      key: 'actions', header: '', align: 'right',
+      cell: u => (
+        <button onClick={() => toggleActive(u.id, u.isActive)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+          {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
         </button>
-      </div>
+      ),
+    },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Manajemen Pengguna"
+        actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</button>}
+      />
 
       {show && (
         <div className="admin-form-panel">
-          <p className="text-[12px] text-teal-700 font-medium">Buat akun admin baru (tidak memerlukan registrasi)</p>
+          <p className="text-[12px] text-admin-accent-strong font-medium">Buat akun admin baru (tidak memerlukan registrasi)</p>
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-slate-500 mb-1">Nama</p>
+              <p className="text-xs text-admin-muted mb-1">Nama</p>
               <input className="admin-inp" value={form.fullName} onChange={set('fullName')} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Email</p>
+              <p className="text-xs text-admin-muted mb-1">Email</p>
               <input type="email" className="admin-inp" value={form.email} onChange={set('email')} />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Password</p>
+              <p className="text-xs text-admin-muted mb-1">Password</p>
               <input type="password" className="admin-inp" value={form.password} onChange={set('password')} placeholder="Min 8 kar, huruf+angka+spesial" />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Role</p>
+              <p className="text-xs text-admin-muted mb-1">Role</p>
               <select className="admin-select" value={form.role} onChange={set('role')}>
                 <option value="admin">Admin (Ops)</option>
                 <option value="manager">Manager</option>
@@ -94,52 +132,14 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div className="admin-card overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="border-b border-line bg-canvas/60">
-            <tr>
-              <th className="admin-th">Nama</th>
-              <th className="admin-th">Email</th>
-              <th className="admin-th">Role</th>
-              <th className="admin-th">Status</th>
-              <th className="admin-th"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-line">
-            {users.map(u => (
-              <tr key={u.id} className="hover:bg-canvas/40 transition-colors">
-                <td className="px-4 py-3 text-ink font-medium text-[13px]">{u.fullName ?? '-'}</td>
-                <td className="px-4 py-3 text-slate-500 text-[12px]">{u.email}</td>
-                <td className="px-4 py-3">
-                  <select
-                    value={u.role}
-                    onChange={e => changeRole(u.id, e.target.value)}
-                    className="admin-select-xs"
-                  >
-                    <option value="pilgrim">Pilgrim</option>
-                    <option value="admin">Admin</option>
-                    <option value="manager">Manager</option>
-                    <option value="superadmin">Superadmin</option>
-                  </select>
-                </td>
-                <td className="px-4 py-3">
-                  <span className={u.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>
-                    {u.isActive ? 'Aktif' : 'Nonaktif'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    onClick={() => toggleActive(u.id, u.isActive)}
-                    className="text-[12px] text-slate-500 hover:text-ink transition-colors"
-                  >
-                    {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        rows={users}
+        getRowId={u => u.id}
+        loading={loading}
+        empty="Belum ada pengguna."
+        footer={meta && meta.total > 0 ? <Pagination {...meta} onPageChange={setPage} /> : undefined}
+      />
     </div>
   )
 }

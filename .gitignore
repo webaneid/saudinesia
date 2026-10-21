@@ -10,8 +10,7 @@ out/
 .env.local
 .env.*.local
 
-# Prisma
-prisma/migrations/
+# Prisma — prisma/migrations/ SENGAJA di-track: `prisma migrate deploy` di production membacanya
 
 # Build
 build/

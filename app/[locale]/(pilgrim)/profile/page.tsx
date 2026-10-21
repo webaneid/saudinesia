@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { getSession } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { ProfileForm } from './ProfileForm'
+import { DeletionRequestCard } from './DeletionRequestCard'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -28,6 +29,7 @@ export default async function ProfilePage({ params }: Props) {
         phoneVerified={!!user.phoneVerifiedAt}
         initialAddress={user.address}
       />
+      <DeletionRequestCard />
     </div>
   )
 }

@@ -97,8 +97,8 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-[13px] font-semibold text-ink">{label}</p>
-          <p className="text-[11px] text-slate-500 mt-0.5">{images.length}/{maxImages} foto</p>
+          <p className="text-[13px] font-semibold text-admin-ink">{label}</p>
+          <p className="text-[11px] text-admin-muted mt-0.5">{images.length}/{maxImages} foto</p>
         </div>
         {canAdd && (
           <button
@@ -113,14 +113,14 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
 
       {/* Error */}
       {error && (
-        <div className="flex items-center gap-2 text-rose-600 text-[12px] bg-rose-50 rounded-xl px-3 py-2 border border-rose-100">
+        <div className="flex items-center gap-2 text-admin-danger text-[12px] bg-admin-danger/10 rounded-xl px-3 py-2 border border-admin-danger/20">
           <AlertCircle className="h-4 w-4 shrink-0" /> {error}
         </div>
       )}
 
       {/* Loading */}
       {loading && !error && (
-        <div className="flex justify-center py-8 text-slate-400">
+        <div className="flex justify-center py-8 text-admin-muted/70">
           <Loader2 className="h-5 w-5 animate-spin" />
         </div>
       )}
@@ -129,7 +129,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
       {!loading && !error && images.length === 0 && (
         <button
           onClick={openModal}
-          className="w-full border-2 border-dashed border-line rounded-2xl p-8 flex flex-col items-center gap-2 text-slate-400 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50/30 transition-colors"
+          className="w-full border-2 border-dashed border-admin-line rounded-2xl p-8 flex flex-col items-center gap-2 text-admin-muted/70 hover:border-admin-accent/30 hover:text-admin-accent hover:bg-admin-accent/5 transition-colors"
         >
           <ImageIcon className="h-8 w-8" />
           <p className="text-[13px] font-medium">Belum ada foto</p>
@@ -141,7 +141,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
       {!loading && images.length > 0 && (
         <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
           {images.map((img, idx) => (
-            <div key={img.key} className="relative group rounded-xl overflow-hidden border border-line bg-canvas aspect-square">
+            <div key={img.key} className="relative group rounded-xl overflow-hidden border border-admin-line bg-admin-spot aspect-square">
               {img.url ? (
                 <img
                   src={img.url}
@@ -150,17 +150,17 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
                   loading="lazy"
                 />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-slate-300">
+                <div className="w-full h-full flex items-center justify-center text-admin-muted/50">
                   <ImageIcon className="h-6 w-6" />
                 </div>
               )}
 
               {/* Hover overlay */}
-              <div className="absolute inset-0 bg-ink/0 group-hover:bg-ink/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+              <div className="absolute inset-0 bg-admin-ink/0 group-hover:bg-admin-ink/40 transition-colors flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
                 {img.url && (
                   <button
                     onClick={() => setLightbox(img.url)}
-                    className="h-8 w-8 rounded-full bg-white/90 grid place-items-center text-ink hover:bg-white transition-colors shadow"
+                    className="h-8 w-8 rounded-full bg-white/90 grid place-items-center text-admin-ink hover:bg-white transition-colors shadow"
                     title="Lihat penuh"
                   >
                     <ZoomIn className="h-3.5 w-3.5" />
@@ -169,7 +169,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
                 <button
                   onClick={() => handleDelete(img.key)}
                   disabled={deleting === img.key}
-                  className="h-8 w-8 rounded-full bg-rose-500 grid place-items-center text-white hover:bg-rose-600 transition-colors shadow disabled:opacity-60"
+                  className="h-8 w-8 rounded-full bg-admin-danger grid place-items-center text-white hover:bg-admin-danger transition-colors shadow disabled:opacity-60"
                   title="Hapus foto"
                 >
                   {deleting === img.key
@@ -181,7 +181,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
 
               {/* Primary badge for first image */}
               {idx === 0 && (
-                <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-ink/70 text-white px-1.5 py-0.5 rounded-md backdrop-blur-sm">
+                <span className="absolute top-1.5 left-1.5 text-[9px] font-bold bg-admin-ink/70 text-white px-1.5 py-0.5 rounded-md backdrop-blur-sm">
                   UTAMA
                 </span>
               )}
@@ -192,7 +192,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
           {canAdd && (
             <button
               onClick={openModal}
-              className="aspect-square rounded-xl border-2 border-dashed border-line flex flex-col items-center justify-center gap-1.5 text-slate-400 hover:border-teal-300 hover:text-teal-600 hover:bg-teal-50/30 transition-colors"
+              className="aspect-square rounded-xl border-2 border-dashed border-admin-line flex flex-col items-center justify-center gap-1.5 text-admin-muted/70 hover:border-admin-accent/30 hover:text-admin-accent hover:bg-admin-accent/5 transition-colors"
             >
               <Plus className="h-5 w-5" />
               <span className="text-[10px] font-medium">Tambah</span>
@@ -213,7 +213,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
       {/* Lightbox */}
       {lightbox && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/80"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-admin-ink/80"
           onClick={() => setLightbox(null)}
         >
           <button
@@ -225,7 +225,7 @@ export function ProductMediaGallery({ hotelId, apiBase, label = 'Foto', maxImage
           <img
             src={lightbox}
             alt="preview"
-            className="max-w-full max-h-[90vh] rounded-2xl shadow-card object-contain"
+            className="max-w-full max-h-[90vh] rounded-2xl shadow-admin object-contain"
             onClick={e => e.stopPropagation()}
           />
         </div>

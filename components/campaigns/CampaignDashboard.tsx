@@ -156,7 +156,7 @@ export function CampaignDashboard() {
             </div>
             <div className="flex items-center gap-4">
               <a href="#" className="hover:text-ink transition-colors">Dokumentasi API</a>
-              <a href="#" className="hover:text-ink transition-colors">Kebijakan Privasi</a>
+              <a href="/privacy" className="hover:text-ink transition-colors">Kebijakan Privasi</a>
               <a href="#" className="hover:text-ink transition-colors">Status sistem</a>
             </div>
           </div>

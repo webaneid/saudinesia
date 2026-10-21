@@ -1,0 +1,65 @@
+name: CI
+
+# Jalan di TIAP pull request ke main — masalah ketahuan SEBELUM merge, bukan sesudah.
+# Pola mengikuti smart-ai (.github/workflows/ci.yml), disesuaikan stack Saudinesia:
+# satu app Next.js + Prisma (bukan monorepo), tanpa ESLint config & tanpa test suite (belum ada).
+on:
+  pull_request:
+    branches: [main]
+  # Dipakai ulang sebagai gate oleh workflow rilis nanti (lihat docs/deployment.md).
+  workflow_call:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    # Token CI hanya-baca. gitleaks butuh membaca daftar commit PR (pull-requests: read).
+    permissions:
+      contents: read
+      pull-requests: read
+    # DB sekali pakai untuk memeriksa migrasi (bukan mock) — dibuang bersama runner.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: saudinesia_ci
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/saudinesia_ci
+      # Nilai dummy khusus CI (bukan rahasia) — hanya agar `next build` tidak berhenti karena env kosong.
+      JWT_SECRET: ci-secret-yang-panjangnya-lebih-dari-32-karakter
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # gitleaks memindai seluruh commit PR
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prisma generate
+        run: bunx prisma generate
+
+      - name: Type check
+        run: bun run typecheck
+
+      # Gagal bila schema.prisma berubah tanpa migrasi (production memakai `migrate deploy`, bukan `db push`).
+      - name: Migrations apply from scratch and match schema.prisma
+        run: |
+          bunx prisma migrate deploy
+          bunx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+      - name: Build
+        run: bun run build
+
+      - name: Secret scan (lapis kedua, independen dari hook Claude Code)
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_COMMENTS: "false" # komentar PR butuh izin tulis — hasil cukup di log CI

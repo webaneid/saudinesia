@@ -28,7 +28,7 @@ export function PaymentActions({ bookingId: _, paymentId, buktiPath }: PaymentAc
 
   if (done) {
     return (
-      <div className="admin-card bg-mint-50 border-mint-100 p-4 text-sm text-mint-700 font-medium">
+      <div className="admin-card bg-admin-ok/10 border-admin-ok/20 p-4 text-sm text-admin-ok font-medium">
         Pembayaran berhasil dikonfirmasi.
       </div>
     )
@@ -36,21 +36,21 @@ export function PaymentActions({ bookingId: _, paymentId, buktiPath }: PaymentAc
 
   return (
     <div className="admin-form-panel">
-      <p className="text-sm font-semibold text-ink">Verifikasi Pembayaran</p>
+      <p className="text-sm font-semibold text-admin-ink">Verifikasi Pembayaran</p>
       {buktiPath && (
         <a href={`/api/v1/admin/bukti/${encodeURIComponent(buktiPath)}`} target="_blank"
-          className="inline-flex items-center gap-1.5 text-[12px] text-teal-700 hover:text-teal-800 font-medium">
+          className="inline-flex items-center gap-1.5 text-[12px] text-admin-accent-strong hover:text-admin-accent-strong font-medium">
           <ExternalLink className="h-3.5 w-3.5" /> Lihat Bukti Transfer
         </a>
       )}
-      {error && <p className="text-[12px] text-rose-600">{error}</p>}
+      {error && <p className="text-[12px] text-admin-danger">{error}</p>}
       <div className="flex gap-2">
         <button onClick={() => act('confirm')} disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-mint-600 hover:bg-mint-700 text-sm text-white font-medium disabled:opacity-50 transition-colors">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-admin-ok hover:bg-admin-ok text-sm text-white font-medium disabled:opacity-50 transition-colors">
           <CheckCircle className="h-4 w-4" /> Konfirmasi
         </button>
         <button onClick={() => act('reject')} disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-sm text-white font-medium disabled:opacity-50 transition-colors">
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-admin-danger hover:bg-admin-danger/90 text-sm text-white font-medium disabled:opacity-50 transition-colors">
           <XCircle className="h-4 w-4" /> Tolak
         </button>
       </div>

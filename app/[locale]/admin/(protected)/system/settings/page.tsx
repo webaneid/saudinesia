@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { Plus, Pencil } from 'lucide-react'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Badge } from '@/components/admin/ui/Badge'
 
 type PricingRule = { id: string; minMarginPercent: number; roundingIncrement: number }
 type AddressRecord = {
@@ -23,10 +26,24 @@ function toAddressValue(a: AddressRecord): AddressValue {
 
 const EMPTY_VENDOR_FORM = { name: '', category: '', country: 'Saudi Arabia', contactInfo: '' }
 
+type SiteSetting = {
+  id: string
+  platformName: string | null
+  metaTitle: string | null
+  metaDescription: string | null
+  contactEmail: string | null
+  contactPhone: string | null
+}
+const EMPTY_SITE_FORM = { platformName: '', metaTitle: '', metaDescription: '', contactEmail: '', contactPhone: '' }
+
 export default function SettingsPage() {
   const [rule, setRule] = useState<PricingRule | null>(null)
   const [ruleForm, setRuleForm] = useState({ minMarginPercent: 20, roundingIncrement: 50000 })
   const [savingRule, setSavingRule] = useState(false)
+
+  const [siteForm, setSiteForm] = useState(EMPTY_SITE_FORM)
+  const [savingSite, setSavingSite] = useState(false)
+  const [siteSavedAt, setSiteSavedAt] = useState<number | null>(null)
 
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [showVendorForm, setShowVendorForm] = useState(false)
@@ -45,7 +62,21 @@ export default function SettingsPage() {
     const j = await r.json()
     setVendors(j.data ?? [])
   }
-  useEffect(() => { loadRule(); loadVendors() }, [])
+  async function loadSiteSetting() {
+    const r = await fetch('/api/v1/admin/system/settings/site')
+    const j = await r.json()
+    const s: SiteSetting | undefined = j.data
+    if (s) {
+      setSiteForm({
+        platformName: s.platformName ?? '',
+        metaTitle: s.metaTitle ?? '',
+        metaDescription: s.metaDescription ?? '',
+        contactEmail: s.contactEmail ?? '',
+        contactPhone: s.contactPhone ?? '',
+      })
+    }
+  }
+  useEffect(() => { loadRule(); loadVendors(); loadSiteSetting() }, [])
 
   async function handleSaveRule() {
     setSavingRule(true)
@@ -56,6 +87,18 @@ export default function SettingsPage() {
     })
     await loadRule()
     setSavingRule(false)
+  }
+
+  async function handleSaveSite() {
+    setSavingSite(true)
+    await fetch('/api/v1/admin/system/settings/site', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(siteForm),
+    })
+    await loadSiteSetting()
+    setSavingSite(false)
+    setSiteSavedAt(Date.now())
   }
 
   function openVendorForm(v?: Vendor) {
@@ -98,17 +141,40 @@ export default function SettingsPage() {
     await loadVendors()
   }
 
+  const vendorColumns: Column<Vendor>[] = [
+    { key: 'name', header: 'Nama', mobile: 'title', cell: v => <span className="text-[13px] font-medium">{v.name}</span> },
+    { key: 'category', header: 'Kategori', cell: v => v.category ? <Badge tone="accent">{v.category}</Badge> : <span className="text-[12px] text-admin-muted/70">—</span> },
+    { key: 'country', header: 'Negara', cell: v => <span className="text-[12px] text-admin-muted">{v.country}</span> },
+    { key: 'contact', header: 'Kontak', cell: v => <span className="text-[12px] text-admin-muted">{v.contactInfo ?? '—'}</span> },
+    {
+      key: 'status', header: 'Status', align: 'right',
+      cell: v => (
+        <button onClick={() => toggleVendorActive(v)} aria-label={v.isActive ? 'Nonaktifkan vendor' : 'Aktifkan vendor'}>
+          <Badge tone={v.isActive ? 'ok' : 'danger'}>{v.isActive ? 'Aktif' : 'Nonaktif'}</Badge>
+        </button>
+      ),
+    },
+    {
+      key: 'actions', header: '', align: 'right',
+      cell: v => (
+        <button onClick={() => openVendorForm(v)} className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+          <Pencil className="h-3.5 w-3.5" /> Edit
+        </button>
+      ),
+    },
+  ]
+
   return (
     <div className="space-y-8 max-w-4xl">
-      <h1 className="admin-h1">Pengaturan</h1>
+      <PageHeader title="Pengaturan" />
 
       <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-ink">Margin &amp; Pembulatan Harga</h2>
-        <p className="text-xs text-slate-500">Berlaku global untuk semua produk, kecuali di-override per tipe produk nanti.</p>
+        <h2 className="text-sm font-semibold text-admin-ink">Margin &amp; Pembulatan Harga</h2>
+        <p className="text-xs text-admin-muted">Berlaku global untuk semua produk, kecuali di-override per tipe produk nanti.</p>
         <div className="admin-form-panel">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-slate-500 mb-1">Margin minimum (%)</p>
+              <p className="text-xs text-admin-muted mb-1">Margin minimum (%)</p>
               <input
                 type="number"
                 className="admin-inp"
@@ -117,7 +183,7 @@ export default function SettingsPage() {
               />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Pembulatan (kelipatan Rp)</p>
+              <p className="text-xs text-admin-muted mb-1">Pembulatan (kelipatan Rp)</p>
               <input
                 type="number"
                 className="admin-inp"
@@ -129,22 +195,55 @@ export default function SettingsPage() {
           <button onClick={handleSaveRule} disabled={savingRule} className="admin-btn-sm disabled:opacity-50">
             {savingRule ? '...' : 'Simpan'}
           </button>
-          {rule && <p className="text-[11px] text-slate-400">Tersimpan: margin {Number(rule.minMarginPercent)}%, bulatkan ke kelipatan Rp{rule.roundingIncrement.toLocaleString('id-ID')}</p>}
+          {rule && <p className="text-[11px] text-admin-muted/70">Tersimpan: margin {Number(rule.minMarginPercent)}%, bulatkan ke kelipatan Rp{rule.roundingIncrement.toLocaleString('id-ID')}</p>}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-admin-ink">Pengaturan Umum Situs</h2>
+        <p className="text-xs text-admin-muted">Nama tampilan platform, meta SEO default, dan kontak publik. Tidak termasuk rekening bank (tetap diatur lewat .env).</p>
+        <div className="admin-form-panel space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <p className="text-xs text-admin-muted mb-1">Nama Platform</p>
+              <input className="admin-inp" placeholder="Saudinesia" value={siteForm.platformName} onChange={e => setSiteForm(p => ({ ...p, platformName: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-admin-muted mb-1">Email Kontak Publik</p>
+              <input className="admin-inp" placeholder="info@saudinesia.com" value={siteForm.contactEmail} onChange={e => setSiteForm(p => ({ ...p, contactEmail: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-admin-muted mb-1">Telepon Kontak Publik</p>
+              <input className="admin-inp" placeholder="+628xxxxxxxxxx" value={siteForm.contactPhone} onChange={e => setSiteForm(p => ({ ...p, contactPhone: e.target.value }))} />
+            </div>
+            <div>
+              <p className="text-xs text-admin-muted mb-1">Meta Title Default (SEO)</p>
+              <input className="admin-inp" placeholder="Saudinesia — Booking Haji & Umroh" value={siteForm.metaTitle} onChange={e => setSiteForm(p => ({ ...p, metaTitle: e.target.value }))} />
+            </div>
+          </div>
+          <div>
+            <p className="text-xs text-admin-muted mb-1">Meta Description Default (SEO)</p>
+            <textarea className="admin-inp w-full" rows={2} placeholder="Platform booking Haji & Umroh terpercaya..." value={siteForm.metaDescription} onChange={e => setSiteForm(p => ({ ...p, metaDescription: e.target.value }))} />
+          </div>
+          <button onClick={handleSaveSite} disabled={savingSite} className="admin-btn-sm disabled:opacity-50">
+            {savingSite ? '...' : 'Simpan'}
+          </button>
+          {siteSavedAt && <p className="text-[11px] text-admin-muted/70">Tersimpan.</p>}
         </div>
       </section>
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-ink">Vendor / Syarikah</h2>
+          <h2 className="text-sm font-semibold text-admin-ink">Vendor / Syarikah</h2>
           <button onClick={() => (showVendorForm ? setShowVendorForm(false) : openVendorForm())} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>
         </div>
         {showVendorForm && (
           <div className="admin-form-panel space-y-3">
-            <p className="text-sm font-semibold text-ink">{editingVendorId ? 'Edit Vendor' : 'Vendor Baru'}</p>
+            <p className="text-sm font-semibold text-admin-ink">{editingVendorId ? 'Edit Vendor' : 'Vendor Baru'}</p>
             <div className="grid md:grid-cols-2 gap-3">
-              <div><p className="text-xs text-slate-500 mb-1">Nama</p><input className="admin-inp" value={vendorForm.name} onChange={e => setVendorForm(p => ({ ...p, name: e.target.value }))} /></div>
+              <div><p className="text-xs text-admin-muted mb-1">Nama</p><input className="admin-inp" value={vendorForm.name} onChange={e => setVendorForm(p => ({ ...p, name: e.target.value }))} /></div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Kategori (opsional)</p>
+                <p className="text-xs text-admin-muted mb-1">Kategori (opsional)</p>
                 <input
                   className="admin-inp" value={vendorForm.category} list="vendor-category-suggestions"
                   placeholder="syarikah / maskapai / hotel"
@@ -156,11 +255,11 @@ export default function SettingsPage() {
                   <option value="hotel" />
                 </datalist>
               </div>
-              <div><p className="text-xs text-slate-500 mb-1">Negara</p><input className="admin-inp" value={vendorForm.country} onChange={e => setVendorForm(p => ({ ...p, country: e.target.value }))} /></div>
-              <div><p className="text-xs text-slate-500 mb-1">Kontak</p><input className="admin-inp" value={vendorForm.contactInfo} onChange={e => setVendorForm(p => ({ ...p, contactInfo: e.target.value }))} /></div>
+              <div><p className="text-xs text-admin-muted mb-1">Negara</p><input className="admin-inp" value={vendorForm.country} onChange={e => setVendorForm(p => ({ ...p, country: e.target.value }))} /></div>
+              <div><p className="text-xs text-admin-muted mb-1">Kontak</p><input className="admin-inp" value={vendorForm.contactInfo} onChange={e => setVendorForm(p => ({ ...p, contactInfo: e.target.value }))} /></div>
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Alamat (docs/arsitektur-alamat.md)</p>
+              <p className="text-xs text-admin-muted mb-1">Alamat (docs/arsitektur-alamat.md)</p>
               <AddressPicker value={vendorAddress} onChange={setVendorAddress} />
             </div>
             <div className="flex gap-2">
@@ -169,33 +268,7 @@ export default function SettingsPage() {
             </div>
           </div>
         )}
-        <div className="admin-card overflow-hidden">
-          <table className="w-full text-sm text-left">
-            <thead className="border-b border-line bg-canvas/60">
-              <tr><th className="admin-th">Nama</th><th className="admin-th">Kategori</th><th className="admin-th">Negara</th><th className="admin-th">Kontak</th><th className="admin-th text-right">Status</th><th className="admin-th"></th></tr>
-            </thead>
-            <tbody className="divide-y divide-line">
-              {vendors.map(v => (
-                <tr key={v.id} className="hover:bg-canvas/40 transition-colors">
-                  <td className="px-4 py-3 text-ink font-medium text-[13px]">{v.name}</td>
-                  <td className="px-4 py-3 text-[12px]">{v.category ? <span className="admin-badge-blue">{v.category}</span> : <span className="text-slate-400">—</span>}</td>
-                  <td className="px-4 py-3 text-slate-500 text-[12px]">{v.country}</td>
-                  <td className="px-4 py-3 text-slate-500 text-[12px]">{v.contactInfo ?? '—'}</td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => toggleVendorActive(v)} className={v.isActive ? 'admin-badge-green' : 'admin-badge-red'}>
-                      {v.isActive ? 'Aktif' : 'Nonaktif'}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button onClick={() => openVendorForm(v)} className="inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-ink transition-colors">
-                      <Pencil className="h-3.5 w-3.5" /> Edit
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={vendorColumns} rows={vendors} getRowId={v => v.id} empty="Belum ada vendor." />
       </section>
     </div>
   )

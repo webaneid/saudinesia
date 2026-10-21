@@ -95,7 +95,7 @@ function ModeSelector({ value, onChange }: { value: Mode; onChange: (m: Mode) =>
       {(['included', 'user_choice', 'none'] as Mode[]).map(m => (
         <button key={m} type="button" onClick={() => onChange(m)}
           className={`px-2.5 py-1.5 rounded-lg text-[12px] font-medium border transition-colors ${
-            value === m ? 'bg-teal-600 border-teal-600 text-white' : 'border-line text-slate-500 hover:bg-canvas'
+            value === m ? 'bg-admin-accent border-admin-accent text-white' : 'border-admin-line text-admin-muted hover:bg-admin-spot'
           }`}>
           {MODE_LABEL[m]}
         </button>
@@ -419,7 +419,7 @@ export default function PackageBuilderPage({ params }: Props) {
     await Promise.all([loadCosts(id), loadBreakdown(id), loadPackage(id)])
   }
 
-  if (!loaded || !pkg) return <div className="text-sm text-slate-400 p-6">Memuat...</div>
+  if (!loaded || !pkg) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   const makkahSchedules = allHotelSchedules.filter(s => s.city.toLowerCase() === 'makkah')
   const madinahSchedules = allHotelSchedules.filter(s => s.city.toLowerCase() === 'madinah')
@@ -434,44 +434,44 @@ export default function PackageBuilderPage({ params }: Props) {
     <div className="space-y-6 max-w-3xl">
       <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/${locale}/admin/products/packages`)}
-          className="text-slate-400 hover:text-ink transition-colors">
+          className="text-admin-muted/70 hover:text-admin-ink transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>
-        <h1 className="admin-h1 flex items-center gap-2"><PackageIcon className="h-5 w-5 text-purple-600" /> {pkg.name}</h1>
+        <h1 className="admin-h1 flex items-center gap-2"><PackageIcon className="h-5 w-5 text-admin-primary-medium" /> {pkg.name}</h1>
       </div>
 
       {/* Info dasar */}
       <div className="admin-form-panel space-y-3">
-        <p className="text-sm font-semibold text-ink">Info Paket</p>
+        <p className="text-sm font-semibold text-admin-ink">Info Paket</p>
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Nama Paket</p>
+            <p className="text-xs text-admin-muted mb-1">Nama Paket</p>
             <input className="admin-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Deskripsi</p>
+            <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
             <textarea className="admin-inp" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Label Harga</p>
+            <p className="text-xs text-admin-muted mb-1">Label Harga</p>
             <input className="admin-inp" placeholder="per orang" value={form.priceLabel} onChange={e => setForm(f => ({ ...f, priceLabel: e.target.value }))} />
           </div>
           <div className="flex items-center gap-2 self-end pb-2">
-            <input type="checkbox" id="featured" checked={form.isFeatured} onChange={e => setForm(p => ({ ...p, isFeatured: e.target.checked }))} className="h-4 w-4 accent-teal-600" />
-            <label htmlFor="featured" className="text-sm text-ink2">Tampilkan di halaman utama</label>
+            <input type="checkbox" id="featured" checked={form.isFeatured} onChange={e => setForm(p => ({ ...p, isFeatured: e.target.checked }))} className="h-4 w-4 accent-admin-accent" />
+            <label htmlFor="featured" className="text-sm text-admin-ink/80">Tampilkan di halaman utama</label>
           </div>
           <div className="md:col-span-2">
-            <p className="text-xs text-slate-500 mb-1">Highlight (satu baris per poin)</p>
+            <p className="text-xs text-admin-muted mb-1">Highlight (satu baris per poin)</p>
             <textarea className="admin-inp" rows={3} value={form.highlights} onChange={e => setForm(f => ({ ...f, highlights: e.target.value }))}
               placeholder={"Hotel bintang 5 Makkah & Madinah\nVisa Umroh termasuk\nMuthowif berpengalaman"} />
           </div>
         </div>
         <label className="flex items-center gap-2.5 cursor-pointer w-fit">
           <div onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-teal-600' : 'bg-slate-200'}`}>
+            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}>
             <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
           </div>
-          <span className="text-sm font-medium text-ink">Aktif</span>
+          <span className="text-sm font-medium text-admin-ink">Aktif</span>
         </label>
         <button onClick={handleSaveInfo} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
           <Save className="h-3.5 w-3.5" /> {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan'}
@@ -481,16 +481,16 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Hotel Makkah */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-teal-600" /> Hotel Makkah</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Pilih bagaimana hotel Makkah masuk ke paket ini — lihat docs/arsitektur-paket-umroh.md §3</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-admin-accent" /> Hotel Makkah</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana hotel Makkah masuk ke paket ini — lihat docs/arsitektur-paket-umroh.md §3</p>
         </div>
         <ModeSelector value={pkg.hotelMakkahMode} onChange={handleSetHotelMakkahMode} />
 
         {pkg.hotelMakkahMode === 'included' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">Harga hotel ini MASUK ke Harga Jual Paket — pilgrim tidak memilih hotel Makkah saat booking.</p>
+            <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga hotel ini MASUK ke Harga Jual Paket — pilgrim tidak memilih hotel Makkah saat booking.</p>
             {pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahPrice != null && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahNumRooms != null && (
-              <p className="text-[12px] text-slate-500">Dikunci: <span className="font-medium text-ink">{pkg.includedHotelMakkahSchedule.period.hotel.name} — {pkg.includedHotelMakkahSchedule.roomType.name}</span> — {pkg.includedHotelMakkahNights} malam × {pkg.includedHotelMakkahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMakkahPrice))} = {rupiah(pkg.includedHotelMakkahNights * pkg.includedHotelMakkahNumRooms * Number(pkg.includedHotelMakkahPrice))}</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMakkahSchedule.period.hotel.name} — {pkg.includedHotelMakkahSchedule.roomType.name}</span> — {pkg.includedHotelMakkahNights} malam × {pkg.includedHotelMakkahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMakkahPrice))} = {rupiah(pkg.includedHotelMakkahNights * pkg.includedHotelMakkahNumRooms * Number(pkg.includedHotelMakkahPrice))}</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
               <select className="admin-select md:col-span-2" value={hmForm.scheduleId} onChange={e => setHmForm(f => ({ ...f, scheduleId: e.target.value }))}>
@@ -506,18 +506,18 @@ export default function PackageBuilderPage({ params }: Props) {
 
         {pkg.hotelMakkahMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">Harga hotel Makkah TIDAK masuk Harga Jual Paket — pilgrim pilih sendiri saat booking.</p>
+            <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga hotel Makkah TIDAK masuk Harga Jual Paket — pilgrim pilih sendiri saat booking.</p>
             <div className="space-y-2">
               {pkg.hotelOptions.filter(o => o.slot === 'makkah').map(o => (
-                <div key={o.id} className="flex items-center justify-between rounded-lg border border-line px-4 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{o.hotelRoomSchedule.period.hotel.name} — {o.hotelRoomSchedule.roomType.name} <span className="text-slate-400 font-normal">({o.nights} malam)</span></p>
+                <div key={o.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
+                  <p className="text-[13px] font-medium text-admin-ink">{o.hotelRoomSchedule.period.hotel.name} — {o.hotelRoomSchedule.roomType.name} <span className="text-admin-muted/70 font-normal">({o.nights} malam)</span></p>
                   <button onClick={() => handleRemoveHotelOption('makkah', o.hotelRoomScheduleId)}
-                    className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                    className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
-              {pkg.hotelOptions.filter(o => o.slot === 'makkah').length === 0 && <p className="text-sm text-slate-400 py-2">Belum ada opsi hotel Makkah ditawarkan.</p>}
+              {pkg.hotelOptions.filter(o => o.slot === 'makkah').length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi hotel Makkah ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
               <select className="admin-select flex-1" value={addHmOption.scheduleId} onChange={e => setAddHmOption(f => ({ ...f, scheduleId: e.target.value }))}>
@@ -536,16 +536,16 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Hotel Madinah */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-teal-600" /> Hotel Madinah</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Sama konsep dengan Hotel Makkah</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-admin-accent" /> Hotel Madinah</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Sama konsep dengan Hotel Makkah</p>
         </div>
         <ModeSelector value={pkg.hotelMadinahMode} onChange={handleSetHotelMadinahMode} />
 
         {pkg.hotelMadinahMode === 'included' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">Harga hotel ini MASUK ke Harga Jual Paket.</p>
+            <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga hotel ini MASUK ke Harga Jual Paket.</p>
             {pkg.includedHotelMadinahSchedule && pkg.includedHotelMadinahPrice != null && pkg.includedHotelMadinahNights != null && pkg.includedHotelMadinahNumRooms != null && (
-              <p className="text-[12px] text-slate-500">Dikunci: <span className="font-medium text-ink">{pkg.includedHotelMadinahSchedule.period.hotel.name} — {pkg.includedHotelMadinahSchedule.roomType.name}</span> — {pkg.includedHotelMadinahNights} malam × {pkg.includedHotelMadinahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMadinahPrice))} = {rupiah(pkg.includedHotelMadinahNights * pkg.includedHotelMadinahNumRooms * Number(pkg.includedHotelMadinahPrice))}</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMadinahSchedule.period.hotel.name} — {pkg.includedHotelMadinahSchedule.roomType.name}</span> — {pkg.includedHotelMadinahNights} malam × {pkg.includedHotelMadinahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMadinahPrice))} = {rupiah(pkg.includedHotelMadinahNights * pkg.includedHotelMadinahNumRooms * Number(pkg.includedHotelMadinahPrice))}</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
               <select className="admin-select md:col-span-2" value={hdForm.scheduleId} onChange={e => setHdForm(f => ({ ...f, scheduleId: e.target.value }))}>
@@ -561,18 +561,18 @@ export default function PackageBuilderPage({ params }: Props) {
 
         {pkg.hotelMadinahMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">Harga hotel Madinah TIDAK masuk Harga Jual Paket — pilgrim pilih sendiri saat booking.</p>
+            <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga hotel Madinah TIDAK masuk Harga Jual Paket — pilgrim pilih sendiri saat booking.</p>
             <div className="space-y-2">
               {pkg.hotelOptions.filter(o => o.slot === 'madinah').map(o => (
-                <div key={o.id} className="flex items-center justify-between rounded-lg border border-line px-4 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{o.hotelRoomSchedule.period.hotel.name} — {o.hotelRoomSchedule.roomType.name} <span className="text-slate-400 font-normal">({o.nights} malam)</span></p>
+                <div key={o.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
+                  <p className="text-[13px] font-medium text-admin-ink">{o.hotelRoomSchedule.period.hotel.name} — {o.hotelRoomSchedule.roomType.name} <span className="text-admin-muted/70 font-normal">({o.nights} malam)</span></p>
                   <button onClick={() => handleRemoveHotelOption('madinah', o.hotelRoomScheduleId)}
-                    className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                    className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
-              {pkg.hotelOptions.filter(o => o.slot === 'madinah').length === 0 && <p className="text-sm text-slate-400 py-2">Belum ada opsi hotel Madinah ditawarkan.</p>}
+              {pkg.hotelOptions.filter(o => o.slot === 'madinah').length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi hotel Madinah ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
               <select className="admin-select flex-1" value={addHdOption.scheduleId} onChange={e => setAddHdOption(f => ({ ...f, scheduleId: e.target.value }))}>
@@ -591,14 +591,14 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Kendaraan */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Bus className="h-4 w-4 text-teal-600" /> Kendaraan</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Pilih bagaimana kendaraan masuk ke paket ini</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Bus className="h-4 w-4 text-admin-accent" /> Kendaraan</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana kendaraan masuk ke paket ini</p>
         </div>
         <ModeSelector value={pkg.transportMode} onChange={handleSetTransportMode} />
 
         {pkg.transportMode === 'included' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">Harga kendaraan ini MASUK ke Harga Jual Paket — pilgrim tidak memilih kendaraan saat booking.</p>
+            <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga kendaraan ini MASUK ke Harga Jual Paket — pilgrim tidak memilih kendaraan saat booking.</p>
             <select className="admin-select" value={includedPricingChoice} onChange={e => handleSetIncludedPricing(e.target.value)}>
               <option value="">— pilih kendaraan —</option>
               {allPricingFlat.map(p => (
@@ -606,14 +606,14 @@ export default function PackageBuilderPage({ params }: Props) {
               ))}
             </select>
             {pkg.includedTransportPricing && pkg.includedTransportPrice != null && (
-              <p className="text-[12px] text-slate-500">Dikunci: <span className="font-medium text-ink">{pkg.includedTransportPricing.vehicle.name}</span> — {rupiah(Number(pkg.includedTransportPrice))} (harga referensi awal, bisa diedit lewat Komponen Biaya kalau perlu penyesuaian)</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedTransportPricing.vehicle.name}</span> — {rupiah(Number(pkg.includedTransportPrice))} (harga referensi awal, bisa diedit lewat Komponen Biaya kalau perlu penyesuaian)</p>
             )}
           </div>
         )}
 
         {pkg.transportMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">Harga kendaraan TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
+            <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga kendaraan TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
             <select className="admin-select" value={userChoiceTripId} onChange={e => handleSetUserChoiceTrip(e.target.value)}>
               <option value="">— pilih trip sumber opsi kendaraan —</option>
               {allTrips.filter(t => t.isActive).map(t => <option key={t.id} value={t.id}>{t.name} ({t.origin} → {t.destination})</option>)}
@@ -625,18 +625,18 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Muthowif */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Users className="h-4 w-4 text-teal-600" /> Muthowif</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Harga jasa muthowif — singleton, tidak ada opsi untuk dipilih</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Users className="h-4 w-4 text-admin-accent" /> Muthowif</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Harga jasa muthowif — singleton, tidak ada opsi untuk dipilih</p>
         </div>
         <ModeSelector value={pkg.muthowifMode} onChange={handleSetMuthowifMode} />
 
         {pkg.muthowifMode === 'included' && (
-          <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">
+          <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">
             MASUK Harga Jual Paket{pkg.includedMuthowifPrice != null && ` — ${rupiah(Number(pkg.includedMuthowifPrice))}`} (harga referensi awal, bisa diedit lewat Komponen Biaya kalau perlu penyesuaian)
           </p>
         )}
         {pkg.muthowifMode === 'user_choice' && breakdown?.currentMuthowifPrice != null && (
-          <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">
+          <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">
             TIDAK masuk Harga Jual Paket — harga saat ini {rupiah(breakdown.currentMuthowifPrice)}, ditambahkan terpisah saat booking.
           </p>
         )}
@@ -645,38 +645,38 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Visa */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><FileText className="h-4 w-4 text-teal-600" /> Visa</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Pilih bagaimana visa masuk ke paket ini</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><FileText className="h-4 w-4 text-admin-accent" /> Visa</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana visa masuk ke paket ini</p>
         </div>
         <ModeSelector value={pkg.visaMode} onChange={handleSetVisaMode} />
 
         {pkg.visaMode === 'included' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">Harga visa ini MASUK ke Harga Jual Paket.</p>
+            <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga visa ini MASUK ke Harga Jual Paket.</p>
             <select className="admin-select" defaultValue="" onChange={e => handleSetIncludedVisa(e.target.value)}>
               <option value="">— pilih produk visa —</option>
               {allVisaProducts.map(v => <option key={v.id} value={v.id}>{v.name} ({v.visaType}) — {rupiah(Number(v.price))}</option>)}
             </select>
             {pkg.includedVisaProduct && pkg.includedVisaPrice != null && (
-              <p className="text-[12px] text-slate-500">Dikunci: <span className="font-medium text-ink">{pkg.includedVisaProduct.name}</span> — {rupiah(Number(pkg.includedVisaPrice))}</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedVisaProduct.name}</span> — {rupiah(Number(pkg.includedVisaPrice))}</p>
             )}
           </div>
         )}
 
         {pkg.visaMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">Harga visa TIDAK masuk Harga Jual Paket — ditawarkan sebagai opsi.</p>
+            <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga visa TIDAK masuk Harga Jual Paket — ditawarkan sebagai opsi.</p>
             <div className="space-y-2">
               {pkg.visaOptions.map(o => (
-                <div key={o.id} className="flex items-center justify-between rounded-lg border border-line px-4 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{o.visaProduct.name} <span className="text-slate-400 font-normal">({rupiah(Number(o.visaProduct.price))})</span></p>
+                <div key={o.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
+                  <p className="text-[13px] font-medium text-admin-ink">{o.visaProduct.name} <span className="text-admin-muted/70 font-normal">({rupiah(Number(o.visaProduct.price))})</span></p>
                   <button onClick={() => handleRemoveVisaOption(o.visaProductId)}
-                    className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                    className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
-              {pkg.visaOptions.length === 0 && <p className="text-sm text-slate-400 py-2">Belum ada opsi visa ditawarkan.</p>}
+              {pkg.visaOptions.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi visa ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
               <select className="admin-select flex-1" value={addVisaOptionId} onChange={e => setAddVisaOptionId(e.target.value)}>
@@ -694,14 +694,14 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Tiket Pesawat */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Plane className="h-4 w-4 text-teal-600" /> Tiket Pesawat</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Pilih bagaimana tiket pesawat masuk ke paket ini</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Plane className="h-4 w-4 text-admin-accent" /> Tiket Pesawat</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana tiket pesawat masuk ke paket ini</p>
         </div>
         <ModeSelector value={pkg.flightMode} onChange={handleSetFlightMode} />
 
         {pkg.flightMode === 'included' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">Harga tiket ini MASUK ke Harga Jual Paket.</p>
+            <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga tiket ini MASUK ke Harga Jual Paket.</p>
             <select className="admin-select" value={includedFlightChoice} onChange={e => handleSetIncludedFlight(e.target.value)}>
               <option value="">— pilih jadwal penerbangan —</option>
               {allFlightSchedules.map(s => (
@@ -709,14 +709,14 @@ export default function PackageBuilderPage({ params }: Props) {
               ))}
             </select>
             {pkg.includedFlightSchedule && pkg.includedFlightPrice != null && (
-              <p className="text-[12px] text-slate-500">Dikunci: <span className="font-medium text-ink">{pkg.includedFlightSchedule.route.origin} → {pkg.includedFlightSchedule.route.destination}</span> — {rupiah(Number(pkg.includedFlightPrice))}</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedFlightSchedule.route.origin} → {pkg.includedFlightSchedule.route.destination}</span> — {rupiah(Number(pkg.includedFlightPrice))}</p>
             )}
           </div>
         )}
 
         {pkg.flightMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">Harga tiket TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
+            <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga tiket TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
             <select className="admin-select" value={userChoiceFlightRouteId} onChange={e => handleSetUserChoiceFlightRoute(e.target.value)}>
               <option value="">— pilih rute sumber opsi tiket —</option>
               {uniqueFlightRoutes.map(r => <option key={r.id} value={r.id}>{r.origin} → {r.destination}</option>)}
@@ -728,16 +728,16 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Katering */}
       <div className="admin-card p-4 space-y-3">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Utensils className="h-4 w-4 text-teal-600" /> Katering</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">Pilih bagaimana katering masuk ke paket ini</p>
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Utensils className="h-4 w-4 text-admin-accent" /> Katering</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana katering masuk ke paket ini</p>
         </div>
         <ModeSelector value={pkg.cateringMode} onChange={handleSetCateringMode} />
 
         {pkg.cateringMode === 'included' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">Harga katering ini MASUK ke Harga Jual Paket.</p>
+            <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga katering ini MASUK ke Harga Jual Paket.</p>
             {pkg.includedCateringOption && pkg.includedCateringPrice != null && pkg.includedCateringNumPeople != null && pkg.includedCateringNumDays != null && (
-              <p className="text-[12px] text-slate-500">Dikunci: <span className="font-medium text-ink">{pkg.includedCateringOption.name}</span> — {pkg.includedCateringNumPeople} orang × {pkg.includedCateringNumDays} hari = {rupiah(Number(pkg.includedCateringPrice))}</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedCateringOption.name}</span> — {pkg.includedCateringNumPeople} orang × {pkg.includedCateringNumDays} hari = {rupiah(Number(pkg.includedCateringPrice))}</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
               <select className="admin-select md:col-span-2" value={cateringForm.optionId} onChange={e => setCateringForm(f => ({ ...f, optionId: e.target.value }))}>
@@ -753,18 +753,18 @@ export default function PackageBuilderPage({ params }: Props) {
 
         {pkg.cateringMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
-            <p className="text-[11px] text-amber-600 bg-amber-50 rounded px-2 py-1 w-fit">Harga katering TIDAK masuk Harga Jual Paket — ditawarkan sebagai opsi.</p>
+            <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga katering TIDAK masuk Harga Jual Paket — ditawarkan sebagai opsi.</p>
             <div className="space-y-2">
               {pkg.cateringOptions.map(o => (
-                <div key={o.id} className="flex items-center justify-between rounded-lg border border-line px-4 py-2.5">
-                  <p className="text-[13px] font-medium text-ink">{o.cateringOption.name} <span className="text-slate-400 font-normal">({o.numPeople} orang × {o.numDays} hari)</span></p>
+                <div key={o.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
+                  <p className="text-[13px] font-medium text-admin-ink">{o.cateringOption.name} <span className="text-admin-muted/70 font-normal">({o.numPeople} orang × {o.numDays} hari)</span></p>
                   <button onClick={() => handleRemoveCateringOption(o.cateringOptionId)}
-                    className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                    className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               ))}
-              {pkg.cateringOptions.length === 0 && <p className="text-sm text-slate-400 py-2">Belum ada opsi katering ditawarkan.</p>}
+              {pkg.cateringOptions.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi katering ditawarkan.</p>}
             </div>
             <div className="grid md:grid-cols-4 gap-2">
               <select className="admin-select md:col-span-2" value={addCateringOption.optionId} onChange={e => setAddCateringOption(f => ({ ...f, optionId: e.target.value }))}>
@@ -785,8 +785,8 @@ export default function PackageBuilderPage({ params }: Props) {
       <div className="admin-form-panel space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Komponen Biaya</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Komponen Biaya</p>
+            <p className="text-[11px] text-admin-muted/70 mt-0.5">
               Tiap komponen (dokumen, admin fee, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-paket-umroh.md §5
             </p>
           </div>
@@ -796,15 +796,15 @@ export default function PackageBuilderPage({ params }: Props) {
         {showCostForm && (
           <div className="space-y-3">
             <div>
-              <p className="text-xs text-slate-500 mb-1">Nama Komponen</p>
+              <p className="text-xs text-admin-muted mb-1">Nama Komponen</p>
               <input className="admin-inp" placeholder="Dokumen, Admin Fee, dst"
                 value={costForm.costComponent} onChange={e => setCostForm(f => ({ ...f, costComponent: e.target.value }))} />
             </div>
 
-            <div className="border border-line rounded-xl p-3 space-y-2">
-              <p className="text-xs font-semibold text-ink">Vendor &amp; Mata Uang</p>
+            <div className="border border-admin-line rounded-xl p-3 space-y-2">
+              <p className="text-xs font-semibold text-admin-ink">Vendor &amp; Mata Uang</p>
               {vendors.length === 0 && !showQuickAddVendor && (
-                <p className="text-[11px] text-amber-600">Belum ada vendor — tambah dulu.</p>
+                <p className="text-[11px] text-admin-warning">Belum ada vendor — tambah dulu.</p>
               )}
               <div className="flex items-center gap-2">
                 {!showQuickAddVendor ? (
@@ -837,17 +837,17 @@ export default function PackageBuilderPage({ params }: Props) {
 
             <div className="grid md:grid-cols-3 gap-3 items-end">
               <div>
-                <p className="text-xs text-slate-500 mb-1">Biaya ({costForm.currency})</p>
+                <p className="text-xs text-admin-muted mb-1">Biaya ({costForm.currency})</p>
                 <input className="admin-inp" type="number" placeholder="0"
                   value={costForm.cost} onChange={e => setCostForm(f => ({ ...f, cost: e.target.value }))} />
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">HPP (Rupiah)</p>
-                <p className="admin-inp bg-slate-50 font-semibold text-ink">{costPreview ? rupiah(costPreview.hppRupiah) : '—'}</p>
+                <p className="text-xs text-admin-muted mb-1">HPP (Rupiah)</p>
+                <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{costPreview ? rupiah(costPreview.hppRupiah) : '—'}</p>
               </div>
               <div>
-                <p className="text-xs text-slate-500 mb-1">Harga Jual (otomatis)</p>
-                <p className="admin-inp bg-slate-50 font-semibold text-ink">{costPreview ? rupiah(costPreview.sellPrice) : '—'}</p>
+                <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
+                <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{costPreview ? rupiah(costPreview.sellPrice) : '—'}</p>
               </div>
             </div>
 
@@ -863,29 +863,29 @@ export default function PackageBuilderPage({ params }: Props) {
 
         <div className="space-y-2">
           {costs.map(c => (
-            <div key={c.id} className="flex items-center justify-between rounded-lg border border-line px-4 py-2.5">
+            <div key={c.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
               <div>
-                <p className="text-[13px] font-medium text-ink">{c.costComponent}</p>
-                <p className="text-[11px] text-slate-500">{c.vendorName} · {c.currency} {c.cost.toLocaleString('id-ID')}{c.hppRupiah != null && ` · HPP ${rupiah(c.hppRupiah)}`}</p>
+                <p className="text-[13px] font-medium text-admin-ink">{c.costComponent}</p>
+                <p className="text-[11px] text-admin-muted">{c.vendorName} · {c.currency} {c.cost.toLocaleString('id-ID')}{c.hppRupiah != null && ` · HPP ${rupiah(c.hppRupiah)}`}</p>
               </div>
               <div className="flex items-center gap-3">
-                {c.sellPrice != null && <p className="text-[13px] font-bold text-teal-700">{rupiah(c.sellPrice)}</p>}
+                {c.sellPrice != null && <p className="text-[13px] font-bold text-admin-accent-strong">{rupiah(c.sellPrice)}</p>}
                 <div className="flex items-center gap-1.5">
-                  <button onClick={() => openCostForm(c)} className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-ink hover:bg-canvas transition-colors">
+                  <button onClick={() => openCostForm(c)} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
                     <Pencil className="h-3.5 w-3.5" />
                   </button>
-                  <button onClick={() => handleDeleteCost(c.id)} className="h-7 w-7 rounded-lg grid place-items-center text-slate-400 hover:text-rose-500 hover:bg-rose-50 transition-colors">
+                  <button onClick={() => handleDeleteCost(c.id)} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
             </div>
           ))}
-          {costs.length === 0 && <p className="text-sm text-slate-400 py-2">Belum ada komponen biaya.</p>}
+          {costs.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada komponen biaya.</p>}
           {costs.length > 0 && breakdown && (
-            <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-              <span className="text-[12px] font-semibold text-ink">Total Komponen</span>
-              <span className="text-[13px] font-bold text-teal-700">{rupiah(breakdown.componentsTotalSellPrice)}</span>
+            <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+              <span className="text-[12px] font-semibold text-admin-ink">Total Komponen</span>
+              <span className="text-[13px] font-bold text-admin-accent-strong">{rupiah(breakdown.componentsTotalSellPrice)}</span>
             </div>
           )}
         </div>
@@ -895,59 +895,59 @@ export default function PackageBuilderPage({ params }: Props) {
       {breakdown && (
         <div className="admin-card p-4 space-y-4">
           <div>
-            <p className="text-sm font-semibold text-ink">Harga Jual Paket (dasar)</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Komponen + tiap bagian yang modenya &quot;Included&quot; saja — ini yang tampil di katalog publik.</p>
+            <p className="text-sm font-semibold text-admin-ink">Harga Jual Paket (dasar)</p>
+            <p className="text-[11px] text-admin-muted/70 mt-0.5">Komponen + tiap bagian yang modenya &quot;Included&quot; saja — ini yang tampil di katalog publik.</p>
           </div>
           <div className="space-y-1.5">
-            <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-              <span className="text-[13px] text-ink">Komponen Biaya</span>
-              <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.componentsTotalSellPrice)}</span>
+            <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+              <span className="text-[13px] text-admin-ink">Komponen Biaya</span>
+              <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.componentsTotalSellPrice)}</span>
             </div>
             {breakdown.hotelMakkahMode === 'included' && breakdown.hotelMakkah && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Hotel Makkah — {breakdown.hotelMakkah.hotelName} ({breakdown.hotelMakkah.roomTypeName})</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.hotelMakkah.totalPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Hotel Makkah — {breakdown.hotelMakkah.hotelName} ({breakdown.hotelMakkah.roomTypeName})</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.hotelMakkah.totalPrice)}</span>
               </div>
             )}
             {breakdown.hotelMadinahMode === 'included' && breakdown.hotelMadinah && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Hotel Madinah — {breakdown.hotelMadinah.hotelName} ({breakdown.hotelMadinah.roomTypeName})</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.hotelMadinah.totalPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Hotel Madinah — {breakdown.hotelMadinah.hotelName} ({breakdown.hotelMadinah.roomTypeName})</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.hotelMadinah.totalPrice)}</span>
               </div>
             )}
             {breakdown.transportMode === 'included' && breakdown.includedTransportPrice != null && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Kendaraan — {breakdown.includedVehicleName}</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.includedTransportPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Kendaraan — {breakdown.includedVehicleName}</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedTransportPrice)}</span>
               </div>
             )}
             {breakdown.muthowifMode === 'included' && breakdown.includedMuthowifPrice != null && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Muthowif</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.includedMuthowifPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Muthowif</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedMuthowifPrice)}</span>
               </div>
             )}
             {breakdown.visaMode === 'included' && breakdown.includedVisaPrice != null && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Visa — {breakdown.includedVisaName}</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.includedVisaPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Visa — {breakdown.includedVisaName}</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedVisaPrice)}</span>
               </div>
             )}
             {breakdown.flightMode === 'included' && breakdown.includedFlightPrice != null && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Tiket Pesawat — {breakdown.includedFlightLabel}</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.includedFlightPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Tiket Pesawat — {breakdown.includedFlightLabel}</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedFlightPrice)}</span>
               </div>
             )}
             {breakdown.cateringMode === 'included' && breakdown.includedCateringPrice != null && (
-              <div className="flex items-center justify-between rounded-lg bg-canvas/60 px-4 py-2">
-                <span className="text-[13px] text-ink">Katering — {breakdown.includedCateringName}</span>
-                <span className="text-[13px] font-medium text-ink">{rupiah(breakdown.includedCateringPrice)}</span>
+              <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
+                <span className="text-[13px] text-admin-ink">Katering — {breakdown.includedCateringName}</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedCateringPrice)}</span>
               </div>
             )}
-            <div className="flex items-center justify-between rounded-lg px-4 py-2 border-t border-line">
-              <span className="text-[13px] font-bold text-ink">Harga Jual Paket</span>
-              <span className="text-[15px] font-bold text-teal-700">
+            <div className="flex items-center justify-between rounded-lg px-4 py-2 border-t border-admin-line">
+              <span className="text-[13px] font-bold text-admin-ink">Harga Jual Paket</span>
+              <span className="text-[15px] font-bold text-admin-accent-strong">
                 {rupiah(
                   breakdown.componentsTotalSellPrice
                   + (breakdown.hotelMakkahMode === 'included' && breakdown.hotelMakkah ? breakdown.hotelMakkah.totalPrice : 0)
@@ -966,49 +966,49 @@ export default function PackageBuilderPage({ params }: Props) {
             || breakdown.visaOptions.length > 0 || breakdown.flightOptions.length > 0 || breakdown.cateringOptions.length > 0
             || breakdown.muthowifMode === 'user_choice') && (
             <div>
-              <p className="text-sm font-semibold text-ink">Opsi Tambahan (dipilih pilgrim saat booking)</p>
-              <p className="text-[11px] text-slate-400 mt-0.5 mb-2">Harga di bawah ini TIDAK dijumlah ke Harga Jual Paket — baru ditambahkan kalau pilgrim benar-benar memilihnya.</p>
+              <p className="text-sm font-semibold text-admin-ink">Opsi Tambahan (dipilih pilgrim saat booking)</p>
+              <p className="text-[11px] text-admin-muted/70 mt-0.5 mb-2">Harga di bawah ini TIDAK dijumlah ke Harga Jual Paket — baru ditambahkan kalau pilgrim benar-benar memilihnya.</p>
               <div className="space-y-1.5">
                 {breakdown.hotelMakkahOptions.map(o => (
-                  <div key={o.hotelRoomScheduleId} className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Hotel Makkah — {o.hotelName} ({o.roomTypeName}, {o.nights} mlm)</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(o.pricePerNight)}/kamar/malam</span>
+                  <div key={o.hotelRoomScheduleId} className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Hotel Makkah — {o.hotelName} ({o.roomTypeName}, {o.nights} mlm)</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(o.pricePerNight)}/kamar/malam</span>
                   </div>
                 ))}
                 {breakdown.hotelMadinahOptions.map(o => (
-                  <div key={o.hotelRoomScheduleId} className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Hotel Madinah — {o.hotelName} ({o.roomTypeName}, {o.nights} mlm)</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(o.pricePerNight)}/kamar/malam</span>
+                  <div key={o.hotelRoomScheduleId} className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Hotel Madinah — {o.hotelName} ({o.roomTypeName}, {o.nights} mlm)</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(o.pricePerNight)}/kamar/malam</span>
                   </div>
                 ))}
                 {breakdown.vehicleOptions.map(v => (
-                  <div key={v.transportPricingId} className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Kendaraan — {v.vehicleName}</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(v.vehiclePrice)}</span>
+                  <div key={v.transportPricingId} className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Kendaraan — {v.vehicleName}</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(v.vehiclePrice)}</span>
                   </div>
                 ))}
                 {breakdown.muthowifMode === 'user_choice' && breakdown.currentMuthowifPrice != null && (
-                  <div className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Muthowif</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(breakdown.currentMuthowifPrice)}</span>
+                  <div className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Muthowif</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(breakdown.currentMuthowifPrice)}</span>
                   </div>
                 )}
                 {breakdown.visaOptions.map(v => (
-                  <div key={v.visaProductId} className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Visa — {v.name}</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(v.price)}</span>
+                  <div key={v.visaProductId} className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Visa — {v.name}</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(v.price)}</span>
                   </div>
                 ))}
                 {breakdown.flightOptions.map(f => (
-                  <div key={f.flightScheduleId} className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Tiket Pesawat — {f.label}</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(f.price)}</span>
+                  <div key={f.flightScheduleId} className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Tiket Pesawat — {f.label}</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(f.price)}</span>
                   </div>
                 ))}
                 {breakdown.cateringOptions.map(c => (
-                  <div key={c.cateringOptionId} className="flex items-center justify-between rounded-lg bg-amber-50 px-4 py-2">
-                    <span className="text-[13px] text-ink">Katering — {c.name} ({c.numPeople} orang × {c.numDays} hari)</span>
-                    <span className="text-[13px] font-medium text-amber-700">+{rupiah(c.price)}</span>
+                  <div key={c.cateringOptionId} className="flex items-center justify-between rounded-lg bg-admin-warning/10 px-4 py-2">
+                    <span className="text-[13px] text-admin-ink">Katering — {c.name} ({c.numPeople} orang × {c.numDays} hari)</span>
+                    <span className="text-[13px] font-medium text-admin-warning">+{rupiah(c.price)}</span>
                   </div>
                 ))}
               </div>

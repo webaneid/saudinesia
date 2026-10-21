@@ -106,16 +106,15 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
   return (
     // Backdrop
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: 'rgba(15,27,45,0.45)', backdropFilter: 'blur(2px)' }}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-admin-ink/40 backdrop-blur-[2px]"
       onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
     >
       {/* Panel */}
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-card border border-line/70 flex flex-col overflow-hidden font-jakarta">
+      <div className="w-full max-w-md bg-white rounded-2xl shadow-admin border border-admin-line flex flex-col overflow-hidden font-jakarta">
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-line">
-          <h2 className="text-[15px] font-bold text-ink">Upload Dokumen</h2>
-          <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-canvas grid place-items-center text-slate-400 transition-colors">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-admin-line">
+          <h2 className="text-[15px] font-bold text-admin-ink">Upload Dokumen</h2>
+          <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-admin-spot grid place-items-center text-admin-muted/70 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -123,7 +122,7 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
         <div className="p-5 space-y-4">
           {/* Doc type selector */}
           <div>
-            <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-slate-500 block mb-1.5">
+            <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-admin-muted block mb-1.5">
               Jenis Dokumen
             </label>
             <select
@@ -146,10 +145,10 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
             onClick={() => !uploading && fileRef.current?.click()}
             className={`relative border-2 border-dashed rounded-2xl p-6 flex flex-col items-center gap-2 cursor-pointer transition-colors select-none ${
               dragOver
-                ? 'border-teal-400 bg-teal-50'
+                ? 'border-admin-accent/50 bg-admin-accent/10'
                 : file
-                ? 'border-mint-300 bg-mint-50/40'
-                : 'border-line hover:border-teal-300 hover:bg-canvas/50'
+                ? 'border-admin-ok/30 bg-admin-ok/5'
+                : 'border-admin-line hover:border-admin-accent/30 hover:bg-admin-spot/40'
             } ${uploading ? 'pointer-events-none' : ''}`}
           >
             <input
@@ -163,21 +162,21 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
             {file ? (
               <>
                 {preview
-                  ? <img src={preview} alt="preview" className="h-20 w-20 object-cover rounded-xl border border-line" />
-                  : <FileText className="h-12 w-12 text-teal-500" />
+                  ? <img src={preview} alt="preview" className="h-20 w-20 object-cover rounded-xl border border-admin-line" />
+                  : <FileText className="h-12 w-12 text-admin-accent" />
                 }
-                <p className="text-[13px] font-semibold text-ink text-center">{file.name}</p>
-                <p className="text-[11px] text-slate-500">{formatBytes(file.size)} · {file.type.split('/')[1]?.toUpperCase()}</p>
+                <p className="text-[13px] font-semibold text-admin-ink text-center">{file.name}</p>
+                <p className="text-[11px] text-admin-muted">{formatBytes(file.size)} · {file.type.split('/')[1]?.toUpperCase()}</p>
                 {!uploading && (
-                  <p className="text-[11px] text-teal-600 font-medium">Klik untuk ganti file</p>
+                  <p className="text-[11px] text-admin-accent font-medium">Klik untuk ganti file</p>
                 )}
               </>
             ) : (
               <>
-                <UploadCloud className="h-10 w-10 text-slate-300" />
-                <p className="text-[13px] font-medium text-ink2">Seret file ke sini</p>
-                <p className="text-[11px] text-slate-400">atau klik untuk pilih file</p>
-                <p className="text-[11px] text-slate-400">{ALLOWED_LABEL} · Maks 5 MB</p>
+                <UploadCloud className="h-10 w-10 text-admin-muted/50" />
+                <p className="text-[13px] font-medium text-admin-ink/80">Seret file ke sini</p>
+                <p className="text-[11px] text-admin-muted/70">atau klik untuk pilih file</p>
+                <p className="text-[11px] text-admin-muted/70">{ALLOWED_LABEL} · Maks 5 MB</p>
               </>
             )}
           </div>
@@ -185,13 +184,13 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
           {/* Progress bar */}
           {uploading && (
             <div className="space-y-1.5">
-              <div className="flex justify-between text-[11px] text-slate-500">
+              <div className="flex justify-between text-[11px] text-admin-muted">
                 <span>Mengupload…</span>
                 <span>{progress}%</span>
               </div>
-              <div className="h-2 rounded-full bg-canvas overflow-hidden">
+              <div className="h-2 rounded-full bg-admin-spot overflow-hidden">
                 <div
-                  className="h-full rounded-full bg-gradient-to-r from-teal-500 to-teal-600 transition-all duration-200"
+                  className="h-full rounded-full bg-gradient-to-r from-admin-primary-medium to-admin-accent transition-all duration-200"
                   style={{ width: `${progress}%` }}
                 />
               </div>
@@ -200,7 +199,7 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
 
           {/* Success state */}
           {done && (
-            <div className="flex items-center gap-2 text-mint-700 text-[13px] font-medium">
+            <div className="flex items-center gap-2 text-admin-ok text-[13px] font-medium">
               <CheckCircle2 className="h-4 w-4" />
               Upload berhasil!
             </div>
@@ -208,9 +207,9 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
 
           {/* Error */}
           {activeErr && !done && (
-            <div className="flex items-start gap-2 bg-rose-50 border border-rose-100 rounded-xl p-3">
-              <AlertCircle className="h-4 w-4 text-rose-500 shrink-0 mt-0.5" />
-              <p className="text-[12px] text-rose-700">{activeErr}</p>
+            <div className="flex items-start gap-2 bg-admin-danger/10 border border-admin-danger/20 rounded-xl p-3">
+              <AlertCircle className="h-4 w-4 text-admin-danger/80 shrink-0 mt-0.5" />
+              <p className="text-[12px] text-admin-danger">{activeErr}</p>
             </div>
           )}
         </div>
@@ -220,14 +219,14 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
           <button
             onClick={onClose}
             disabled={uploading}
-            className="flex-1 h-10 rounded-xl border border-line text-[13px] font-medium text-ink2 hover:bg-canvas disabled:opacity-50 transition-colors"
+            className="flex-1 h-10 rounded-xl border border-admin-line text-[13px] font-medium text-admin-ink/80 hover:bg-admin-spot disabled:opacity-50 transition-colors"
           >
             Batal
           </button>
           <button
             onClick={handleSubmit}
             disabled={!file || uploading || done}
-            className="flex-1 h-10 rounded-xl bg-ink text-white text-[13px] font-semibold hover:bg-ink2 disabled:opacity-40 transition-colors"
+            className="flex-1 h-10 rounded-xl bg-admin-accent text-white text-[13px] font-semibold hover:bg-admin-accent-strong disabled:opacity-40 transition-colors"
           >
             {uploading ? 'Mengupload…' : 'Upload'}
           </button>

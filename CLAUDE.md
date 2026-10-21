@@ -181,6 +181,18 @@ middleware.ts                 # auth + role guard
 
 ---
 
+## Admin UI Kit
+
+Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman admin:
+
+- Pakai komponen `components/admin/{shell,ui,data-table}/` (`PageHeader`, `Card`, `Badge`, `Button`, `FormField`, `DataTable`, `Pagination`) — jangan membuat tabel `<table>` mentah atau header halaman ad-hoc
+- Warna hanya lewat token `admin-*` (`text-admin-muted`, `bg-admin-accent`, `border-admin-line`, …) — dilarang kelas palet mentah (`teal-`, `slate-`, `rose-`, hex) di folder admin; brand diubah di satu blok `--brand-*` di `app/globals.css`
+- Form padat boleh memakai kelas komponen `admin-inp`, `admin-select`, `admin-btn-sm`, `admin-form-panel`, `admin-badge-*`
+- Tailwind di project ini **v3.4**: modifier opacity di luar skala (mis. `/12`) tidak error tapi diam-diam tidak menghasilkan CSS — skala sudah diperluas untuk 12/14/15; di luar itu pakai nilai skala biasa
+- List transaksional/yang bisa tumbuh: `parseListParams` + `paginate` dari `lib/admin/pagination.ts`, `orderBy` wajib punya tie-breaker `id`. Pengecualian: list katalog produk (master data kecil yang juga dikonsumsi picker)
+
+---
+
 ## Tiptap
 
 - Active extensions: `StarterKit`, `Link`, `Image`, `Placeholder` — add others only when spec explicitly requires
@@ -252,6 +264,9 @@ middleware.ts                 # auth + role guard
 - Branches: `feat/<slug>`, `fix/<slug>`, `chore/<slug>`
 - One logical change per commit — do not mix feature work with refactors
 - Link PRs to a `docs/decisions.md` entry for any architectural choice
+- Repo: `github.com/webaneid/saudinesia` (private). Alur: branch → **PR ke `main`** → CI `validate` (`.github/workflows/ci.yml`) harus hijau → merge. Tidak ada commit langsung ke `main` (dijaga hook; proteksi sungguhan = branch protection GitHub)
+- `prisma/migrations/` WAJIB di-commit, di PR yang sama dengan perubahan `schema.prisma` — CI gagal bila skema dan migrasi tidak sinkron
+- Production/deploy/versioning: `docs/deployment.md` (alur git, CI, perbandingan dengan smart-ai, keputusan yang menunggu pemilik)
 
 ---
 

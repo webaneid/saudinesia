@@ -17,6 +17,9 @@ export const registerSchema = z.object({
     .min(9, 'Nomor terlalu pendek')
     .max(15, 'Nomor terlalu panjang')
     .regex(/^[0-9+\s-]+$/, 'Format nomor tidak valid'),
+  privacyConsent: z.literal(true, {
+    errorMap: () => ({ message: 'Anda harus menyetujui Kebijakan Privasi' }),
+  }),
 })
 
 export const loginSchema = z.object({

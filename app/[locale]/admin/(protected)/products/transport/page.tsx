@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Bus, Route, Pencil } from 'lucide-react'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Badge } from '@/components/admin/ui/Badge'
 
 type Vehicle = { id: string; name: string; vehicleType: string; capacity: number; fleetCount: number; isActive: boolean }
 type Trip    = { id: string; name: string; category: string | null; origin: string; destination: string; isActive: boolean; pricing: { id: string }[] }
@@ -78,25 +81,63 @@ export default function TransportPage() {
   const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
   const CATS  = ['airport', 'intercity', 'city_tour', 'shuttle', 'other']
 
-  return (
-    <div className="space-y-5 max-w-5xl">
-      <div className="flex items-center justify-between">
-        <h1 className="admin-h1">Transport</h1>
-        <button
-          onClick={() => tab === 'vehicles' ? setShowVehicle(s => !s) : setShowTrip(s => !s)}
-          className="admin-btn"
-        >
-          <Plus className="h-4 w-4" />
-          {tab === 'vehicles' ? 'Tambah Kendaraan' : 'Tambah Trip'}
+  const vehicleColumns: Column<Vehicle>[] = [
+    { key: 'name', header: 'Kendaraan', mobile: 'title', cell: v => <span className="text-[13px] font-medium">{v.name}</span> },
+    { key: 'type', header: 'Tipe', cell: v => <Badge tone="accent" className="capitalize">{v.vehicleType}</Badge> },
+    { key: 'capacity', header: 'Kapasitas', align: 'right', cell: v => <span className="text-[13px] text-admin-ink/80">{v.capacity} org</span> },
+    { key: 'fleet', header: 'Armada', align: 'right', cell: v => <span className="text-[13px] text-admin-muted">{v.fleetCount} unit</span> },
+    { key: 'status', header: 'Status', cell: v => <Badge tone={v.isActive ? 'ok' : 'neutral'}>{v.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
+    {
+      key: 'actions', header: '', align: 'right',
+      cell: v => (
+        <button onClick={() => router.push(`/${locale}/admin/products/transport/vehicles/${v.id}`)}
+          className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+          <Pencil className="h-3.5 w-3.5" /> Edit
         </button>
-      </div>
+      ),
+    },
+  ]
+
+  const tripColumns: Column<Trip>[] = [
+    { key: 'name', header: 'Nama Trip', mobile: 'title', cell: t => <span className="text-[13px] font-medium">{t.name}</span> },
+    {
+      key: 'category', header: 'Kategori',
+      cell: t => t.category
+        ? <Badge tone="accent" className="capitalize">{t.category.replace('_', ' ')}</Badge>
+        : <span className="text-[12px] text-admin-muted/50">—</span>,
+    },
+    { key: 'vehicles', header: 'Kendaraan', align: 'right', cell: t => <span className="text-[13px] text-admin-ink/80">{t.pricing.length} kendaraan</span> },
+    { key: 'route', header: 'Rute', cell: t => <span className="text-[12px] text-admin-muted">{t.origin} → {t.destination}</span> },
+    { key: 'status', header: 'Status', cell: t => <Badge tone={t.isActive ? 'ok' : 'neutral'}>{t.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
+    {
+      key: 'actions', header: '', align: 'right',
+      cell: t => (
+        <button onClick={() => router.push(`/${locale}/admin/products/transport/trips/${t.id}`)}
+          className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+          <Pencil className="h-3.5 w-3.5" /> Edit & Harga
+        </button>
+      ),
+    },
+  ]
+
+  return (
+    <div className="space-y-5">
+      <PageHeader
+        title="Transport"
+        actions={
+          <button onClick={() => tab === 'vehicles' ? setShowVehicle(s => !s) : setShowTrip(s => !s)} className="admin-btn">
+            <Plus className="h-4 w-4" />
+            {tab === 'vehicles' ? 'Tambah Kendaraan' : 'Tambah Trip'}
+          </button>
+        }
+      />
 
       {/* Tabs */}
-      <div className="flex gap-1 border-b border-line">
+      <div className="flex gap-1 border-b border-admin-line">
         {([['vehicles', 'Kendaraan', Bus], ['trips', 'Trip & Harga', Route]] as const).map(([key, label, Icon]) => (
           <button key={key} onClick={() => setTab(key)}
             className={`flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              tab === key ? 'border-teal-600 text-teal-600' : 'border-transparent text-slate-500 hover:text-ink'
+              tab === key ? 'border-admin-accent text-admin-accent' : 'border-transparent text-admin-muted hover:text-admin-ink'
             }`}
           >
             <Icon className="h-3.5 w-3.5" /> {label}
@@ -109,27 +150,27 @@ export default function TransportPage() {
         <>
           {showVehicle && (
             <div className="admin-form-panel space-y-3">
-              <p className="text-sm font-semibold text-ink">Kendaraan Baru</p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-sm font-semibold text-admin-ink">Kendaraan Baru</p>
+              <p className="text-[11px] text-admin-muted/70">
                 Harga tidak diset di sini — diatur di halaman Trip per kombinasi trip+kendaraan.
               </p>
               <div className="grid md:grid-cols-2 gap-3">
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Nama</p>
+                  <p className="text-xs text-admin-muted mb-1">Nama</p>
                   <input className="admin-inp" value={vForm.name} onChange={setV('name')} placeholder="Bus Pariwisata 49" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Tipe</p>
+                  <p className="text-xs text-admin-muted mb-1">Tipe</p>
                   <select className="admin-select" value={vForm.vehicleType} onChange={setV('vehicleType')}>
                     {TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
                   </select>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Kapasitas (orang)</p>
+                  <p className="text-xs text-admin-muted mb-1">Kapasitas (orang)</p>
                   <input type="number" min={1} className="admin-inp" value={vForm.capacity} onChange={setV('capacity')} />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Jumlah Armada (unit)</p>
+                  <p className="text-xs text-admin-muted mb-1">Jumlah Armada (unit)</p>
                   <input type="number" min={1} className="admin-inp" value={vForm.fleetCount} onChange={setV('fleetCount')} />
                 </div>
               </div>
@@ -142,42 +183,7 @@ export default function TransportPage() {
             </div>
           )}
 
-          <div className="admin-card overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="border-b border-line bg-canvas/60"><tr>
-                <th className="admin-th">Kendaraan</th>
-                <th className="admin-th">Tipe</th>
-                <th className="admin-th text-right">Kapasitas</th>
-                <th className="admin-th text-right">Armada</th>
-                <th className="admin-th">Status</th>
-                <th className="admin-th"></th>
-              </tr></thead>
-              <tbody className="divide-y divide-line">
-                {vehicles.map(v => (
-                  <tr key={v.id} className={`hover:bg-canvas/40 transition-colors ${!v.isActive ? 'opacity-50' : ''}`}>
-                    <td className="px-4 py-3 font-medium text-ink text-[13px]">{v.name}</td>
-                    <td className="px-4 py-3"><span className="admin-badge-blue capitalize">{v.vehicleType}</span></td>
-                    <td className="px-4 py-3 text-right text-[13px] text-ink2">{v.capacity} org</td>
-                    <td className="px-4 py-3 text-right text-[13px] text-slate-500">{v.fleetCount} unit</td>
-                    <td className="px-4 py-3">
-                      <span className={v.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>
-                        {v.isActive ? 'Aktif' : 'Nonaktif'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => router.push(`/${locale}/admin/products/transport/vehicles/${v.id}`)}
-                        className="inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-ink transition-colors">
-                        <Pencil className="h-3.5 w-3.5" /> Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {vehicles.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm">Belum ada kendaraan.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable columns={vehicleColumns} rows={vehicles} getRowId={v => v.id} empty="Belum ada kendaraan." rowClassName={v => (v.isActive ? undefined : 'opacity-50')} />
         </>
       )}
 
@@ -186,27 +192,27 @@ export default function TransportPage() {
         <>
           {showTrip && (
             <div className="admin-form-panel space-y-3">
-              <p className="text-sm font-semibold text-ink">Trip Baru</p>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-sm font-semibold text-admin-ink">Trip Baru</p>
+              <p className="text-[11px] text-admin-muted/70">
                 Setelah disimpan, kamu akan diarahkan ke halaman edit untuk mengatur harga per kendaraan.
               </p>
               <div className="grid md:grid-cols-2 gap-3">
                 <div className="md:col-span-2">
-                  <p className="text-xs text-slate-500 mb-1">Nama Trip</p>
+                  <p className="text-xs text-admin-muted mb-1">Nama Trip</p>
                   <input className="admin-inp" value={tForm.name} onChange={setT('name')} placeholder="Airport Transfer — Bandara ke Hotel" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Kategori (opsional)</p>
+                  <p className="text-xs text-admin-muted mb-1">Kategori (opsional)</p>
                   <input className="admin-inp" value={tForm.category} onChange={setT('category')}
                     list="cat-list" placeholder="airport / intercity / city_tour" />
                   <datalist id="cat-list">{CATS.map(c => <option key={c} value={c} />)}</datalist>
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Origin (titik jemput)</p>
+                  <p className="text-xs text-admin-muted mb-1">Origin (titik jemput)</p>
                   <input className="admin-inp" value={tForm.origin} onChange={setT('origin')} placeholder="Bandara King Abdulaziz Jeddah" />
                 </div>
                 <div>
-                  <p className="text-xs text-slate-500 mb-1">Destination (titik tujuan)</p>
+                  <p className="text-xs text-admin-muted mb-1">Destination (titik tujuan)</p>
                   <input className="admin-inp" value={tForm.destination} onChange={setT('destination')} placeholder="Hotel Makkah/Madinah" />
                 </div>
               </div>
@@ -219,46 +225,7 @@ export default function TransportPage() {
             </div>
           )}
 
-          <div className="admin-card overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="border-b border-line bg-canvas/60"><tr>
-                <th className="admin-th">Nama Trip</th>
-                <th className="admin-th">Kategori</th>
-                <th className="admin-th text-right">Kendaraan</th>
-                <th className="admin-th">Rute</th>
-                <th className="admin-th">Status</th>
-                <th className="admin-th"></th>
-              </tr></thead>
-              <tbody className="divide-y divide-line">
-                {trips.map(t => (
-                  <tr key={t.id} className={`hover:bg-canvas/40 transition-colors ${!t.isActive ? 'opacity-50' : ''}`}>
-                    <td className="px-4 py-3 font-medium text-ink text-[13px]">{t.name}</td>
-                    <td className="px-4 py-3">
-                      {t.category
-                        ? <span className="admin-badge-blue capitalize">{t.category.replace('_', ' ')}</span>
-                        : <span className="text-slate-300 text-[12px]">—</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right text-[13px] text-ink2">{t.pricing.length} kendaraan</td>
-                    <td className="px-4 py-3 text-[12px] text-slate-500">{t.origin} → {t.destination}</td>
-                    <td className="px-4 py-3">
-                      <span className={t.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>
-                        {t.isActive ? 'Aktif' : 'Nonaktif'}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button onClick={() => router.push(`/${locale}/admin/products/transport/trips/${t.id}`)}
-                        className="inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-ink transition-colors">
-                        <Pencil className="h-3.5 w-3.5" /> Edit & Harga
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-                {trips.length === 0 && (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400 text-sm">Belum ada trip.</td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          <DataTable columns={tripColumns} rows={trips} getRowId={t => t.id} empty="Belum ada trip." rowClassName={t => (t.isActive ? undefined : 'opacity-50')} />
         </>
       )}
     </div>

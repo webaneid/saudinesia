@@ -26,6 +26,7 @@ export function RegisterForm({ locale }: RegisterFormProps) {
   const { seconds, reset: resetCountdown } = useOtpCountdown(60)
 
   const [form, setForm] = useState({ fullName: '', email: '', password: '', phone: '' })
+  const [privacyConsent, setPrivacyConsent] = useState(false)
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -37,7 +38,7 @@ export function RegisterForm({ locale }: RegisterFormProps) {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, privacyConsent }),
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Pendaftaran gagal.'); return }
@@ -59,7 +60,7 @@ export function RegisterForm({ locale }: RegisterFormProps) {
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, privacyConsent }),
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Gagal mengirim ulang.'); return }
@@ -152,8 +153,23 @@ export function RegisterForm({ locale }: RegisterFormProps) {
                 <Input id="phone" type="tel" placeholder="8xx xxxx xxxx" value={form.phone} onChange={set('phone')} className="rounded-l-none" required />
               </div>
             </div>
+            <label className="flex items-start gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={privacyConsent}
+                onChange={(e) => setPrivacyConsent(e.target.checked)}
+                className="mt-0.5 h-3.5 w-3.5 rounded border-input"
+                required
+              />
+              <span>
+                Saya telah membaca dan menyetujui{' '}
+                <a href={`/${locale}/privacy`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Kebijakan Privasi
+                </a>
+              </span>
+            </label>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading}>
+            <Button type="submit" className="w-full" disabled={loading || !privacyConsent}>
               {loading ? 'Mendaftar...' : 'Daftar & Kirim OTP'}
             </Button>
             <p className="text-center text-sm text-muted-foreground">

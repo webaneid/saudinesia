@@ -7,6 +7,7 @@ import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { normalizePhone } from '@/lib/utils/phone'
 import { registerSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
+import { PRIVACY_POLICY_VERSION } from '@/lib/constants/legal'
 
 export async function POST(request: Request) {
   try {
@@ -33,7 +34,10 @@ export async function POST(request: Request) {
     const passwordHash = await hash(password, 12)
 
     await prisma.user.create({
-      data: { email, passwordHash, fullName, phone: normalizedPhone, role: 'pilgrim', isActive: false },
+      data: {
+        email, passwordHash, fullName, phone: normalizedPhone, role: 'pilgrim', isActive: false,
+        consentLogs: { create: { type: 'privacy_policy', version: PRIVACY_POLICY_VERSION } },
+      },
     })
 
     const code = generateOtp()

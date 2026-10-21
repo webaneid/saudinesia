@@ -3,6 +3,9 @@
 import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Plus, Pencil, MapPin } from 'lucide-react'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Badge } from '@/components/admin/ui/Badge'
 
 type TourismSite = { id: string; name: string; city: string | null; isActive: boolean }
 
@@ -13,12 +16,14 @@ export default function TourismSitesPage() {
   const [list, setList] = useState<TourismSite[]>([])
   const [show, setShow] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ name: '', city: 'makkah', description: '', gmapsUrl: '' })
 
   async function load() {
     const r = await fetch('/api/v1/admin/products/tourism-sites')
     const j = await r.json()
     setList(j.data ?? [])
+    setLoading(false)
   }
   useEffect(() => { load() }, [])
 
@@ -36,26 +41,40 @@ export default function TourismSitesPage() {
     await load(); setShow(false); setSaving(false)
   }
 
+  const columns: Column<TourismSite>[] = [
+    { key: 'name', header: 'Nama', mobile: 'title', cell: s => <span className="text-[13px] font-medium">{s.name}</span> },
+    { key: 'city', header: 'Kota', cell: s => <span className="text-[12px] capitalize text-admin-muted">{s.city}</span> },
+    { key: 'status', header: 'Status', cell: s => <Badge tone={s.isActive ? 'ok' : 'neutral'}>{s.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
+    {
+      key: 'actions', header: '', align: 'right',
+      cell: s => (
+        <button onClick={() => router.push(`/${locale}/admin/products/tourism-sites/${s.id}`)}
+          className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+          <Pencil className="h-3.5 w-3.5" /> Edit
+        </button>
+      ),
+    },
+  ]
+
   return (
-    <div className="space-y-5 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="admin-h1 flex items-center gap-2"><MapPin className="h-5 w-5 text-teal-600" /> Situs Wisata</h1>
-          <p className="text-sm text-slate-500 mt-1">Master data tempat wisata — dipakai berulang di berbagai Paket Ziarah.</p>
-        </div>
-        <button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader
+        icon={MapPin}
+        title="Situs Wisata"
+        description="Master data tempat wisata — dipakai berulang di berbagai Paket Ziarah."
+        actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>}
+      />
 
       {show && (
         <div className="admin-form-panel space-y-3">
-          <p className="text-sm font-semibold text-ink">Situs Baru</p>
+          <p className="text-sm font-semibold text-admin-ink">Situs Baru</p>
           <div className="grid md:grid-cols-2 gap-3">
             <div className="md:col-span-2">
-              <p className="text-xs text-slate-500 mb-1">Nama</p>
+              <p className="text-xs text-admin-muted mb-1">Nama</p>
               <input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Jabal Nur (Gua Hira)" />
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Kota</p>
+              <p className="text-xs text-admin-muted mb-1">Kota</p>
               <select className="admin-select" value={form.city} onChange={set('city')}>
                 <option value="makkah">Makkah</option>
                 <option value="madinah">Madinah</option>
@@ -63,11 +82,11 @@ export default function TourismSitesPage() {
               </select>
             </div>
             <div>
-              <p className="text-xs text-slate-500 mb-1">Link Google Maps (opsional)</p>
+              <p className="text-xs text-admin-muted mb-1">Link Google Maps (opsional)</p>
               <input className="admin-inp" value={form.gmapsUrl} onChange={set('gmapsUrl')} placeholder="https://maps.google.com/..." />
             </div>
             <div className="md:col-span-2">
-              <p className="text-xs text-slate-500 mb-1">Deskripsi</p>
+              <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
               <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
             </div>
           </div>
@@ -78,36 +97,7 @@ export default function TourismSitesPage() {
         </div>
       )}
 
-      <div className="admin-card overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="border-b border-line bg-canvas/60"><tr>
-            <th className="admin-th">Nama</th>
-            <th className="admin-th">Kota</th>
-            <th className="admin-th">Status</th>
-            <th className="admin-th"></th>
-          </tr></thead>
-          <tbody className="divide-y divide-line">
-            {list.map(s => (
-              <tr key={s.id} className={`hover:bg-canvas/40 transition-colors ${!s.isActive ? 'opacity-50' : ''}`}>
-                <td className="px-4 py-3 text-ink font-medium text-[13px]">{s.name}</td>
-                <td className="px-4 py-3 text-slate-500 capitalize text-[12px]">{s.city}</td>
-                <td className="px-4 py-3">
-                  <span className={s.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>{s.isActive ? 'Aktif' : 'Nonaktif'}</span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => router.push(`/${locale}/admin/products/tourism-sites/${s.id}`)}
-                    className="inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-ink transition-colors">
-                    <Pencil className="h-3.5 w-3.5" /> Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr><td colSpan={4} className="px-4 py-8 text-center text-slate-400 text-sm">Belum ada situs wisata.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} rows={list} getRowId={s => s.id} loading={loading} empty="Belum ada situs wisata." rowClassName={s => (s.isActive ? undefined : 'opacity-50')} />
     </div>
   )
 }

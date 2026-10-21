@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Plus, Save, Pencil, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Badge } from '@/components/admin/ui/Badge'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -17,6 +20,7 @@ export default function MuthowifPage() {
   const [list, setList] = useState<Muthowif[]>([])
   const [show, setShow] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [form, setForm] = useState({ name: '', bio: '', dailyCapacity: 40, languages: 'Bahasa Indonesia' })
 
   // HPP layanan muthowif — satu komponen flat, tidak per-orang, cache di MuthowifServicePrice.price
@@ -35,6 +39,7 @@ export default function MuthowifPage() {
     const r = await fetch('/api/v1/admin/products/muthowif')
     const j = await r.json()
     setList(j.data ?? [])
+    setLoading(false)
   }
   async function loadPrice() {
     const sr = await fetch('/api/v1/admin/products/muthowif/service-price')
@@ -93,35 +98,48 @@ export default function MuthowifPage() {
     setTimeout(() => setPriceSaved(false), 2000)
   }
 
+  const columns: Column<Muthowif>[] = [
+    { key: 'name', header: 'Nama', mobile: 'title', cell: m => <span className="text-[13px] font-medium">{m.name}</span> },
+    { key: 'rating', header: 'Rating', cell: m => <span className="text-[12px] text-admin-gold-strong">★ {m.rating}</span> },
+    { key: 'capacity', header: 'Kap/hari', align: 'right', cell: m => <span className="text-[12px] text-admin-muted">{m.dailyCapacity}</span> },
+    { key: 'status', header: 'Status', cell: m => <Badge tone={m.isActive ? 'ok' : 'neutral'}>{m.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
+    {
+      key: 'actions', header: '', align: 'right',
+      cell: m => (
+        <button onClick={() => router.push(`/${locale}/admin/products/muthowif/${m.id}`)}
+          className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+          <Pencil className="h-3.5 w-3.5" /> Edit
+        </button>
+      ),
+    },
+  ]
+
   return (
-    <div className="space-y-5 max-w-4xl">
-      <div className="flex items-center justify-between">
-        <h1 className="admin-h1">Muthowif</h1>
-        <button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>
-      </div>
+    <div className="space-y-5">
+      <PageHeader title="Muthowif" actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>} />
 
       {/* HPP layanan — satu harga flat, bukan per-orang (docs/arsitektur-muthowif.md §9/§10) */}
       <div className="admin-form-panel space-y-4">
         <div>
-          <p className="text-sm font-semibold text-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Harga Layanan Muthowif</p>
-          <p className="text-[11px] text-slate-400 mt-0.5">
+          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Harga Layanan Muthowif</p>
+          <p className="text-[11px] text-admin-muted/70 mt-0.5">
             Satu harga berlaku untuk semua booking — muthowif spesifik ditentukan admin belakangan, jamaah membayar untuk jasa pembimbingan, bukan memilih orang tertentu.
           </p>
         </div>
 
         <div className="admin-card p-3 flex items-center gap-3">
-          <p className="text-xs text-slate-500">Harga saat ini:</p>
-          <p className="text-sm font-bold text-ink">{formatRupiah(currentPrice)}</p>
-          <p className="text-xs text-slate-400">/ hari — dihitung otomatis dari HPP di bawah</p>
+          <p className="text-xs text-admin-muted">Harga saat ini:</p>
+          <p className="text-sm font-bold text-admin-ink">{formatRupiah(currentPrice)}</p>
+          <p className="text-xs text-admin-muted/70">/ hari — dihitung otomatis dari HPP di bawah</p>
         </div>
 
-        <div className="border border-line rounded-xl p-3 space-y-2">
-          <p className="text-xs font-semibold text-ink">Vendor &amp; Mata Uang</p>
-          <p className="text-[11px] text-slate-400">
+        <div className="border border-admin-line rounded-xl p-3 space-y-2">
+          <p className="text-xs font-semibold text-admin-ink">Vendor &amp; Mata Uang</p>
+          <p className="text-[11px] text-admin-muted/70">
             Muthowif tidak punya vendor pihak ketiga — Saudinesia menetapkan sendiri harga pasarannya.
           </p>
           <div className="flex items-center gap-2">
-            <p className="admin-inp flex-1 bg-slate-50 text-slate-600">{vendorName}</p>
+            <p className="admin-inp flex-1 bg-admin-spot/50 text-admin-ink/80">{vendorName}</p>
             <select className="admin-inp w-20 shrink-0" value={currency} onChange={e => setCurrency(e.target.value)}>
               {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -130,16 +148,16 @@ export default function MuthowifPage() {
 
         <div className="grid md:grid-cols-3 gap-3 items-end">
           <div>
-            <p className="text-xs text-slate-500 mb-1">Harga Layanan ({currency})</p>
+            <p className="text-xs text-admin-muted mb-1">Harga Layanan ({currency})</p>
             <input type="number" className="admin-inp" value={hargaLayanan} onChange={e => setHargaLayanan(e.target.value)} placeholder="0" />
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">HPP (Rupiah)</p>
-            <p className="admin-inp bg-slate-50 font-semibold text-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
+            <p className="text-xs text-admin-muted mb-1">HPP (Rupiah)</p>
+            <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-500 mb-1">Harga Jual (otomatis)</p>
-            <p className="admin-inp bg-slate-50 font-semibold text-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
+            <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
+            <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
           </div>
         </div>
 
@@ -151,12 +169,12 @@ export default function MuthowifPage() {
 
       {show && (
         <div className="admin-form-panel">
-          <p className="text-sm font-semibold text-ink mb-1">Muthowif Baru</p>
+          <p className="text-sm font-semibold text-admin-ink mb-1">Muthowif Baru</p>
           <div className="grid md:grid-cols-2 gap-3">
-            <div><p className="text-xs text-slate-500 mb-1">Nama</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
-            <div><p className="text-xs text-slate-500 mb-1">Bahasa (pisah koma)</p><input className="admin-inp" value={form.languages} onChange={set('languages')} placeholder="Bahasa Indonesia, Arab" /></div>
-            <div className="md:col-span-2"><p className="text-xs text-slate-500 mb-1">Bio</p><textarea className="admin-inp" rows={2} value={form.bio} onChange={set('bio')} /></div>
-            <div><p className="text-xs text-slate-500 mb-1">Kapasitas/hari</p><input type="number" className="admin-inp" value={form.dailyCapacity} onChange={set('dailyCapacity')} /></div>
+            <div><p className="text-xs text-admin-muted mb-1">Nama</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
+            <div><p className="text-xs text-admin-muted mb-1">Bahasa (pisah koma)</p><input className="admin-inp" value={form.languages} onChange={set('languages')} placeholder="Bahasa Indonesia, Arab" /></div>
+            <div className="md:col-span-2"><p className="text-xs text-admin-muted mb-1">Bio</p><textarea className="admin-inp" rows={2} value={form.bio} onChange={set('bio')} /></div>
+            <div><p className="text-xs text-admin-muted mb-1">Kapasitas/hari</p><input type="number" className="admin-inp" value={form.dailyCapacity} onChange={set('dailyCapacity')} /></div>
           </div>
           <div className="flex gap-2">
             <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50">{saving ? '...' : 'Simpan'}</button>
@@ -165,40 +183,7 @@ export default function MuthowifPage() {
         </div>
       )}
 
-      <div className="admin-card overflow-hidden">
-        <table className="w-full text-sm text-left">
-          <thead className="border-b border-line bg-canvas/60"><tr>
-            <th className="admin-th">Nama</th>
-            <th className="admin-th">Rating</th>
-            <th className="admin-th text-right">Kap/hari</th>
-            <th className="admin-th">Status</th>
-            <th className="admin-th"></th>
-          </tr></thead>
-          <tbody className="divide-y divide-line">
-            {list.map(m => (
-              <tr key={m.id} className={`hover:bg-canvas/40 transition-colors ${!m.isActive ? 'opacity-50' : ''}`}>
-                <td className="px-4 py-3 text-ink font-medium text-[13px]">{m.name}</td>
-                <td className="px-4 py-3 text-gold-600 text-[12px]">★ {m.rating}</td>
-                <td className="px-4 py-3 text-right text-slate-500 text-[12px]">{m.dailyCapacity}</td>
-                <td className="px-4 py-3">
-                  <span className={m.isActive ? 'admin-badge-green' : 'admin-badge-gray'}>
-                    {m.isActive ? 'Aktif' : 'Nonaktif'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button onClick={() => router.push(`/${locale}/admin/products/muthowif/${m.id}`)}
-                    className="inline-flex items-center gap-1 text-[12px] text-slate-500 hover:text-ink transition-colors">
-                    <Pencil className="h-3.5 w-3.5" /> Edit
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-slate-400 text-sm">Belum ada muthowif.</td></tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} rows={list} getRowId={m => m.id} loading={loading} empty="Belum ada muthowif." rowClassName={m => (m.isActive ? undefined : 'opacity-50')} />
     </div>
   )
 }

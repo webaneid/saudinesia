@@ -88,16 +88,16 @@ export function PilgrimDocuments({ bookingId, pilgrimId, pilgrimName, bookingCod
     <div className="admin-card overflow-hidden">
       <button
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-canvas/40 transition-colors"
+        className="w-full flex items-center justify-between px-5 py-3.5 text-left hover:bg-admin-spot/30 transition-colors"
       >
         <div className="flex items-center gap-3">
-          <span className="text-[14px] font-bold text-ink">{pilgrimName}</span>
+          <span className="text-[14px] font-bold text-admin-ink">{pilgrimName}</span>
           <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-full ${
             uploaded >= requiredCount
-              ? 'bg-mint-50 text-mint-700'
+              ? 'bg-admin-ok/10 text-admin-ok'
               : uploaded === 0
-              ? 'bg-rose-50 text-rose-600'
-              : 'bg-gold-50 text-gold-600'
+              ? 'bg-admin-danger/10 text-admin-danger'
+              : 'bg-admin-gold/15 text-admin-gold-strong'
           }`}>
             {uploaded}/{requiredCount} dok
           </span>
@@ -107,7 +107,7 @@ export function PilgrimDocuments({ bookingId, pilgrimId, pilgrimName, bookingCod
             <button
               onClick={e => { e.stopPropagation(); handleZip() }}
               disabled={zipping}
-              className="h-8 px-3 rounded-lg border border-line text-[12px] font-medium text-ink2 hover:bg-white hover:shadow-soft flex items-center gap-1.5 transition-colors disabled:opacity-50"
+              className="h-8 px-3 rounded-lg border border-admin-line text-[12px] font-medium text-admin-ink/80 hover:bg-white hover:shadow-admin flex items-center gap-1.5 transition-colors disabled:opacity-50"
             >
               {zipping
                 ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -116,20 +116,20 @@ export function PilgrimDocuments({ bookingId, pilgrimId, pilgrimName, bookingCod
               ZIP
             </button>
           )}
-          {open ? <ChevronUp className="h-4 w-4 text-slate-400" /> : <ChevronDown className="h-4 w-4 text-slate-400" />}
+          {open ? <ChevronUp className="h-4 w-4 text-admin-muted/70" /> : <ChevronDown className="h-4 w-4 text-admin-muted/70" />}
         </div>
       </button>
 
       {open && (
-        <div className="px-5 pb-5 border-t border-line pt-4">
+        <div className="px-5 pb-5 border-t border-admin-line pt-4">
           {loading && (
-            <div className="flex justify-center py-6 text-slate-400">
+            <div className="flex justify-center py-6 text-admin-muted/70">
               <Loader2 className="h-5 w-5 animate-spin" />
             </div>
           )}
 
           {error && (
-            <div className="flex items-center gap-2 text-rose-600 text-[12px]">
+            <div className="flex items-center gap-2 text-admin-danger text-[12px]">
               <AlertCircle className="h-4 w-4 shrink-0" /> {error}
             </div>
           )}
@@ -137,7 +137,7 @@ export function PilgrimDocuments({ bookingId, pilgrimId, pilgrimName, bookingCod
           {!loading && !error && (
             <>
               {uploaded === 0 ? (
-                <p className="text-[13px] text-slate-400 py-4 text-center">Belum ada dokumen diupload.</p>
+                <p className="text-[13px] text-admin-muted/70 py-4 text-center">Belum ada dokumen diupload.</p>
               ) : (
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {docList.map(({ docType, label, required }) => (

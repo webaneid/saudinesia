@@ -34,20 +34,20 @@ export function PassportForm({ pilgrimId, initial }: PassportFormProps) {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
       <div>
-        <p className="text-[10.5px] text-slate-500 mb-1 font-medium">No. Paspor</p>
+        <p className="text-[10.5px] text-admin-muted mb-1 font-medium">No. Paspor</p>
         <input className="admin-inp-xs" value={data.passportNumber} onChange={set('passportNumber')} placeholder="A1234567" />
       </div>
       <div>
-        <p className="text-[10.5px] text-slate-500 mb-1 font-medium">Exp. Paspor</p>
+        <p className="text-[10.5px] text-admin-muted mb-1 font-medium">Exp. Paspor</p>
         <input type="date" className="admin-inp-xs" value={data.passportExpiry} onChange={set('passportExpiry')} />
       </div>
       <div>
-        <p className="text-[10.5px] text-slate-500 mb-1 font-medium">Tanggal Lahir</p>
+        <p className="text-[10.5px] text-admin-muted mb-1 font-medium">Tanggal Lahir</p>
         <input type="date" className="admin-inp-xs" value={data.dateOfBirth} onChange={set('dateOfBirth')} />
       </div>
       <div className="flex items-end">
         <button onClick={handleSave} disabled={loading}
-          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-ink hover:bg-ink2 text-[11px] font-medium text-white disabled:opacity-50 w-full justify-center transition-colors">
+          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-admin-accent hover:bg-admin-accent-strong text-[11px] font-medium text-white disabled:opacity-50 w-full justify-center transition-colors">
           <Save className="h-3 w-3" />
           {saved ? 'Tersimpan ✓' : loading ? '...' : 'Simpan'}
         </button>
