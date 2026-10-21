@@ -1,0 +1,34 @@
+# Update dependency PROAKTIF lewat PR otomatis — pelengkap `bun audit` yang reaktif (CI memblokir Critical).
+# Pola mengikuti smart-ai (.github/dependabot.yml). Saudinesia tidak punya branch `develop`, jadi PR ke `main`.
+version: 2
+updates:
+  - package-ecosystem: "npm" # Dependabot belum punya ecosystem "bun" native, tapi membaca package.json/lockfile dengan benar
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Minor/patch digabung jadi 1 PR (kurangi noise); major tetap terpisah per paket — sering breaking change.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: "chore"
+      include: "scope"
+
+  # Versi action di workflow (dipin ke tag, bukan SHA — lihat docs/lessons-learned.md SEC-11)
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "ci"
+
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore"

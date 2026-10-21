@@ -58,6 +58,15 @@ jobs:
       - name: Build
         run: bun run build
 
+      # Security check SOP (CLAUDE.md): Critical memblokir; high/moderate hanya peringatan sampai register temuan
+      # (docs/lessons-learned.md SEC-05) dibereskan — setelah itu naikkan ke --audit-level=high.
+      - name: Dependency audit - Critical memblokir
+        run: bun audit --audit-level=critical
+
+      - name: Dependency audit - ringkasan (peringatan, tidak memblokir)
+        run: bun audit
+        continue-on-error: true
+
       - name: Secret scan (lapis kedua, independen dari hook Claude Code)
         uses: gitleaks/gitleaks-action@v3
         env:
