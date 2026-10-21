@@ -47,15 +47,18 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, whatsapp: true, fullName: true } })
   if (!user) return []
 
-  const out: ChannelOutcome[] = []
   const deliver = (channel: 'whatsapp' | 'email', recipient: string, preview: string, send: () => Promise<SendOutcome>) =>
     deliverOne({ userId, bookingId, type: event.type, dedupe }, channel, recipient, preview, send)
+
+  // KEDUA KANAL BERJALAN PARALEL dan tidak saling menunggu: email adalah jaring pengaman. Gateway WhatsApp yang mati/lambat/diblokir
+  // (timeout 10 dtk × 3 percobaan + jeda ≈ 34 dtk) tidak boleh menunda atau menggagalkan email. Tiap kanal menulis log sendiri dan tidak melempar.
+  const tasks: Promise<ChannelOutcome>[] = []
 
   // WhatsApp — hanya bila kejadian punya pesan WA dan akun punya nomor WhatsApp (bukan nomor telepon biasa).
   const wa = waMessage(event)
   if (wa && user.whatsapp) {
     const phone = user.whatsapp
-    out.push(await deliver('whatsapp', phone, wa.slice(0, 200), async () => {
+    tasks.push(deliver('whatsapp', phone, wa.slice(0, 200), async () => {
       // Penjaga defensif: WhatsApp hanya untuk akun yang tercatat menyetujuinya (UU PDP) — jangan bergantung pada "kebetulan hanya dua jalur
       // yang mengisi nomor". Dan batas harian per NOMOR TUJUAN: nomor tak terverifikasi bisa milik orang lain; pesan beruntun ke orang yang
       // tak mengenal Saudinesia membahayakan nomor gateway (alasan lingkup WhatsApp diperkecil). Email tetap terkirim.
@@ -72,21 +75,35 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   // Email — hanya bila akun punya alamat yang bisa dituju. Email placeholder (`*.invalid`) tidak pernah dikirimi.
   if (isDeliverableEmail(user.email)) {
     const email = user.email
-    const setting = await prisma.siteSetting.findFirst({ select: { emailNotificationsEnabled: true } })
-    const content = emailContent(event, { name: user.fullName.trim(), bookingId })
-    if (setting && !setting.emailNotificationsEnabled) {
-      out.push(await deliver('email', email, content.subject, async () => ({ status: 'skipped', reason: 'Notifikasi email dinonaktifkan di pengaturan admin' })))
-    } else {
-      out.push(
-        await deliver('email', email, content.subject, () =>
-          // Kunci idempotensi per pemanggilan: retry di dalam sendEmail tidak bisa mengirim ganda; pengiriman terpisah yang
-          // memang diinginkan (mis. bukti ditolak dua kali) tidak ikut tertelan.
-          sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, idempotencyKey: randomUUID() }),
-        ),
+    tasks.push((async () => {
+      const setting = await prisma.siteSetting.findFirst({ select: { emailNotificationsEnabled: true } })
+      const content = emailContent(event, { name: user.fullName.trim(), bookingId })
+      if (setting && !setting.emailNotificationsEnabled) {
+        return deliver('email', email, content.subject, async () => ({ status: 'skipped' as const, reason: 'Notifikasi email dinonaktifkan di pengaturan admin' }))
+      }
+      return deliver('email', email, content.subject, () =>
+        // Kunci idempotensi per pemanggilan: retry di dalam sendEmail tidak bisa mengirim ganda; pengiriman terpisah yang
+        // memang diinginkan (mis. bukti ditolak dua kali) tidak ikut tertelan.
+        sendEmail({ to: email, subject: content.subject, html: content.html, text: content.text, idempotencyKey: randomUUID() }),
       )
-    }
+    })())
   }
 
+  // allSettled: galat tak terduga di satu kanal (mis. query DB) tidak boleh membuang hasil kanal lain.
+  const settled = await Promise.allSettled(tasks)
+  const out: ChannelOutcome[] = []
+  for (const r of settled) {
+    if (r.status === 'fulfilled') out.push(r.value)
+    else console.error('[notify] satu kanal gagal tak terduga:', safeErr(r.reason))
+  }
+
+  // Peringatan keras bila TIDAK ADA kanal yang sampai (mis. WhatsApp mati DAN email dimatikan/belum dikonfigurasi): pengguna tidak
+  // mendapat pemberitahuan apa pun. Tanpa PII — hanya jenis kejadian.
+  if (out.length > 0 && !out.some((o) => o.status === 'sent' || o.status === 'duplicate')) {
+    console.error(`[notify] TIDAK ADA kanal yang terkirim untuk kejadian ${event.type}: ${out.map((o) => `${o.channel}=${o.status}`).join(' ')}`)
+  } else if (out.length === 0) {
+    console.error(`[notify] TIDAK ADA kanal yang bisa dituju untuk kejadian ${event.type} (tanpa email yang valid dan tanpa WhatsApp)`)
+  }
   return out
 }
 
