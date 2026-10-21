@@ -17,6 +17,7 @@ export const LIMITS = {
   loginAcct:      { limit: 30, windowSec: 3600 }, // GAGAL login per akun, dari mana pun (brute-force terdistribusi)
   authEmailSendEmail: { limit: 3,  windowSec: 600 },  // email auth (daftar / lupa password) ke SATU alamat — cegah spam ke korban & kuota Resend
   authEmailSendIp:    { limit: 10, windowSec: 3600 }, // permintaan yang memicu email auth per IP
+  googleIp:           { limit: 30, windowSec: 600 },  // start/callback/complete login Google per IP (menahan pembuatan akun massal & pemanggilan token endpoint Google)
   authTokenIp:        { limit: 30, windowSec: 600 },  // pratinjau/penyelesaian tautan per IP (token 256-bit tak bisa ditebak; ini pembatas kasar)
   resetIp:        { limit: 10, windowSec: 3600 }, // reset password per IP
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)

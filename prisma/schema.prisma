@@ -19,6 +19,8 @@ model User {
   whatsapp        String?
   // Bukti email milik pemilik akun (tautan verifikasi / reset password / Google). Login mensyaratkan ini DAN isActive.
   emailVerifiedAt DateTime?
+  // Identitas Google (klaim `sub` ID token — stabil, TIDAK berubah walau emailnya berubah). Hanya jamaah; staf tak pernah tersambung.
+  googleSub       String?   @unique
   role            UserRole  @default(pilgrim)
   // Hanya "boleh login (tidak dinonaktifkan admin)" — BUKAN lagi penanda "belum verifikasi" (itu emailVerifiedAt).
   isActive        Boolean   @default(true)

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { safeLocale } from '@/lib/utils/locale'
 import { getSession } from '@/lib/auth/session'
 import { CompleteRegistrationForm } from './CompleteRegistrationForm'
 
@@ -11,7 +12,7 @@ export default async function CompleteRegistrationPage({
   const { locale } = await params
   const { token } = await searchParams
   const session = await getSession()
-  if (session) redirect(`/${locale}/dashboard`)
+  if (session) redirect(`/${safeLocale(locale)}/dashboard`)
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
       <CompleteRegistrationForm locale={locale} token={typeof token === 'string' ? token : ''} />

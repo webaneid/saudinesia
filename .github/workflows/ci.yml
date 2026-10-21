@@ -186,6 +186,33 @@ jobs:
           $C exec -T redis redis-cli --scan --pattern 'rl:*' | tee /tmp/rl-keys.txt
           grep -q 'rl:loginAcctIp:' /tmp/rl-keys.txt || { echo "kunci rate limit TIDAK ada di Redis — limiter jatuh ke memori"; exit 1; }
 
+      # Auth email + Google di image produksi (tanpa kredensial Resend/Google — itu justru kondisi yang harus aman): pendaftaran & lupa password
+      # membalas seragam, tautan/token tak terbaca dari respons, rute OTP lama sudah tidak ada, Google mati dengan sopan, dan pengaman callback
+      # (state/cookie) menolak. Pengaman yang hanya hidup di rute ini tidak tercakup uji skrip — ini penutupnya.
+      - name: Smoke - auth email dan Google di image produksi
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          $C exec -T web bun -e "
+            const base = 'http://localhost:3000/api/v1/auth'
+            const post = (path, body) => fetch(base + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+            const get = (path) => fetch(base + path, { redirect: 'manual' })
+            const fail = (m) => { console.log('GAGAL:', m); process.exit(1) }
+            const reg = { fullName: 'Uji CI', email: 'ci-daftar@example.test', phone: '628111222333', whatsapp: '628111222333', locale: 'id' }
+            let r = await post('/register', reg); let j = await r.json()
+            if (r.status !== 200 || JSON.stringify(j) !== '{\"success\":true,\"data\":{\"sent\":true}}') fail('register harus {sent:true}, dapat ' + r.status + JSON.stringify(j))
+            r = await post('/register', { ...reg, password: 'x' }); if (r.status !== 400) fail('register menerima field password: ' + r.status)
+            r = await post('/forgot-password', { email: 'tidak-ada@example.test' }); j = await r.json()
+            if (r.status !== 200 || j.data?.sent !== true) fail('forgot-password harus seragam: ' + r.status)
+            r = await post('/registration/preview', { token: 'x'.repeat(43) }); if (r.status !== 404) fail('preview token ngawur harus 404: ' + r.status)
+            r = await post('/registration/complete', { token: 'x'.repeat(43), password: 'Sandi-Kuat1!', privacyConsent: true, whatsappConsent: true }); if (r.status !== 401) fail('complete token ngawur harus 401: ' + r.status)
+            for (const p of ['/verify-phone', '/verify-reset-otp']) { r = await post(p, {}); if (r.status !== 404) fail(p + ' seharusnya sudah tidak ada: ' + r.status) }
+            r = await get('/google/start?locale=id'); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('error=google_unavailable')) fail('google/start tanpa kredensial: ' + r.status + ' ' + r.headers.get('location'))
+            r = await get('/google/callback?code=x&state=y'); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('error=google_failed')) fail('google/callback tanpa cookie state: ' + r.status + ' ' + r.headers.get('location'))
+            r = await post('/google/complete', { fullName: 'Uji CI', privacyConsent: true }); if (r.status !== 401) fail('google/complete tanpa cookie harus 401: ' + r.status)
+            r = await fetch('http://localhost:3000/id/login'); const html = await r.text(); if (html.includes('Masuk dengan Google')) fail('tombol Google tampil tanpa kredensial')
+            console.log('OK: auth email + Google aman di image produksi')
+          "
+
       - name: Log layanan (hanya bila gagal)
         if: failure()
         run: docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy logs --no-color --tail=120
