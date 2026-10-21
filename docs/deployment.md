@@ -70,6 +70,10 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
   langkah manual `mc mb`.
 - `Dockerfile` lama: `COPY bun.lockb*` tidak menyalin `bun.lock`; tanpa `openssl` (Prisma salah mendeteksi libssl di image
   slim); tanpa jalur migrasi; root user.
+- **`sitemap.xml` dibuat dinamis** (`export const dynamic = 'force-dynamic'`): sitemap membaca hotel/muthowif dari DB, tapi
+  di-prerender statis saat `next build` — gagal di image Docker (tidak ada database saat build; ditemukan job `docker` CI)
+  dan, kalaupun berhasil, isinya membeku pada data saat build. Diverifikasi: build dengan `DATABASE_URL` kosong lolos dan
+  sitemap hasil build memuat 5 hotel + 3 muthowif yang sama dengan DB.
 - `CRON_SECRET` dihapus dari `.env.example` — tidak dibaca kode mana pun (rute cron HTTP sudah dihapus).
 
 ### Yang masih memakai pola smart-ai tapi BELUM ada di sini

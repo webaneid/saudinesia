@@ -1,6 +1,11 @@
 import type { MetadataRoute } from 'next'
 import { prisma } from '@/lib/db'
 
+// Dibaca dari DB (hotel & muthowif aktif): harus dirender saat REQUEST. Tanpa ini Next meng-prerender sitemap saat
+// `next build` — gagal di image Docker (tidak ada database saat build) dan, kalaupun berhasil, isinya membeku pada
+// data saat build sehingga hotel baru tidak pernah masuk.
+export const dynamic = 'force-dynamic'
+
 const LOCALES = ['id', 'en'] as const
 
 const CATALOG_PATHS = [
