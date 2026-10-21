@@ -10,12 +10,17 @@ export type NotificationEvent =
   | { type: 'payment_rejected'; code: string }
   | { type: 'auto_cancelled'; code: string }
   | { type: 'visa_status_change'; code: string; status: string }
+  | { type: 'contact_changed' }
   | { type: 'welcome'; name: string }
   | { type: 'test' }
 
 export type NotificationType = NotificationEvent['type']
 
-/** Pesan WhatsApp untuk kejadian ini; `null` = kejadian ini tidak dikirim lewat WhatsApp (welcome, test). */
+/**
+ * Pesan WhatsApp untuk kejadian ini; `null` = TIDAK dikirim lewat WhatsApp. Lingkup sengaja kecil (keputusan produk 2026-10-21, ADR-0001 —
+ * gateway pihak ketiga makin sering memblokir): hanya konfirmasi booking, pengingat pembayaran, dan pembayaran dikonfirmasi/ditolak.
+ * Status visa dan pembatalan otomatis hanya lewat email; ditinjau lagi nanti.
+ */
 export function waMessage(e: NotificationEvent): string | null {
   switch (e.type) {
     case 'booking_submitted':
@@ -28,9 +33,8 @@ export function waMessage(e: NotificationEvent): string | null {
     case 'payment_rejected':
       return waTemplates.paymentRejected(e.code)
     case 'auto_cancelled':
-      return waTemplates.autoCancelled(e.code)
     case 'visa_status_change':
-      return waTemplates.visaStatusChange(e.code, e.status)
+    case 'contact_changed':
     case 'welcome':
     case 'test':
       return null

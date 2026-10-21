@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
 import { COUNTRIES } from '@/lib/constants/countries'
 import { isoToFlagEmoji } from '@/lib/utils/flag'
+import { splitE164 } from '@/lib/utils/phone'
 
 export type ContactValue = {
   phoneCountryCode: string
@@ -21,6 +22,17 @@ export const EMPTY_CONTACT: ContactValue = {
   whatsappCountryCode: 'ID',
   whatsapp: '',
   email: '',
+}
+
+/** Isi komponen dari nomor E.164 yang tersimpan di akun (kosong → default Indonesia; WhatsApp mengikuti telepon bila belum ada). */
+export function contactFromStored(phone: string, whatsapp: string): ContactValue {
+  const p = phone ? splitE164(phone) : null
+  const w = whatsapp ? splitE164(whatsapp) : null
+  return {
+    ...EMPTY_CONTACT,
+    phoneCountryCode: p?.countryCode ?? 'ID', phone: p?.local ?? '',
+    whatsappCountryCode: w?.countryCode ?? p?.countryCode ?? 'ID', whatsapp: w?.local ?? p?.local ?? '',
+  }
 }
 
 // docs/arsitektur-komponen-kontak.md §3.2 — "Sama dengan nomor HP" TIDAK disimpan sebagai

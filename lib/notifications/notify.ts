@@ -31,6 +31,8 @@ type SendOutcome =
   | { status: 'failed'; error: string }
 
 const MAX_ERROR_LENGTH = 300
+/** Tiap booking memicu 3 WhatsApp (konfirmasi + 2 pengingat) + hasil pembayaran: 10 cukup untuk pemakaian wajar. */
+const WA_MAX_PER_NUMBER_PER_DAY = 10
 
 export async function notify(input: NotifyInput): Promise<ChannelOutcome[]> {
   try {
@@ -53,7 +55,18 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   const wa = waMessage(event)
   if (wa && user.whatsapp) {
     const phone = user.whatsapp
-    out.push(await deliver('whatsapp', phone, wa.slice(0, 200), () => whatsapp.sendMessage({ phone, message: wa })))
+    out.push(await deliver('whatsapp', phone, wa.slice(0, 200), async () => {
+      // Penjaga defensif: WhatsApp hanya untuk akun yang tercatat menyetujuinya (UU PDP) — jangan bergantung pada "kebetulan hanya dua jalur
+      // yang mengisi nomor". Dan batas harian per NOMOR TUJUAN: nomor tak terverifikasi bisa milik orang lain; pesan beruntun ke orang yang
+      // tak mengenal Saudinesia membahayakan nomor gateway (alasan lingkup WhatsApp diperkecil). Email tetap terkirim.
+      const consented = await prisma.consentLog.findFirst({ where: { userId, type: 'whatsapp_notifications' }, select: { id: true } })
+      if (!consented) return { status: 'skipped' as const, reason: 'Belum ada persetujuan notifikasi WhatsApp' }
+      const sentToday = await prisma.notificationLog.count({
+        where: { channel: 'whatsapp', recipient: phone, status: { in: ['sent', 'failed'] }, sentAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+      })
+      if (sentToday >= WA_MAX_PER_NUMBER_PER_DAY) return { status: 'skipped' as const, reason: 'Batas pesan WhatsApp per nomor per hari tercapai' }
+      return whatsapp.sendMessage({ phone, message: wa })
+    }))
   }
 
   // Email — hanya bila akun punya alamat yang bisa dituju. Email placeholder (`*.invalid`) tidak pernah dikirimi.

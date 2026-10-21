@@ -210,6 +210,11 @@ jobs:
             r = await get('/google/callback?code=x&state=y'); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('error=google_failed')) fail('google/callback tanpa cookie state: ' + r.status + ' ' + r.headers.get('location'))
             r = await post('/google/complete', { fullName: 'Uji CI', privacyConsent: true }); if (r.status !== 401) fail('google/complete tanpa cookie harus 401: ' + r.status)
             r = await fetch('http://localhost:3000/id/login'); const html = await r.text(); if (html.includes('Masuk dengan Google')) fail('tombol Google tampil tanpa kredensial')
+            r = await fetch(base + '/contact', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '628111222333', whatsapp: '628111222333', whatsappConsent: true }) })
+            if (r.status !== 401) fail('PUT /auth/contact tanpa sesi harus 401: ' + r.status)
+            r = await fetch('http://localhost:3000/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+            if (r.status !== 401) fail('POST /bookings tanpa sesi harus 401: ' + r.status)
+            r = await fetch('http://localhost:3000/id/lengkapi-data', { redirect: 'manual' }); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('/id/login')) fail('lengkapi-data tanpa sesi harus ke login: ' + r.status)
             console.log('OK: auth email + Google aman di image produksi')
           "
 

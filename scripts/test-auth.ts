@@ -9,7 +9,10 @@ import { completeRegistration, previewRegistration, requestPasswordReset, reques
 import { hashToken, issueToken, peekToken } from '@/lib/auth/tokens'
 import { sendAuthEmail } from '@/lib/auth/authEmail'
 import { completeRegistrationSchema, registerSchema } from '@/lib/validators/auth'
-import { maskE164 } from '@/lib/utils/phone'
+import { e164FromCountry, maskE164, splitE164 } from '@/lib/utils/phone'
+import { isContactComplete, requireContactForBooking, updateContact } from '@/lib/auth/contact'
+import { readFileSync } from 'node:fs'
+import { contactSchema } from '@/lib/validators/auth'
 import { startFakeServer, type FakeRequest } from './lib/fakeServer'
 
 const url = process.env.DATABASE_URL ?? ''
@@ -196,6 +199,101 @@ await t('akun dinonaktifkan SETELAH tautan terbit tidak bisa direset; jenis toke
   const uid = (await makeUser(email())).id
   const resetTok = await issueToken({ type: 'password_reset', userId: uid })
   assert.deepEqual(await completeRegistration(resetTok, strong), { ok: false, reason: 'invalid' })
+})
+
+console.log('== kontak (Lengkapi data) ==')
+
+await t('isContactComplete: butuh telepon DAN WhatsApp', () => {
+  assert.equal(isContactComplete({ phone: '628111', whatsapp: '628111' }), true)
+  assert.equal(isContactComplete({ phone: null, whatsapp: '628111' }), false)
+  assert.equal(isContactComplete({ phone: '628111', whatsapp: null }), false)
+  assert.equal(isContactComplete({ phone: '', whatsapp: '' }), false)
+  return Promise.resolve()
+})
+
+await t('e164FromCountry <-> splitE164: nomor Indonesia, luar negeri, kode terpanjang menang, tak dikenal → Indonesia', async () => {
+  assert.equal(e164FromCountry('ID', '0812 3456 7890'), '6281234567890')
+  assert.equal(e164FromCountry('SA', '055 123 4567'), '966551234567')
+  assert.equal(e164FromCountry('ZZ', '812'), '') // negara tak dikenal
+  assert.equal(e164FromCountry('ID', ''), '')
+  assert.deepEqual(splitE164('6281234567890'), { countryCode: 'ID', local: '81234567890' })
+  assert.deepEqual(splitE164('966551234567'), { countryCode: 'SA', local: '551234567' })
+  assert.equal(splitE164('12684567890').countryCode, 'AG') // +1268 (Antigua) menang atas +1 (AS)
+  assert.deepEqual(splitE164(''), { countryCode: 'ID', local: '' })
+  for (const [cc, local] of [['ID', '81234567890'], ['SA', '551234567'], ['MY', '123456789']] as const) {
+    const back = splitE164(e164FromCountry(cc, local))
+    assert.deepEqual(back, { countryCode: cc, local }, cc) // pulang-pergi (dipakai mengisi ulang form dari data tersimpan)
+  }
+})
+
+await t('contactSchema: E.164, .strict(); whatsappConsent opsional', async () => {
+  assert.equal(contactSchema.safeParse({ phone: '6281234567890', whatsapp: '6281234567890' }).success, true)
+  assert.equal(contactSchema.safeParse({ phone: '6281234567890', whatsapp: '6281234567890', whatsappConsent: true }).success, true)
+  for (const bad of [{ phone: '1234567890123456', whatsapp: '6281234567890' }, { phone: '62812345678AB', whatsapp: '6281234567890' }, { phone: '6281234567890', whatsapp: '62812 345678' }, { phone: '081234567890', whatsapp: '6281234567890' }, { phone: '+6281234567890', whatsapp: '6281234567890' }, { phone: '6281234567890', whatsapp: '123' }, { phone: '6281234567890' }, { phone: '6281234567890', whatsapp: '6281234567890', role: 'admin' }]) {
+    assert.equal(contactSchema.safeParse(bad).success, false, JSON.stringify(bad))
+  }
+})
+
+await t('updateContact: akun tanpa persetujuan WA → wajib whatsappConsent; dicatat SEKALI; ubah nomor berikutnya tanpa meminta ulang', async () => {
+  const u = await makeUser(email())
+  const input = { phone: '6281234567890', whatsapp: '6289876543210' }
+  assert.deepEqual(await updateContact(u.id, input), { ok: false, reason: 'consent_required' })
+  assert.deepEqual(await updateContact(u.id, { ...input, whatsappConsent: false }), { ok: false, reason: 'consent_required' })
+  let row = await prisma.user.findUniqueOrThrow({ where: { id: u.id } })
+  assert.equal(row.phone, null) // penolakan tidak menyimpan apa pun
+  assert.equal((await updateContact(u.id, { ...input, whatsappConsent: true })).ok, true)
+  row = await prisma.user.findUniqueOrThrow({ where: { id: u.id } })
+  assert.equal(row.phone, input.phone); assert.equal(row.whatsapp, input.whatsapp)
+  assert.equal(await prisma.consentLog.count({ where: { userId: u.id, type: 'whatsapp_notifications' } }), 1)
+  assert.equal((await updateContact(u.id, { phone: '966551234567', whatsapp: '966551234567' })).ok, true) // tanpa persetujuan baru
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).whatsapp, '966551234567')
+  assert.equal((await updateContact(u.id, { ...input, whatsappConsent: true })).ok, true)
+  assert.equal(await prisma.consentLog.count({ where: { userId: u.id, type: 'whatsapp_notifications' } }), 1) // tidak dobel
+})
+
+await t('BALAPAN: dua updateContact bersamaan dari akun tanpa persetujuan → ConsentLog tepat satu', async () => {
+  const u = await makeUser(email())
+  const input = { phone: '6281234567890', whatsapp: '6281234567890', whatsappConsent: true }
+  const rs = await Promise.all([updateContact(u.id, input), updateContact(u.id, { ...input, phone: '6281111111111' }), updateContact(u.id, input)])
+  assert.ok(rs.every((r) => r.ok))
+  assert.equal(await prisma.consentLog.count({ where: { userId: u.id, type: 'whatsapp_notifications' } }), 1)
+})
+
+await t('updateContact.changed: pengisian pertama BUKAN perubahan; nomor yang sudah ada berganti = changed (pemilik diberi tahu); sama = tidak', async () => {
+  const u = await makeUser(email())
+  const first = await updateContact(u.id, { phone: '6281234567890', whatsapp: '6281234567890', whatsappConsent: true })
+  assert.deepEqual(first, { ok: true, changed: false })
+  assert.deepEqual(await updateContact(u.id, { phone: '6281234567890', whatsapp: '6281234567890' }), { ok: true, changed: false })
+  assert.deepEqual(await updateContact(u.id, { phone: '6281234567890', whatsapp: '6289999999999' }), { ok: true, changed: true })
+  assert.deepEqual(await updateContact(u.id, { phone: '966551234567', whatsapp: '6289999999999' }), { ok: true, changed: true })
+})
+
+await t('requireContactForBooking: jamaah tanpa kontak ditolak; lengkap lolos; staf tak terkena; akun tak ada ditolak', async () => {
+  const none = await makeUser(email())
+  const onlyPhone = await makeUser(email(), { phone: '6281234567890' })
+  const full = await makeUser(email(), { phone: '6281234567890', whatsapp: '6281234567890' })
+  assert.equal(await requireContactForBooking(none.id, 'pilgrim'), false)
+  assert.equal(await requireContactForBooking(onlyPhone.id, 'pilgrim'), false)
+  assert.equal(await requireContactForBooking(full.id, 'pilgrim'), true)
+  assert.equal(await requireContactForBooking(none.id, 'admin'), true)
+  assert.equal(await requireContactForBooking('tidak-ada', 'pilgrim'), false)
+})
+
+await t('route POST /bookings memanggil requireContactForBooking SEBELUM membaca body dan SEBELUM efek samping (penjaga tak boleh terhapus diam-diam)', async () => {
+  const src = readFileSync(new URL('../app/api/v1/bookings/route.ts', import.meta.url), 'utf8')
+  const post = src.slice(src.indexOf('export async function POST'))
+  const guard = post.indexOf('requireContactForBooking(')
+  assert.ok(guard > 0, 'penjaga hilang dari POST /bookings')
+  assert.ok(guard < post.indexOf('request.json()'), 'penjaga harus sebelum membaca body')
+  assert.ok(guard < post.indexOf('prisma.$transaction'), 'penjaga harus sebelum transaksi/efek samping')
+  assert.match(post, /status: 422/)
+})
+
+await t('updateContact: pengguna daftar manual (sudah menyetujui saat menyelesaikan) tidak ditanya lagi; akun tak ada → not_found', async () => {
+  const e = email(); const token = await pending(e); await completeRegistration(token, strong)
+  const u = await prisma.user.findUniqueOrThrow({ where: { email: e } })
+  assert.equal((await updateContact(u.id, { phone: '6281111111111', whatsapp: '6281111111111' })).ok, true)
+  assert.deepEqual(await updateContact('tidak-ada', { phone: '6281111111111', whatsapp: '6281111111111', whatsappConsent: true }), { ok: false, reason: 'not_found' })
 })
 
 console.log('== email auth ==')

@@ -1,0 +1,48 @@
+import type { UserRole } from '@prisma/client'
+import { prisma } from '@/lib/db'
+import { WHATSAPP_CONSENT_VERSION } from '@/lib/constants/legal'
+
+// Data kontak akun (docs/arsitektur-auth.md §3.5). Telepon & WhatsApp: digit E.164, tidak diverifikasi, tidak unik.
+
+export function isContactComplete(u: { phone: string | null; whatsapp: string | null }): boolean {
+  return Boolean(u.phone && u.whatsapp)
+}
+
+/**
+ * Penegakan di SERVER (gerbang UI saja tidak cukup): jamaah wajib punya telepon + WhatsApp sebelum membuat booking, karena
+ * notifikasi bergantung padanya. Staf tidak terkena. Dipanggil route `POST /bookings` SEBELUM membaca body / efek samping apa pun.
+ */
+export async function requireContactForBooking(userId: string, role: UserRole): Promise<boolean> {
+  if (role !== 'pilgrim') return true
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { phone: true, whatsapp: true } })
+  return Boolean(user && isContactComplete(user))
+}
+
+export type ContactUpdate =
+  | { ok: true; changed: boolean }
+  | { ok: false; reason: 'consent_required' | 'not_found' }
+
+/**
+ * Simpan telepon + WhatsApp. Persetujuan notifikasi WhatsApp WAJIB diberikan sekali (dicatat di ConsentLog, UU PDP): bila akun belum
+ * punya catatannya (mis. pengguna Google baru), `whatsappConsent` harus true; setelah itu pengubahan nomor tidak meminta ulang.
+ * `changed` = nomor yang SUDAH ada berganti (pengisian pertama bukan perubahan) — pemanggil memberi tahu pemilik lewat email.
+ */
+export async function updateContact(userId: string, input: { phone: string; whatsapp: string; whatsappConsent?: boolean }): Promise<ContactUpdate> {
+  return prisma.$transaction(async (tx) => {
+    // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE. Kunci baris pengguna menserialkan dua pembaruan paralel milik akun yang
+    // sama — tanpa ini dua PUT bersamaan sama-sama melihat "belum ada persetujuan" dan mencatatnya dua kali.
+    const locked = await tx.$queryRaw<{ phone: string | null; whatsapp: string | null }[]>`SELECT "phone", "whatsapp" FROM "users" WHERE "id" = ${userId} FOR UPDATE`
+    const before = locked[0]
+    if (!before) return { ok: false as const, reason: 'not_found' as const }
+
+    const consented = await tx.consentLog.findFirst({ where: { userId, type: 'whatsapp_notifications' }, select: { id: true } })
+    if (!consented) {
+      if (input.whatsappConsent !== true) return { ok: false as const, reason: 'consent_required' as const }
+      await tx.consentLog.create({ data: { userId, type: 'whatsapp_notifications', version: WHATSAPP_CONSENT_VERSION } })
+    }
+    await tx.user.update({ where: { id: userId }, data: { phone: input.phone, whatsapp: input.whatsapp } })
+
+    const changed = Boolean((before.phone && before.phone !== input.phone) || (before.whatsapp && before.whatsapp !== input.whatsapp))
+    return { ok: true as const, changed }
+  })
+}
