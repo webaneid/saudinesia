@@ -20,7 +20,7 @@ Sumber: security review pertama, 2026-10-21 (audit mekanis 125 `route.ts` + pemb
 | SEC-01 | **Critical** | Selesai 2026-10-21 | Next.js 15.5.18: 2 advisory critical (RCE tanpa autentikasi di Image Optimization API; RCE di server Windows) + 3 high (DoS Server Actions, 2× SSRF). Diperbaiki dengan `next` → 15.5.28 (`bun audit --audit-level=critical` kini bersih) | `package.json`, `bun.lock` | ya |
 | SEC-02 | **High** | Selesai 2026-10-21 | Perilaku dev **fail-open**: `isDev = NODE_ENV !== 'production'` membuat OTP tampil di response HTTP (`devCode`) dan **tidak dikirim lewat WhatsApp** di lingkungan mana pun yang NODE_ENV-nya salah/kosong; `forgot-password` + `verify-reset-otp` + `reset-password` = pengambilalihan akun siapa pun. `GET /api/v1/dev/otp` dan bypass `checkRateLimit` punya pola sama. Kini hanya `NODE_ENV === 'development'` persis | `auth/register`, `auth/forgot-password`, `dev/otp`, `lib/auth/otp.ts` | ya |
 | SEC-03 | Medium | Selesai 2026-10-21 | Mass assignment: `prisma.hajiProduct.update({ data: body })` (manager) dan `prisma.user.update({ data: body })` (superadmin) — body mentah bisa mengubah `bookedQuota`/`pendingQuota`, `passwordHash`, `resetToken`, `email`, dst. Diganti skema Zod `.strict()` (`lib/validators/adminUpdates.ts`); `totalQuota` tak boleh di bawah kuota terpesan | `admin/products/haji/[id]`, `admin/system/users/[id]` | ya |
-| SEC-04 | **High** | **Terbuka** | **Tidak ada rate limit** di `login`, `register`, `forgot-password`, `reset-password`, `verify-phone`, `verify-reset-otp`. `checkRateLimit()` (3 OTP/10 menit/nomor) **tidak dipanggil di mana pun** — dead code; padahal `CLAUDE.md` menyatakannya aktif. Verifikasi OTP tidak membatasi percobaan salah → kode 6 digit bisa di-brute-force dalam TTL 5 menit. `checkRateLimit` juga *fail-open* bila Redis mati. Caddy tidak punya rate limit bawaan → harus di aplikasi | `lib/auth/otp.ts`, `app/api/v1/auth/*` | ya |
+| SEC-04 | **High** | **Selesai 2026-10-21** (jalur Redis menunggu hasil CI) | ~~Tidak ada rate limit~~ di `login`, `register`, `forgot-password`, `reset-password`, `verify-phone`, `verify-reset-otp`; `checkRateLimit()` tidak dipanggil siapa pun; OTP 6 digit bisa di-brute-force. Kini `lib/auth/rateLimit.ts` (Redis + fallback memori, Lua atomik) dipasang di keenam rute dengan batas per IP, per akun, per nomor/email, dan batas percobaan salah OTP (OTP dibatalkan di kegagalan ke-5). Angka & perilaku: `architecture-security.md` § 6. Terbukti lokal: 14 uji unit (memori + Redis mati), uji mutasi, 43 dari 44 pemeriksaan HTTP terhadap server berjalan lolos (1 gagal karena premis uji keliru, lalu jalur itu diuji lewat pemanggilan handler langsung). **Dibuktikan di CI**: uji dengan Redis nyata (`validate`) dan limiter di image produksi + kunci ada di Redis (`docker`) | `lib/auth/rateLimit.ts`, `lib/auth/otpVerify.ts`, `app/api/v1/auth/*` | ya |
 | SEC-05 | **High** | **Terbuka** | 17 advisory high tersisa di dependency (34 total: 17 high, 15 moderate, 2 low). Perlu triase *runtime vs build-time*: `sharp` via Next (libvips/librsvg — optimizer gambar; app memakai custom loader), `prosemirror-view` (XSS pada paste — editor Tiptap), `markdown-it`/`linkify-it` (DoS kuadratik), serta tooling build (`browserslist`, `postcss`, `braces`, `nanoid`, `source-map-js`). Dependabot kini dipasang | `bun.lock` | ya |
 | SEC-06 | Medium | Selesai 2026-10-21 (sebagian) | Tidak ada `Content-Security-Policy`/`frame-ancestors` dari aplikasi; domain aplikasi bisa di-frame pihak lain (clickjacking). `Caddyfile` kini memasang `frame-ancestors 'self'` untuk domain aplikasi. **CSP penuh (script-src dst.) belum** — Tiptap/Next butuh nonce; kerjakan sebagai fase sendiri | `Caddyfile`, `next.config.ts` | sebagian |
 | SEC-07 | Medium | Terbuka | 11 rute **stub** `ok(null)` yang menerima semua method **tanpa auth** dan membalas sukses (POST → 201) tanpa melakukan apa pun: `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/bookings/[id]/status`, `admin/notifications`, `admin/reports`, `groups`, `groups/[id]`, `groups/[id]/invite`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`. Tidak membocorkan data, tapi menyesatkan (klien mengira berhasil) dan memperlebar permukaan serang. `groups`/`pilgrims` mungkin kerangka modul Group Booking — putuskan hapus atau beri auth + 501 | `app/api/v1/…` | ya |
@@ -30,6 +30,8 @@ Sumber: security review pertama, 2026-10-21 (audit mekanis 125 `route.ts` + pemb
 | SEC-11 | Low | Terbuka | GitHub Actions dipin ke tag (`@v7`), bukan commit SHA → rentan supply-chain bila tag dipindah. Dependabot (mingguan, termasuk `github-actions`) kini membantu menaikkan versi | `.github/workflows/*` | tidak |
 | SEC-12 | Low | Terbuka | `PATCH /admin/deletion-requests/[id]` bisa memproses ulang permintaan yang sudah `completed`/`rejected` (menimpa `processedBy`/`processedAt` → jejak audit UU PDP berubah). Tambahkan guard `status = pending` | `admin/deletion-requests/[id]` | tidak |
 | SEC-13 | Low | Terbuka | Superadmin bisa menurunkan role / menonaktifkan **akunnya sendiri** atau superadmin terakhir lewat `PUT /admin/system/users/[id]` → terkunci dari sistem (pemulihan butuh `create-superadmin --additional`) | `admin/system/users/[id]` | ya |
+| SEC-14 | Low | Terbuka | Lockout-DoS: penyerang terdistribusi dapat mengunci login satu akun (30 gagal/jam) atau forgot-password satu email (3/10 mnt) — kompromi inheren rate limit. Belum ada buka-kunci oleh admin / CAPTCHA. Bila jadi masalah: tombol "reset pembatasan" superadmin (`reset()` sudah ada) | `lib/auth/rateLimit.ts` | tidak |
+| SEC-15 | Low | Terbuka | `forgot-password` masih membedakan respons "email punya nomor WA terverifikasi" (`masked: '0812***789'`) dari "tidak" (`masked: null`) → enumerasi email terdaftar (kini dibatasi 10 permintaan/IP/jam, tapi tidak hilang). Samakan bentuk respons | `auth/forgot-password` | ya |
 
 **Tidak bisa diverifikasi dari kode** (perlu cek manual saat server ada): hardening SSH/firewall VPS, rahasia GitHub Actions
 benar-benar hanya di Secrets, izin akses repo, apakah WAF/CDN dipakai, dan perilaku `X-Forwarded-For` di balik proxy sungguhan.
@@ -94,3 +96,18 @@ akunnya sendiri.
 
 **Pencegahan:** `scripts/create-superadmin.ts` menolak password > 72 byte (batas asli bcrypt). Kompatibilitas hash antar
 library diuji dulu sebelum skrip ditulis, bukan diasumsikan.
+
+---
+
+## 2026-10-21 — Rate limit: yang diuji harus bisa gagal, dan "tidak ada header" belum tentu "tidak ada IP"
+
+**Masalah:** (1) satu uji HTTP (login tanpa `X-Forwarded-For` mengharapkan hanya batas akun yang berlaku) gagal; (2) Redis tidak
+terpasang di mesin dev sehingga jalur Redis (termasuk skrip Lua atomik — bagian paling berisiko) tidak bisa diuji lokal.
+
+**Penyebab:** (1) Next.js mengisi `x-forwarded-for` dari alamat koneksi (`::1`) bila header tidak ada — kodenya benar, premis uji
+salah; jalur `ip = null` baru teruji dengan memanggil handler langsung. (2) Memasang Redis hanya untuk uji berarti mengubah mesin
+pengguna.
+
+**Pencegahan:** uji diverifikasi bisa gagal (mutasi off-by-one membuat 5 uji merah, lalu dipulihkan); jalur yang tak bisa dijalankan
+lokal dibuktikan di CI dengan layanan nyata dan **pembacaan kunci lewat klien terpisah** (fallback diam-diam tidak boleh lolos
+sebagai hijau); status temuan ditulis jujur ("jalur Redis menunggu CI") sampai CI benar-benar hijau.

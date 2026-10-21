@@ -60,12 +60,10 @@ pembaca baru.
   Pesan error sama untuk "user tidak ada" dan "password salah" — sudah benar,
   mencegah email enumeration.
 - **Verifikasi akun**: WhatsApp OTP via GOWA saat registrasi, `User.isActive`
-  di-gate sampai OTP dikonfirmasi. **Rate limit OTP BELUM aktif**: fungsi
-  `checkRateLimit()` (3 request/nomor/10 menit, counter Redis) ada di
-  `lib/auth/otp.ts` tetapi **tidak dipanggil oleh route mana pun**, dan
-  verifikasi OTP tidak membatasi percobaan salah (kode 6 digit, TTL 5 menit) —
-  lihat § 6 dan `docs/lessons-learned.md` SEC-04. (Koreksi 2026-10-21: versi
-  sebelumnya menulis ini sebagai sudah berjalan.)
+  di-gate sampai OTP dikonfirmasi. Pengiriman & verifikasi OTP dibatasi oleh
+  `lib/auth/rateLimit.ts` (§ 6, SEC-04 Selesai). (Riwayat: sampai 2026-10-21 dokumen
+  ini menulis rate limit sudah berjalan padahal `checkRateLimit()` tidak dipanggil
+  siapa pun — fungsi itu kini dihapus.)
 - Session: JWT, disimpan `httpOnly; Secure; SameSite=Strict` cookie
   (`CLAUDE.md` § Security) — bukan localStorage.
 - Role check: `middleware.ts` cek `ADMIN_ROLES`/`SUPERADMIN_ROLES` di level
@@ -100,14 +98,28 @@ pembaca baru.
   `dangerouslySetInnerHTML`/`innerHTML` di kode (diverifikasi 2026-10-21), jadi XSS bergantung pada escaping React.
 
 ## 6. Rate Limiting
-**Belum ada — diverifikasi 2026-10-21 (SEC-04, High, Terbuka).**
-- `login`, `register`, `forgot-password`, `reset-password`, `verify-phone`, `verify-reset-otp`: tidak ada pembatasan
-  laju sama sekali (brute-force password admin/superadmin; spam pengiriman WhatsApp yang berbiaya).
-- `checkRateLimit()` di `lib/auth/otp.ts` tidak dipanggil siapa pun; selain itu ia *fail-open* bila Redis mati.
-- Verifikasi OTP tidak membatasi percobaan salah → kode 6 digit bisa ditebak dalam TTL 5 menit.
-- Caddy tidak punya rate limit bawaan (butuh plugin) → pembatasan harus di aplikasi (Redis counter), per nomor/email
-  **dan** per IP (`X-Forwarded-For` sudah ditimpa Caddy dengan alamat klien sebenarnya).
-Perbaikan dijadwalkan sebagai fase hardening, wajib Selesai sebelum go-live.
+**Aktif sejak SEC-04 (2026-10-21)** — `lib/auth/rateLimit.ts`, semua angka di `LIMITS` (satu tempat).
+
+| Endpoint | Batas |
+|---|---|
+| `auth/login` | semua percobaan per IP: 20 / 15 mnt · **gagal** per akun+IP: 5 / 15 mnt · **gagal** per akun (dari mana pun): 30 / jam. Hanya yang gagal dihitung; sukses mereset |
+| `auth/register` | pendaftaran per IP: 10 / jam · OTP per nomor: 3 / 10 mnt (dicek **sebelum** akun dibuat, supaya tidak ada akun setengah jadi) |
+| `auth/forgot-password` | per IP: 10 / jam · per email: 3 / 10 mnt — dihitung **sebelum** mencari akun dan sama untuk email ada/tidak (429 tidak membocorkan keberadaan) |
+| `auth/verify-phone`, `auth/verify-reset-otp` | percobaan per IP: 30 / 10 mnt · OTP **salah** per nomor: 5 / 15 mnt — pada kegagalan ke-5 OTP **dibatalkan** (tebakan sisa tak berguna). Meminta OTP baru mereset hitungan salah, jadi pengguna sah pulih |
+| `auth/reset-password` | per IP: 10 / jam |
+
+- **Penyimpanan**: counter jendela-tetap di Redis, atomik lewat skrip Lua (INCR + EXPIRE pada hit pertama; kunci tanpa
+  TTL disembuhkan). Redis tidak terjangkau → jatuh ke memori proses (aplikasi 1 replika), dengan circuit breaker 10 detik
+  agar tidak menunggu timeout tiap request. Redis mati **tidak** berarti pembatasan hilang; memori ter-reset saat restart.
+- **IP klien**: `X-Forwarded-For` yang **ditimpa Caddy** dengan alamat koneksi sebenarnya (tak bisa dipalsukan klien selama
+  container web tidak di-publish langsung — compose production tidak mem-publish port web). Tanpa IP yang valid, hanya batas
+  berbasis identitas yang berlaku. Next.js sendiri mengisi header ini dari alamat koneksi bila tidak ada (dev: `::1`).
+- **Identitas panjang** di-hash (> 128 karakter) supaya kunci tidak bisa digelembungkan; memori dibatasi 50.000 kunci.
+- **Dev**: `RATE_LIMIT_DISABLED=true` hanya berlaku bila `NODE_ENV=development` (fail-closed).
+- **Pengujian**: `bun run test` (`scripts/test-rate-limit.ts`) — memori, Redis mati, dan (di CI, `REDIS_TEST_URL`) Redis
+  sungguhan dengan pembacaan kunci lewat klien terpisah; job `docker` CI menguji limiter di image produksi dengan Redis nyata.
+- **Risiko sisa** (SEC-14/15): penyerang terdistribusi bisa mengunci login satu akun (30 gagal/jam) dan mengunci
+  forgot-password satu email (3/10 mnt) — kompromi umum "lockout vs brute-force"; belum ada mekanisme buka-kunci admin.
 
 ## 7. File Upload (MinIO)
 - Validasi MIME type + ukuran **server-side**: whitelist `image/jpeg`,

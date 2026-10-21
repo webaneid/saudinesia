@@ -27,6 +27,12 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+      # Redis sungguhan untuk menguji rate limiter (lib/auth/rateLimit.ts, skrip Lua atomik) — SEC-04.
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/saudinesia_ci
       # Nilai dummy khusus CI (bukan rahasia) — hanya agar `next build` tidak berhenti karena env kosong.
@@ -54,6 +60,11 @@ jobs:
         run: |
           bunx prisma migrate deploy
           bunx prisma migrate diff --from-url "$DATABASE_URL" --to-schema-datamodel prisma/schema.prisma --exit-code
+
+      # Rate limiter (SEC-04): memori, Redis mati, dan Redis SUNGGUHAN. Uji Redis membaca kunci lewat klien terpisah
+      # supaya fallback ke memori yang diam-diam tidak lolos sebagai "hijau".
+      - name: Uji rate limiter
+        run: REDIS_TEST_URL=redis://localhost:6379 bun run test
 
       - name: Build
         run: bun run build
@@ -154,6 +165,23 @@ jobs:
             echo "skrip seharusnya menolak superadmin kedua"; exit 1
           fi
           $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
+
+      # Rate limit login (SEC-04) di image produksi dengan Redis nyata: 5 gagal diizinkan, ke-6 harus 429, dan kuncinya
+      # harus benar-benar ada di Redis (bukan fallback memori).
+      - name: Smoke - rate limit login di image produksi (Redis)
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          attempt() {
+            $C exec -T web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': '198.51.100.7' }, body: JSON.stringify({ email: 'rl-ci@example.test', password: 'salah' }) }).then((r) => console.log(r.status))"
+          }
+          for i in 1 2 3 4 5; do
+            code=$(attempt)
+            [ "$code" = "401" ] || { echo "percobaan $i: harap 401, dapat $code"; exit 1; }
+          done
+          code=$(attempt)
+          [ "$code" = "429" ] || { echo "percobaan ke-6: harap 429, dapat $code"; exit 1; }
+          $C exec -T redis redis-cli --scan --pattern 'rl:*' | tee /tmp/rl-keys.txt
+          grep -q 'rl:loginAcctIp:' /tmp/rl-keys.txt || { echo "kunci rate limit TIDAK ada di Redis — limiter jatuh ke memori"; exit 1; }
 
       - name: Log layanan (hanya bila gagal)
         if: failure()

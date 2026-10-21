@@ -233,7 +233,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Message templates in `lib/notifications/templates/whatsapp.ts`, keyed by notification type and locale
 - Retry: 2 attempts, 2 s delay on network error — log failure to `notification_logs`, then continue
 - GOWA is best-effort: a WA failure must **never** block a booking confirmation or status update
-- OTP rate limit: **target** max 3 requests per phone number per 10 minutes via Redis counter (`checkRateLimit()` in `lib/auth/otp.ts`). **NOT enforced yet** — the function exists but no route calls it, and wrong OTP attempts are uncapped (docs/lessons-learned.md SEC-04, High, must be fixed before go-live)
+- Auth rate limiting: `lib/auth/rateLimit.ts` (Redis fixed-window counters, atomic Lua; falls back to in-process memory when Redis is unreachable — the app runs a single replica). All numbers live in `LIMITS` there: OTP max 3 per phone/email per 10 min, 10 OTP-triggering requests per IP per hour, wrong OTP attempts capped at 5 per phone (then the OTP is invalidated), login failures capped per account+IP and per account, plus a per-IP ceiling. Applied in `auth/login`, `register`, `forgot-password`, `verify-phone`, `verify-reset-otp`, `reset-password` (SEC-04). A new auth/OTP endpoint must use it too
 
 ---
 
