@@ -31,8 +31,53 @@ model User {
   confirmedPayments Payment[]         @relation("ConfirmedBy")
   approvedRefunds   Refund[]          @relation("ApprovedBy")
   notifications     NotificationLog[]
+  consentLogs                ConsentLog[]
+  deletionRequests           AccountDeletionRequest[] @relation("DeletionRequestUser")
+  processedDeletionRequests  AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
 
   @@map("users")
+}
+
+// UU PDP — jejak audit persetujuan (docs/RETROFIT-GAPS.md #2). Append-only,
+// TIDAK pernah di-update/hapus — bukti "kapan versi kebijakan mana disetujui".
+model ConsentLog {
+  id        String      @id @default(uuid())
+  userId    String
+  type      ConsentType
+  version   String
+  createdAt DateTime    @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@map("consent_logs")
+}
+
+enum ConsentType {
+  privacy_policy
+}
+
+// UU PDP — hak subjek data untuk minta akun+data dihapus (docs/RETROFIT-GAPS.md #2).
+// Sengaja bukan hard-delete otomatis — booking/payment punya kebutuhan retensi
+// legal/pajak terpisah, jadi permintaan masuk antrean, diproses manual superadmin.
+model AccountDeletionRequest {
+  id            String                @id @default(uuid())
+  userId        String
+  status        DeletionRequestStatus @default(pending)
+  note          String?
+  requestedAt   DateTime              @default(now())
+  processedAt   DateTime?
+  processedById String?
+
+  user        User  @relation("DeletionRequestUser", fields: [userId], references: [id])
+  processedBy User? @relation("DeletionRequestProcessedBy", fields: [processedById], references: [id])
+
+  @@map("account_deletion_requests")
+}
+
+enum DeletionRequestStatus {
+  pending
+  completed
+  rejected
 }
 
 enum UserRole {
@@ -1124,6 +1169,21 @@ model PricingRule {
 
   @@unique([productType])
   @@map("pricing_rules")
+}
+
+// Satu baris global (pola sama PricingRule) — nama tampilan platform/meta SEO
+// default/kontak publik. Sengaja TIDAK termasuk rekening bank (tetap env-only,
+// lihat lib/constants/payment.ts) — docs/RETROFIT-GAPS.md #6.
+model SiteSetting {
+  id              String   @id @default(uuid())
+  platformName    String?
+  metaTitle       String?
+  metaDescription String?
+  contactEmail    String?
+  contactPhone    String?
+  updatedAt       DateTime @updatedAt
+
+  @@map("site_settings")
 }
 
 model PreferredVendor {
