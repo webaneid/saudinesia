@@ -2314,3 +2314,16 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** `docs/arsitektur-notifikasi.md` §11.
 
 **Affects:** `lib/notifications/{notify,events,integrations}.ts`, `lib/email/{resend,templates}.ts`, `lib/whatsapp/client.ts`, `lib/cron/autocancelJob.ts`, route payments-confirm / visa-status / bookings POST, `app/api/v1/admin/system/integrations/**`, `prisma/schema.prisma` (+migrasi), `scripts/test-{email,notify}.ts`, `scripts/lib/fakeServer.ts`, env example & `scripts/buat-env-production.sh` (`APP_URL`, `RESEND_REPLY_TO`).
+
+## 2026-10-21 — Auth Fase 1: daftar manual tanpa password di form; akun lahir saat tautan email diklik
+
+**Decision:** Pendaftaran manual (ADR-0001, `docs/arsitektur-auth.md`) tidak membuat akun dan tidak menerima password. Isian (nama, telepon, WhatsApp) menunggu di `AuthToken(registration)`; pemilik email mengklik tautan, melihat pratinjau, mencentang persetujuan (privasi + notifikasi WhatsApp), memilih password, lalu akun dibuat (`emailVerifiedAt`) dalam satu transaksi dengan klaim token. Token 256-bit, hanya hash SHA-256 di DB, klaim atomik; halaman tautan tidak mengonsumsi (pemindai email melakukan GET). Reset password lewat tautan email. Respons daftar/lupa password seragam; email auth dikirim tanpa ditunggu. `isActive` kembali berarti "tidak dinonaktifkan admin"; login mensyaratkan `isActive` dan `emailVerifiedAt`.
+
+**Rationale:** Rancangan awal (form dengan password → akun `isActive` sebelum email terverifikasi) punya celah pre-hijacking: penyerang mendaftar dengan email korban lalu menimpa password akun yang belum terverifikasi; korban yang mengklik tautan verifikasi mendarat di akun yang password-nya dipegang penyerang. Dengan password dipilih SETELAH bukti kepemilikan email, tidak ada akun/password yang bisa dipasang pihak lain, dan sambung otomatis Google (Fase 2) menjadi aman. Persetujuan UU PDP harus diberikan pemilik email, bukan pengirim form (temuan audit SEC-19).
+
+**Alternatives considered:** Verifikasi email dengan password di form (celah di atas). Meminta ulang password di halaman verifikasi (friksi, tak menutup kasus korban yang mendaftar sendiri setelah penyerang). OTP email 6 digit (butuh batas percobaan; tautan 256-bit lebih sederhana).
+
+**Ringkasan security check (SOP langkah 5):** audit independen subagent `security-auditor` + review sendiri: 0 Critical, 0 High, 1 Medium, 8 Low → semua Medium/Low yang menyangkut kode fase ini diperbaiki (SEC-19..25), 2 dicatat terbuka (SEC-26, SEC-27); SEC-15/16/17 ditutup. `bun audit`: tidak ada dependency berubah selain menghapus `resend` (sebelumnya). Bukti: `docs/arsitektur-auth.md` §7.
+
+**Affects:** `prisma/schema.prisma` + migrasi `20261021150000_auth_email_verification`, `lib/auth/{tokens,tokenPattern,accounts,authEmail,email,rateLimit}.ts`, `lib/email/authTemplates.ts`, `lib/validators/{auth,adminUpdates}.ts`, `app/api/v1/auth/*`, `app/[locale]/(auth)/*`, `lib/cron/authTokenJob.ts`, `scripts/test-auth.ts`, dan penghapusan seluruh kode OTP WhatsApp.
+

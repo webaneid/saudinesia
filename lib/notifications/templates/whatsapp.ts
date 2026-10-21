@@ -1,7 +1,4 @@
 export const waTemplates = {
-  otp: (code: string) =>
-    `*Saudinesia* — Kode OTP Anda: *${code}*\nBerlaku 5 menit. Jangan bagikan ke siapapun.`,
-
   bookingSubmitted: (code: string, deadline: string) =>
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,
 

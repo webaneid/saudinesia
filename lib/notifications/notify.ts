@@ -42,17 +42,17 @@ export async function notify(input: NotifyInput): Promise<ChannelOutcome[]> {
 }
 
 async function run({ userId, bookingId = null, event, dedupe = false }: NotifyInput): Promise<ChannelOutcome[]> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, phone: true, fullName: true } })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, whatsapp: true, fullName: true } })
   if (!user) return []
 
   const out: ChannelOutcome[] = []
   const deliver = (channel: 'whatsapp' | 'email', recipient: string, preview: string, send: () => Promise<SendOutcome>) =>
     deliverOne({ userId, bookingId, type: event.type, dedupe }, channel, recipient, preview, send)
 
-  // WhatsApp — hanya bila kejadian punya pesan WA dan akun punya nomor.
+  // WhatsApp — hanya bila kejadian punya pesan WA dan akun punya nomor WhatsApp (bukan nomor telepon biasa).
   const wa = waMessage(event)
-  if (wa && user.phone) {
-    const phone = user.phone
+  if (wa && user.whatsapp) {
+    const phone = user.whatsapp
     out.push(await deliver('whatsapp', phone, wa.slice(0, 200), () => whatsapp.sendMessage({ phone, message: wa })))
   }
 

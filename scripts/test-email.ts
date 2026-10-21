@@ -139,6 +139,15 @@ await t('kunci API TIDAK PERNAH muncul di pesan galat', async () => {
   assert.doesNotMatch(msg, /Bearer|Authorization/i)
 })
 
+await t('alamat email di pesan galat Resend dibuang (PII tidak masuk log/NotificationLog)', async () => {
+  withKey(); reset([{ status: 422, body: { message: 'The to field "korban@example.test" is invalid' } }])
+  const r = await sendEmail(mail)
+  assert.equal(r.status, 'failed')
+  const msg = (r as { error: string }).error
+  assert.ok(!msg.includes('korban@example.test'), `alamat bocor: ${msg}`)
+  assert.match(msg, /\[email\]/)
+})
+
 await t('jaringan mati → failed setelah 3 percobaan dengan jeda (tidak menggantung, tidak melempar)', async () => {
   withKey(); env.RESEND_API_URL = 'http://127.0.0.1:1'; reset()
   const t0 = Date.now()

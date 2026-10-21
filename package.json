@@ -12,7 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "bun prisma/seed.ts",
-    "test": "bun scripts/test-rate-limit.ts && bun scripts/test-email.ts && bun scripts/test-notify.ts"
+    "test": "bun scripts/test-rate-limit.ts && bun scripts/test-email.ts && bun scripts/test-notify.ts && bun scripts/test-auth.ts"
   },
   "prisma": {
     "seed": "bun prisma/seed.ts"

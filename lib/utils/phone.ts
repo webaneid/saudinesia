@@ -1,3 +1,5 @@
+import { COUNTRIES } from '@/lib/constants/countries'
+
 /**
  * Normalize any Indonesian phone input to E.164 without the leading +.
  * Examples:
@@ -6,8 +8,7 @@
  *   "+628111222333"→ "628111222333"
  *   "628111222333" → "628111222333"
  *
- * Dipakai KHUSUS oleh alur registrasi/OTP (docs/arsitektur-komponen-kontak.md §5 — nomor WA
- * akun sengaja tetap Indonesia-only, bukan bagian dari komponen Kontak generik).
+ * Hanya untuk input nomor Indonesia (mis. skrip/tes). Form akun memakai kode negara dari komponen Kontak → `e164FromCountry`.
  */
 export function normalizePhone(raw: string): string {
   const digits = raw.replace(/[\s\-+]/g, '')
@@ -25,4 +26,21 @@ export function toE164Digits(dialCode: string, localNumber: string): string {
   const local = localNumber.replace(/\D/g, '').replace(/^0+/, '')
   const dial = dialCode.replace(/\D/g, '')
   return dial + local
+}
+
+/**
+ * Nomor akun (telepon/WhatsApp) disimpan sebagai digit E.164 tanpa "+" (docs/arsitektur-auth.md §3.1). Menyusunnya dari kode
+ * negara ISO (mis. 'ID') + nomor lokal yang diketik; mengembalikan '' bila negara tidak dikenal atau nomor kosong.
+ */
+export function e164FromCountry(countryCode: string, localNumber: string): string {
+  const country = COUNTRIES.find((c) => c.code === countryCode)
+  const local = localNumber.replace(/\D/g, '')
+  if (!country || !local) return ''
+  return toE164Digits(country.dialCode, local)
+}
+
+/** Samarkan nomor untuk ditampilkan di email (+62••••••890): pemilik nomor mengenalinya, orang lain tidak bisa membacanya utuh. */
+export function maskE164(digits: string): string {
+  if (digits.length <= 6) return '+' + '•'.repeat(digits.length)
+  return `+${digits.slice(0, 2)}${'•'.repeat(digits.length - 5)}${digits.slice(-3)}`
 }

@@ -7,16 +7,8 @@
 
 ## Ralat Terhadap `CLAUDE.md`
 
-`CLAUDE.md` § Tech Stack menulis "Auth | WhatsApp OTP via GOWA ... — no
-NextAuth", yang bisa terbaca seolah-olah TIDAK ada password sama sekali.
-Verifikasi ke kode (`app/api/v1/auth/login/route.ts`,
-`app/api/v1/auth/register/route.ts`, `app/api/v1/auth/reset-password/route.ts`)
-menunjukkan login sebenarnya **email + password** (`bcryptjs`, kolom
-`User.passwordHash`) — WhatsApp OTP dipakai untuk **verifikasi akun saat
-registrasi** (`User.isActive` di-gate sampai OTP dikonfirmasi), bukan sebagai
-mekanisme login berkelanjutan. Dua-duanya benar, cuma `CLAUDE.md` tidak
-eksplisit sebut ada jalur password — perlu diupdate biar tidak menyesatkan
-pembaca baru.
+> **Diperbarui 2026-10-21 (ADR-0001):** catatan ralat lama di sini (OTP WhatsApp untuk verifikasi) sudah tidak berlaku —
+> OTP WhatsApp dihapus total dari auth. `CLAUDE.md` § Tech Stack kini menjelaskan auth berbasis email. Detail: `docs/arsitektur-auth.md`.
 
 ## 1. Secrets & Environment
 - Semua secret (DB password, JWT secret, MinIO keys, GOWA API key) di
@@ -59,11 +51,13 @@ pembaca baru.
 - **Login**: email + password, hash `bcryptjs` (`app/api/v1/auth/login/route.ts`).
   Pesan error sama untuk "user tidak ada" dan "password salah" — sudah benar,
   mencegah email enumeration.
-- **Verifikasi akun**: WhatsApp OTP via GOWA saat registrasi, `User.isActive`
-  di-gate sampai OTP dikonfirmasi. Pengiriman & verifikasi OTP dibatasi oleh
-  `lib/auth/rateLimit.ts` (§ 6, SEC-04 Selesai). (Riwayat: sampai 2026-10-21 dokumen
-  ini menulis rate limit sudah berjalan padahal `checkRateLimit()` tidak dipanggil
-  siapa pun — fungsi itu kini dihapus.)
+- **Verifikasi akun & pemulihan**: tautan email (Resend) — `lib/auth/tokens.ts`: token 256-bit, hanya hash SHA-256 di DB,
+  sekali pakai (klaim atomik), kedaluwarsa singkat (daftar 24 jam, reset 30 menit). Pendaftaran manual **tidak membuat
+  akun** sampai pemilik email mengklik tautan dan memilih passwordnya sendiri (menutup pre-hijacking). Halaman tautan
+  tidak mengonsumsi token (pemindai email melakukan GET); konsumsi lewat POST. Respons daftar/lupa password seragam
+  (anti-enumerasi); login mengungkap status akun hanya setelah password benar. Login mensyaratkan `isActive` DAN `emailVerifiedAt`.
+  Pengiriman dibatasi `lib/auth/rateLimit.ts` (§ 6). (Riwayat: sampai 2026-10-21 verifikasi memakai OTP WhatsApp.)
+- **Email = identitas**: `PUT /auth/profile` tidak menerima `email` (SEC-17); mengganti email butuh fitur terpisah dengan verifikasi email baru.
 - Session: JWT, disimpan `httpOnly; Secure; SameSite=Strict` cookie
   (`CLAUDE.md` § Security) — bukan localStorage.
 - Role check: `middleware.ts` cek `ADMIN_ROLES`/`SUPERADMIN_ROLES` di level
@@ -71,9 +65,9 @@ pembaca baru.
   WAJIB re-check role sendiri lewat `lib/auth/session.ts`
   (`requireAdmin()`/`requireSuperadmin()`) — middleware saja tidak cukup,
   ini aturan eksplisit yang sudah dipegang project ini.
-- **Perilaku dev fail-closed**: OTP di response/log, pengiriman WhatsApp dilewati, bypass rate limit, dan
-  `GET /api/v1/dev/otp` hanya aktif bila `NODE_ENV === 'development'` persis (SEC-02). Pola `!== 'production'` membuat
-  `NODE_ENV` yang salah/kosong di lingkungan terdeploy membocorkan OTP → pengambilalihan akun via reset password.
+- **Perilaku dev fail-closed**: tautan email auth dicetak ke log server (tak pernah ke respons), `APP_URL` default, dan bypass
+  rate limit hanya aktif bila `NODE_ENV === 'development'` persis (SEC-02). Pola `!== 'production'` membuat `NODE_ENV` yang
+  salah/kosong di lingkungan terdeploy membocorkan tautan pengambilalihan akun. (Endpoint `GET /api/v1/dev/otp` sudah dihapus.)
 - **Mass assignment**: body request tidak boleh langsung ke `prisma.*.create/update` — parse dengan Zod `.strict()`
   (`lib/validators/adminUpdates.ts` contoh), supaya field `passwordHash`/`role`/`bookedQuota`, dst. tidak bisa diubah (SEC-03).
 - **Pembuatan superadmin pertama** hanya lewat `scripts/create-superadmin.ts` (tanpa kredensial default; `db:seed` tidak
@@ -103,10 +97,10 @@ pembaca baru.
 | Endpoint | Batas |
 |---|---|
 | `auth/login` | semua percobaan per IP: 20 / 15 mnt · **gagal** per akun+IP: 5 / 15 mnt · **gagal** per akun (dari mana pun): 30 / jam. Hanya yang gagal dihitung; sukses mereset |
-| `auth/register` | pendaftaran per IP: 10 / jam · OTP per nomor: 3 / 10 mnt (dicek **sebelum** akun dibuat, supaya tidak ada akun setengah jadi) |
-| `auth/forgot-password` | per IP: 10 / jam · per email: 3 / 10 mnt — dihitung **sebelum** mencari akun dan sama untuk email ada/tidak (429 tidak membocorkan keberadaan) |
-| `auth/verify-phone`, `auth/verify-reset-otp` | percobaan per IP: 30 / 10 mnt · OTP **salah** per nomor: 5 / 15 mnt — pada kegagalan ke-5 OTP **dibatalkan** (tebakan sisa tak berguna). Meminta OTP baru mereset hitungan salah, jadi pengguna sah pulih |
+| `auth/register`, `auth/forgot-password` | email auth per IP: 10 / jam · per alamat: 3 / 10 mnt — dihitung **sebelum** mencari akun dan sama untuk email ada/tidak (429 tidak membocorkan keberadaan) |
+| `auth/registration/preview`, `auth/registration/complete` | per IP: 30 / 10 mnt (token 256-bit tak bisa ditebak; ini pembatas kasar) |
 | `auth/reset-password` | per IP: 10 / jam |
+| `admin/system/integrations/test-email` | per admin: 5 / jam |
 
 - **Penyimpanan**: counter jendela-tetap di Redis, atomik lewat skrip Lua (INCR + EXPIRE pada hit pertama; kunci tanpa
   TTL disembuhkan). Redis tidak terjangkau → jatuh ke memori proses (aplikasi 1 replika), dengan circuit breaker 10 detik

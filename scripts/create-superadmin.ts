@@ -116,7 +116,8 @@ async function main() {
       fail(`Sudah ada ${existing.length} superadmin (${existing.map((u) => u.email).join(', ')}). Tidak ada yang dibuat. Pakai --additional bila memang ingin menambah.`)
     }
 
-    const email = args.email ?? (process.stdin.isTTY ? await ask('Email: ') : '')
+    // Email selalu huruf kecil (docs/arsitektur-auth.md §3.1) — login & pencocokan Google memakai bentuk yang sama.
+    const email = (args.email ?? (process.stdin.isTTY ? await ask('Email: ') : '')).trim().toLowerCase()
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) fail('Format email tidak valid (gunakan --email).')
     const fullName = args.name ?? (process.stdin.isTTY ? await ask('Nama lengkap: ') : '')
     if (fullName.length < 2 || fullName.length > 100) fail('Nama harus 2–100 karakter (gunakan --name).')
@@ -131,12 +132,11 @@ async function main() {
 
     const passwordHash = await Bun.password.hash(password, { algorithm: 'bcrypt', cost: 12 })
     const user = await prisma.user.create({
-      data: { email, fullName, passwordHash, role: 'superadmin', isActive: true },
+      data: { email, fullName, passwordHash, role: 'superadmin', isActive: true, emailVerifiedAt: new Date() },
       select: { id: true, email: true, role: true },
     })
 
     console.log(`OK: superadmin dibuat — ${user.email} (id ${user.id}).`)
-    if (email !== email.toLowerCase()) console.log('Catatan: login memakai email persis seperti yang diketik (huruf besar/kecil dibedakan).')
     console.log('Masuk lewat /<locale>/admin/login. Password tidak disimpan di mana pun selain hash di database.')
   } finally {
     await prisma.$disconnect()

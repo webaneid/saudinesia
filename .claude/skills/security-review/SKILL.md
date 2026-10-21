@@ -7,7 +7,7 @@ description: Audit kode yang baru ditulis/diedit terhadap checklist keamanan pro
 
 > Diadopsi dari template `master-typescript` (2026-09-10), disesuaikan ke
 > stack project ini: Next.js App Router Route Handler + Prisma (bukan Elysia
-> + Drizzle), auth JWT + WhatsApp OTP via GOWA, storage MinIO.
+> + Drizzle), auth JWT + verifikasi/reset lewat tautan email (Resend), storage MinIO.
 
 Tujuan: mengecek kode yang baru ditulis terhadap checklist konkret, BUKAN
 memberi opini umum "sudah cukup aman". Setiap poin harus dijawab dengan
@@ -42,7 +42,7 @@ merujuk baris kode spesifik, bukan asumsi.
    - [ ] Response shape konsisten `{ success, data?, error?, meta? }` — tidak
          mengembalikan Prisma error mentah, stack trace, atau nama model internal
    - [ ] Rate limiting ada untuk endpoint sensitif (login, register,
-         forgot-password, OTP — pola Redis counter sudah ada di `lib/auth/otp.ts`)
+         forgot-password, konsumsi token — `lib/auth/rateLimit.ts`)
 
    **Kalau file menyentuh database (Prisma):**
    - [ ] Tidak ada `$queryRaw`/`$executeRaw` dengan string concatenation/template
@@ -55,12 +55,14 @@ merujuk baris kode spesifik, bukan asumsi.
 
    **Kalau file terkait auth (`lib/auth/`, login/register):**
    - [ ] Session JWT `httpOnly; Secure; SameSite=Strict` (`CLAUDE.md` § Security)
-   - [ ] Tidak pernah log OTP, password, atau isi token — meski di error log
+   - [ ] Tidak pernah log password, token/tautan email, atau isi token — meski di error log (kecuali tautan dev-only di `NODE_ENV === 'development'`)
    - [ ] Permission check role (`ADMIN_ROLES`/`SUPERADMIN_ROLES`) dicek di
          `lib/auth/session.ts` atau di Route Handler, bukan `if` ad-hoc yang
          gampang kelewat di endpoint baru
-   - [ ] OTP rate limit (3x/10 menit per nomor) tetap dipakai kalau ada flow
-         OTP baru — jangan bikin jalur OTP baru yang skip counter Redis ini
+   - [ ] Token auth: acak ≥256 bit, hanya hash disimpan, klaim atomik sekali pakai, kedaluwarsa singkat; halaman tautan TIDAK
+         mengonsumsi (pemindai email melakukan GET); akun tidak dibuat/di-password sebelum bukti kepemilikan email
+   - [ ] Email adalah identitas: tidak ada endpoint yang mengubah `email` tanpa verifikasi alamat baru (SEC-17)
+   - [ ] Flow email baru memakai `lib/auth/rateLimit.ts` per alamat DAN per IP; respons seragam untuk akun ada/tidak
 
    **Kalau file terkait upload (MinIO, `lib/storage/minio.ts`):**
    - [ ] Validasi MIME type + ukuran file **server-side** (whitelist
@@ -92,9 +94,9 @@ merujuk baris kode spesifik, bukan asumsi.
          valid → 400, tidak ditemukan (`P2025`) → 404, sisanya 500 + log. BUKAN
          `catch { return 403 }` untuk semua error
 
-   **Kalau file adalah endpoint sensitif (login, register, forgot/reset password, OTP, kirim WhatsApp):**
+   **Kalau file adalah endpoint sensitif (login, register, forgot/reset password, konsumsi token, kirim email/WhatsApp):**
    - [ ] Ada rate limit per identitas (nomor/email) DAN per IP, dan ada batas
-         percobaan salah untuk kode yang bisa ditebak (OTP 6 digit)
+         percobaan salah untuk kode yang bisa ditebak (bila ada kode pendek; token tautan 256-bit tidak perlu)
    - [ ] **Fungsi proteksinya punya pemanggil.** `grep -rn "<namaFungsi>"` —
          fungsi rate limit yang tidak dipanggil siapa pun sama dengan tidak ada
          (SEC-04). Jangan puas dengan "ada fungsinya / ada di dokumen"
@@ -102,9 +104,9 @@ merujuk baris kode spesifik, bukan asumsi.
          untuk endpoint yang memicu biaya/pengambilalihan akun), atau
          keputusan fail-open dicatat sadar
 
-   **Kalau ada perilaku khusus development (OTP di response/log, bypass limit, endpoint `/dev/*`, `NODE_ENV`):**
+   **Kalau ada perilaku khusus development (tautan auth di log, bypass limit, endpoint `/dev/*`, `NODE_ENV`):**
    - [ ] Kondisi aktifnya `NODE_ENV === 'development'` persis. `!== 'production'`
-         = fail-open → lingkungan dengan NODE_ENV salah/kosong membocorkan OTP
+         = fail-open → lingkungan dengan NODE_ENV salah/kosong membocorkan tautan pengambilalihan akun
          (SEC-02). Uji dengan `NODE_ENV` = `test`, `staging`, kosong → harus mati
 
    **Kalau file infra (Dockerfile, docker-compose*.yml, Caddyfile, `.github/workflows/*`, `scripts/*`, `.env*.example`, `next.config.ts`, `instrumentation*.ts`):**

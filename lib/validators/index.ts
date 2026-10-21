@@ -6,15 +6,6 @@ export const phoneSchema = z
   .max(15)
   .regex(/^[0-9+]+$/, 'Invalid phone number')
 
-export const otpRequestSchema = z.object({
-  phone: phoneSchema,
-})
-
-export const otpVerifySchema = z.object({
-  phone: phoneSchema,
-  code: z.string().length(6).regex(/^\d+$/),
-})
-
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

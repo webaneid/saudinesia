@@ -1,8 +1,19 @@
 import { z } from 'zod'
 import { UserRole } from '@prisma/client'
+import { emailSchema, passwordSchema } from './auth'
 
 // Skema UPDATE untuk rute admin yang dulu meneruskan body mentah ke prisma.update (mass assignment).
 // `.strict()` — field di luar daftar DITOLAK (400), bukan diabaikan diam-diam, supaya klien yang salah ketahuan.
+
+/** POST /api/v1/admin/system/users — akun STAF (jamaah mendaftar sendiri lewat /auth/register atau Google). Role pilgrim tidak boleh dibuat di sini. */
+export const staffCreateSchema = z
+  .object({
+    fullName: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100),
+    email: emailSchema,
+    password: passwordSchema,
+    role: z.enum(['admin', 'manager', 'superadmin']).default('admin'),
+  })
+  .strict()
 
 /** PUT /api/v1/admin/system/users/[id] — hanya role & status aktif. passwordHash, resetToken, email, dst TIDAK boleh lewat sini. */
 export const userAdminUpdateSchema = z

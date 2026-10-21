@@ -15,11 +15,9 @@ export const LIMITS = {
   loginIp:        { limit: 20, windowSec: 900 },  // semua percobaan login dari satu IP
   loginAcctIp:    { limit: 5,  windowSec: 900 },  // GAGAL login per akun+IP
   loginAcct:      { limit: 30, windowSec: 3600 }, // GAGAL login per akun, dari mana pun (brute-force terdistribusi)
-  otpSendPhone:   { limit: 3,  windowSec: 600 },  // OTP dikirim per nomor (spesifikasi CLAUDE.md)
-  otpSendEmail:   { limit: 3,  windowSec: 600 },  // permintaan lupa-password per email
-  otpSendIp:      { limit: 10, windowSec: 3600 }, // permintaan yang memicu OTP per IP
-  otpVerifyPhone: { limit: 5,  windowSec: 900 },  // OTP SALAH per nomor — setelah ini OTP dibatalkan
-  otpVerifyIp:    { limit: 30, windowSec: 600 },  // percobaan verifikasi OTP per IP
+  authEmailSendEmail: { limit: 3,  windowSec: 600 },  // email auth (daftar / lupa password) ke SATU alamat — cegah spam ke korban & kuota Resend
+  authEmailSendIp:    { limit: 10, windowSec: 3600 }, // permintaan yang memicu email auth per IP
+  authTokenIp:        { limit: 30, windowSec: 600 },  // pratinjau/penyelesaian tautan per IP (token 256-bit tak bisa ditebak; ini pembatas kasar)
   resetIp:        { limit: 10, windowSec: 3600 }, // reset password per IP
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
 } as const satisfies Record<string, { limit: number; windowSec: number }>
@@ -126,7 +124,22 @@ export async function reset(...policies: Policy[]): Promise<void> {
  */
 export function clientIp(request: Request): string | null {
   const first = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-  return first && /^[0-9a-fA-F:.]{3,45}$/.test(first) ? first : null
+  if (!first || !/^[0-9a-fA-F:.]{3,45}$/.test(first)) return null
+  return first.includes(':') ? ipv6Prefix64(first) : first
+}
+
+/**
+ * Pengguna IPv6 biasanya menguasai satu blok /64 (≈1,8×10^19 alamat): memakai alamat penuh sebagai kunci membuat batas per-IP
+ * bisa diputar tanpa batas. Kunci = 64 bit pertama. Alamat berbentuk aneh/IPv4-mapped dipakai apa adanya.
+ */
+function ipv6Prefix64(ip: string): string {
+  if (ip.includes('.') || ip.split('::').length > 2) return ip
+  const [head = '', tail = ''] = ip.split('::')
+  const h = head ? head.split(':') : []
+  const t = tail ? tail.split(':') : []
+  const groups = ip.includes('::') ? [...h, ...Array<string>(Math.max(8 - h.length - t.length, 0)).fill('0'), ...t] : h
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-fA-F]{1,4}$/.test(g))) return ip
+  return `${groups.slice(0, 4).map((g) => g.toLowerCase().replace(/^0+(?=.)/, '')).join(':')}::/64`
 }
 
 export function tooManyRequests(retryAfterSec: number): NextResponse {

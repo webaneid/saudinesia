@@ -1,79 +1,42 @@
 import { NextResponse } from 'next/server'
-import { hash } from 'bcryptjs'
-import { prisma } from '@/lib/db'
-import { generateOtp, storeOtp } from '@/lib/auth/otp'
-import { whatsapp } from '@/lib/whatsapp/client'
-import { waTemplates } from '@/lib/notifications/templates/whatsapp'
-import { normalizePhone } from '@/lib/utils/phone'
+import { requestRegistration } from '@/lib/auth/accounts'
+import { sendAuthEmail } from '@/lib/auth/authEmail'
+import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
+import { maskE164 } from '@/lib/utils/phone'
 import { registerSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
-import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
-import { resetOtpVerifyFailures } from '@/lib/auth/otpVerify'
-import { PRIVACY_POLICY_VERSION } from '@/lib/constants/legal'
 
+// Pendaftaran manual (docs/arsitektur-auth.md §3.2): TIDAK membuat akun — mengirim tautan ke email. Respons SERAGAM untuk
+// email baru maupun yang sudah terdaftar (tidak membocorkan keberadaan akun).
 export async function POST(request: Request) {
   try {
-    const body = await request.json()
-    const parsed = registerSchema.safeParse(body)
+    const parsed = registerSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
-      const msg = parsed.error.errors[0]?.message ?? 'Input tidak valid'
-      return NextResponse.json(err(msg), { status: 400 })
+      return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
     }
+    const input = parsed.data
 
-    const { fullName, email, password, phone } = parsed.data
-    const normalizedPhone = normalizePhone(phone)
-
-    // Per IP: semua pendaftaran yang lolos validasi (spam akun & WhatsApp massal).
+    // Batas dihitung SEBELUM mencari akun dan sama untuk email baru/lama — 429 tidak boleh membocorkan apa pun.
     const ip = clientIp(request)
     if (ip) {
-      const h = await consume(policy('otpSendIp', ip))
+      const h = await consume(policy('authEmailSendIp', ip))
       if (!h.allowed) return tooManyRequests(h.retryAfterSec)
     }
+    const perEmail = await consume(policy('authEmailSendEmail', input.email))
+    if (!perEmail.allowed) return tooManyRequests(perEmail.retryAfterSec)
 
-    const emailTaken = await prisma.user.findUnique({ where: { email } })
-    if (emailTaken) {
-      return NextResponse.json(err('Email sudah terdaftar.'), { status: 409 })
-    }
-
-    const phoneTaken = await prisma.user.findUnique({ where: { phone: normalizedPhone } })
-    if (phoneTaken) {
-      return NextResponse.json(err('Nomor WhatsApp sudah terdaftar.'), { status: 409 })
-    }
-
-    // Per nomor: maks 3 OTP / 10 menit (CLAUDE.md). Sengaja SEBELUM user dibuat — memblokir sesudahnya akan
-    // meninggalkan akun setengah jadi (email terpakai tapi tidak ada OTP).
-    const perPhone = await consume(policy('otpSendPhone', normalizedPhone))
-    if (!perPhone.allowed) return tooManyRequests(perPhone.retryAfterSec)
-
-    const passwordHash = await hash(password, 12)
-
-    await prisma.user.create({
-      data: {
-        email, passwordHash, fullName, phone: normalizedPhone, role: 'pilgrim', isActive: false,
-        consentLogs: { create: { type: 'privacy_policy', version: PRIVACY_POLICY_VERSION } },
-      },
-    })
-
-    const code = generateOtp()
-    await storeOtp(normalizedPhone, code)
-    await resetOtpVerifyFailures(normalizedPhone) // OTP baru: pengguna sah tidak boleh terkunci oleh kegagalan OTP lama
-    await prisma.otpRequest.create({
-      data: { phone: normalizedPhone, code, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
-    })
-
-    // FAIL-CLOSED: kemudahan dev (OTP tampil di log & response, WhatsApp tidak dikirim) HANYA bila NODE_ENV persis
-    // 'development'. Dulu `!== 'production'` — lingkungan mana pun yang NODE_ENV-nya salah/kosong (staging, container
-    // salah konfigurasi) akan membocorkan OTP di response HTTP, yang berarti pengambilalihan akun lewat reset password.
-    const isDev = process.env.NODE_ENV === 'development'
-    if (isDev) {
-      console.log(`\n[DEV] OTP registrasi ${normalizedPhone}: ${code}\n`)
+    const outcome = await requestRegistration(input)
+    // Dikirim TANPA ditunggu: lama balasan sama untuk email baru/lama (kirim email ke Resend memakan waktu — kalau hanya salah satu
+    // cabang yang menunggu, selisih waktu membocorkan keberadaan akun). sendAuthEmail tidak pernah melempar dan mencatat kegagalan sendiri.
+    if (outcome.kind === 'pending') {
+      void sendAuthEmail('registration', input.email, { name: input.fullName, locale: input.locale, token: outcome.token, whatsappMasked: maskE164(input.whatsapp) })
     } else {
-      await whatsapp.sendMessage({ phone: normalizedPhone, message: waTemplates.otp(code) })
+      void sendAuthEmail('already_registered', input.email, { name: outcome.fullName, locale: input.locale })
     }
 
-    return NextResponse.json(ok({ phone: normalizedPhone, devCode: isDev ? code : undefined }))
+    return NextResponse.json(ok({ sent: true }))
   } catch (error) {
-    console.error('[auth/register]', error)
+    console.error('[auth/register]', error instanceof Error ? error.name : error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -10,6 +10,9 @@ export async function registerNode() {
   startAutoCancelJob()
   startPaymentReminderJob()
 
+  const { startAuthTokenCleanupJob } = await import('@/lib/cron/authTokenJob')
+  startAuthTokenCleanupJob()
+
   const { startExchangeRateJob } = await import('@/lib/cron/exchangeRateJob')
   startExchangeRateJob()
 

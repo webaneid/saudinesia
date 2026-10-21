@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     if (e && typeof e === 'object' && (e as { code?: string }).code === 'P2025') {
       return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
     }
-    console.error('[admin/system/users/[id]/PUT]', e)
+    console.error('[admin/system/users/[id]/PUT]', e instanceof Error ? e.name : e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
