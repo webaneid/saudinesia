@@ -233,7 +233,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Message templates in `lib/notifications/templates/whatsapp.ts`, keyed by notification type and locale
 - Retry: 2 attempts, 2 s delay on network error — log failure to `notification_logs`, then continue
 - GOWA is best-effort: a WA failure must **never** block a booking confirmation or status update
-- OTP rate limit: max 3 requests per phone number per 10 minutes, enforced via Redis counter in `lib/auth/otp.ts`
+- OTP rate limit: **target** max 3 requests per phone number per 10 minutes via Redis counter (`checkRateLimit()` in `lib/auth/otp.ts`). **NOT enforced yet** — the function exists but no route calls it, and wrong OTP attempts are uncapped (docs/lessons-learned.md SEC-04, High, must be fixed before go-live)
 
 ---
 
@@ -255,6 +255,13 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Session JWT stored in `httpOnly; Secure; SameSite=Strict` cookie
 - Enforce role check inside every admin/superadmin Route Handler — do not rely on middleware alone
 - Never log pilgrim PII (passport numbers, DOB, KTP) to application logs
+- Dev-only behaviour (OTP in the response/log, skipping WhatsApp, rate-limit bypass, `/api/v1/dev/*`) is enabled **only when `NODE_ENV === 'development'` exactly** — fail-closed. Never `!== 'production'`: a wrong/empty `NODE_ENV` on any deployed environment must not leak OTPs (docs/lessons-learned.md SEC-02)
+- Never pass a request body straight into Prisma (`data: body`) — parse it with a `.strict()` Zod schema from `lib/validators/` so unknown fields are rejected (mass assignment, SEC-03)
+- Sensitive endpoints (login, register, forgot/reset password, OTP verify) need rate limiting **and** a cap on wrong attempts. A protection function must have a caller you can `grep` — documenting a control is not the same as running it (SEC-04: `checkRateLimit()` was never called)
+- Admin routes distinguish errors: `Unauthorized`/`Forbidden` → 401/403, invalid input → 400, everything else → 500 + log. Never `catch { return 403 }` for all errors
+- `bun audit --audit-level=critical` blocks CI; new high advisories brought in by a dependency added in a phase must be triaged in that phase
+- Dockerfile, compose, Caddyfile, GitHub workflows, `scripts/*` and `.env*.example` are security surface too — they go through the same review (non-root, no secrets in images/layers, no published ports beyond the proxy, least-privilege workflow `permissions`)
+- Process and severity policy: **Fase Eksekusi SOP langkah 5**; findings register: `docs/lessons-learned.md`
 
 ---
 
@@ -284,11 +291,20 @@ Berlaku untuk implementasi apa pun yang dipecah jadi beberapa fase/step (mis. me
 
 **4. Begitu satu fase selesai, cek error type dulu** — `bun run build`, harus **zero error** sebelum lanjut.
 
-**5. Kalau 0 error, dokumentasikan hasil fase itu** — update `docs/progress.md` (centang item yang selesai), `docs/decisions.md` kalau ada keputusan baru yang diambil saat implementasi (bukan cuma yang direncanakan di awal), dan update dokumen arsitektur terkait kalau strukturnya berubah dari rencana.
+**5. Security check — sebelum dokumentasi & sebelum menutup fase** (pola langkah "Security check" pada SOP smart-ai, repo terpisah):
+   - Jalankan skill `security-review` untuk SEMUA file yang diubah/ditambah fase ini: Route Handler, `lib/auth/`, upload/storage, `middleware.ts`, skema Prisma, **dan** Dockerfile/compose/Caddyfile/workflow/skrip/`.env*.example`. Skill berisi checklist per jenis file dan format laporan.
+   - Fase besar (lebih dari ±10 file, lintas modul, atau menyentuh auth, pembayaran, upload, infra) → delegasikan ke subagent `security-auditor` (read-only) supaya konteks sesi utama tidak habis.
+   - Jalankan `bun audit`. Critical = tidak boleh ada (CI memblokir). High baru yang masuk lewat dependency yang ditambah fase ini harus ditriase di fase itu.
+   - **Klasifikasi & kewajiban:** temuan **Critical/High pada kode yang diubah atau ditambah fase ini WAJIB diperbaiki sebelum fase ditutup** — tidak ada pengecualian. **Medium/Low WAJIB dicatat** di `docs/lessons-learned.md` (Register Temuan Security: ID, severity, lokasi, rencana) — boleh ditunda, tidak boleh hilang.
+   - **Temuan pre-existing** (kode lama yang ditemukan sambil lalu, bukan hasil fase ini): catat dengan severity apa adanya dan **beri tahu pemilik saat ditemukan**. Critical/High pre-existing tidak harus menghentikan fase yang sedang berjalan, tapi WAJIB dijadwalkan sebagai fase hardening dan Selesai sebelum go-live (`docs/progress.md` M15).
+   - **Perbaikan dibuktikan dengan uji nyata** (curl/skrip terhadap kode yang berjalan, termasuk kasus yang harus DITOLAK), bukan hanya typecheck. Periksa juga bahwa proteksi yang diklaim punya **pemanggil** (`grep`) — dokumen yang bilang "ada rate limit" tidak membuktikan rate limit berjalan.
+   - Ringkasan hasil review (jumlah temuan per severity, yang diperbaiki, yang dicatat) masuk ke entri `docs/decisions.md` fase ini dan deskripsi PR.
 
-**6. Baru lanjut ke fase berikutnya — ulangi dari nomor 3, sampai semua fase selesai.**
+**6. Kalau 0 error DAN security check selesai, dokumentasikan hasil fase itu** — update `docs/progress.md` (centang item yang selesai), `docs/decisions.md` kalau ada keputusan baru yang diambil saat implementasi (bukan cuma yang direncanakan di awal), dan update dokumen arsitektur terkait kalau strukturnya berubah dari rencana.
 
-**Tidak boleh lompat ke fase berikutnya kalau build masih merah, tidak boleh eksekusi fase yang belum ada di rencana tertulis, dan tidak boleh mulai merencanakan upgrade (poin 2) sebelum poin 1 (recheck doc vs kode) selesai dan dikonfirmasi akurat.**
+**7. Baru lanjut ke fase berikutnya — ulangi dari nomor 3, sampai semua fase selesai.**
+
+**Tidak boleh menutup fase selama masih ada temuan Critical/High yang belum diperbaiki pada kode yang diubah fase itu (poin 5), tidak boleh lompat ke fase berikutnya kalau build masih merah, tidak boleh eksekusi fase yang belum ada di rencana tertulis, dan tidak boleh mulai merencanakan upgrade (poin 2) sebelum poin 1 (recheck doc vs kode) selesai dan dikonfirmasi akurat.**
 
 ---
 
@@ -296,11 +312,12 @@ Berlaku untuk implementasi apa pun yang dipecah jadi beberapa fase/step (mis. me
 
 1. **`bun run build`** — pastikan zero type errors sebelum lanjut. Fix semua error dulu.
    Typecheck dan dev server (Turbopack) TIDAK menangkap error bundling produksi — mis. kode khusus Node di `instrumentation.ts`/`middleware.ts` yang ikut dikompilasi untuk Edge. Perubahan di file-file itu atau `next.config.ts` hanya terbukti oleh `bun run build`. Kode khusus Node di instrumentation → `instrumentation-node.ts`, di-import dari dalam `if (process.env.NEXT_RUNTIME === 'nodejs')`.
-2. **Update `docs/progress.md`** — centang semua item yang selesai, catat yang masih pending.
-3. **Append `docs/decisions.md`** — jika ada keputusan arsitektur baru selama implementasi.
-4. **Baru lanjut ke milestone berikutnya.**
+2. **Security check** — skill `security-review` untuk file yang berubah (subagent `security-auditor` bila milestone besar) + `bun audit`. Critical/High pada kode milestone ini diperbaiki dulu; Medium/Low dicatat di `docs/lessons-learned.md`. Detail & aturan temuan pre-existing: Fase Eksekusi SOP langkah 5.
+3. **Update `docs/progress.md`** — centang semua item yang selesai, catat yang masih pending.
+4. **Append `docs/decisions.md`** — jika ada keputusan arsitektur baru selama implementasi (sertakan ringkasan hasil security check).
+5. **Baru lanjut ke milestone berikutnya.**
 
-Tidak boleh masuk fase berikutnya jika build masih merah.
+Tidak boleh masuk fase berikutnya jika build masih merah atau ada temuan Critical/High yang belum diperbaiki pada kode milestone ini.
 
 ---
 
