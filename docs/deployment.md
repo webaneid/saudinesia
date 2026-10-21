@@ -115,6 +115,11 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    **Email (Resend)**: verifikasi domain pengirim di Resend (SPF + DKIM + DMARC) dulu, lalu isi `RESEND_API_KEY`/`RESEND_FROM`,
    `docker compose up -d web`, login superadmin → Pengaturan → Integrasi & Notifikasi → **Kirim uji**. Detail: `docs/arsitektur-notifikasi.md` §7.
    Sebelum diisi, email dicatat `dilewati` di Log Notifikasi (aplikasi tetap normal).
+   **Login Google (opsional)**: Google Cloud Console → buat project → OAuth consent screen (External; scope `openid`, `email`, `profile`;
+   scope itu tidak butuh verifikasi manual, tapi status aplikasi harus *In production* agar semua pengguna bisa masuk, bukan hanya penguji) →
+   Credentials → OAuth client ID → *Web application* → Authorized redirect URI **persis** `https://<APP_DOMAIN>/api/v1/auth/google/callback`
+   (+ `http://localhost:6260/...` untuk dev) → isi `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` di `.env.production`, `docker compose up -d web`.
+   Admin → Pengaturan → Integrasi menampilkan redirect URI yang harus didaftarkan dan apakah Google sudah terkonfigurasi. Tanpa kredensial tombol Google tidak tampil.
 6. Rahasia Actions untuk deploy: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY` — diisi langsung di GitHub, **jangan**
    ditempel di chat.
 7. Tulis `deploy.yml` (build+push 2 image, scp, SSH, health check, rollback). Baru setelah itu semantic-release.

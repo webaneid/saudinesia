@@ -57,6 +57,7 @@
   tidak mengonsumsi token (pemindai email melakukan GET); konsumsi lewat POST. Respons daftar/lupa password seragam
   (anti-enumerasi); login mengungkap status akun hanya setelah password benar. Login mensyaratkan `isActive` DAN `emailVerifiedAt`.
   Pengiriman dibatasi `lib/auth/rateLimit.ts` (§ 6). (Riwayat: sampai 2026-10-21 verifikasi memakai OTP WhatsApp.)
+- **Sambung otomatis Google berdasarkan email** (docs/arsitektur-auth.md §3.3): risiko sisa yang diterima — pemilik domain Google Workspace atau alamat email yang didaur ulang bisa memperoleh `email_verified=true` untuk alamat yang dulu dipakai orang lain. Sama kelasnya dengan reset password lewat email; staf dikecualikan sepenuhnya. Alias Gmail (titik/`+tag`) tidak digabung → akun ganda, bukan pengambilalihan.
 - **Email = identitas**: `PUT /auth/profile` tidak menerima `email` (SEC-17); mengganti email butuh fitur terpisah dengan verifikasi email baru.
 - Session: JWT, disimpan `httpOnly; Secure; SameSite=Strict` cookie
   (`CLAUDE.md` § Security) — bukan localStorage.

@@ -2327,3 +2327,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `prisma/schema.prisma` + migrasi `20261021150000_auth_email_verification`, `lib/auth/{tokens,tokenPattern,accounts,authEmail,email,rateLimit}.ts`, `lib/email/authTemplates.ts`, `lib/validators/{auth,adminUpdates}.ts`, `app/api/v1/auth/*`, `app/[locale]/(auth)/*`, `lib/cron/authTokenJob.ts`, `scripts/test-auth.ts`, dan penghapusan seluruh kode OTP WhatsApp.
 
+## 2026-10-22 — Auth Fase 2: login Google buatan sendiri (PKCE), sambung otomatis ke akun jamaah dengan email sama
+
+**Decision:** Login/daftar Google dengan OAuth Authorization Code + PKCE S256 implementasi sendiri (`lib/auth/google.ts`, tanpa Better Auth/NextAuth): state (CSRF) + nonce (replay) + verifier PKCE di cookie `jose` bertanda tangan (kunci turunan SHA-256 + audience, `SameSite=Lax`, sekali pakai, 10 menit); ID token diverifikasi penuh (JWKS Google, `iss`, `aud`, `exp`/`iat`/`sub` wajib, `nonce`, `email_verified === true`, `algorithms: RS256`). Aturan akun (`lib/auth/googleAccounts.ts`): `sub` dikenal → masuk; email cocok akun **pilgrim** aktif → tersambung otomatis (akun lama belum terverifikasi: password dimatikan); **staf tak pernah** tersambung; nonaktif/konflik ditolak; pengguna baru menyetujui kebijakan privasi di halaman lengkapi **sebelum** akun dibuat. Endpoint Google dapat di-override hanya saat `NODE_ENV` development/test (uji dengan server Google palsu). Fitur mati otomatis bila `GOOGLE_CLIENT_ID/SECRET/APP_URL` kosong.
+
+**Rationale:** Pilihan pemilik (keputusan 9, ADR-0001): akun manual yang kelak masuk lewat Google langsung tersambung. Aman karena akun manual hanya lahir setelah pemilik email membuktikan kepemilikan (Fase 1) dan Google memverifikasi email. Staf dikecualikan agar salah ketik/penyalahgunaan email tak berubah menjadi akses admin. Implementasi sendiri karena project tak memakai pustaka auth; `jose` sudah ada.
+
+**Alternatives considered:** Better Auth/NextAuth (dependency & model sesi baru). Tidak menyambung otomatis (ditolak pemilik). Cookie state berisi JWT_SECRET mentah (JWT sesi dan cookie sementara bisa tertukar — ditolak: kunci turunan + audience).
+
+**Ringkasan security check (SOP langkah 5):** audit independen `security-auditor`: 0 Critical, 0 High, 0 Medium, 5 Low → semua diperbaiki (SEC-28/29/30), SEC-31 dicatat terbuka. Bukti: `docs/arsitektur-auth.md` §8 (36 uji + uji mutasi 18 pengaman, browser dengan Google palsu penuh, smoke CI image produksi). Tidak ada dependency baru (`jose` sudah ada).
+
+**Affects:** `prisma/schema.prisma` + migrasi `20261022090000_user_google_sub`, `lib/auth/{google,googleAccounts,googleCookies}.ts`, `lib/utils/locale.ts`, `app/api/v1/auth/google/*`, `app/[locale]/(auth)/{login,register}/**` + `register/google`, `components/shared/GoogleButton.tsx`, `lib/notifications/integrations.ts`, `scripts/test-google.ts`, `.github/workflows/ci.yml`, env examples, `docs/deployment.md`.
+

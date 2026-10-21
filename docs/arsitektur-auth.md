@@ -1,6 +1,6 @@
 # Arsitektur — Auth berbasis Email (daftar manual + Google), tanpa OTP WhatsApp
 
-> Status: **FASE 1 SELESAI & TERVERIFIKASI (2026-10-21)** — auth email manual + hapus OTP (§7). Fase 2 (Google) dan 3 (Lengkapi data) belum.
+> Status: **FASE 1–2 SELESAI & TERVERIFIKASI (2026-10-21/22)** — auth email manual + hapus OTP (§7), login Google (§8). Fase 3 (Lengkapi data) belum.
 > Keputusan produk dikonfirmasi pemilik (§2). Menggantikan
 > `docs/arsitektur-login-google.md` (dihapus) dan bagian "Verifikasi akun / Reset password" di `docs/auth-flow.md`.
 > Alasan perubahan: gateway WhatsApp pihak ketiga makin sering memblokir, jadi **WhatsApp tidak boleh lagi jadi dependensi auth**.
@@ -148,7 +148,7 @@ Redirect URI persis `{APP_URL}/api/v1/auth/google/callback`.
 ## 6. Fase eksekusi (satu PR per fase, dari `main`)
 
 1. **Auth email (manual)** — SELESAI 2026-10-21 (§7): migrasi, token, register/complete/login/forgot/reset, hapus OTP, form kontak di daftar, perbaikan profile (SEC-17), staf `emailVerifiedAt`, uji + CI.
-2. **Google:** `lib/auth/google.ts` + server Google palsu, rute `start/callback/complete/methods`, aturan sambung §3.3, UI tombol & halaman lengkapi, panel Integrasi.
+2. **Google** — SELESAI 2026-10-22 (§8): `lib/auth/google.ts` + server Google palsu, rute `start/callback/complete`, aturan sambung §3.3, UI tombol & halaman lengkapi, panel Integrasi.
 3. **Lengkapi data:** gerbang di layout, `PUT /auth/contact`, `ConsentLog` WhatsApp, penegakan di `POST /bookings`, WA client E.164, lingkup WhatsApp, profil.
 4. **Penutupan:** hapus sisa kode/dok OTP, `CLAUDE.md`, security review akhir lintas fase.
 
@@ -171,4 +171,24 @@ Redirect URI persis `{APP_URL}/api/v1/auth/google/callback`.
   SEC-21 (nama berisi tautan/karakter kontrol), SEC-22 (IPv6 /64), SEC-23 (log PII), SEC-24 (retensi `auth_tokens` + cron), SEC-25 (alamat di galat Resend); SEC-15/16/17 ditutup.
   Dicatat terbuka: SEC-26 (atomisitas batas login per akun), SEC-27 (seed tanpa penjaga), SEC-14/18 (sudah ada). Stub 410 `auth/otp/*` dihapus. Perubahan konsekuensi:
   form daftar tidak lagi memuat centang persetujuan — persetujuan privasi + WhatsApp dicentang di halaman penyelesaian (§3.2).
+
+## 8. Fase 2 — Login Google (as-built, 2026-10-22)
+
+**Implementasi** (menyimpang dari rencana §3.4 pada tiga hal, semuanya penyederhanaan):
+- Tidak ada `GET /auth/methods`: halaman `login`/`register` adalah Server Component yang memanggil `googleConfigured()` langsung dan meneruskan prop ke form.
+- Halaman lengkapi (`/{locale}/register/google`) membaca identitas dari cookie bertanda tangan di server (tanpa endpoint `pending`); `POST /auth/google/complete` menerima `{fullName, privacyConsent}`.
+- Pengguna Google baru hanya menyetujui **kebijakan privasi** di sana; persetujuan notifikasi WhatsApp + nomor telepon/WhatsApp dikumpulkan di "Lengkapi data" (Fase 3).
+
+**Berkas:** `lib/auth/google.ts` (protokol: state/nonce/PKCE S256, tukar kode, verifikasi ID token via JWKS, cookie bertanda tangan dengan kunci turunan SHA-256 + audience per jenis — tak bisa ditukar dengan JWT sesi), `lib/auth/googleAccounts.ts` (aturan §3.3, klaim tautan atomik `updateMany where googleSub null`), `lib/auth/googleCookies.ts` (cookie `SameSite=Lax`: callback adalah navigasi lintas-situs), rute `auth/google/{start,callback,complete}`, `GoogleButton` (logo "G" resmi), migrasi `20261022090000_user_google_sub` (`User.googleSub @unique`). Email `welcome` dikirim untuk pendaftaran Google dan manual.
+Aturan sambung (diuji): `sub` dikenal → masuk (tetap benar walau email di Google berubah); email cocok akun pilgrim aktif → tersambung otomatis; akun lama belum terverifikasi → tersambung + password dimatikan; **staf tak pernah** (ditolak, tak diubah); nonaktif ditolak; email sudah tersambung ke Google LAIN → konflik; pengguna baru → cookie identitas 15 menit → persetujuan → akun.
+Galat dikembalikan sebagai kode di `/login?error=google_*` (allow-list di halaman, bukan teks mentah dari query).
+
+**Bukti verifikasi:**
+- `scripts/test-google.ts` (36 uji; server Google palsu dengan kunci RSA nyata, **PKCE diverifikasi di sisi server palsu**; tiap uji "ditolak" didahului kontrol positif — sebelumnya 5 uji lolos hampa karena token tiruan tak memuat `nonce`, ditemukan dari kasus sukses yang gagal): nonce salah, audience salah, issuer salah, kedaluwarsa, kunci lain, tanpa sub/email, `email_verified` false/"true"/hilang, endpoint token menolak/tanpa id_token/tak terjangkau, konfusi algoritma HS256, override endpoint hanya development/test, cookie tak bisa ditukar dengan JWT sesi, aturan akun (sambung, legacy, staf ×3, nonaktif, konflik, balapan, duplikat).
+- **Uji mutasi** 12 pengaman: 10 membuat uji gagal. 2 selamat dan ternyata *equivalent*: audience cookie (berlebih — kunci turunan sudah memisahkan) dan cek konflik awal (berlebih — klaim atomik menutupnya).
+- Browser + HTTP (dev server + Google palsu penuh: redirect, PKCE, token RSA): tombol → halaman lengkapi (email huruf kecil, nama dari Google) → **belum ada akun** → setuju → akun dibuat + email sambutan → dashboard; akun manual (email beda huruf) tersambung langsung tanpa halaman lengkapi; staf → `/login?error=google_staff`, tidak ada sesi/tautan; state salah / tanpa cookie / cookie dipakai ulang → `google_failed`; ditolak di Google → `google_denied`; `locale` liar tak dipakai mentah; tanpa kredensial: tombol hilang, `start` → `google_unavailable`, halaman lengkapi tanpa cookie → `google_expired`.
+- **Belum diverifikasi:** Google asli (butuh kredensial + redirect URI terdaftar + aplikasi berstatus *In production*), tampilan di layar persetujuan Google.
+- **Audit keamanan independen Fase 2** (subagent `security-auditor`, read-only): 0 Critical, 0 High, 0 Medium, 5 Low — semuanya diperbaiki (SEC-28/29/30) kecuali pola locale di halaman non-auth (SEC-31, terbuka). Dari audit juga: uji ditambah — **kedaluwarsa cookie** (TTL produksi tepat 600/900 detik + kedaluwarsa nyata), **RS384 dengan JWKS tanpa `alg`** (membuktikan opsi `algorithms` benar-benar membatasi), **override production** untuk token/JWKS/issuer/auth (bukan hanya `buildAuthUrl`), token tanpa `exp`/`iat`, `googleConfigured` butuh `APP_URL`; 6 mutan baru semuanya tertangkap.
+- **Rute HTTP** (state/cookie sekali pakai, allow-list `locale`, `createSession` hanya setelah semua cek) tak bisa diuji skrip Bun (butuh `next/headers`): diverifikasi manual (browser + curl, atas) dan sebagian dijaga langkah smoke CI **"auth email dan Google di image produksi"** (register/forgot seragam, token ngawur 404/401, rute OTP lama 404, `google/start` tanpa kredensial → `google_unavailable`, `google/callback` tanpa cookie → `google_failed`, `google/complete` tanpa cookie 401, tombol Google tersembunyi). Skrip langkah itu dijalankan lokal sebelum commit.
+- **Koreksi §7:** klaim "reset mengaktifkan akun lama" hanya berlaku untuk keadaan sintetik (`isActive=true, emailVerifiedAt=null`): migrasi Fase 1 hanya mem-backfill `isActive=true`, jadi akun lama `isActive=false` tak punya jalur pemulihan lewat Google/lupa password (admin harus mengaktifkannya). Tak berdampak — belum ada pengguna nyata.
 
