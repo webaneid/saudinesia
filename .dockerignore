@@ -1,0 +1,33 @@
+# Tanpa file ini `COPY . .` di Dockerfile menyalin SEMUANYA ke layer build — termasuk .env.local dan riwayat git.
+
+# Rahasia & environment — TIDAK PERNAH boleh masuk image
+.env
+.env.*
+!.env.example
+
+# Dokumentasi & konfigurasi Claude Code — bukan bagian dari aplikasi
+docs/
+.claude/
+*.md
+
+# Konfigurasi deploy — dipakai DI SERVER, bukan bagian dari image
+docker-compose*.yml
+Caddyfile*
+infra/
+scripts/
+
+# Git & CI
+.git/
+.github/
+
+# Dependency & hasil build lokal (image melakukan install/build sendiri)
+node_modules/
+.next/
+out/
+build/
+
+# Misc
+.DS_Store
+Thumbs.db
+*.log
+*.tsbuildinfo

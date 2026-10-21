@@ -9,6 +9,9 @@ out/
 .env
 .env.local
 .env.*.local
+# Dibuat di SERVER oleh scripts/buat-env-production.sh / langkah deploy — berisi rahasia asli, jangan pernah di-commit
+.env.production
+.env.deploy
 
 # Prisma — prisma/migrations/ SENGAJA di-track: `prisma migrate deploy` di production membacanya
 
