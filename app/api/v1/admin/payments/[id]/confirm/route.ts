@@ -3,8 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { quotaAdapters } from '@/lib/quota/adapters'
-import { sendWhatsApp } from '@/lib/notifications/send'
-import { waTemplates } from '@/lib/notifications/templates/whatsapp'
+import { notify } from '@/lib/notifications/notify'
 import { z } from 'zod'
 
 const schema = z.object({ action: z.enum(['confirm', 'reject']), notes: z.string().optional() })
@@ -37,21 +36,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
         for (const bm of booking.muthowif) await quotaAdapters.muthowif.confirm(tx, bm)
         for (const bh of booking.haji) await quotaAdapters.haji.confirm(tx, bh)
       })
-      if (booking.user.phone) {
-        sendWhatsApp({
-          userId: booking.userId, phone: booking.user.phone, type: 'payment_confirmed',
-          message: waTemplates.paymentConfirmed(booking.bookingCode), bookingId: booking.id,
-        }).catch(e => console.error('[payments/confirm] WA failed:', e))
-      }
+      // Best-effort, tidak memblokir respons; notify() tidak pernah melempar dan mencatat status jujur per kanal.
+      void notify({ userId: booking.userId, bookingId: booking.id, event: { type: 'payment_confirmed', code: booking.bookingCode } })
     } else {
       await prisma.payment.update({ where: { id }, data: { status: 'rejected', notes: parsed.data.notes ?? null } })
       await prisma.booking.update({ where: { id: booking.id }, data: { status: 'awaiting_payment' } })
-      if (booking.user.phone) {
-        sendWhatsApp({
-          userId: booking.userId, phone: booking.user.phone, type: 'payment_rejected',
-          message: waTemplates.paymentRejected(booking.bookingCode), bookingId: booking.id,
-        }).catch(e => console.error('[payments/reject] WA failed:', e))
-      }
+      void notify({ userId: booking.userId, bookingId: booking.id, event: { type: 'payment_rejected', code: booking.bookingCode } })
     }
 
     return NextResponse.json(ok({ action }))

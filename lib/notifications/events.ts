@@ -1,0 +1,43 @@
+import { waTemplates } from '@/lib/notifications/templates/whatsapp'
+
+// Semua kejadian notifikasi di SATU union (docs/arsitektur-notifikasi.md §3–4). Menambah kejadian = tambah satu varian di sini;
+// `waMessage` dan `emailContent` (lib/email/templates.ts) memakai `switch` yang lengkap, jadi kompiler memaksa kedua kanal diisi.
+export type NotificationEvent =
+  | { type: 'booking_submitted'; code: string; deadline: string | null }
+  | { type: 'payment_reminder_12h'; code: string; deadline: string }
+  | { type: 'payment_reminder_22h'; code: string; deadline: string }
+  | { type: 'payment_confirmed'; code: string }
+  | { type: 'payment_rejected'; code: string }
+  | { type: 'auto_cancelled'; code: string }
+  | { type: 'visa_status_change'; code: string; status: string }
+  | { type: 'welcome'; name: string }
+  | { type: 'test' }
+
+export type NotificationType = NotificationEvent['type']
+
+/** Pesan WhatsApp untuk kejadian ini; `null` = kejadian ini tidak dikirim lewat WhatsApp (welcome, test). */
+export function waMessage(e: NotificationEvent): string | null {
+  switch (e.type) {
+    case 'booking_submitted':
+      return waTemplates.bookingSubmitted(e.code, e.deadline ?? '-')
+    case 'payment_reminder_12h':
+    case 'payment_reminder_22h':
+      return waTemplates.paymentReminder(e.code, e.deadline)
+    case 'payment_confirmed':
+      return waTemplates.paymentConfirmed(e.code)
+    case 'payment_rejected':
+      return waTemplates.paymentRejected(e.code)
+    case 'auto_cancelled':
+      return waTemplates.autoCancelled(e.code)
+    case 'visa_status_change':
+      return waTemplates.visaStatusChange(e.code, e.status)
+    case 'welcome':
+    case 'test':
+      return null
+  }
+}
+
+/** Format batas waktu untuk pesan (zona WIB, bahasa Indonesia) — satu tempat, dipakai route dan cron. */
+export function formatDeadline(d: Date): string {
+  return d.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long', timeStyle: 'short' })
+}

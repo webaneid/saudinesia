@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
-import { Badge } from '@/components/admin/ui/Badge'
+import { Badge, type BadgeTone } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 
@@ -13,12 +13,17 @@ type Props = {
 
 type LogRow = Prisma.NotificationLogGetPayload<{ include: { user: { select: { fullName: true; phone: true } } } }>
 
+// 'sent' = diterima penyedia (bukan jaminan sampai); 'skipped' = kanal belum dikonfigurasi/dimatikan; 'failed' = ditolak/galat.
+const STATUS_TONE: Record<string, BadgeTone> = { sent: 'ok', skipped: 'warning', failed: 'danger' }
+const STATUS_LABEL: Record<string, string> = { sent: 'terkirim', skipped: 'dilewati', failed: 'gagal' }
+
 const columns: Column<LogRow>[] = [
   { key: 'time', header: 'Waktu', cell: l => <span className="text-[12px] text-admin-muted">{new Date(l.sentAt).toLocaleString('id-ID')}</span> },
   { key: 'user', header: 'User', mobile: 'title', cell: l => <span className="text-[13px]">{l.user.fullName ?? l.recipient}</span> },
   { key: 'channel', header: 'Kanal', cell: l => <Badge tone={l.channel === 'whatsapp' ? 'ok' : 'accent'}>{l.channel}</Badge> },
   { key: 'type', header: 'Tipe', cell: l => <span className="text-[12px] text-admin-muted">{l.type.replace(/_/g, ' ')}</span> },
-  { key: 'status', header: 'Status', cell: l => <Badge tone={l.status === 'sent' ? 'ok' : 'danger'}>{l.status}</Badge> },
+  { key: 'status', header: 'Status', cell: l => <Badge tone={STATUS_TONE[l.status] ?? 'neutral'}>{STATUS_LABEL[l.status] ?? l.status}</Badge> },
+  { key: 'detail', header: 'Keterangan', cell: l => <span className="text-[12px] text-admin-muted">{l.error ?? '—'}</span> },
 ]
 
 export default async function AdminNotifications({ params, searchParams }: Props) {

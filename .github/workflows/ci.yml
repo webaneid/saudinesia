@@ -63,7 +63,10 @@ jobs:
 
       # Rate limiter (SEC-04): memori, Redis mati, dan Redis SUNGGUHAN. Uji Redis membaca kunci lewat klien terpisah
       # supaya fallback ke memori yang diam-diam tidak lolos sebagai "hijau".
-      - name: Uji rate limiter
+      #
+      # Notifikasi (email Resend + WhatsApp): klien, template, dan notify() terhadap DB sungguhan + gateway PALSU lokal —
+      # log harus jujur (sent | failed | skipped). test-notify menolak jalan kecuali nama DB memuat test/_ci/tmp (saudinesia_ci lolos).
+      - name: Uji rate limiter & notifikasi
         run: REDIS_TEST_URL=redis://localhost:6379 bun run test
 
       - name: Build

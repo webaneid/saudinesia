@@ -111,7 +111,10 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 3. Jalankan workflow **MinIO Image** (Actions → Run workflow) sekali.
 4. DNS: A record `APP_DOMAIN` dan `FILES_DOMAIN` ke IP VPS **sebelum** Caddy dinyalakan.
 5. Server: Docker + Compose, folder `/opt/app` berisi `docker-compose.prod.yml`, `Caddyfile`, `.env.production.example`,
-   `scripts/buat-env-production.sh`; jalankan skrip env; isi manual `WA_GATEWAY_*`, `RESEND_*`.
+   `scripts/buat-env-production.sh`; jalankan skrip env (mengisi `APP_URL` otomatis); isi manual `WA_GATEWAY_*`, `RESEND_*`.
+   **Email (Resend)**: verifikasi domain pengirim di Resend (SPF + DKIM + DMARC) dulu, lalu isi `RESEND_API_KEY`/`RESEND_FROM`,
+   `docker compose up -d web`, login superadmin → Pengaturan → Integrasi & Notifikasi → **Kirim uji**. Detail: `docs/arsitektur-notifikasi.md` §7.
+   Sebelum diisi, email dicatat `dilewati` di Log Notifikasi (aplikasi tetap normal).
 6. Rahasia Actions untuk deploy: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY` — diisi langsung di GitHub, **jangan**
    ditempel di chat.
 7. Tulis `deploy.yml` (build+push 2 image, scp, SSH, health check, rollback). Baru setelah itu semantic-release.

@@ -21,6 +21,7 @@ export const LIMITS = {
   otpVerifyPhone: { limit: 5,  windowSec: 900 },  // OTP SALAH per nomor — setelah ini OTP dibatalkan
   otpVerifyIp:    { limit: 30, windowSec: 600 },  // percobaan verifikasi OTP per IP
   resetIp:        { limit: 10, windowSec: 3600 }, // reset password per IP
+  emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
 } as const satisfies Record<string, { limit: number; windowSec: number }>
 
 const MAX_ID_LENGTH = 128

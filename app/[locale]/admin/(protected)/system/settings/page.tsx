@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, Pencil } from 'lucide-react'
+import { Plus, Pencil, Send } from 'lucide-react'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
@@ -33,8 +33,17 @@ type SiteSetting = {
   metaDescription: string | null
   contactEmail: string | null
   contactPhone: string | null
+  emailNotificationsEnabled: boolean
 }
 const EMPTY_SITE_FORM = { platformName: '', metaTitle: '', metaDescription: '', contactEmail: '', contactPhone: '' }
+
+type IntegrationStatus = {
+  appUrl: { set: boolean; value: string | null }
+  email: { configured: boolean; hasApiKey: boolean; from: string | null; hasReplyTo: boolean }
+  whatsapp: { configured: boolean; hasToken: boolean }
+  google: { configured: boolean; redirectUri: string | null }
+}
+type TestEmailResult = { status: 'sent' | 'failed' | 'skipped'; detail: string | null; to: string }
 
 export default function SettingsPage() {
   const [rule, setRule] = useState<PricingRule | null>(null)
@@ -44,6 +53,13 @@ export default function SettingsPage() {
   const [siteForm, setSiteForm] = useState(EMPTY_SITE_FORM)
   const [savingSite, setSavingSite] = useState(false)
   const [siteSavedAt, setSiteSavedAt] = useState<number | null>(null)
+
+  const [integrations, setIntegrations] = useState<IntegrationStatus | null>(null)
+  const [emailEnabled, setEmailEnabled] = useState(true)
+  const [savingEmailToggle, setSavingEmailToggle] = useState(false)
+  const [testTo, setTestTo] = useState('')
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<TestEmailResult | { status: 'error'; detail: string } | null>(null)
 
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [showVendorForm, setShowVendorForm] = useState(false)
@@ -74,9 +90,44 @@ export default function SettingsPage() {
         contactEmail: s.contactEmail ?? '',
         contactPhone: s.contactPhone ?? '',
       })
+      setEmailEnabled(s.emailNotificationsEnabled)
     }
   }
-  useEffect(() => { loadRule(); loadVendors(); loadSiteSetting() }, [])
+  async function loadIntegrations() {
+    const r = await fetch('/api/v1/admin/system/integrations')
+    const j = await r.json()
+    setIntegrations(j.data ?? null)
+  }
+  useEffect(() => { loadRule(); loadVendors(); loadSiteSetting(); loadIntegrations() }, [])
+
+  async function handleToggleEmail(next: boolean) {
+    setSavingEmailToggle(true)
+    setEmailEnabled(next)
+    const r = await fetch('/api/v1/admin/system/settings/site', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailNotificationsEnabled: next }),
+    })
+    if (!r.ok) setEmailEnabled(!next)
+    setSavingEmailToggle(false)
+  }
+
+  async function handleTestEmail() {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const r = await fetch('/api/v1/admin/system/integrations/test-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testTo.trim() ? { to: testTo.trim() } : {}),
+      })
+      const j = await r.json()
+      setTestResult(r.ok && j.data ? j.data : { status: 'error', detail: j.error ?? 'Gagal mengirim email uji' })
+    } catch {
+      setTestResult({ status: 'error', detail: 'Tidak dapat menghubungi server' })
+    }
+    setTesting(false)
+  }
 
   async function handleSaveRule() {
     setSavingRule(true)
@@ -229,6 +280,87 @@ export default function SettingsPage() {
             {savingSite ? '...' : 'Simpan'}
           </button>
           {siteSavedAt && <p className="text-[11px] text-admin-muted/70">Tersimpan.</p>}
+        </div>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-sm font-semibold text-admin-ink">Integrasi &amp; Notifikasi</h2>
+        <p className="text-xs text-admin-muted">
+          Status konfigurasi layanan pihak ketiga. Kunci/rahasia hanya diatur lewat environment server dan tidak pernah ditampilkan di sini.
+        </p>
+        <div className="admin-form-panel space-y-4">
+          {!integrations ? (
+            <p className="text-xs text-admin-muted">Memuat status...</p>
+          ) : (
+            <>
+              <ul className="divide-y divide-admin-line text-[13px]">
+                <li className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-admin-ink">Email (Resend)</p>
+                    <p className="text-[11px] text-admin-muted">
+                      {integrations.email.configured
+                        ? `Pengirim: ${integrations.email.from}`
+                        : `Belum lengkap — ${!integrations.email.hasApiKey ? 'RESEND_API_KEY' : 'RESEND_FROM'} belum diisi. Email dicatat sebagai "dilewati", bukan "terkirim".`}
+                    </p>
+                  </div>
+                  <Badge tone={integrations.email.configured ? 'ok' : 'warning'}>{integrations.email.configured ? 'Terkonfigurasi' : 'Belum diatur'}</Badge>
+                </li>
+                <li className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-admin-ink">WhatsApp (GOWA)</p>
+                    <p className="text-[11px] text-admin-muted">{integrations.whatsapp.configured ? 'Gateway terhubung ke konfigurasi server.' : 'WA_GATEWAY_URL belum diisi — pesan WhatsApp dicatat sebagai "dilewati".'}</p>
+                  </div>
+                  <Badge tone={integrations.whatsapp.configured ? 'ok' : 'warning'}>{integrations.whatsapp.configured ? 'Terkonfigurasi' : 'Belum diatur'}</Badge>
+                </li>
+                <li className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-admin-ink">Masuk dengan Google</p>
+                    <p className="text-[11px] text-admin-muted">
+                      {integrations.google.configured ? 'Tombol Google tampil di halaman masuk/daftar.' : 'GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET belum diisi — tombol Google disembunyikan.'}
+                      {integrations.google.redirectUri && <> Redirect URI: <code className="text-admin-ink">{integrations.google.redirectUri}</code></>}
+                    </p>
+                  </div>
+                  <Badge tone={integrations.google.configured ? 'ok' : 'neutral'}>{integrations.google.configured ? 'Terkonfigurasi' : 'Nonaktif'}</Badge>
+                </li>
+                <li className="flex items-start justify-between gap-3 py-2">
+                  <div>
+                    <p className="font-medium text-admin-ink">APP_URL (tautan di email)</p>
+                    <p className="text-[11px] text-admin-muted">{integrations.appUrl.set ? integrations.appUrl.value : 'Belum diisi — email dikirim tanpa tombol/tautan.'}</p>
+                  </div>
+                  <Badge tone={integrations.appUrl.set ? 'ok' : 'warning'}>{integrations.appUrl.set ? 'Terisi' : 'Kosong'}</Badge>
+                </li>
+              </ul>
+
+              <label className="flex items-start gap-2 text-[13px]">
+                <input type="checkbox" className="mt-0.5" checked={emailEnabled} disabled={savingEmailToggle} onChange={e => handleToggleEmail(e.target.checked)} />
+                <span>
+                  <span className="font-medium text-admin-ink">Kirim notifikasi email ke jamaah</span>
+                  <span className="block text-[11px] text-admin-muted">Saklar darurat. Bila dimatikan, email dicatat &quot;dilewati&quot;; WhatsApp tidak terpengaruh.</span>
+                </span>
+              </label>
+
+              <div className="space-y-2 border-t border-admin-line pt-3">
+                <p className="text-xs font-semibold text-admin-ink">Kirim email uji</p>
+                <div className="flex flex-col gap-2 md:flex-row">
+                  <input className="admin-inp md:max-w-sm" type="email" placeholder="Kosongkan = kirim ke email akun Anda" value={testTo} onChange={e => setTestTo(e.target.value)} />
+                  <button onClick={handleTestEmail} disabled={testing} className="admin-btn-sm inline-flex items-center gap-1.5 disabled:opacity-50">
+                    <Send className="h-3.5 w-3.5" /> {testing ? 'Mengirim...' : 'Kirim uji'}
+                  </button>
+                </div>
+                {testResult && (
+                  <p className="text-[12px]" role="status">
+                    {testResult.status === 'sent' && <Badge tone="ok">Diterima Resend</Badge>}
+                    {testResult.status === 'skipped' && <Badge tone="warning">Dilewati</Badge>}
+                    {(testResult.status === 'failed' || testResult.status === 'error') && <Badge tone="danger">Gagal</Badge>}
+                    {' '}
+                    <span className="text-admin-muted">
+                      {testResult.status === 'sent' ? `Diterima Resend untuk ${(testResult as TestEmailResult).to}. Cek kotak masuk (dan spam) — diterima Resend belum menjamin masuk inbox.` : testResult.detail}
+                    </span>
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </section>
 
