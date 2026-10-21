@@ -2339,3 +2339,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `prisma/schema.prisma` + migrasi `20261022090000_user_google_sub`, `lib/auth/{google,googleAccounts,googleCookies}.ts`, `lib/utils/locale.ts`, `app/api/v1/auth/google/*`, `app/[locale]/(auth)/{login,register}/**` + `register/google`, `components/shared/GoogleButton.tsx`, `lib/notifications/integrations.ts`, `scripts/test-google.ts`, `.github/workflows/ci.yml`, env examples, `docs/deployment.md`.
 
+## 2026-10-22 — Auth Fase 3: gerbang "Lengkapi data", telepon + WhatsApp wajib (tak diverifikasi), lingkup WhatsApp diperkecil
+
+**Decision:** Jamaah wajib mengisi telepon dan WhatsApp (dua kolom, tidak diverifikasi, tidak unik, E.164) sebelum halaman jamaah mana pun: gerbang di `(pilgrim)/layout.tsx` → `/{locale}/lengkapi-data`, ditegakkan juga di server (`POST /bookings` → 422). Persetujuan notifikasi WhatsApp dicatat sekali di `ConsentLog`. Notifikasi WhatsApp hanya untuk konfirmasi booking, pengingat pembayaran, dan pembayaran dikonfirmasi/ditolak; status visa dan pembatalan otomatis email saja. Pengaman nomor tak terverifikasi: rate limit ubah-nomor (5/hari) dan booking (20/jam), batas 10 WA per nomor tujuan per hari, WA hanya bila ada `ConsentLog`, email ke pemilik akun saat nomor berganti.
+
+**Rationale:** Keputusan pemilik (ADR-0001, pertanyaan 5–8): data awal harus lengkap sekali jalan; WhatsApp dikecilkan karena gateway pihak ketiga makin sering memblokir. Nomor tak terverifikasi bisa salah ketik atau milik orang lain — pengaman di atas membatasi dampaknya tanpa OTP.
+
+**Alternatives considered:** Verifikasi nomor (OTP) — bertentangan dengan keputusan pemilik dan dengan alasan menjauh dari WhatsApp. Gerbang di `middleware.ts` — Edge tanpa Prisma. WhatsApp opsional — ditolak pemilik untuk sekarang; dicatat sebagai opsi di SEC-33.
+
+**Ringkasan security check (SOP langkah 5):** audit independen `security-auditor`: 0 Critical, 0 High, 2 Medium, 5 Low. Diperbaiki: SEC-32 (dimitigasi), 34, 36, 37. **Terbuka dan menunggu keputusan pemilik/legal:** SEC-33 (persetujuan WhatsApp wajib tanpa jalur penarikan — UU PDP), SEC-35 (versi persetujuan), risiko sisa SEC-32. Bukti: `docs/arsitektur-auth.md` §9.
+
+**Affects:** `lib/auth/{contact,rateLimit}.ts`, `app/api/v1/auth/contact/route.ts`, `app/api/v1/bookings/route.ts`, `app/[locale]/(pilgrim)/{layout,profile/*}`, `app/[locale]/(auth)/lengkapi-data/*`, `components/shared/ContactPicker.tsx`, `lib/utils/{phone,locale}.ts`, `lib/notifications/{events,notify}.ts`, `lib/email/templates.ts`, `middleware.ts`, `scripts/test-{auth,notify}.ts`, `.github/workflows/ci.yml`.
+

@@ -230,7 +230,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 
 - GOWA base URL from `process.env.WA_GATEWAY_URL` (Sumopod-hosted external service)
 - All GOWA calls go through `lib/whatsapp/client.ts` — no direct `fetch` to GOWA anywhere else
-- Message templates in `lib/notifications/templates/whatsapp.ts`, keyed by notification type and locale
+- Message templates in `lib/notifications/templates/whatsapp.ts`, keyed by notification type and locale. **WhatsApp scope is deliberately small** (ADR-0001): only booking submitted, payment reminders, payment confirmed/rejected (`waMessage` in `lib/notifications/events.ts`); everything else is email-only. Numbers are `User.whatsapp` (E.164, unverified, not unique) — never `phone`
 - Retry: 2 attempts, 2 s delay on network error — log failure to `notification_logs`, then continue
 - GOWA is best-effort: a WA failure must **never** block a booking confirmation or status update
 - Auth rate limiting: `lib/auth/rateLimit.ts` (Redis fixed-window counters, atomic Lua; falls back to in-process memory when Redis is unreachable — the app runs a single replica). All numbers live in `LIMITS` there: auth emails max 3 per address per 10 min and 10 per IP per hour, token preview/complete capped per IP, login failures capped per account+IP and per account, plus a per-IP ceiling. Applied in `auth/login`, `register`, `forgot-password`, `registration/preview`, `registration/complete`, `reset-password` (SEC-04). A new auth endpoint that sends email or consumes a token must use it too
