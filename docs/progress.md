@@ -656,3 +656,10 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] **Fase 3 — Lengkapi data** (2026-10-22): gerbang di layout jamaah → `/lengkapi-data` (telepon + WhatsApp dua kolom, centang "sama dengan nomor HP", persetujuan WhatsApp dicatat sekali), `PUT /auth/contact`, penegakan 422 di `POST /bookings`, kontak bisa diedit di profil, WhatsApp hanya booking/pengingat/pembayaran dikonfirmasi-ditolak (visa & auto-cancel email saja), SEC-31 ditutup (`safeLocale` di semua redirect). 15 uji baru + smoke CI; diverifikasi browser dengan Google palsu; audit independen (0 Critical/High, 2 Medium, 5 Low): mitigasi nomor tak terverifikasi (rate limit, batas 10 WA/nomor/hari, penjaga ConsentLog, email saat nomor berganti). **Keputusan pemilik tertunda:** SEC-33 (persetujuan WhatsApp wajib tanpa jalur penarikan, UU PDP) dan risiko sisa SEC-32.
 - [ ] **Fase 4 — penutupan**: hapus sisa rujukan OTP di `docs/auth-flow.md`/`docs/architecture.md`/`docs/spec.md` (arsip), security review lintas fase.
 
+---
+
+## Verifikasi WhatsApp lewat pesan masuk (`docs/arsitektur-whatsapp-verifikasi.md`, ADR-0002)
+
+- [x] **Email sebagai jaring pengaman** (2026-10-22): `notify()` menjalankan WhatsApp dan email **paralel** (gateway macet tak lagi menunda email ≈34 dtk); email dikirim untuk semua kejadian tanpa syarat WhatsApp; peringatan keras bila tak ada kanal yang sampai. Diuji untuk SETIAP jenis kejadian × (gateway belum dikonfigurasi, akun tanpa nomor, tanpa persetujuan, gateway 500, gateway mati, gateway lambat) + uji mutasi.
+- [ ] **Verifikasi nomor** (rencana tertulis, menunggu konfigurasi webhook GOWA oleh pemilik): kode lewat pesan masuk (webhook GOWA bertanda tangan HMAC), WhatsApp hanya ke nomor terverifikasi, 1 nomor = 1 akun terverifikasi, tidak menghalangi pemesanan, status GOWA di panel admin.
+
