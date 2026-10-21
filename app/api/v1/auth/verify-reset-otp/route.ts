@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { verifyAndConsumeOtp } from '@/lib/auth/otp'
+import { verifyOtpGuarded } from '@/lib/auth/otpVerify'
 import { verifyResetOtpSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
 import { randomUUID } from 'crypto'
@@ -14,10 +14,9 @@ export async function POST(request: Request) {
     }
 
     const { phone, code } = parsed.data
-    const valid = await verifyAndConsumeOtp(phone, code)
-    if (!valid) {
-      return NextResponse.json(err('Kode OTP salah atau sudah kadaluarsa.'), { status: 401 })
-    }
+    // Batas percobaan salah per nomor & per IP (SEC-04) — kode 6 digit tidak boleh bisa ditebak tanpa batas.
+    const verified = await verifyOtpGuarded(request, phone, code)
+    if (!verified.ok) return verified.response
 
     const user = await prisma.user.findUnique({ where: { phone }, select: { id: true } })
     if (!user) {

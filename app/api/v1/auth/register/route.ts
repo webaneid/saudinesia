@@ -7,6 +7,8 @@ import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { normalizePhone } from '@/lib/utils/phone'
 import { registerSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
+import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
+import { resetOtpVerifyFailures } from '@/lib/auth/otpVerify'
 import { PRIVACY_POLICY_VERSION } from '@/lib/constants/legal'
 
 export async function POST(request: Request) {
@@ -21,6 +23,13 @@ export async function POST(request: Request) {
     const { fullName, email, password, phone } = parsed.data
     const normalizedPhone = normalizePhone(phone)
 
+    // Per IP: semua pendaftaran yang lolos validasi (spam akun & WhatsApp massal).
+    const ip = clientIp(request)
+    if (ip) {
+      const h = await consume(policy('otpSendIp', ip))
+      if (!h.allowed) return tooManyRequests(h.retryAfterSec)
+    }
+
     const emailTaken = await prisma.user.findUnique({ where: { email } })
     if (emailTaken) {
       return NextResponse.json(err('Email sudah terdaftar.'), { status: 409 })
@@ -30,6 +39,11 @@ export async function POST(request: Request) {
     if (phoneTaken) {
       return NextResponse.json(err('Nomor WhatsApp sudah terdaftar.'), { status: 409 })
     }
+
+    // Per nomor: maks 3 OTP / 10 menit (CLAUDE.md). Sengaja SEBELUM user dibuat — memblokir sesudahnya akan
+    // meninggalkan akun setengah jadi (email terpakai tapi tidak ada OTP).
+    const perPhone = await consume(policy('otpSendPhone', normalizedPhone))
+    if (!perPhone.allowed) return tooManyRequests(perPhone.retryAfterSec)
 
     const passwordHash = await hash(password, 12)
 
@@ -42,6 +56,7 @@ export async function POST(request: Request) {
 
     const code = generateOtp()
     await storeOtp(normalizedPhone, code)
+    await resetOtpVerifyFailures(normalizedPhone) // OTP baru: pengguna sah tidak boleh terkunci oleh kegagalan OTP lama
     await prisma.otpRequest.create({
       data: { phone: normalizedPhone, code, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
     })

@@ -3,8 +3,6 @@ import { randomInt } from 'crypto'
 import { prisma } from '@/lib/db'
 
 const OTP_TTL = 300 // 5 minutes
-const RATE_LIMIT_WINDOW = 600 // 10 minutes
-const RATE_LIMIT_MAX = 3
 
 let _redis: Redis | null = null
 let _redisOk: boolean | null = null
@@ -74,16 +72,9 @@ export async function verifyAndConsumeOtp(phone: string, code: string): Promise<
   return true
 }
 
-export async function checkRateLimit(phone: string): Promise<boolean> {
-  // No rate limiting in dev — GOWA not running, no cost per request.
-  // Hanya 'development' persis: staging/test dengan NODE_ENV lain TETAP dibatasi (dulu semua non-production lolos).
-  if (process.env.NODE_ENV === 'development') return true
-
-  const r = await getRedis()
-  if (!r) return true
-
-  const key = `otp_rate:${phone}`
-  const count = await r.incr(key)
-  if (count === 1) await r.expire(key, RATE_LIMIT_WINDOW)
-  return count <= RATE_LIMIT_MAX
+/** Batalkan OTP aktif untuk nomor ini (dipakai saat terlalu banyak percobaan salah). */
+export async function invalidateOtp(phone: string): Promise<void> {
+  const r = await getRedis().catch(() => null)
+  if (r) await r.del(`otp:${phone}`)
+  await prisma.otpRequest.updateMany({ where: { phone, used: false }, data: { used: true } })
 }

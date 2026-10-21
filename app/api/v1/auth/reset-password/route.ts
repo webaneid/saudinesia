@@ -4,9 +4,16 @@ import { prisma } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { resetPasswordSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
+import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 
 export async function POST(request: Request) {
   try {
+    const ip = clientIp(request)
+    if (ip) {
+      const h = await consume(policy('resetIp', ip))
+      if (!h.allowed) return tooManyRequests(h.retryAfterSec)
+    }
+
     const body = await request.json()
     const parsed = resetPasswordSchema.safeParse(body)
     if (!parsed.success) {

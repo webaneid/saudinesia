@@ -5,6 +5,8 @@ import { whatsapp } from '@/lib/whatsapp/client'
 import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { forgotPasswordSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
+import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
+import { resetOtpVerifyFailures } from '@/lib/auth/otpVerify'
 
 function maskPhone(phone: string): string {
   if (phone.length <= 6) return '***'
@@ -20,6 +22,17 @@ export async function POST(request: Request) {
     }
 
     const { email } = parsed.data
+
+    // Batas dihitung SEBELUM mencari akun dan sama untuk email yang ada maupun tidak — respons 429 tidak boleh
+    // membocorkan apakah email terdaftar. (Per email: spam WhatsApp ke satu orang; per IP: spam massal.)
+    const ip = clientIp(request)
+    if (ip) {
+      const h = await consume(policy('otpSendIp', ip))
+      if (!h.allowed) return tooManyRequests(h.retryAfterSec)
+    }
+    const perEmail = await consume(policy('otpSendEmail', email.toLowerCase()))
+    if (!perEmail.allowed) return tooManyRequests(perEmail.retryAfterSec)
+
     const user = await prisma.user.findUnique({
       where: { email },
       select: { phone: true, phoneVerifiedAt: true, isActive: true },
@@ -32,6 +45,7 @@ export async function POST(request: Request) {
 
     const code = generateOtp()
     await storeOtp(user.phone, code)
+    await resetOtpVerifyFailures(user.phone) // OTP baru: pengguna sah tidak boleh terkunci oleh kegagalan OTP lama
     await prisma.otpRequest.create({
       data: { phone: user.phone, code, expiresAt: new Date(Date.now() + 5 * 60 * 1000) },
     })
