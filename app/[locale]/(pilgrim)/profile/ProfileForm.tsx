@@ -4,8 +4,6 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
-import { CheckCircle } from 'lucide-react'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 
 type AddressRecord = {
@@ -23,8 +21,7 @@ type AddressRecord = {
 
 interface ProfileFormProps {
   locale: string
-  initialData: { fullName: string; email: string; phone: string }
-  phoneVerified: boolean
+  initialData: { fullName: string; email: string; phone: string; whatsapp: string }
   initialAddress: AddressRecord
 }
 
@@ -37,7 +34,7 @@ function toAddressValue(a: AddressRecord): AddressValue {
   }
 }
 
-export function ProfileForm({ locale, initialData, phoneVerified, initialAddress }: ProfileFormProps) {
+export function ProfileForm({ locale, initialData, initialAddress }: ProfileFormProps) {
   const [fullName, setFullName] = useState(initialData.fullName)
   const [address,  setAddress]  = useState<AddressValue>(toAddressValue(initialAddress))
   const [loading,  setLoading]  = useState(false)
@@ -78,13 +75,12 @@ export function ProfileForm({ locale, initialData, phoneVerified, initialAddress
           <p className="text-xs text-muted-foreground">Email tidak dapat diubah dari profil</p>
         </div>
         <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label>Nomor WhatsApp</Label>
-            {phoneVerified
-              ? <Badge variant="success" className="text-xs"><CheckCircle className="h-3 w-3 mr-1" />Terverifikasi</Badge>
-              : <Badge variant="warning" className="text-xs">Belum diverifikasi</Badge>}
-          </div>
+          <Label>Nomor Telepon</Label>
           <Input value={initialData.phone ? `+${initialData.phone}` : '-'} disabled className="opacity-60" />
+        </div>
+        <div className="space-y-2">
+          <Label>Nomor WhatsApp</Label>
+          <Input value={initialData.whatsapp ? `+${initialData.whatsapp}` : '-'} disabled className="opacity-60" />
         </div>
 
         <div className="space-y-2 pt-2 border-t">

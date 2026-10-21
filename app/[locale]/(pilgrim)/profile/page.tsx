@@ -14,7 +14,7 @@ export default async function ProfilePage({ params }: Props) {
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: {
-      fullName: true, email: true, phone: true, phoneVerifiedAt: true,
+      fullName: true, email: true, phone: true, whatsapp: true,
       address: true, // docs/arsitektur-alamat.md §9
     },
   })
@@ -25,8 +25,7 @@ export default async function ProfilePage({ params }: Props) {
       <h1 className="text-2xl font-bold">Profil Saya</h1>
       <ProfileForm
         locale={locale}
-        initialData={{ fullName: user.fullName, email: user.email ?? '', phone: user.phone ?? '' }}
-        phoneVerified={!!user.phoneVerifiedAt}
+        initialData={{ fullName: user.fullName, email: user.email ?? '', phone: user.phone ?? '', whatsapp: user.whatsapp ?? '' }}
         initialAddress={user.address}
       />
       <DeletionRequestCard />

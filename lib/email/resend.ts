@@ -81,7 +81,8 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
       }
 
       // Pesan galat dipotong; kunci API tidak pernah ada di respons maupun di log.
-      const detail = (await res.text().catch(() => '')).replace(/\s+/g, ' ').slice(0, 200)
+      // Alamat email dibuang dari pesan galat: validasi Resend kadang menyebut alamat tujuan (PII) dan pesan ini masuk log + NotificationLog.
+      const detail = (await res.text().catch(() => '')).replace(/\s+/g, ' ').replace(/[^\s"'<>,;]+@[^\s"'<>,;]+/g, '[email]').slice(0, 200)
       // Penyedia kadang memantulkan kunci di pesan galat — redaksi eksplisit sebelum disimpan/dicatat.
       lastError = `HTTP ${res.status}${detail ? `: ${detail.split(apiKey).join('[redacted]')}` : ''}`
       // 4xx (kecuali 429) = permintaan/kunci/domain salah — mengulang tidak membantu.

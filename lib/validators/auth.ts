@@ -1,56 +1,83 @@
 import { z } from 'zod'
 import { addressSchema } from './address'
+import { TOKEN_PATTERN } from '@/lib/auth/tokenPattern'
 
 export const passwordSchema = z
   .string()
   .min(8, 'Password minimal 8 karakter')
+  .max(72, 'Password maksimal 72 karakter') // bcrypt hanya membaca 72 byte pertama
   .regex(/[a-zA-Z]/, 'Password harus mengandung huruf')
   .regex(/[0-9]/, 'Password harus mengandung angka')
   .regex(/[^a-zA-Z0-9]/, 'Password harus mengandung karakter spesial (!@#$%...)')
 
-export const registerSchema = z.object({
-  fullName: z.string().min(2, 'Nama minimal 2 karakter').max(100),
-  email: z.string().email('Format email tidak valid'),
-  password: passwordSchema,
-  phone: z
-    .string()
-    .min(9, 'Nomor terlalu pendek')
-    .max(15, 'Nomor terlalu panjang')
-    .regex(/^[0-9+\s-]+$/, 'Format nomor tidak valid'),
-  privacyConsent: z.literal(true, {
-    errorMap: () => ({ message: 'Anda harus menyetujui Kebijakan Privasi' }),
-  }),
+/** Email selalu dinormalisasi huruf kecil di batas validasi — semua pemanggil menerima nilai yang sudah rapi. */
+export const emailSchema = z.string().trim().toLowerCase().email('Format email tidak valid').max(254)
+
+/** Nomor telepon/WhatsApp: digit E.164 tanpa "+" (kode negara + nomor), 8–15 digit. Klien menyusunnya dari kode negara + nomor lokal. */
+export const e164Schema = z.string().regex(/^[1-9]\d{7,14}$/, 'Nomor tidak valid (sertakan kode negara)')
+
+const localeSchema = z.enum(['id', 'en']).default('id')
+const tokenSchema = z.string().regex(TOKEN_PATTERN, 'Tautan tidak valid')
+
+// Pendaftaran manual TIDAK memuat password: akun dibuat setelah pemilik email mengklik tautan dan memilih password sendiri
+// (docs/arsitektur-auth.md §3.2) — menutup pre-hijacking.
+// Nama masuk ke email resmi Saudinesia yang dikirim ke pemilik email (bisa orang lain): tanpa karakter kontrol (baris palsu di
+// versi teks) dan tanpa pola tautan/alamat (celah phishing lewat domain pengirim tepercaya).
+const fullNameSchema = z
+  .string()
+  .trim()
+  .min(2, 'Nama minimal 2 karakter')
+  .max(100)
+  .refine((v) => !/[\u0000-\u001f\u007f]/.test(v), 'Nama mengandung karakter tidak valid')
+  .refine((v) => !/:\/\/|@/.test(v), 'Nama tidak boleh berisi tautan atau alamat email')
+
+// Persetujuan TIDAK diminta di sini: pengirim form belum tentu pemilik email. Persetujuan diberikan pemilik email di halaman
+// penyelesaian (completeRegistrationSchema) dan dicatat pada waktu itu.
+export const registerSchema = z
+  .object({
+    fullName: fullNameSchema,
+    email: emailSchema,
+    phone: e164Schema,
+    whatsapp: e164Schema,
+    locale: localeSchema,
+  })
+  .strict()
+
+/** Data isian pendaftaran yang menunggu di AuthToken.payload sampai tautan diklik. */
+export const registrationPayloadSchema = z.object({
+  fullName: z.string(),
+  phone: e164Schema,
+  whatsapp: e164Schema,
 })
 
+export const tokenOnlySchema = z.object({ token: tokenSchema }).strict()
+
+export const completeRegistrationSchema = z
+  .object({
+    token: tokenSchema,
+    password: passwordSchema,
+    privacyConsent: z.literal(true, { errorMap: () => ({ message: 'Anda harus menyetujui Kebijakan Privasi' }) }),
+    whatsappConsent: z.literal(true, { errorMap: () => ({ message: 'Anda harus menyetujui pemberitahuan WhatsApp' }) }),
+  })
+  .strict()
+
 export const loginSchema = z.object({
-  email: z.string().email('Format email tidak valid'),
+  email: emailSchema,
   password: z.string().min(1, 'Password tidak boleh kosong'),
 })
 
-export const forgotPasswordSchema = z.object({
-  email: z.string().email('Format email tidak valid'),
-})
+export const forgotPasswordSchema = z.object({ email: emailSchema, locale: localeSchema }).strict()
 
-export const verifyResetOtpSchema = z.object({
-  phone: z.string().min(9).max(15),
-  code: z.string().length(6).regex(/^\d+$/),
-})
+export const resetPasswordSchema = z.object({ token: tokenSchema, newPassword: passwordSchema }).strict()
 
-export const resetPasswordSchema = z.object({
-  resetToken: z.string().uuid('Token tidak valid'),
-  newPassword: passwordSchema,
-})
-
-export const verifyPhoneSchema = z.object({
-  phone: z.string().min(9).max(15),
-  code: z.string().length(6).regex(/^\d+$/),
-})
-
-export const profileSchema = z.object({
-  fullName: z.string().min(2, 'Nama minimal 2 karakter').max(100),
-  email: z.string().email('Format email tidak valid').optional(),
-  address: addressSchema.optional(), // docs/arsitektur-alamat.md §9 — alamat rumah jamaah
-})
+// `email` SENGAJA tidak ada: email adalah identitas akun, mengubahnya tanpa verifikasi membuka pengambilalihan akun
+// (SEC-17). Ganti email = fitur terpisah dengan verifikasi email BARU.
+export const profileSchema = z
+  .object({
+    fullName: z.string().min(2, 'Nama minimal 2 karakter').max(100),
+    address: addressSchema.optional(), // docs/arsitektur-alamat.md §9 — alamat rumah jamaah
+  })
+  .strict()
 
 export type RegisterInput = z.infer<typeof registerSchema>
 export type LoginInput = z.infer<typeof loginSchema>

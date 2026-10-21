@@ -38,9 +38,11 @@ const COUNTRY_CODE_OPTIONS: AutocompleteOption[] = COUNTRIES.map(c => ({
 type Props = {
   value: ContactValue
   onChange: (v: ContactValue) => void
+  /** false = tanpa kolom Email (mis. pendaftaran/Lengkapi data akun: email adalah identitas akun, bukan data kontak). */
+  showEmail?: boolean
 }
 
-export function ContactPicker({ value, onChange }: Props) {
+export function ContactPicker({ value, onChange, showEmail = true }: Props) {
   // "Sama dengan nomor HP" dimulai dari nilai turunan (bandingkan phone vs whatsapp aktual —
   // penting saat memuat data existing yang sudah divergen), tapi begitu pengguna secara EKSPLISIT
   // membuka centang, itu harus tetap terbuka walau phone/whatsapp kebetulan masih sama persis —
@@ -118,11 +120,13 @@ export function ContactPicker({ value, onChange }: Props) {
         </label>
       </div>
 
-      <div className="space-y-2">
-        <Label>Email</Label>
-        <Input type="email" placeholder="email@example.com"
-          value={value.email} onChange={e => onChange({ ...value, email: e.target.value })} />
-      </div>
+      {showEmail && (
+        <div className="space-y-2">
+          <Label>Email</Label>
+          <Input type="email" placeholder="email@example.com"
+            value={value.email} onChange={e => onChange({ ...value, email: e.target.value })} />
+        </div>
+      )}
     </div>
   )
 }

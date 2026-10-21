@@ -53,10 +53,13 @@ function configure(opts: { wa?: boolean; email?: boolean } = {}) {
 
 // ───────────── data uji ─────────────
 const tag = `nt${Date.now()}`
-const mk = (suffix: string, extra: Partial<{ email: string; phone: string | null; fullName: string }> = {}) =>
-  prisma.user.create({
-    data: { email: extra.email ?? `${tag}-${suffix}@example.test`, passwordHash: 'x', fullName: extra.fullName ?? `Uji ${suffix}`, phone: extra.phone === undefined ? `62811${Math.floor(Math.random() * 1e8).toString().padStart(8, '0')}` : extra.phone, role: 'pilgrim', isActive: true },
+// `phone` di opsi = nomor WhatsApp akun (notifikasi WA memakai User.whatsapp — docs/arsitektur-auth.md §3.5); telepon diisi sama.
+const mk = (suffix: string, extra: Partial<{ email: string; phone: string | null; fullName: string }> = {}) => {
+  const number = extra.phone === undefined ? `62811${Math.floor(Math.random() * 1e8).toString().padStart(8, '0')}` : extra.phone
+  return prisma.user.create({
+    data: { email: extra.email ?? `${tag}-${suffix}@example.test`, passwordHash: 'x', fullName: extra.fullName ?? `Uji ${suffix}`, phone: number, whatsapp: number, role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() },
   })
+}
 const ids: { users: string[]; bookings: string[] } = { users: [], bookings: [] }
 async function user(...a: Parameters<typeof mk>) { const u = await mk(...a); ids.users.push(u.id); return u }
 async function booking(userId: string) {

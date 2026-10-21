@@ -7,7 +7,7 @@ import type { NotificationEvent } from '@/lib/notifications/events'
 export type EmailContent = { subject: string; html: string; text: string }
 export type EmailContext = { name: string; bookingId?: string | null }
 
-type Body = {
+export type EmailBody = {
   subject: string
   preheader: string
   heading: string
@@ -32,14 +32,16 @@ export function esc(v: string): string {
 
 /** Origin publik untuk tautan. Kosong → tombol/tautan TIDAK dibuat (tidak pernah tautan relatif di email). */
 export function appUrl(): string {
-  return (process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/$/, '')
+  const configured = (process.env.APP_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '').trim().replace(/\/$/, '')
+  // Kemudahan dev: tanpa APP_URL tautan tetap bisa diklik dari log. HANYA 'development' persis (fail-closed, SEC-02).
+  return configured || (process.env.NODE_ENV === 'development' ? 'http://localhost:6260' : '')
 }
 
 function bookingPath(id?: string | null): string {
   return id ? `/id/bookings/${encodeURIComponent(id)}` : '/id/dashboard'
 }
 
-function bodyFor(e: NotificationEvent, ctx: EmailContext): Body {
+function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
   const bookingCta = { label: 'Lihat detail booking', path: bookingPath(ctx.bookingId) }
   switch (e.type) {
     case 'booking_submitted':
@@ -133,7 +135,11 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): Body {
 }
 
 export function emailContent(e: NotificationEvent, ctx: EmailContext): EmailContent {
-  const b = bodyFor(e, ctx)
+  return renderEmail(bodyFor(e, ctx))
+}
+
+/** Render layout bersama dari satu `EmailBody` — dipakai juga email auth (lib/email/authTemplates.ts). */
+export function renderEmail(b: EmailBody): EmailContent {
   const base = appUrl()
   const ctaUrl = b.cta && base ? `${base}${b.cta.path}` : null
 

@@ -14,12 +14,14 @@ model User {
   email           String    @unique
   passwordHash    String
   fullName        String
-  phone           String?   @unique
-  phoneVerifiedAt DateTime?
+  // Kontak (docs/arsitektur-auth.md §3.1): digit E.164 tanpa "+", TIDAK diverifikasi dan TIDAK unik — bukan identitas.
+  phone           String?
+  whatsapp        String?
+  // Bukti email milik pemilik akun (tautan verifikasi / reset password / Google). Login mensyaratkan ini DAN isActive.
+  emailVerifiedAt DateTime?
   role            UserRole  @default(pilgrim)
-  isActive        Boolean   @default(false)
-  resetToken      String?   @unique
-  resetTokenExp   DateTime?
+  // Hanya "boleh login (tidak dinonaktifkan admin)" — BUKAN lagi penanda "belum verifikasi" (itu emailVerifiedAt).
+  isActive        Boolean   @default(true)
   addressId       String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
@@ -31,6 +33,7 @@ model User {
   confirmedPayments         Payment[]                @relation("ConfirmedBy")
   approvedRefunds           Refund[]                 @relation("ApprovedBy")
   notifications             NotificationLog[]
+  authTokens                AuthToken[]
   consentLogs               ConsentLog[]
   deletionRequests          AccountDeletionRequest[] @relation("DeletionRequestUser")
   processedDeletionRequests AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
@@ -54,6 +57,7 @@ model ConsentLog {
 
 enum ConsentType {
   privacy_policy
+  whatsapp_notifications
 }
 
 // UU PDP — hak subjek data untuk minta akun+data dihapus (docs/RETROFIT-GAPS.md #2).
@@ -90,16 +94,33 @@ enum UserRole {
   @@map("user_role")
 }
 
-model OtpRequest {
-  id        String   @id @default(uuid())
-  phone     String
-  code      String
-  expiresAt DateTime
-  used      Boolean  @default(false)
-  createdAt DateTime @default(now())
+// Token sekali pakai (docs/arsitektur-auth.md §3.1). Hanya HASH (SHA-256) yang disimpan — kebocoran DB tidak membocorkan
+// tautan yang masih berlaku.
+//   registration   : pendaftaran manual BELUM menjadi akun. Data isian (payload) menunggu di sini; akun baru dibuat saat
+//                    pemilik email mengklik tautan dan memilih password sendiri. Dengan begitu tidak ada akun "setengah jadi"
+//                    yang password-nya bisa dipasang pihak lain (pre-hijacking). userId kosong, email terisi.
+//   password_reset : userId terisi.
+enum AuthTokenType {
+  registration
+  password_reset
+}
 
-  @@index([phone])
-  @@map("otp_requests")
+model AuthToken {
+  id        String        @id @default(uuid())
+  type      AuthTokenType
+  tokenHash String        @unique
+  userId    String?
+  email     String?
+  payload   Json?
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, type])
+  @@index([email, type])
+  @@map("auth_tokens")
 }
 
 // ─── SEASONS ──────────────────────────────────────────────────

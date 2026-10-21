@@ -12,14 +12,14 @@ export async function GET() {
     const session = await requireSession()
     const user = await prisma.user.findUniqueOrThrow({
       where: { id: session.userId },
-      select: { email: true, phone: true, phoneVerifiedAt: true },
+      select: { email: true, phone: true, whatsapp: true },
     })
     return NextResponse.json(ok(user))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(err('Unauthorized'), { status: 401 })
     }
-    console.error('[auth/profile]', error)
+    console.error('[auth/profile]', error instanceof Error ? error.name : error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -34,11 +34,8 @@ export async function PUT(request: Request) {
       return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
     }
 
-    const { fullName, email, address } = parsed.data
-    const data: Record<string, unknown> = {
-      fullName,
-      ...(email !== undefined ? { email: email || undefined } : {}),
-    }
+    const { fullName, address } = parsed.data
+    const data: Record<string, unknown> = { fullName }
 
     if (address) {
       const existing = await prisma.user.findUniqueOrThrow({ where: { id: session.userId }, select: { addressId: true } })
@@ -58,7 +55,7 @@ export async function PUT(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(err('Unauthorized'), { status: 401 })
     }
-    console.error('[auth/profile]', error)
+    console.error('[auth/profile]', error instanceof Error ? error.name : error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

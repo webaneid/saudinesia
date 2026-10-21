@@ -11,8 +11,10 @@ interface SendPayload {
   message: string
 }
 
-function normalizePhone(phone: string): string {
-  return phone.replace(/^\+/, '').replace(/^0/, '62').replace(/\s+/g, '')
+// Nomor disimpan sebagai digit E.164 (docs/arsitektur-auth.md §3.5) — dikirim apa adanya. Dulu awalan "62" dipaksakan pada nomor
+// yang tidak berawalan 0, yang merusak nomor luar negeri.
+function toGatewayNumber(phone: string): string {
+  return phone.replace(/\D/g, '')
 }
 
 function sleep(ms: number): Promise<void> {
@@ -43,7 +45,7 @@ async function sendMessage(payload: SendPayload): Promise<WhatsAppResult> {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
-          phone: normalizePhone(payload.phone),
+          phone: toGatewayNumber(payload.phone),
           message: payload.message,
         }),
         signal: AbortSignal.timeout(10_000),

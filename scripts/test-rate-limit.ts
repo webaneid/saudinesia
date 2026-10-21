@@ -97,16 +97,21 @@ await t('identitas sangat panjang di-hash (kunci tidak bisa digelembungkan), pen
   assert.equal(policy('loginAcct', 'x'.repeat(128)).key, 'rl:loginAcct:' + 'x'.repeat(128), 'tepat 128 tidak di-hash')
 })
 
-await t('LIMITS: OTP per nomor = 3 per 10 menit (spesifikasi CLAUDE.md)', () => {
-  assert.equal(LIMITS.otpSendPhone.limit, 3)
-  assert.equal(LIMITS.otpSendPhone.windowSec, 600)
+await t('LIMITS: email auth per alamat = 3 per 10 menit (docs/arsitektur-auth.md §3.6)', () => {
+  assert.equal(LIMITS.authEmailSendEmail.limit, 3)
+  assert.equal(LIMITS.authEmailSendEmail.windowSec, 600)
 })
 
 await t('clientIp: ambil IP pertama, tolak nilai yang bukan IP', () => {
   const ip = (h?: string) => clientIp(new Request('http://x', { headers: h === undefined ? {} : { 'x-forwarded-for': h } }))
   assert.equal(ip('203.0.113.7'), '203.0.113.7')
   assert.equal(ip('203.0.113.7, 10.0.0.1'), '203.0.113.7')
-  assert.equal(ip('2001:db8::1'), '2001:db8::1')
+  assert.equal(ip('2001:db8::1'), '2001:db8:0:0::/64')
+  // IPv6: semua alamat dalam satu /64 memakai kunci yang sama (tak bisa diputar dengan mengganti alamat); /64 lain terpisah
+  assert.equal(ip('2001:db8:aaaa:bbbb:1:2:3:4'), ip('2001:db8:AAAA:bbbb:ffff:ffff:ffff:ffff'))
+  assert.notEqual(ip('2001:db8:aaaa:bbbb::1'), ip('2001:db8:aaaa:bbbc::1'))
+  assert.equal(ip('::1'), '0:0:0:0::/64')
+  assert.equal(ip('::ffff:203.0.113.7'), '::ffff:203.0.113.7')
   assert.equal(ip(), null)
   assert.equal(ip(''), null)
   assert.equal(ip('<script>alert(1)</script>'), null)

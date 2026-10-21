@@ -23,8 +23,8 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email },
-    create: { email, passwordHash, fullName: process.env.SUPERADMIN_NAME ?? 'Super Admin', role: 'superadmin', isActive: true },
-    update: { passwordHash, role: 'superadmin', isActive: true },
+    create: { email, passwordHash, fullName: process.env.SUPERADMIN_NAME ?? 'Super Admin', role: 'superadmin', isActive: true, emailVerifiedAt: new Date() },
+    update: { passwordHash, role: 'superadmin', isActive: true, emailVerifiedAt: new Date() },
   })
   console.log('✓ Superadmin:', email)
 
@@ -36,12 +36,12 @@ async function main() {
 
   await prisma.user.upsert({
     where: { email: managerEmail },
-    create: { email: managerEmail, passwordHash: demoHash, fullName: 'Manajer Produk', role: 'manager', isActive: true },
+    create: { email: managerEmail, passwordHash: demoHash, fullName: 'Manajer Produk', role: 'manager', isActive: true, emailVerifiedAt: new Date() },
     update: {},
   })
   await prisma.user.upsert({
     where: { email: adminEmail },
-    create: { email: adminEmail, passwordHash: demoHash, fullName: 'Staff Operasional', role: 'admin', isActive: true },
+    create: { email: adminEmail, passwordHash: demoHash, fullName: 'Staff Operasional', role: 'admin', isActive: true, emailVerifiedAt: new Date() },
     update: {},
   })
   console.log('✓ Demo users: manager@saudinesia.local, ops@saudinesia.local (password: Admin@1234)')
