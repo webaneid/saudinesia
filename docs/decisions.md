@@ -2351,3 +2351,13 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `lib/auth/{contact,rateLimit}.ts`, `app/api/v1/auth/contact/route.ts`, `app/api/v1/bookings/route.ts`, `app/[locale]/(pilgrim)/{layout,profile/*}`, `app/[locale]/(auth)/lengkapi-data/*`, `components/shared/ContactPicker.tsx`, `lib/utils/{phone,locale}.ts`, `lib/notifications/{events,notify}.ts`, `lib/email/templates.ts`, `middleware.ts`, `scripts/test-{auth,notify}.ts`, `.github/workflows/ci.yml`.
 
+## 2026-10-22 — WhatsApp tetap wajib untuk jamaah (menutup SEC-33)
+
+**Decision:** Pemilik memutuskan nomor WhatsApp tetap wajib dan tidak ada jalur menarik persetujuan WhatsApp: WhatsApp adalah kanal komunikasi lanjutan bisnis dengan jamaah, meski sistem notifikasi tidak membutuhkannya.
+
+**Rationale:** Kebutuhan bisnis (komunikasi lanjutan dengan jamaah haji/umrah), bukan kebutuhan teknis. Email tetap kanal utama notifikasi mesin; WhatsApp dibatasi lingkupnya karena gateway pihak ketiga sering memblokir.
+
+**Alternatives considered:** WhatsApp opsional; tombol "berhenti menerima WhatsApp" dengan pencatatan penarikan di `ConsentLog` (ditolak untuk saat ini).
+
+**Konsekuensi yang dicatat:** (1) persetujuan yang tercatat hanya mencakup notifikasi pembayaran/pesanan — pesan promosi atau siaran massal memerlukan persetujuan terpisah (opt-in); (2) teks persetujuan dan Kebijakan Privasi perlu menyebut tujuan komunikasi WhatsApp secara jelas (tinjauan legal); (3) SEC-35 (versi persetujuan) tetap terbuka.
+
