@@ -10,6 +10,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { FilterPills } from '@/components/admin/data-table/FilterPills'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -26,6 +27,7 @@ const isVisaStatus = (v: string | undefined): v is VisaStatus =>
 
 export default async function AdminVisa({ params, searchParams }: Props) {
   const { locale } = await params
+  await requireAdminPage(locale)
   const sp = await searchParams
   const list = parseListParams(sp)
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined

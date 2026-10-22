@@ -38,7 +38,7 @@ export async function GET(request: Request) {
     const resolved = await resolveGoogleLogin(result.identity)
     if (resolved.kind === 'refused') return fail(`google_${resolved.reason}`)
     if (resolved.kind === 'session') {
-      await createSession({ userId: resolved.user.id, role: resolved.user.role })
+      await createSession(resolved.user.id)
       return go('/dashboard')
     }
 

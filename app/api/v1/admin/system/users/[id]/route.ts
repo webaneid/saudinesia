@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
+import { updateUserByAdmin } from '@/lib/auth/adminUsers'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { userAdminUpdateSchema } from '@/lib/validators/adminUpdates'
@@ -11,9 +11,8 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const parsed = userAdminUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    // Akun dinonaktifkan → nomor WhatsApp terverifikasinya DILEPAS (kunci unik tak boleh menahan nomor yang bisa jadi sudah didaur ulang operator).
-    const release = parsed.data.isActive === false ? { whatsappVerifiedAt: null, verifiedWhatsapp: null } : {}
-    const user = await prisma.user.update({ where: { id }, data: { ...parsed.data, ...release }, select: { id: true, role: true, isActive: true } })
+    const user = await updateUserByAdmin(id, parsed.data)
+    if (!user) return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
     return NextResponse.json(ok(user))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

@@ -11,13 +11,9 @@ import { updateContact } from '@/lib/auth/contact'
 import { processWebhook, maskEmail, webhookSecret, WEBHOOK_MAX_BODY_BYTES } from '@/lib/whatsapp/webhook'
 import { readFileSync } from 'node:fs'
 import { businessWaDigits } from '@/lib/constants/payment'
+import { assertThrowawayDb } from './lib/testDb'
 
-const url = process.env.DATABASE_URL ?? ''
-const dbName = url.split('/').pop()?.split('?')[0] ?? ''
-if (!/(test|_ci|tmp)/i.test(dbName)) {
-  console.error(`DITOLAK: database "${dbName}" bukan database uji (harus memuat test / _ci / tmp).`)
-  process.exit(2)
-}
+await assertThrowawayDb()
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -301,8 +297,11 @@ await t('BALAPAN: verifikasi bersamaan dengan pergantian nomor → tak pernah te
 })
 
 await t('route admin: menonaktifkan akun MELEPAS nomor terverifikasi (penjaga tak boleh terhapus diam-diam); route webhook tipis memanggil processWebhook', () => {
+  // Logika pindah ke updateUserByAdmin (SEC-18) — perilakunya diuji langsung di test-session; di sini penjaga: route memakainya & helper masih melepas nomor.
   const adminSrc = readFileSync(new URL('../app/api/v1/admin/system/users/[id]/route.ts', import.meta.url), 'utf8')
-  assert.match(adminSrc, /isActive === false \? \{ whatsappVerifiedAt: null, verifiedWhatsapp: null \}/)
+  assert.ok(adminSrc.includes('updateUserByAdmin('), 'route admin harus lewat updateUserByAdmin (tempat nomor dilepas & sesi dicabut)')
+  const helperSrc = readFileSync(new URL('../lib/auth/adminUsers.ts', import.meta.url), 'utf8')
+  assert.match(helperSrc, /isActive === false\) \{ data\.whatsappVerifiedAt = null; data\.verifiedWhatsapp = null \}/)
   const hookSrc = readFileSync(new URL('../app/api/v1/webhooks/whatsapp/route.ts', import.meta.url), 'utf8')
   assert.ok(hookSrc.includes('processWebhook(') && hookSrc.includes('webhookSecret()') && hookSrc.includes('readLimited('))
   const post = hookSrc.slice(hookSrc.indexOf('export async function POST'))

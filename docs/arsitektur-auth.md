@@ -147,7 +147,7 @@ Redirect URI persis `{APP_URL}/api/v1/auth/google/callback`.
 - Pre-hijacking & takeover lewat ganti email: §3.3 + SEC-17.
 - Email auth adalah jalur kritis: domain pengirim terverifikasi (SPF/DKIM/DMARC) menjadi **syarat go-live**; kuota Resend (paket gratis ±100/hari) kemungkinan tidak cukup — butuh paket berbayar sebelum jamaah banyak.
 - Dev-only hanya `NODE_ENV === 'development'` persis (SEC-02).
-- Sesi JWT tidak bisa dicabut dari server (stateless): setelah reset password, sesi lama tetap berlaku sampai habis. Pre-existing, dicatat Low (SEC-18); `tokenVersion` di JWT = perbaikan kelak.
+- ~~Sesi JWT tidak bisa dicabut dari server~~ — **ditutup 2026-10-22 (SEC-18), lihat §11.**
 
 ## 6. Fase eksekusi (satu PR per fase, dari `main`)
 
@@ -232,9 +232,49 @@ tidak rendah — `lib/auth/secret.ts`, juga untuk kunci turunan cookie Google); 
 `verify-email`, `resend-verification` dihapus dari klaim; daftar `LIMITS` dilengkapi; `docs/auth-flow.md` ditulis ulang; dokumen lama yang memuat OTP (`architecture.md`, `spec.md`, `arsitektur-komponen-kontak.md`,
 `arsitektur-notifikasi.md`, `architecture-security.md`, `RETROFIT-GAPS.md`, `docker-compose.prod.yml`, CLAUDE.md) diberi banner/koreksi.
 
-**Daftar terbuka sebelum go-live** (lihat Register `docs/lessons-learned.md`): SEC-18 (sesi stateless — tonggak: `tokenVersion`/cek DB, utamanya jalur admin), SEC-44 (anonimisasi akun UU PDP), SEC-05 (17 advisory dependency high), SEC-26/27
+**Daftar terbuka sebelum go-live** (lihat Register `docs/lessons-learned.md`): ~~SEC-18 (sesi stateless)~~ — **selesai 2026-10-22, §11** —, SEC-44 (anonimisasi akun UU PDP), SEC-05 (17 advisory dependency high), SEC-26/27
 (batas login atomik, seed tanpa penjaga), SEC-43 (alat admin lepas nomor), SEC-47 (BOLA `address/[id]`), serta uji dengan layanan asli (Resend: SPF/DKIM/DMARC; Google: redirect URI + status *In production* — dan konfirmasi login tidak
 terpental ke halaman login; GOWA: bentuk `from`/`/app/status`) dan cek DB produksi bebas akun pra-migrasi.
 
 **Hitungan uji terkini (Fase 4):** `test-rate-limit` 14, `test-email` 20, `test-notify` 29, `test-auth` 33, `test-google` 36, `test-whatsapp` 24 (semua lulus; angka di §7–§9 adalah hitungan saat fase itu dikerjakan).
 
+## 11. Pencabutan sesi (SEC-18, as-built 2026-10-22)
+
+**Masalah.** Sesi adalah JWT 7 hari yang hanya diperiksa tanda tangan dan kedaluwarsanya; `role` dibaca dari token. Akibatnya: staf yang dinonaktifkan atau diturunkan tetap punya akses admin (termasuk unduh dokumen paspor
+jamaah) sampai 7 hari; reset password tidak menendang penyerang yang sudah mencuri sesi; akun yang dinonaktifkan masih bisa memesan.
+
+**Desain.**
+- Kolom `User.sessionVersion Int @default(0)` (migrasi `20261022150000_user_session_version`). Token membawa klaim `ver` = versi saat terbit.
+- `lib/auth/session.ts::resolveSessionToken(token)` adalah **satu-satunya** jalur yang menghasilkan `SessionPayload`. Ia memverifikasi JWT (hanya `HS256`), lalu membaca akun dari DB dan **menolak** bila: akun tidak ada, `isActive=false`,
+  `emailVerifiedAt` kosong, atau `ver` ≠ `sessionVersion` (token tanpa `ver` / bertipe salah juga ditolak — fail-closed; token yang beredar sebelum fitur ini otomatis tidak berlaku). **`role` dikembalikan dari DB**, bukan dari token, sehingga
+  perubahan peran berlaku seketika. Kueri DB dibungkus `cache()` React (satu kueri per pengguna per request; layout + halaman memanggil `getSession()` bersamaan). Token sampah ditolak **sebelum** kueri DB.
+- `createSession(userId)` menerima **hanya id**; peran dan versi dibaca dari DB di dalamnya (`issueSessionToken`), sehingga pemanggil tidak bisa menyodorkan peran/versi basi. Menolak akun nonaktif / belum terverifikasi.
+- `getSession()`/`requireSession/Admin/Manager/SuperAdmin` semua lewat `resolveSessionToken`. `middleware.ts` (Edge, tanpa DB) tetap hanya **gerbang kasar** berbasis klaim token; keputusan akses sebenarnya di `getSession()` pada Route Handler
+  dan **pada setiap Server Component halaman admin yang membaca data** (`lib/auth/pageGuards.ts::requireAdminPage`, SEC-52). Layout saja TIDAK cukup: Next.js tidak merender ulang layout pada navigasi lunak/RSC parsial. Middleware kini mengimpor `lib/auth/roles` (bukan `session.ts`, yang memakai Prisma dan tidak boleh masuk bundel Edge).
+
+**Kapan versi dinaikkan** (semua atomik di transaksi/pembaruan yang sama):
+
+| Peristiwa | Tempat | Catatan |
+|---|---|---|
+| Password direset | `resetPassword` (`lib/auth/accounts.ts`) | Sesi baru diterbitkan pemanggil **sesudah** transaksi → memakai versi baru; sesi lama (mis. dicuri) mati |
+| Google disambung ke akun LAMA belum terverifikasi | `resolveGoogleLogin` (`lib/auth/googleAccounts.ts`) | Password lama dibuang → sesi lama akun itu ikut dicabut (tanpa ini `emailVerifiedAt` yang kini terisi menghidupkan token lama) |
+| Peran atau `isActive` berubah **nyata** | `updateUserByAdmin` (`lib/auth/adminUsers.ts`) | Termasuk **reaktivasi**: tanpa kenaikan, token lama hidup lagi begitu `isActive` kembali true. Permintaan yang tidak mengubah apa pun tidak menendang siapa pun |
+
+Penjaga `isActive`/`emailVerifiedAt` di `resolveSessionToken` adalah lapisan kedua: akun yang dimatikan **langsung di DB** (SQL manual, kode masa depan tanpa kenaikan versi) tetap menolak token.
+
+**Yang belum ada (sengaja):** tombol "keluar dari semua perangkat" bagi pengguna; anonimisasi akun UU PDP (SEC-44) akan memakai mekanisme yang sama (naikkan versi + `isActive=false`).
+
+**Biaya.** Setiap request terautentikasi kini menyentuh DB satu kali (PK lookup, 4 kolom). Diterima: instansi tunggal, dan cek ini adalah inti pencabutan. Bila kelak jadi masalah: cache TTL pendek per instans (mengorbankan pencabutan seketika) —
+keputusan harus eksplisit.
+
+**Bukti verifikasi (2026-10-22).** `scripts/test-session.ts` (15 uji terhadap DB sungguhan; masuk rantai `bun run test` dan CI) — kontrol positif di tiap penolakan; **uji mutasi**: menghapus tiap kontrol (versi, isActive, peran dari token,
+bump di reset/Google/admin, bump selalu/tidak sama sekali, emailVerifiedAt) membuat tes gagal — satu mutan setara secara logika (cek tipe `ver` eksplisit, karena `undefined !== 0` sudah menolak) sengaja tak diuji terpisah. Uji end-to-end terhadap aplikasi
+yang berjalan (curl, DB sekali pakai): nonaktif → cookie lama 401 & `/admin` → login; **aktif kembali → cookie lama tetap 401**, login ulang 200; diturunkan admin→pilgrim → cookie lama 401; peran diubah langsung via SQL tanpa bump →
+JWT yang masih berklaim `admin` tidak lagi membuka `/admin` (peran dari DB); **reset password → cookie yang dicuri 401, cookie baru dari respons reset 200, token reset tak bisa dipakai ulang**. `tsc` bersih; `next build` bersih (middleware Edge
+tanpa Prisma).
+
+**Pengaman uji tulis-DB diperkuat (insiden proses, bukan produk).** Saat verifikasi ini, URL database sekali pakai dibangun dengan `sed` yang diam-diam gagal sehingga migrasi dan beberapa suite uji sempat berjalan ke **database dev**
+(hanya data uji bertag yang ditulis lalu dibersihkan, migrasi aditif; 3 pengguna e2e yang sempat tertanam sudah dihapus; jumlah pengguna dev kembali 3). Pengaman lama membaca segmen URL **terakhir** sehingga lolos. Kini
+`scripts/lib/testDb.ts::assertThrowawayDb()` mewajibkan path URL **tepat satu segmen** DAN `select current_database()` yang benar-benar tersambung memuat `test`/`_ci`/`tmp`; dipakai semua suite yang menulis DB.
+
+**Review independen (`security-auditor`, 2026-10-22):** 0 Critical, 0 High, 1 Medium, 4 Low, 3 Info. Medium **SEC-52** (halaman admin hanya dijaga layout) direproduksi lalu ditutup; Low **SEC-53** (race login-vs-reset lewat `expectedVersion`, kunci baris `updateUserByAdmin`, pin algoritma middleware, penjaga sumber yang lebih kuat, `assertThrowawayDb` berjangkar + host lokal) ditutup; Info S18-G dicatat di SEC-27 dan SEC-44. Info S18-H (login 500 bukan 403 pada akun yang dinonaktifkan di tengah penerbitan) kini 401 generik. Dampak deploy: semua token beredar tanpa `ver` ditolak → seluruh pengguna login keluar sekali (terjadwal di jam sepi; catat di rilis).

@@ -129,7 +129,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    ditempel di chat.
 7. Tulis `deploy.yml` (build+push 2 image, scp, SSH, health check, rollback). Baru setelah itu semantic-release.
 8. Jadwalkan backup (`backup-db.sh`, `backup-minio.sh`) dan uji restore.
-9. **Blocker keamanan yang masih terbuka** (`docs/lessons-learned.md`): SEC-05 (17 advisory dependency *high*), **SEC-18** (sesi JWT tak bisa dicabut — menonaktifkan staf tidak memutus aksesnya hingga 7 hari),
+9. **Blocker keamanan yang masih terbuka** (`docs/lessons-learned.md`): SEC-05 (17 advisory dependency *high*), ~~SEC-18 (sesi tak bisa dicabut)~~ — selesai 2026-10-22,
    **SEC-44** (permintaan hapus akun UU PDP belum menghapus/anonimkan apa pun), serta SEC-26/27 (batas login atomik; seed tanpa penjaga — jangan jalankan `db:seed` di server).
 10. **Uji dengan layanan asli sebelum membuka ke jamaah:** Resend (domain SPF/DKIM/DMARC + email masuk inbox), **Google** (redirect URI terdaftar, aplikasi *In production*, dan pastikan login **mendarat di dashboard**, bukan
     terpental ke halaman login — cookie sesi sudah `Lax`), GOWA (bentuk `from` bukan `@lid`, `/app/status`). Pastikan DB produksi **tidak berisi akun pra-migrasi** (migrasi auth menandai semua `isActive=true` sebagai email terverifikasi).

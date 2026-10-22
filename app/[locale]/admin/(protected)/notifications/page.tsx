@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge, type BadgeTone } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -28,6 +29,7 @@ const columns: Column<LogRow>[] = [
 
 export default async function AdminNotifications({ params, searchParams }: Props) {
   const { locale } = await params
+  await requireAdminPage(locale)
   const sp = await searchParams
   const list = parseListParams(sp)
 
