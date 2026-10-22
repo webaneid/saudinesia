@@ -16,9 +16,6 @@
     "login": "Login",
     "register": "Register",
     "phone": "WhatsApp Number",
-    "otp": "OTP Code",
-    "sendOtp": "Send OTP",
-    "verifyOtp": "Verify",
     "logout": "Logout",
     "name": "Full Name",
     "email": "Email"

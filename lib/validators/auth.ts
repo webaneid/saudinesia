@@ -5,10 +5,11 @@ import { TOKEN_PATTERN } from '@/lib/auth/tokenPattern'
 export const passwordSchema = z
   .string()
   .min(8, 'Password minimal 8 karakter')
-  .max(72, 'Password maksimal 72 karakter') // bcrypt hanya membaca 72 byte pertama
   .regex(/[a-zA-Z]/, 'Password harus mengandung huruf')
   .regex(/[0-9]/, 'Password harus mengandung angka')
   .regex(/[^a-zA-Z0-9]/, 'Password harus mengandung karakter spesial (!@#$%...)')
+  // bcrypt hanya membaca 72 BYTE pertama: karakter non-ASCII (mis. emoji/aksara) bisa >1 byte, jadi hitung byte — bukan karakter — agar tak terpotong diam-diam.
+  .refine((v) => new TextEncoder().encode(v).length <= 72, 'Password maksimal 72 byte (karakter non-ASCII dihitung lebih dari satu)')
 
 /** Email selalu dinormalisasi huruf kecil di batas validasi — semua pemanggil menerima nilai yang sudah rapi. */
 export const emailSchema = z.string().trim().toLowerCase().email('Format email tidak valid').max(254)

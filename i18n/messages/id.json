@@ -16,9 +16,6 @@
     "login": "Masuk",
     "register": "Daftar",
     "phone": "Nomor WhatsApp",
-    "otp": "Kode OTP",
-    "sendOtp": "Kirim OTP",
-    "verifyOtp": "Verifikasi",
     "logout": "Keluar",
     "name": "Nama Lengkap",
     "email": "Email"

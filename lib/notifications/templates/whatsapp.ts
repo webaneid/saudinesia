@@ -1,3 +1,6 @@
+// Template yang TIDAK dipakai saat ini (lingkup WhatsApp diperkecil — waMessage di lib/notifications/events.ts hanya memakai bookingSubmitted, paymentReminder,
+// paymentConfirmed, paymentRejected + dua balasan verifikasi): autoCancelled, visaStatusChange, departureReminder, refundApproved. Sengaja dipertahankan untuk
+// dibuka kembali saat WhatsApp dipakai lagi (ADR-0001); hapus bila keputusan itu berubah.
 export const waTemplates = {
   // Balasan atas pesan verifikasi yang DIKIRIM PENGGUNA sendiri (percakapan dimulai pengguna — bukan pesan tak diminta).
   whatsappVerified: (maskedEmail: string) =>

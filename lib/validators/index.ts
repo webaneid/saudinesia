@@ -1,11 +1,5 @@
 import { z } from 'zod'
 
-export const phoneSchema = z
-  .string()
-  .min(9)
-  .max(15)
-  .regex(/^[0-9+]+$/, 'Invalid phone number')
-
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(100).default(20),

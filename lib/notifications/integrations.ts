@@ -2,7 +2,7 @@ import { emailConfigured, emailFrom } from '@/lib/email/resend'
 import { appUrl } from '@/lib/email/templates'
 import { googleConfigured, googleRedirectUri } from '@/lib/auth/google'
 import { whatsapp, type GatewayStatus } from '@/lib/whatsapp/client'
-import { getPaymentConfig } from '@/lib/constants/payment'
+import { businessWaDigits } from '@/lib/constants/payment'
 import { webhookSecret } from '@/lib/whatsapp/webhook'
 
 // Status integrasi untuk panel admin (docs/arsitektur-notifikasi.md §6). HANYA boolean dan nilai publik — kunci/rahasia
@@ -40,7 +40,7 @@ export async function integrationStatus(): Promise<IntegrationStatus> {
       hasToken: Boolean(process.env.WA_GATEWAY_TOKEN?.trim()),
       // true hanya bila secret KUAT (≥32 karakter, bukan bawaan/placeholder) — sama dengan yang dipakai webhook; selain itu webhook mati.
       webhookSecretSet: webhookSecret() !== null,
-      businessNumberSet: Boolean(getPaymentConfig().businessWa.replace(/\D/g, '')),
+      businessNumberSet: businessWaDigits() !== '',
       webhookUrl: base ? `${base}/api/v1/webhooks/whatsapp` : null,
       gateway,
     },

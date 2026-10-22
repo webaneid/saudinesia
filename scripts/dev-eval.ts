@@ -12,7 +12,8 @@ import { SignJWT, exportJWK, generateKeyPair } from 'jose'
 
 const APP_PORT = Number(process.env.EVAL_APP_PORT ?? 6260)
 const APP_URL = `http://localhost:${APP_PORT}`
-const PORT = { gowa: 6297, google: 6298, mail: 6299 }
+// Port simulasi bisa diganti (mis. menjalankan dua sesi berdampingan): EVAL_GOWA_PORT / EVAL_GOOGLE_PORT / EVAL_MAIL_PORT.
+const PORT = { gowa: Number(process.env.EVAL_GOWA_PORT ?? 6297), google: Number(process.env.EVAL_GOOGLE_PORT ?? 6298), mail: Number(process.env.EVAL_MAIL_PORT ?? 6299) }
 const WEBHOOK_SECRET = randomBytes(32).toString('hex') // acak per sesi; dipakai bersama oleh aplikasi dan GOWA palsu
 const GOOGLE_CLIENT_ID = 'evaluasi-lokal.apps.googleusercontent.com'
 const GOOGLE_CLIENT_SECRET = randomBytes(16).toString('hex')
@@ -188,7 +189,9 @@ const env = {
   NEXT_PUBLIC_BUSINESS_WA: process.env.NEXT_PUBLIC_BUSINESS_WA || '628111222333',
   // Google → pemilih akun simulasi
   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
-  GOOGLE_AUTH_URL: `http://localhost:${PORT.google}/auth`, GOOGLE_TOKEN_URL: `http://127.0.0.1:${PORT.google}/token`, GOOGLE_JWKS_URL: `http://127.0.0.1:${PORT.google}/jwks`,
+  // 127.0.0.1 (BUKAN localhost) = situs berbeda dari aplikasi di localhost → navigasi balik dari 'Google' bersifat LINTAS-SITUS seperti Google asli;
+  // di localhost yang sama, masalah cookie SameSite tidak akan pernah muncul.
+  GOOGLE_AUTH_URL: `http://127.0.0.1:${PORT.google}/auth`, GOOGLE_TOKEN_URL: `http://127.0.0.1:${PORT.google}/token`, GOOGLE_JWKS_URL: `http://127.0.0.1:${PORT.google}/jwks`,
 }
 
 console.log(`
@@ -198,7 +201,7 @@ console.log(`
  Aplikasi           ${APP_URL}
  Kotak masuk email  http://localhost:${PORT.mail}   ← buka di tab terpisah (tautan daftar/reset ada di sini)
  WhatsApp (GOWA)    http://localhost:${PORT.gowa}   ← pesan keluar + simulator pesan masuk (verifikasi nomor)
- Google             pemilih akun palsu muncul saat menekan "Masuk dengan Google"
+ Google             pemilih akun palsu (http://127.0.0.1:${PORT.google}, situs berbeda seperti Google asli) muncul saat menekan "Masuk dengan Google"
  Rate limit dimatikan. Tekan Ctrl+C untuk berhenti. Panduan: docs/evaluasi-lokal.md
 ═══════════════════════════════════════════════════════════════
 `)

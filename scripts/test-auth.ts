@@ -3,12 +3,16 @@
 //
 // PENGAMAN: menulis user/token sementara → menolak jalan kecuali nama database memuat "test", "_ci" atau "tmp".
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 import { compare } from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { completeRegistration, previewRegistration, requestPasswordReset, requestRegistration, resetPassword } from '@/lib/auth/accounts'
 import { hashToken, issueToken, peekToken } from '@/lib/auth/tokens'
 import { sendAuthEmail } from '@/lib/auth/authEmail'
-import { completeRegistrationSchema, registerSchema } from '@/lib/validators/auth'
+import { completeRegistrationSchema, passwordSchema, registerSchema } from '@/lib/validators/auth'
+import { SESSION_SAME_SITE, cookieSecure } from '@/lib/auth/cookieFlags'
+import { jwtSecretProblem, requireJwtSecret } from '@/lib/auth/secret'
+import { signStateCookie } from '@/lib/auth/google'
 import { e164FromCountry, maskE164, splitE164 } from '@/lib/utils/phone'
 import { isContactComplete, requireContactForBooking, updateContact } from '@/lib/auth/contact'
 import { readFileSync } from 'node:fs'
@@ -294,6 +298,57 @@ await t('updateContact: pengguna daftar manual (sudah menyetujui saat menyelesai
   const u = await prisma.user.findUniqueOrThrow({ where: { email: e } })
   assert.equal((await updateContact(u.id, { phone: '6281111111111', whatsapp: '6281111111111' })).ok, true)
   assert.deepEqual(await updateContact('tidak-ada', { phone: '6281111111111', whatsapp: '6281111111111', whatsappConsent: true }), { ok: false, reason: 'not_found' })
+})
+
+console.log('== penguatan lintas fase ==')
+
+await t('cookie sesi SameSite=LAX (Strict merusak login Google dan tautan dari email), dan penjaga di sumber tak terhapus diam-diam', () => {
+  assert.equal(SESSION_SAME_SITE, 'lax')
+  const session = readFileSync(new URL('../lib/auth/session.ts', import.meta.url), 'utf8')
+  assert.ok(session.includes('sameSite: SESSION_SAME_SITE'), 'session.ts harus memakai SESSION_SAME_SITE')
+  assert.ok(!/sameSite:\s*'strict'/i.test(session), "session.ts tak boleh kembali ke 'strict'")
+  assert.ok(session.includes('secure: cookieSecure()'))
+  const g = readFileSync(new URL('../lib/auth/googleCookies.ts', import.meta.url), 'utf8')
+  assert.ok(g.includes('secure: cookieSecure()') && g.includes("sameSite: 'lax'"))
+  return Promise.resolve()
+})
+
+await t('cookieSecure: Secure aktif di semua lingkungan KECUALI development persis (NODE_ENV salah/kosong tidak melepas Secure)', () => {
+  const keep = env.NODE_ENV
+  try {
+    for (const [nodeEnv, expected] of [['development', false], ['production', true], ['test', true], ['staging', true], ['', true]] as const) {
+      env.NODE_ENV = nodeEnv; assert.equal(cookieSecure(), expected, `NODE_ENV="${nodeEnv}"`)
+    }
+    delete env.NODE_ENV; assert.equal(cookieSecure(), true)
+  } finally { env.NODE_ENV = keep }
+  return Promise.resolve()
+})
+
+await t('JWT_SECRET: kosong, < 32 karakter, berawalan contoh (berapa pun panjangnya), dan entropi rendah ditolak; secret acak diterima — juga oleh kunci turunan cookie Google', async () => {
+  const strong = randomBytes(32).toString('hex')
+  for (const bad of [undefined, '', 'x'.repeat(31), randomBytes(15).toString('hex'), // 30 karakter acak: hanya cek PANJANG yang menolaknya
+     'replace_with_64_char_random_hex', 'REPLACE_WITH_64_CHAR_RANDOM_HEX' + 'a1b2c3d4e5f6', 'changeme' + strong, 'your_secret_' + strong, 'a'.repeat(64), 'ab'.repeat(40), '1234'.repeat(16)]) {
+    assert.notEqual(jwtSecretProblem(bad), null, String(bad))
+  }
+  assert.equal(jwtSecretProblem(strong), null)
+  const keep = env.JWT_SECRET
+  try {
+    env.JWT_SECRET = 'replace_with_64_char_random_hex'
+    assert.throws(() => requireJwtSecret(), /contoh|pendek/)
+    await assert.rejects(signStateCookie({ state: 's', nonce: 'n', verifier: 'v', locale: 'id' }))
+    env.JWT_SECRET = strong
+    assert.equal(requireJwtSecret(), strong)
+    assert.ok(await signStateCookie({ state: 's', nonce: 'n', verifier: 'v', locale: 'id' }))
+  } finally { env.JWT_SECRET = keep }
+})
+
+await t('password: batas 72 BYTE (bukan karakter) — ASCII 72 lolos, 73 ditolak, non-ASCII dihitung per byte', () => {
+  const base = 'Aa1!'
+  assert.equal(passwordSchema.safeParse(base + 'x'.repeat(68)).success, true)   // 72 byte
+  assert.equal(passwordSchema.safeParse(base + 'x'.repeat(69)).success, false)  // 73 byte
+  assert.equal(passwordSchema.safeParse(base + '€'.repeat(22)).success, true)   // 4 + 66 = 70 byte
+  assert.equal(passwordSchema.safeParse(base + '€'.repeat(24)).success, false)  // 28 karakter tetapi 76 byte → tak boleh terpotong diam-diam
+  return Promise.resolve()
 })
 
 console.log('== email auth ==')

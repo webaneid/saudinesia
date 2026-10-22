@@ -31,3 +31,6 @@ docker-compose.override.yml
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Keluaran build alternatif (NEXT_DIST_DIR) untuk verifikasi tanpa mengganggu next dev
+.next-*
