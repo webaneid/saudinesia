@@ -4,6 +4,7 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 const requirementSchema = z.object({
   docType:     z.string().min(1),
@@ -18,12 +19,13 @@ const updateSchema = z.object({
   name:         z.string().min(1).optional(),
   country:      z.string().optional(),
   visaType:     z.string().optional(),
-  description:  z.string().nullable().optional(),
+  // Teks kaya (docs/arsitektur-editor-teks.md): divalidasi daftar putih & dibersihkan; '' / tanpa teks bermakna → null.
+  description:  richTextField().nullish(),
   requirements: z.array(requirementSchema).optional(),
   priceLabel:   z.string().nullable().optional(),
   processDays:  z.coerce.number().int().positive().optional(),
   isActive:     z.boolean().optional(),
-})
+}).strict()
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -52,9 +54,13 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id } = await params
     const body = await req.json()
     const parsed = updateSchema.safeParse(body)
-    if (!parsed.success) return NextResponse.json(err('Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const product = await prisma.visaProduct.update({ where: { id }, data: parsed.data })
+    const { description, ...fields } = parsed.data
+    const product = await prisma.visaProduct.update({
+      where: { id },
+      data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
+    })
     // Replace-all DocumentRequirement kalau requirements dikirim — sumber kebenaran baru
     // (docs/arsitektur-dokumen.md §4), requirements Json tetap ikut ditulis untuk kompatibilitas
     // mundur (dari input yang sama, tidak ada risiko drift).

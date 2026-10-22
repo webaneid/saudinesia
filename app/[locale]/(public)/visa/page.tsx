@@ -4,6 +4,7 @@ import { KeyRound, Clock, FileText, ArrowRight, Globe, ShieldCheck, Info } from 
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -90,9 +91,7 @@ export default async function VisaCatalogPage({ params }: Props) {
                   </div>
 
                   {/* Description */}
-                  {v.description && (
-                    <p className="text-sm text-muted-foreground">{v.description}</p>
-                  )}
+                  <RichTextView value={v.description} className="text-muted-foreground" />
 
                   {/* Process time */}
                   <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
