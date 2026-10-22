@@ -28,7 +28,7 @@ export async function PUT(request: Request) {
   try {
     const session = await requireSession()
 
-    const body = await request.json()
+    const body = await request.json().catch(() => null)
     const parsed = profileSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })

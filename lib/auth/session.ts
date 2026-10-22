@@ -1,14 +1,14 @@
 import { SignJWT, jwtVerify } from 'jose'
 import { cookies } from 'next/headers'
 import type { UserRole } from '@prisma/client'
+import { SESSION_SAME_SITE, cookieSecure } from '@/lib/auth/cookieFlags'
+import { requireJwtSecret } from '@/lib/auth/secret'
 
 const COOKIE_NAME = 'snd-session'
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
 
 function getSecret(): Uint8Array {
-  const secret = process.env.JWT_SECRET
-  if (!secret) throw new Error('JWT_SECRET is not set')
-  return new TextEncoder().encode(secret)
+  return new TextEncoder().encode(requireJwtSecret())
 }
 
 export type SessionPayload = {
@@ -30,8 +30,8 @@ export async function createSession(payload: SessionPayload): Promise<void> {
   const jar = await cookies()
   jar.set(COOKIE_NAME, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'strict',
+    secure: cookieSecure(),
+    sameSite: SESSION_SAME_SITE, // Lax — lihat lib/auth/cookieFlags.ts (Strict merusak login Google & tautan dari email)
     maxAge: COOKIE_MAX_AGE,
     path: '/',
   })

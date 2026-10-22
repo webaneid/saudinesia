@@ -1,13 +1,14 @@
 # Arsitektur — Auth berbasis Email (daftar manual + Google), tanpa OTP WhatsApp
 
-> Status: **FASE 1–3 SELESAI & TERVERIFIKASI (2026-10-21/22)** — auth email manual + hapus OTP (§7), login Google (§8), Lengkapi data + lingkup WhatsApp (§9). Tersisa Fase 4 (penutupan dokumen).
+> Status: **SEMUA FASE (1–4) SELESAI & TERVERIFIKASI SECARA LOKAL (2026-10-21/22)** — auth email manual + hapus OTP (§7), login Google (§8), Lengkapi data + lingkup WhatsApp (§9),
+> verifikasi nomor WhatsApp (ADR-0002, `docs/arsitektur-whatsapp-verifikasi.md`), penutupan + review lintas fase (§10). **Belum diuji dengan layanan asli** (Resend, Google, GOWA).
 > Keputusan produk dikonfirmasi pemilik (§2). Menggantikan
 > `docs/arsitektur-login-google.md` (dihapus) dan bagian "Verifikasi akun / Reset password" di `docs/auth-flow.md`.
 > Alasan perubahan: gateway WhatsApp pihak ketiga makin sering memblokir, jadi **WhatsApp tidak boleh lagi jadi dependensi auth**.
 > Email (Resend, `docs/arsitektur-notifikasi.md`) menjadi identitas, verifikasi, dan jalur pemulihan akun. Aplikasi belum produksi
 > dan tidak punya jamaah nyata — migrasi boleh destruktif pada data dev.
 
-## 1. Keadaan aktual (recheck 2026-10-21 terhadap kode)
+## 1. Keadaan AWAL sebelum Fase 1 (RIWAYAT — recheck 2026-10-21; seluruhnya sudah digantikan, lihat §3 dan §10)
 
 | Fakta | Bukti |
 |---|---|
@@ -38,7 +39,9 @@ penyerang yang password-nya dipegang penyerang). Wajib ditutup di Fase 1 sebelum
    ke halaman "Lengkapi data" untuk mengisi keduanya.
 5. **Gerbang keras (opsi A):** jamaah yang telepon/WhatsApp-nya belum lengkap dialihkan ke "Lengkapi data" di semua halaman jamaah sampai selesai.
 6. **Nomor tidak diverifikasi.** Saat mengisi WhatsApp ditampilkan pemberitahuan bahwa notifikasi pembayaran/pembaruan dikirim via WhatsApp selain email; persetujuan itu dicatat (`ConsentLog`).
+   **→ Diubah sebagian oleh ADR-0002 (2026-10-22):** nomor WhatsApp kini diverifikasi lewat pesan masuk (opsional, tidak menghalangi pemesanan; WhatsApp hanya ke nomor terverifikasi). Telepon tetap tak diverifikasi.
 7. **Hapus keunikan `phone`** (nomor tak lagi identitas; keunikan pada nomor tak terverifikasi membuka "perebutan nomor").
+   **→ ADR-0002:** `phone` tetap tak unik; `whatsapp` tak unik, tetapi **satu nomor hanya untuk satu akun TERVERIFIKASI** (`User.verifiedWhatsapp @unique`).
 8. **Lingkup WhatsApp diperkecil:** hanya `booking_submitted`, `payment_reminder_12h/22h`, `payment_confirmed`, `payment_rejected`. `visa_status_change` dan `auto_cancelled` **hanya email**.
    Dikunci di kode (`waMessage`), tanpa saklar admin — sengaja sederhana; WhatsApp ditinjau lagi nanti.
 9. **Google ↔ akun manual dengan email sama: langsung tersambung** (Google sudah memverifikasi email). Aman karena akun manual hanya bisa aktif setelah email terverifikasi (§3.3).
@@ -53,10 +56,11 @@ penyerang yang password-nya dipegang penyerang). Wajib ditutup di Fase 1 sebelum
 - `+ whatsapp String?` — digit E.164 tanpa `+` (mis. `628123456789`). `phone` ikut disimpan sebagai **digit E.164** (bukan lagi dinormalisasi paksa ke 62).
 - `− @unique` pada `phone`; `− phoneVerifiedAt`; `− resetToken`, `− resetTokenExp`.
 - `+ googleSub String? @unique` (Fase 2).
+- `+ whatsappVerifiedAt DateTime?`, `+ verifiedWhatsapp String? @unique` (ADR-0002) — nomor yang terbukti; mengubah `whatsapp` mengosongkan keduanya.
 - `isActive` kembali berarti **hanya** "boleh login (tidak dinonaktifkan admin)". Akun baru `isActive=true, emailVerifiedAt=null`. **Login mensyaratkan keduanya.**
 - Email dinormalisasi **huruf kecil** di semua jalur (daftar, login, lupa password, Google). Migrasi menurunkan huruf email yang ada.
 
-Model baru `AuthToken`: `id`, `type` (`registration | password_reset`), `tokenHash String @unique` (SHA-256), `userId?` (reset), `email?` + `payload Json?` (pendaftaran: isian menunggu di token, **belum ada akun**), `expiresAt`, `usedAt?`, `createdAt`; indeks `(userId,type)`, `(email,type)`.
+Model baru `AuthToken`: `id`, `type` (`registration | password_reset | whatsapp_verification`), `tokenHash String @unique` (SHA-256), `userId?` (reset), `email?` + `payload Json?` (pendaftaran: isian menunggu di token, **belum ada akun**), `expiresAt`, `usedAt?`, `createdAt`; indeks `(userId,type)`, `(email,type)`.
 Token = 32 byte acak (`base64url`, 43 karakter), **hanya hash yang disimpan**. Pendaftaran berlaku 24 jam, reset 30 menit. Token baru jenis & pemilik yang sama menghanguskan yang belum terpakai.
 Konsumsi atomik: `updateMany where { tokenHash, usedAt: null, expiresAt > now } set usedAt` — jika `count=0` → ditolak (tak bisa dipakai dua kali, aman balapan).
 
@@ -83,7 +87,7 @@ Lupa password: POST /auth/forgot-password {email} → respons SERAGAM; bila akun
 
 Pengiriman email auth: langsung `sendEmail()` (bukan `notify()`) karena hasilnya perlu diketahui dan tautan berisi token tidak boleh masuk log. Kegagalan kirim
 **tidak** mengubah respons (anti-enumerasi) tetapi dicatat (tanpa token/alamat), dan UI menyediakan "Kirim ulang" dengan jeda 60 detik.
-Mode `development` persis (bukan `!== 'production'`, SEC-02): bila Resend belum dikonfigurasi, tautan dicetak ke **log server** — tidak pernah di respons HTTP.
+Mode `development` persis (bukan `!== 'production'`, SEC-02): bila email **tidak terkirim** (Resend belum dikonfigurasi, atau kunci placeholder/ditolak), tautan dicetak ke **log server** — tidak pernah di respons HTTP (dulu hanya untuk 'belum dikonfigurasi': kunci dev placeholder membuat daftar/reset buntu).
 
 ### 3.3 Mengapa sambung otomatis Google aman (keputusan 9)
 
@@ -91,9 +95,9 @@ Pre-hijacking: penyerang mendaftar dengan email korban. Karena pendaftaran manua
 tidak ada akun yang password-nya bisa dipasang penyerang (perbaikan dari rancangan awal yang membuat akun `isActive` dengan password dari form — celah itu ditemukan saat
 merancang Fase 1: penyerang bisa menimpa password akun yang belum terverifikasi lalu korban mengklik tautan verifikasi). Saat korban masuk lewat Google (Fase 2):
 - akun ada & `emailVerifiedAt` terisi → sambung (`googleSub`) dan masuk;
-- akun ada & **belum** terverifikasi (hanya akun lama pra-Fase 1) → tandai terverifikasi, **ganti `passwordHash` dengan hash acak**, sambung, masuk;
+- akun ada & **belum** terverifikasi (hanya akun lama pra-Fase 1 — **praktis tak terjangkau**: `isActive` dicek lebih dulu dan migrasi menandai semua `isActive=true` terverifikasi; hanya keadaan sintetik, §8) → tandai terverifikasi, **ganti `passwordHash` dengan hash acak**, sambung, masuk;
 - akun ada tapi **role staf** → ditolak ("Akun staf masuk dengan email & password");
-- akun ada & `isActive=false` (dinonaktifkan/proses hapus akun) → ditolak.
+- akun ada & `isActive=false` (dinonaktifkan admin) → ditolak. (Proses hapus akun belum mengubah `isActive` — SEC-44.)
 Syarat tetap: `PUT /auth/profile` tidak boleh lagi mengubah email (SEC-17, ditutup Fase 1). Ganti email = fitur terpisah di masa depan (verifikasi email BARU sebelum berlaku).
 Akun Google-only dapat menyetel password lewat "Lupa password" (kepemilikan email terbukti).
 
@@ -103,7 +107,7 @@ Dipertahankan dari rencana lama: `GET /auth/google/start` (state + nonce + code_
 Google → `GET /auth/google/callback` (cek state, tukar code, **verifikasi ID token**: JWKS, `iss`, `aud`, `exp`, `nonce`, `email_verified=true`) →
 `googleSub` dikenal → sesi; email cocok → aturan §3.3; pengguna baru → cookie identitas terverifikasi 15 menit → `/{locale}/register/google` (nama + **persetujuan privasi**, sebelum akun dibuat — UU PDP) →
 `POST /auth/google/complete` membuat `User(googleSub, emailVerifiedAt=now, passwordHash acak)` + `ConsentLog` + email `welcome` → sesi → gerbang §3.5.
-Hanya aktif bila `GOOGLE_CLIENT_ID/SECRET` terisi (`GET /auth/methods`); parameter `next` hanya path internal; endpoint Google bisa di-override **hanya** saat `NODE_ENV` development/test (uji server palsu); rate limit per IP.
+Hanya aktif bila `GOOGLE_CLIENT_ID/SECRET` **dan** `APP_URL` terisi (halaman membaca `googleConfigured()` di server; tidak ada endpoint `methods`); tidak ada parameter `next` (tujuan akhir selalu `/dashboard`, `locale` allow-list `id|en`); endpoint Google bisa di-override **hanya** saat `NODE_ENV` development/test (uji server palsu); rate limit per IP.
 Redirect URI persis `{APP_URL}/api/v1/auth/google/callback`.
 
 ### 3.5 Gerbang "Lengkapi data" (keputusan 4–6)
@@ -113,27 +117,27 @@ Redirect URI persis `{APP_URL}/api/v1/auth/google/callback`.
 - `(pilgrim)/layout.tsx` (Server Component): untuk `role = pilgrim`, bila `phone` atau `whatsapp` kosong → `redirect('/{locale}/lengkapi-data')`. Staf tidak terkena.
   (`middleware.ts` berjalan di Edge tanpa Prisma, jadi cek data di layout, bukan di middleware.)
 - **Penegakan di server:** `POST /bookings` menolak (422) bila telepon/WhatsApp kosong — gerbang UI saja tidak cukup (notifikasi bergantung pada nomor ini).
-- `PUT /auth/contact {phone, whatsapp, consent}` memperbarui nomor + `ConsentLog(whatsapp_notifications)`. Profil memakai komponen & endpoint yang sama.
-- `lib/whatsapp/client.ts` kini menerima **E.164 apa adanya** (hanya membuang `+`/spasi); `normalizePhone` (paksa awalan 62) hanya dipakai saat memasukkan nomor Indonesia **di form**.
+- `PUT /auth/contact {phone, whatsapp, whatsappConsent?}` (persetujuan hanya wajib bila akun belum punya catatannya) memperbarui nomor + `ConsentLog(whatsapp_notifications)`. Profil memakai komponen & endpoint yang sama.
+- `lib/whatsapp/client.ts` kini menerima **E.164 apa adanya** (hanya membuang `+`/spasi); form menyusun E.164 lewat `e164FromCountry` (kode negara + nomor lokal). (`normalizePhone` lama dihapus — tak punya pemanggil.)
   `notify()` memakai `User.whatsapp` (bukan `phone`).
 
 ### 3.6 Rate limit (pelajaran SEC-04: setiap perlindungan harus punya pemanggil yang bisa di-`grep`)
 
 `LIMITS` diganti: `otpSend*`/`otpVerify*` dihapus → `authEmailSendEmail` (3 per 10 menit per alamat), `authEmailSendIp` (10 per jam per IP), `authTokenIp` (30 per 10 menit per IP; token 256-bit tak bisa ditebak, ini pembatas kasar),
-`resetIp` tetap. Login tetap (`loginIp`, `loginAcctIp`, `loginAcct`). Google: `googleIp`. Uji `scripts/test-rate-limit.ts` disesuaikan (uji spesifikasi "OTP 3/10 menit" diganti kebijakan baru).
+`resetIp` tetap. Login tetap (`loginIp`, `loginAcctIp`, `loginAcct`). Google: `googleIp` (30/10 mnt per IP). Ditambah sesudahnya: `contactUpdateUser` 5/hari dan `bookingCreateUser` 20/jam (per akun), `whatsappVerifyUser` 5/jam (per akun), `webhookIp` 3000/10 mnt, `webhookBadSigIp` 30/10 mnt (per IP) dan `webhookSender` 10/jam (per nomor pengirim), `emailTestUser` 5/jam (per admin). Sumber kebenaran: `LIMITS` di `lib/auth/rateLimit.ts`. Uji `scripts/test-rate-limit.ts` disesuaikan (uji spesifikasi "OTP 3/10 menit" diganti kebijakan baru).
 
 ## 4. Dampak ke kode (daftar kerja)
 
 | Area | Perubahan |
 |---|---|
 | `schema.prisma` + migrasi | §3.1 |
-| `lib/auth/` | hapus `otp.ts`, `otpVerify.ts`; tambah `tokens.ts` (buat/konsumsi), `authEmail.ts`, `google.ts` (Fase 2), `email.ts` (normalisasi huruf kecil) |
-| `app/api/v1/auth/*` | tulis ulang `register`, `login`, `forgot-password`, `reset-password`; baru `verify-email`, `resend-verification`, `contact`, `methods`, `google/*`; hapus `verify-phone`, `verify-reset-otp`, `dev/otp` |
+| `lib/auth/` | hapus `otp.ts`, `otpVerify.ts`; tambah `tokens.ts`, `accounts.ts`, `authEmail.ts`, `google.ts`+`googleAccounts.ts`+`googleCookies.ts`, `contact.ts`, `whatsappVerify.ts`, `cookieFlags.ts`, `secret.ts` (normalisasi email ada di `emailSchema`; `email.ts` lama dihapus — tak terpakai) |
+| `app/api/v1/auth/*` | tulis ulang `register`, `login`, `forgot-password`, `reset-password`; baru `registration/preview`, `registration/complete`, `contact`, `google/{start,callback,complete}`, `whatsapp/{verification,status}`, `webhooks/whatsapp`; hapus `verify-phone`, `verify-reset-otp`, `dev/otp` |
 | `profile` | `PUT` tanpa `email` (`.strict()`); `GET` tanpa `phoneVerifiedAt` |
 | `admin/system/users` POST | Zod `.strict()` + `emailVerifiedAt=now` (staf dibuat superadmin); `scripts/create-superadmin.ts` & `prisma/seed.ts` mengisi `emailVerifiedAt` |
-| UI | `RegisterForm` (dua kolom kontak, tanpa langkah OTP), `LoginForm` (+tombol Google), `ForgotPasswordForm` (satu langkah), halaman `verify-email`, `reset-password`, `lengkapi-data`, `register/google`; hapus `OtpInput` |
+| UI | `RegisterForm` (dua kolom kontak, tanpa langkah OTP), `LoginForm` (+tombol Google), `ForgotPasswordForm` (satu langkah), halaman `register/complete`, `reset-password`, `lengkapi-data`, `register/google`; hapus `OtpInput` |
 | `lib/notifications` | `waMessage`: `null` untuk `visa_status_change`/`auto_cancelled`; `waTemplates.otp` dihapus; `notify()` pakai `user.whatsapp`; template email auth baru |
-| Dokumen | `docs/auth-flow.md` (ditimpa pointer), `CLAUDE.md` baris Auth & bagian WhatsApp/OTP, `docs/architecture/architecture-security.md`, `docs/deployment.md` (Google Console) |
+| Dokumen | `docs/auth-flow.md` (ditulis ulang sebagai ringkasan operasional, Fase 4), `CLAUDE.md` baris Auth & bagian WhatsApp/OTP, `docs/architecture/architecture-security.md`, `docs/deployment.md` (Google Console) |
 
 ## 5. Keamanan
 
@@ -207,4 +211,30 @@ Galat dikembalikan sebagai kode di `/login?error=google_*` (allow-list di halama
 - **Belum diverifikasi:** kirim WhatsApp ke gateway nyata (kondisi diblokir justru alasan lingkup diperkecil).
 - **Audit keamanan independen Fase 3** (`security-auditor`): 0 Critical, 0 High, **2 Medium**, 5 Low. Diperbaiki: SEC-32 dimitigasi (rate limit `contactUpdateUser` 5/hari dan `bookingCreateUser` 20/jam; `notify()` hanya mengirim WA bila ada `ConsentLog` dan maks **10 WA per nomor tujuan per 24 jam** lintas akun; email `contact_changed` ke pemilik akun tiap nomor yang sudah ada berganti), SEC-34 (kunci `FOR UPDATE`), SEC-36 (uji: `requireContactForBooking` + uji sumber route memastikan penjaga mendahului `request.json()`/transaksi; `phone`≠`whatsapp` di data uji; body gateway digit-saja; 16 digit/non-digit), SEC-37 (profil kirim ulang nomor hanya bila diubah), log PII + JSON rusak di `POST /bookings` (SEC-23). **Terbuka (keputusan pemilik):** SEC-33 — persetujuan WhatsApp wajib tanpa jalur penarikan (UU PDP) dan SEC-35 (versi persetujuan); serta risiko sisa SEC-32 (verifikasi nomor bertentangan dengan keputusan produk 6).
 - **Uji mutasi** 7 pengaman baru (FOR UPDATE, persetujuan diminta, `changed`, penjaga ConsentLog di notify, batas harian, penjaga route): semua tertangkap; satu kontrol (select ekstra) tetap lulus.
+
+## 10. Penutupan Fase 4 (2026-10-22)
+
+**Review keamanan lintas fase** (`security-auditor`, seluruh sistem auth + inventaris 131 rute API + infra + kecocokan dokumen): 0 Critical, 0 High, 2 Medium (usulan naik kelas: SEC-18 sesi tak bisa dicabut, SEC-44
+penghapusan akun tak menghapus apa pun — keduanya **blocker go-live**), 11 Low baru, 1 butir "perlu dicek manual". Tidak ada rantai pengambilalihan akun lintas fase.
+
+**Butir yang dicek manual dan TERBUKTI bug nyata — diperbaiki:** cookie sesi `SameSite=Strict` tidak dikirim pada rantai redirect yang diawali dari situs lain, sehingga login Google asli berakhir di halaman login
+padahal sesi sudah dibuat (juga tautan di email notifikasi tampak "logout"). Direproduksi dengan Google palsu di `127.0.0.1` (situs berbeda dari aplikasi di `localhost`; Google palsu di `localhost` yang sama situs
+menyembunyikan masalah ini): sebelum → mendarat di `/id/login`; sesudah (cookie `Lax`) → langsung `/id/dashboard`. **Keputusan 2026-10-22 mengubah aturan Strict di CLAUDE.md** (`docs/decisions.md`). CSRF tetap tertutup:
+Lax tidak dikirim pada POST/PUT/DELETE lintas-situs dan semua operasi pengubah data bukan GET.
+Penjaga: `lib/auth/cookieFlags.ts` (`SESSION_SAME_SITE`, `cookieSecure()`), diuji termasuk uji sumber agar tak kembali ke `strict`.
+
+**Penguatan lain dari review (diperbaiki + diuji + uji mutasi):** `Secure` cookie kini fail-closed (`NODE_ENV !== 'development'`, bukan `=== 'production'`); `JWT_SECRET` divalidasi saat dipakai (≥32 karakter, bukan placeholder/awalan contoh, entropi
+tidak rendah — `lib/auth/secret.ts`, juga untuk kunci turunan cookie Google); `NEXT_PUBLIC_BUSINESS_WA` placeholder (`628xxxxxxxxxx`) tak lagi dianggap terisi (`businessWaDigits`); batas password dihitung dalam **byte**
+(bcrypt 72 byte); `auth/profile` JSON rusak → 400; `X-Powered-By` dimatikan; kontainer `migrate` hanya menerima `DATABASE_URL`.
+**Kode mati dihapus:** `normalizePhone`, `phoneSchema`, `lib/auth/email.ts`, kunci i18n `otp/sendOtp/verifyOtp`. Template WA yang tak terpakai dipertahankan dengan catatan.
+
+**Koreksi dokumen (hasil audit kecocokan):** §1 diberi label riwayat; keputusan 6/7 diberi catatan ADR-0002; §3.1 memuat kolom verifikasi WhatsApp dan nilai enum baru; `GET /auth/methods`, parameter `next`,
+`verify-email`, `resend-verification` dihapus dari klaim; daftar `LIMITS` dilengkapi; `docs/auth-flow.md` ditulis ulang; dokumen lama yang memuat OTP (`architecture.md`, `spec.md`, `arsitektur-komponen-kontak.md`,
+`arsitektur-notifikasi.md`, `architecture-security.md`, `RETROFIT-GAPS.md`, `docker-compose.prod.yml`, CLAUDE.md) diberi banner/koreksi.
+
+**Daftar terbuka sebelum go-live** (lihat Register `docs/lessons-learned.md`): SEC-18 (sesi stateless — tonggak: `tokenVersion`/cek DB, utamanya jalur admin), SEC-44 (anonimisasi akun UU PDP), SEC-05 (17 advisory dependency high), SEC-26/27
+(batas login atomik, seed tanpa penjaga), SEC-43 (alat admin lepas nomor), SEC-47 (BOLA `address/[id]`), serta uji dengan layanan asli (Resend: SPF/DKIM/DMARC; Google: redirect URI + status *In production* — dan konfirmasi login tidak
+terpental ke halaman login; GOWA: bentuk `from`/`/app/status`) dan cek DB produksi bebas akun pra-migrasi.
+
+**Hitungan uji terkini (Fase 4):** `test-rate-limit` 14, `test-email` 20, `test-notify` 29, `test-auth` 33, `test-google` 36, `test-whatsapp` 24 (semua lulus; angka di §7–§9 adalah hitungan saat fase itu dikerjakan).
 

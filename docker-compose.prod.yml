@@ -6,7 +6,7 @@
 # adalah bentuk awal/dev yang MEMBANGUN image di mesin sendiri dan membuka port — jangan dipakai di production.
 #
 # Pola mengikuti smart-ai (docker-compose.prod.yml), disesuaikan: satu app Next.js (bukan api+web+worker), Redis
-# (OTP), GOWA eksternal di Sumopod (tidak ada service WhatsApp di sini), satu role database.
+# (rate limit auth), GOWA eksternal di Sumopod (tidak ada service WhatsApp di sini), satu role database.
 #
 # RESOURCE LIMITS: tanpa batas, satu container yang bocor/spike menghabiskan RAM dan memicu OOM-kill container
 # LAIN (termasuk postgres — data berisiko). Angka di bawah titik awal untuk VPS ±4 GB — sesuaikan dengan
@@ -49,7 +49,9 @@ services:
   migrate:
     image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/migrate:${IMAGE_TAG:-latest}
     restart: "no"
-    env_file: .env.production
+    # HANYA DATABASE_URL — kontainer ini tak butuh JWT_SECRET/GOOGLE_CLIENT_SECRET/RESEND_API_KEY/token GOWA (minimum hak; SEC-10).
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL belum diisi}
     depends_on:
       postgres:
         condition: service_healthy
@@ -80,7 +82,7 @@ services:
     cpus: 1.0
     logging: *logging
 
-  # OTP & rate limit (lib/auth/otp.ts). Data berumur pendek: kehilangannya hanya membuat pengguna meminta OTP ulang.
+  # Rate limit auth (lib/auth/rateLimit.ts). Data berumur pendek: kehilangannya hanya mengosongkan hitungan (ada fallback memori).
   redis:
     image: redis:7-alpine
     restart: unless-stopped

@@ -1,9 +1,10 @@
 import { cookies } from 'next/headers'
 import { SIGNUP_COOKIE, STATE_COOKIE } from '@/lib/auth/google'
+import { cookieSecure } from '@/lib/auth/cookieFlags'
 
 // Opsi cookie sementara login Google. SameSite=Lax (bukan Strict seperti sesi): callback adalah navigasi tingkat-atas LINTAS-SITUS dari
 // Google — cookie Strict tidak ikut terkirim sehingga state tak terbaca. httpOnly + Secure di produksi + kedaluwarsa singkat.
-const base = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const }
+const base = { httpOnly: true, secure: cookieSecure(), sameSite: 'lax' as const }
 
 export async function setStateCookie(value: string) {
   (await cookies()).set(STATE_COOKIE, value, { ...base, maxAge: 600, path: '/api/v1/auth/google' })

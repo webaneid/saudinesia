@@ -10,6 +10,7 @@ import {
 import { updateContact } from '@/lib/auth/contact'
 import { processWebhook, maskEmail, webhookSecret, WEBHOOK_MAX_BODY_BYTES } from '@/lib/whatsapp/webhook'
 import { readFileSync } from 'node:fs'
+import { businessWaDigits } from '@/lib/constants/payment'
 
 const url = process.env.DATABASE_URL ?? ''
 const dbName = url.split('/').pop()?.split('?')[0] ?? ''
@@ -306,6 +307,18 @@ await t('route admin: menonaktifkan akun MELEPAS nomor terverifikasi (penjaga ta
   assert.ok(hookSrc.includes('processWebhook(') && hookSrc.includes('webhookSecret()') && hookSrc.includes('readLimited('))
   const post = hookSrc.slice(hookSrc.indexOf('export async function POST'))
   assert.ok(post.indexOf('webhookSecret()') > 0 && post.indexOf('webhookSecret()') < post.indexOf('readLimited(request'), 'secret dicek SEBELUM membaca body')
+})
+
+await t('businessWaDigits: nomor bisnis 8–15 digit; placeholder (628xxxxxxxxxx → "628"), kosong, berawalan 0, kepanjangan → "" (tak dianggap terisi)', () => {
+  assert.equal(businessWaDigits('6281300000000'), '6281300000000')
+  assert.equal(businessWaDigits('+62 813-0000-0000'), '6281300000000')
+  for (const bad of ['628xxxxxxxxxx', '', '0812345678', '1234567', '1'.repeat(16), 'abc']) assert.equal(businessWaDigits(bad), '', String(bad))
+  const keep = env.NEXT_PUBLIC_BUSINESS_WA // tanpa argumen: membaca env (undefined → default parameter)
+  try {
+    delete env.NEXT_PUBLIC_BUSINESS_WA; assert.equal(businessWaDigits(), '')
+    env.NEXT_PUBLIC_BUSINESS_WA = '628xxxxxxxxxx'; assert.equal(businessWaDigits(), '')
+    env.NEXT_PUBLIC_BUSINESS_WA = '6281300000000'; assert.equal(businessWaDigits(), '6281300000000')
+  } finally { if (keep === undefined) delete env.NEXT_PUBLIC_BUSINESS_WA; else env.NEXT_PUBLIC_BUSINESS_WA = keep }
 })
 
 await prisma.authToken.deleteMany({ where: { user: { email: { startsWith: tag } } } })

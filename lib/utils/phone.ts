@@ -1,26 +1,8 @@
 import { COUNTRIES } from '@/lib/constants/countries'
 
 /**
- * Normalize any Indonesian phone input to E.164 without the leading +.
- * Examples:
- *   "8111222333"   → "628111222333"
- *   "08111222333"  → "628111222333"
- *   "+628111222333"→ "628111222333"
- *   "628111222333" → "628111222333"
- *
- * Hanya untuk input nomor Indonesia (mis. skrip/tes). Form akun memakai kode negara dari komponen Kontak → `e164FromCountry`.
- */
-export function normalizePhone(raw: string): string {
-  const digits = raw.replace(/[\s\-+]/g, '')
-  if (digits.startsWith('62')) return digits
-  if (digits.startsWith('0')) return '62' + digits.slice(1)
-  return '62' + digits
-}
-
-/**
  * Gabungkan kode negara (dial code, tanpa "+") + nomor lokal jadi digit E.164 penuh —
- * dipakai komponen Kontak (docs/arsitektur-komponen-kontak.md §3.4) yang sadar negara,
- * beda dari normalizePhone() di atas yang hardcode Indonesia.
+ * dipakai komponen Kontak (docs/arsitektur-komponen-kontak.md §3.4) yang sadar negara.
  */
 export function toE164Digits(dialCode: string, localNumber: string): string {
   const local = localNumber.replace(/\D/g, '').replace(/^0+/, '')

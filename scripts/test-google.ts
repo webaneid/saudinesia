@@ -229,11 +229,11 @@ await t('cookie kedaluwarsa: TTL produksi tepat 10 menit (state) dan 15 menit (s
   const ttl = (jwt: string) => { const p = JSON.parse(Buffer.from(jwt.split('.')[1]!, 'base64url').toString()) as { exp: number; iat: number }; return p.exp - p.iat }
   assert.equal(ttl(await signStateCookie({ state: 's', nonce: 'n', verifier: 'v', locale: 'id' })), 600)
   assert.equal(ttl(await signSignupCookie({ sub: 'x', email: 'a@b.co', name: 'A' })), 900)
-  // kontrol positif + kedaluwarsa nyata: ttl 1 detik, lalu tunggu
-  const s = await signStateCookie({ state: 's', nonce: 'n', verifier: 'v', locale: 'id' }, '1s')
-  const g = await signSignupCookie({ sub: 'x', email: 'a@b.co', name: 'A' }, '1s')
+  // kontrol positif + kedaluwarsa nyata: ttl 2 detik, lalu tunggu. (exp/iat dibulatkan ke detik: ttl 1s bisa sudah lewat begitu dibuat bila melintasi batas detik → flaky di CI)
+  const s = await signStateCookie({ state: 's', nonce: 'n', verifier: 'v', locale: 'id' }, '2s')
+  const g = await signSignupCookie({ sub: 'x', email: 'a@b.co', name: 'A' }, '2s')
   assert.ok(await readStateCookie(s)); assert.ok(await readSignupCookie(g))
-  await new Promise((r) => setTimeout(r, 2200))
+  await new Promise((r) => setTimeout(r, 3200))
   assert.equal(await readStateCookie(s), null); assert.equal(await readSignupCookie(g), null)
 })
 

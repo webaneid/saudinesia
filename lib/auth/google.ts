@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { SignJWT, createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
 import { appUrl } from '@/lib/email/templates'
+import { requireJwtSecret } from '@/lib/auth/secret'
 
 // Login Google: OAuth 2.0 Authorization Code + PKCE buatan sendiri (tanpa Better Auth) — docs/arsitektur-auth.md §3.4.
 // File ini hanya protokol (tanpa DB/sesi) supaya bisa diuji dengan server Google palsu.
@@ -41,9 +42,7 @@ export function googleConfigured(): boolean {
 // dengan kunci yang sama bisa ditukar-pakai sebagai sesi. Kunci turunan + audience berbeda menutup itu.
 
 function key(label: string): Uint8Array {
-  const secret = process.env.JWT_SECRET
-  if (!secret) throw new Error('JWT_SECRET is not set')
-  return createHash('sha256').update(`${label}:${secret}`).digest()
+  return createHash('sha256').update(`${label}:${requireJwtSecret()}`).digest()
 }
 
 export const STATE_COOKIE = 'snd-g-state'

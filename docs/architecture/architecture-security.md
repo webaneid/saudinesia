@@ -11,7 +11,7 @@
 > OTP WhatsApp dihapus total dari auth. `CLAUDE.md` § Tech Stack kini menjelaskan auth berbasis email. Detail: `docs/arsitektur-auth.md`.
 
 ## 1. Secrets & Environment
-- Semua secret (DB password, JWT secret, MinIO keys, GOWA API key) di
+- Semua secret (DB password, JWT secret, MinIO keys, GOWA API key, `RESEND_API_KEY`, `GOOGLE_CLIENT_SECRET`, `WHATSAPP_WEBHOOK_SECRET`) di
   `.env`/`.env.local`, **tidak pernah** di kode/commit — dikonfirmasi
   `.gitignore` sudah exclude `.env`/`.env.local`/`.env.*.local` sejak awal.
 - `.env.example` sudah ada tanpa nilai asli.
@@ -58,9 +58,17 @@
   (anti-enumerasi); login mengungkap status akun hanya setelah password benar. Login mensyaratkan `isActive` DAN `emailVerifiedAt`.
   Pengiriman dibatasi `lib/auth/rateLimit.ts` (§ 6). (Riwayat: sampai 2026-10-21 verifikasi memakai OTP WhatsApp.)
 - **Sambung otomatis Google berdasarkan email** (docs/arsitektur-auth.md §3.3): risiko sisa yang diterima — pemilik domain Google Workspace atau alamat email yang didaur ulang bisa memperoleh `email_verified=true` untuk alamat yang dulu dipakai orang lain. Sama kelasnya dengan reset password lewat email; staf dikecualikan sepenuhnya. Alias Gmail (titik/`+tag`) tidak digabung → akun ganda, bukan pengambilalihan.
+- **Google OAuth** (`lib/auth/google.ts`): PKCE S256 + `state` (CSRF) + `nonce` (replay), cookie sementara bertanda tangan dengan **kunci turunan + audience** (tak bisa ditukar dengan JWT sesi), ID token diverifikasi penuh
+  (JWKS, `iss`, `aud`, `exp/iat/sub` wajib, `nonce`, `email_verified === true`, RS256 saja); endpoint override hanya `NODE_ENV` development/test. Staf tak pernah tersambung/masuk lewat Google.
+- **Webhook GOWA** (`/api/v1/webhooks/whatsapp`, publik): satu-satunya penjaga = HMAC-SHA256 atas body mentah (`timingSafeEqual`); **mati (503)** bila `WHATSAPP_WEBHOOK_SECRET` kosong/<32 karakter/bawaan GOWA/placeholder; tanda tangan
+  salah dibatasi per IP; body dibaca berbatas (64 KB, byte); pesan basi/grup/LID/`is_from_me`/`chat_id≠from` diabaikan; verifikasi nomor bersyarat + atomik. Detail: `docs/arsitektur-whatsapp-verifikasi.md` §9.
 - **Email = identitas**: `PUT /auth/profile` tidak menerima `email` (SEC-17); mengganti email butuh fitur terpisah dengan verifikasi email baru.
-- Session: JWT, disimpan `httpOnly; Secure; SameSite=Strict` cookie
-  (`CLAUDE.md` § Security) — bukan localStorage.
+- Session: JWT 7 hari, disimpan `httpOnly; Secure; SameSite=**Lax**` cookie (`lib/auth/cookieFlags.ts`) — bukan localStorage. **Lax, bukan Strict (keputusan 2026-10-22):** Strict tidak dikirim pada rantai redirect yang
+  diawali dari situs lain → callback Google asli mendarat di `/login` padahal sesi sudah dibuat (direproduksi dengan Google palsu di situs berbeda), dan tautan dari email tampak "logout". CSRF tetap tertutup: Lax tidak dikirim
+  pada POST/PUT/DELETE lintas-situs dan tidak ada operasi pengubah data berbentuk GET. `Secure` aktif di semua lingkungan kecuali `NODE_ENV === 'development'` persis (fail-closed). `JWT_SECRET` divalidasi
+  (`lib/auth/secret.ts`: ≥32 karakter, bukan placeholder/awalan contoh, entropi tidak rendah).
+- **Sesi stateless tak bisa dicabut (SEC-18, Medium, blocker go-live):** `role` dibaca dari JWT 7 hari tanpa cek DB; menonaktifkan/menurunkan akun, reset password, dan penautan Google tidak mencabut sesi yang ada
+  (termasuk akses admin ke dokumen paspor). Perbaikan: `tokenVersion` atau cek `isActive`/`role` ke DB (minimal jalur admin).
 - Role check: `middleware.ts` cek `ADMIN_ROLES`/`SUPERADMIN_ROLES` di level
   edge untuk redirect awal, **tapi** tiap Route Handler admin/superadmin
   WAJIB re-check role sendiri lewat `lib/auth/session.ts`
@@ -101,6 +109,11 @@
 | `auth/register`, `auth/forgot-password` | email auth per IP: 10 / jam · per alamat: 3 / 10 mnt — dihitung **sebelum** mencari akun dan sama untuk email ada/tidak (429 tidak membocorkan keberadaan) |
 | `auth/registration/preview`, `auth/registration/complete` | per IP: 30 / 10 mnt (token 256-bit tak bisa ditebak; ini pembatas kasar) |
 | `auth/reset-password` | per IP: 10 / jam |
+| `auth/google/start`, `callback`, `complete` | per IP: 30 / 10 mnt (`googleIp`; 429 pada navigasi → redirect ke login dengan pesan) |
+| `auth/contact` (PUT) | per akun: 5 / hari (`contactUpdateUser`) — nomor tak terverifikasi tak boleh jadi alat mengirim pesan ke nomor orang lain |
+| `bookings` (POST) | per akun: 20 / jam (`bookingCreateUser`); sebelumnya 422 bila telepon/WhatsApp kosong |
+| `auth/whatsapp/verification` | per akun: 5 / jam (`whatsappVerifyUser`) |
+| `webhooks/whatsapp` | tanda tangan SALAH per IP: 30 / 10 mnt (`webhookBadSigIp`) · semua pesan sah per IP: 3000 / 10 mnt (`webhookIp`) · pesan `VERIF` per nomor pengirim: 10 / jam (`webhookSender`) |
 | `admin/system/integrations/test-email` | per admin: 5 / jam |
 
 - **Penyimpanan**: counter jendela-tetap di Redis, atomik lewat skrip Lua (INCR + EXPIRE pada hit pertama; kunci tanpa
@@ -134,9 +147,7 @@
 Tidak pakai payment gateway pihak ketiga — model `Payment` (`buktiTransferPath`,
 `confirmedById`, status `pending/confirmed/rejected`) + model `Refund`
 terpisah, dikonfirmasi manual oleh admin/manager/superadmin.
-- [ ] **Perlu diverifikasi manual**: endpoint konfirmasi pembayaran
-      benar-benar cek role admin di server (bukan cuma disembunyikan di UI) —
-      jalankan skill `security-review` saat menyentuh route ini.
+- [x] Endpoint konfirmasi pembayaran cek role admin di server (`admin/payments/[id]/confirm` memanggil `requireAdmin()` di awal) — terverifikasi review lintas fase 2026-10-22.
 - `totalAmount` booking sudah 100% server-computed (bukan trust dari client)
   per `docs/arsitektur-booking.md` Step 5 — pola yang benar, pertahankan
   untuk modul baru.

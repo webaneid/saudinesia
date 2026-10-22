@@ -5,6 +5,9 @@ const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Folder keluaran bisa dipisah (NEXT_DIST_DIR=.next-verify) supaya `next build` untuk verifikasi tidak menimpa .next milik `next dev` yang sedang berjalan.
+  distDir: process.env.NEXT_DIST_DIR || '.next',
+  poweredByHeader: false, // jangan umumkan framework (X-Powered-By)
   serverExternalPackages: ['node-cron'],
   images: {
     loader: 'custom',

@@ -2373,3 +2373,19 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `prisma/schema.prisma` + migrasi `20261022120000_whatsapp_verification`, `lib/auth/{whatsappVerify,contact,rateLimit,tokens}.ts`, `lib/whatsapp/{webhook,client}.ts`, `lib/notifications/{notify,integrations,templates/whatsapp}.ts`, `app/api/v1/webhooks/whatsapp`, `app/api/v1/auth/whatsapp/*`, `app/api/v1/admin/system/users/[id]`, `WhatsappVerifyCard`, profil/dashboard/panel admin, `scripts/{test-whatsapp,test-notify,buat-env-production}`, env examples, CI.
 
+## 2026-10-22 — Cookie sesi SameSite=Lax (menggantikan aturan SameSite=Strict di CLAUDE.md § Security)
+
+**Decision:** Cookie sesi `snd-session` memakai `SameSite=Lax` (bukan Strict). `Secure` aktif di semua lingkungan kecuali `NODE_ENV === 'development'`. Konstanta + fungsi di `lib/auth/cookieFlags.ts`, diuji (termasuk uji sumber agar tak kembali ke `strict`). CLAUDE.md § Security diperbarui.
+
+**Rationale:** Review lintas fase menandai butir "perlu dicek manual"; saya **mereproduksinya**: dengan Google palsu di situs berbeda (`127.0.0.1` vs aplikasi di `localhost`), callback membuat sesi tetapi cookie Strict tidak ikut pada redirect berikutnya (rantai diawali dari situs lain) → pengguna mendarat di `/login`; setelah Lax → langsung `/dashboard`. Dengan Google asli akan identik, dan tautan di email notifikasi (klik dari Gmail) juga tampak "logout". CSRF tetap tertutup: Lax tidak dikirim pada POST/PUT/DELETE lintas-situs dan tidak ada route pengubah data berbentuk GET. Simulasi `dev:eval` kini memakai `127.0.0.1` untuk Google agar alur lintas-situs teruji (di `localhost` yang sama situs, masalah ini tersembunyi).
+
+**Alternatives considered:** Tetap Strict + halaman perantara 200 yang me-redirect sisi klien setelah callback — memperbaiki Google tetapi tidak tautan dari email, dan menambah satu hop; ditolak. Dua cookie (Strict sesi penuh + Lax penanda) — kompleksitas tanpa manfaat.
+
+## 2026-10-22 — Auth Fase 4: penutupan dokumen + review lintas fase
+
+**Decision:** Menutup rangkaian auth (ADR-0001/0002): dokumen lama (OTP) diberi banner/koreksi atau ditulis ulang (`docs/auth-flow.md`), kode mati dihapus, hardening dari review lintas fase diterapkan, SEC-18 dan SEC-44 dinaikkan menjadi Medium dan ditetapkan blocker go-live.
+
+**Ringkasan security check (SOP langkah 5):** review independen lintas fase (`security-auditor`, inventaris 131 rute + infra + kecocokan dokumen): 0 Critical, 0 High, 2 Medium (usulan naik), 11 Low, 1 butir manual yang terbukti bug nyata (SEC-46, diperbaiki). Diperbaiki: SEC-46, SEC-48, sebagian SEC-49. Dicatat terbuka: SEC-47, SEC-50, SEC-51 (diterima), SEC-18/44 (blocker). Bukti: `docs/arsitektur-auth.md` §10.
+
+**Affects:** `lib/auth/{cookieFlags,secret,session,googleCookies,google}.ts`, `lib/constants/payment.ts`, `lib/validators/{auth,index}.ts`, `lib/utils/phone.ts`, `next.config.ts`, `docker-compose.prod.yml`, `scripts/dev-eval.ts`, `scripts/test-{auth,whatsapp}.ts`, i18n, dan dokumen: `auth-flow`, `arsitektur-auth`, `arsitektur-notifikasi`, `arsitektur-komponen-kontak`, `architecture`, `spec`, `architecture-security`, `deployment`, `lessons-learned`, CLAUDE.md.
+

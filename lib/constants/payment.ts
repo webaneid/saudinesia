@@ -8,6 +8,15 @@ export type BankAccount = {
   accountName:   string
 }
 
+/**
+ * Nomor WhatsApp bisnis sebagai digit, atau '' bila belum diisi / masih placeholder (`628xxxxxxxxxx` → "628" bukan nomor): wajib 8–15 digit E.164.
+ * Dipakai tautan verifikasi `wa.me` dan indikator panel admin — placeholder tak boleh dianggap "terisi".
+ */
+export function businessWaDigits(raw: string | undefined = process.env.NEXT_PUBLIC_BUSINESS_WA): string {
+  const d = (raw ?? '').replace(/\D/g, '')
+  return d.length >= 8 && d.length <= 15 && !/^0/.test(d) ? d : ''
+}
+
 export function getPaymentConfig(): {
   banks:           BankAccount[]
   businessName:    string
