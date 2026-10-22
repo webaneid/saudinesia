@@ -6,6 +6,7 @@ import { Building2, Bus, UserRound, UtensilsCrossed, MapPin, ArrowRight, Star } 
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah, formatDistance } from '@/lib/utils'
+import { plainText } from '@/lib/rich-text/doc'
 
 export default async function LandingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
@@ -160,7 +161,7 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
                   </div>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground line-clamp-2">{m.bio}</p>
+              <p className="text-xs text-muted-foreground line-clamp-2">{plainText(m.bio)}</p>
             </div>
           ))}
         </div>

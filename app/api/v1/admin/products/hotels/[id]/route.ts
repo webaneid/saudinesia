@@ -6,13 +6,14 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { addressSchema } from '@/lib/validators/address'
 import { upsertAddress } from '@/lib/address/prepare'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 const updateSchema = z.object({
   name:             z.string().min(1).optional(),
   city:             z.enum(['makkah', 'madinah']).optional(),
   stars:            z.coerce.number().int().min(1).max(5).optional(),
   distanceToHaramM: z.coerce.number().int().min(0).optional(),
-  description:      z.string().optional(),
+  description:      richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   facilities:       z.array(z.string()).optional(),
   featuredImageKey: z.string().nullable().optional(),
   isActive:         z.boolean().optional(),
@@ -48,9 +49,10 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json())
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const { address, ...rest } = parsed.data
+    const { address, description, ...rest } = parsed.data
 
     const data: Record<string, unknown> = { ...rest }
+    if (description !== undefined) data.description = emptyToNull(description)
     if (address) {
       const existing = await prisma.hotel.findUniqueOrThrow({ where: { id }, select: { addressId: true } })
       const result = await upsertAddress(existing.addressId, address)

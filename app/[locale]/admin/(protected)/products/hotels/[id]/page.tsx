@@ -7,6 +7,7 @@ import { useParams } from 'next/navigation'
 import { ProductMediaGallery } from '@/components/admin/media/ProductMediaGallery'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -265,9 +266,9 @@ export default function HotelDetailPage() {
             <p className="text-xs text-admin-muted mb-1">Jarak ke Haram (meter)</p>
             <input type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 min-w-0">
             <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-            <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
+            <RichTextEditor id="hotel-description" title="Deskripsi hotel" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Tentang hotel, lokasi, fasilitas unggulan, catatan untuk jamaah…" />
           </div>
         </div>
 

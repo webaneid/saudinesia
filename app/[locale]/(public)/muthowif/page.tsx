@@ -5,6 +5,7 @@ import { getPresignedUrl } from '@/lib/storage/minio'
 import { UserRound, Star, Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
+import { plainText } from '@/lib/rich-text/doc'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -55,7 +56,7 @@ export default async function MuthowifPage({ params }: Props) {
                 </div>
               </div>
 
-              <p className="text-sm text-muted-foreground line-clamp-3">{g.bio}</p>
+              <p className="text-sm text-muted-foreground line-clamp-3">{plainText(g.bio)}</p>
 
               <div className="flex flex-wrap gap-1.5">
                 {langs.map((lang) => (

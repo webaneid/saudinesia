@@ -6,6 +6,7 @@ import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type HajiProduct = { id: string; name: string; hajiType: string; year: number; price: number; totalQuota: number; bookedQuota: number; isActive: boolean }
 
@@ -88,7 +89,7 @@ export default function HajiPage() {
             <div><p className="text-xs text-admin-muted mb-1">Durasi (hari)</p><input type="number" className="admin-inp" value={form.durationDays} onChange={set('durationDays')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Harga/orang (Rp)</p><input type="number" className="admin-inp" value={form.price} onChange={set('price')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Kuota</p><input type="number" className="admin-inp" value={form.totalQuota} onChange={set('totalQuota')} /></div>
-            <div className="lg:col-span-3"><p className="text-xs text-admin-muted mb-1">Deskripsi</p><textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} /></div>
+            <div className="lg:col-span-3 min-w-0"><p className="text-xs text-admin-muted mb-1">Deskripsi</p><RichTextEditor id="haji-new-description" title="Deskripsi paket haji" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Program perjalanan, fasilitas, syarat, dan catatan penting…" /></div>
             <div className="lg:col-span-3"><p className="text-xs text-admin-muted mb-1">Yang Termasuk (satu baris per item)</p><textarea className="admin-inp" rows={4} value={form.includes} onChange={set('includes')} placeholder={"Visa Haji\nAkomodasi Makkah\nTransportasi Armuzna"} /></div>
           </div>
           <div className="flex gap-2">

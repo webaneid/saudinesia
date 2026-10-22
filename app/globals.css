@@ -143,8 +143,8 @@
      admin (hijau) maupun publik. Hanya elemen yang ada di daftar putih lib/rich-text/schema.ts. === */
   .rich-text                { @apply text-sm leading-relaxed text-foreground; }
   .rich-text > * + *        { @apply mt-3; }
-  .rich-text h2             { @apply text-base font-bold tracking-tight; }
-  .rich-text h3             { @apply text-sm font-semibold; }
+  .rich-text h2             { @apply text-base font-bold tracking-tight text-foreground; }
+  .rich-text h3             { @apply text-sm font-semibold text-foreground; }
   .rich-text ul             { @apply list-disc space-y-1 pl-5; }
   .rich-text ol             { @apply list-decimal space-y-1 pl-5; }
   .rich-text-editing        { @apply min-h-40; }

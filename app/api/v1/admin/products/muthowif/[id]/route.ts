@@ -5,10 +5,11 @@ import { getPresignedUrl } from '@/lib/storage/minio'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 const updateSchema = z.object({
   name:          z.string().min(1).optional(),
-  bio:           z.string().nullable().optional(),
+  bio:           richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   languages:     z.array(z.string()).optional(),
   dailyCapacity: z.coerce.number().int().positive().optional(),
   isActive:      z.boolean().optional(),
@@ -40,7 +41,11 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json())
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const m = await prisma.muthowif.update({ where: { id }, data: parsed.data })
+    const { bio, ...fields } = parsed.data
+    const m = await prisma.muthowif.update({
+      where: { id },
+      data: { ...fields, ...(bio !== undefined && { bio: emptyToNull(bio) }) },
+    })
     return NextResponse.json(ok(m))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
