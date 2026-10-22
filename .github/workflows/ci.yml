@@ -169,6 +169,14 @@ jobs:
           fi
           $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
 
+      # Invoice PDF di image produksi (`bun server.js`): upgrade dependency pernah lulus `next build` dan dev tetapi invoice gagal 500 di
+      # produksi (modul pembuat PDF tak termuat oleh Bun). Hanya uji pada artefak produksi yang menangkap kelas regresi ini (SEC-05).
+      - name: Smoke - invoice PDF di image produksi
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          $C cp scripts/ci-invoice-smoke.ts web:/app/scripts/ci-invoice-smoke.ts
+          $C exec -T -e CI_SMOKE=1 web bun scripts/ci-invoice-smoke.ts
+
       # Rate limit login (SEC-04) di image produksi dengan Redis nyata: 5 gagal diizinkan, ke-6 harus 429, dan kuncinya
       # harus benar-benar ada di Redis (bukan fallback memori).
       - name: Smoke - rate limit login di image produksi (Redis)

@@ -8,6 +8,15 @@ updates:
       interval: "weekly"
       day: "monday"
     open-pull-requests-limit: 5
+    # Versi yang TERBUKTI merusak runtime produksi (Bun) — jangan diusulkan ulang sampai diverifikasi (docs/lessons-learned.md SEC-05).
+    # Selalu uji pada artefak produksi (`bun server.js`): `next build` dan dev tetap lulus untuk kasus-kasus ini.
+    ignore:
+      - dependency-name: "react"
+        versions: [">=19.3.0"] # 19.3.x membuat `next build` crash di internal Bun ("Expected CommonJS module to have a function wrapper")
+      - dependency-name: "react-dom"
+        versions: [">=19.3.0"]
+      - dependency-name: "@react-pdf/renderer"
+        update-types: ["version-update:semver-minor", "version-update:semver-patch"] # 4.9 menarik @react-pdf/* + pdfkit baru → invoice 500 di produksi (modul `#standard-fonts`)
     groups:
       # Minor/patch digabung jadi 1 PR (kurangi noise); major tetap terpisah per paket — sering breaking change.
       minor-and-patch:

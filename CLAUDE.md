@@ -264,6 +264,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Sensitive endpoints (login, register, forgot/reset password, token consumption) need rate limiting **and** a cap on wrong attempts. A protection function must have a caller you can `grep` — documenting a control is not the same as running it (SEC-04: `checkRateLimit()` was never called)
 - Admin routes distinguish errors: `Unauthorized`/`Forbidden` → 401/403, invalid input → 400, everything else → 500 + log. Never `catch { return 403 }` for all errors
 - `bun audit --audit-level=critical` blocks CI; new high advisories brought in by a dependency added in a phase must be triaged in that phase
+- Dependency bumps are verified on the PRODUCTION artifact, not just `next build`/dev: production runs `bun server.js` (standalone), and bumps have passed build + dev yet broken production (React 19.3.x crashes `next build` in Bun; `@react-pdf` ≥4.7 → invoice 500). CI runs `scripts/ci-invoice-smoke.ts` in the image; compare `bun.lock` before/after for transitive drift. Overrides live in `package.json` `overrides` (same-major only); rationale in `docs/lessons-learned.md` SEC-05
 - Dockerfile, compose, Caddyfile, GitHub workflows, `scripts/*` and `.env*.example` are security surface too — they go through the same review (non-root, no secrets in images/layers, no published ports beyond the proxy, least-privilege workflow `permissions`)
 - Process and severity policy: **Fase Eksekusi SOP langkah 5**; findings register: `docs/lessons-learned.md`
 
