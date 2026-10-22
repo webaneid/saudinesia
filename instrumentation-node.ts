@@ -13,6 +13,9 @@ export async function registerNode() {
   const { startAuthTokenCleanupJob } = await import('@/lib/cron/authTokenJob')
   startAuthTokenCleanupJob()
 
+  const { startErasureSweepJob } = await import('@/lib/cron/erasureSweepJob')
+  startErasureSweepJob()
+
   const { startExchangeRateJob } = await import('@/lib/cron/exchangeRateJob')
   startExchangeRateJob()
 

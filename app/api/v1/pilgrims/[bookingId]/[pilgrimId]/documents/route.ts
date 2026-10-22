@@ -125,6 +125,14 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(err('Storage error. Please try again.'), { status: 500 })
   }
 
+  // Penghapusan akun (SEC-57): sesi divalidasi di awal, tetapi akun bisa dianonimkan SELAMA unggahan berjalan. Cek ulang pemilik tepat
+  // sebelum menulis baris; kalau sudah nonaktif, buang berkas yang baru diunggah dan jangan catat apa pun (sisa celah mikrodetik disapu cron).
+  const owner = await prisma.user.findUnique({ where: { id: auth.pilgrim.booking.userId }, select: { isActive: true } })
+  if (!owner?.isActive) {
+    await deleteObject(objectKey).catch(() => {})
+    return NextResponse.json(err('Unauthorized'), { status: 401 })
+  }
+
   const doc = await prisma.document.create({
     data: {
       bookingPilgrimId: pilgrimId,
