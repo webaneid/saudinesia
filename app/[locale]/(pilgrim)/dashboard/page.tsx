@@ -18,7 +18,7 @@ export default async function DashboardPage({ params }: Props) {
 
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
-    select: { fullName: true, email: true, phone: true },
+    select: { fullName: true, email: true, phone: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true },
   })
 
   const bookings = await prisma.booking.findMany({
@@ -32,6 +32,14 @@ export default async function DashboardPage({ params }: Props) {
 
   return (
     <div className="space-y-8">
+      {/* Ajakan verifikasi WhatsApp — TIDAK menghalangi apa pun; email tetap kanal notifikasi (ADR-0002) */}
+      {user?.whatsapp && !(user.whatsappVerifiedAt && user.verifiedWhatsapp === user.whatsapp) && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <span>Nomor WhatsApp Anda belum terverifikasi. Verifikasi agar notifikasi juga sampai lewat WhatsApp — email tetap dikirim.</span>
+          <Link href={`/${safeLocale(locale)}/profile#verifikasi-whatsapp`} className="font-semibold underline">Verifikasi sekarang</Link>
+        </div>
+      )}
+
       {/* Greeting */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>

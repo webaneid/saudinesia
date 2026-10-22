@@ -40,7 +40,12 @@ export async function updateContact(userId: string, input: { phone: string; what
       if (input.whatsappConsent !== true) return { ok: false as const, reason: 'consent_required' as const }
       await tx.consentLog.create({ data: { userId, type: 'whatsapp_notifications', version: WHATSAPP_CONSENT_VERSION } })
     }
-    await tx.user.update({ where: { id: userId }, data: { phone: input.phone, whatsapp: input.whatsapp } })
+    // Nomor WhatsApp berganti → verifikasi dicabut (nomor baru harus dibuktikan lagi); telepon biasa tak memengaruhi.
+    const whatsappChanged = before.whatsapp !== input.whatsapp
+    await tx.user.update({
+      where: { id: userId },
+      data: { phone: input.phone, whatsapp: input.whatsapp, ...(whatsappChanged ? { whatsappVerifiedAt: null, verifiedWhatsapp: null } : {}) },
+    })
 
     const changed = Boolean((before.phone && before.phone !== input.phone) || (before.whatsapp && before.whatsapp !== input.whatsapp))
     return { ok: true as const, changed }

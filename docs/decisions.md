@@ -2361,3 +2361,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Konsekuensi yang dicatat:** (1) persetujuan yang tercatat hanya mencakup notifikasi pembayaran/pesanan — pesan promosi atau siaran massal memerlukan persetujuan terpisah (opt-in); (2) teks persetujuan dan Kebijakan Privasi perlu menyebut tujuan komunikasi WhatsApp secara jelas (tinjauan legal); (3) SEC-35 (versi persetujuan) tetap terbuka.
 
+## 2026-10-22 — Verifikasi nomor WhatsApp lewat pesan masuk (ADR-0002) + email sebagai jaring pengaman
+
+**Decision:** `notify()` menjalankan WhatsApp dan email paralel dan email selalu dikirim untuk semua kejadian. Nomor WhatsApp diverifikasi lewat pesan MASUK: pengguna mengirim `VERIF <KODE>` dari nomornya ke nomor bisnis; webhook GOWA (HMAC atas body mentah, mati tanpa secret kuat ≥32 karakter) mencocokkan JID pengirim dengan nomor akun. WhatsApp hanya ke nomor terverifikasi; satu nomor = satu akun TERVERIFIKASI (`User.verifiedWhatsapp @unique`); verifikasi tidak menghalangi pemesanan; mengubah nomor atau menonaktifkan akun mencabut/melepasnya.
+
+**Rationale:** Permintaan pemilik: tutup risiko pesan ke nomor orang lain (SEC-32) tanpa bergantung pada pengiriman keluar yang sering diblokir, dan pengguna tak boleh kehilangan notifikasi hanya karena WhatsApp tak tersedia. JID pengirim diautentikasi WhatsApp — tak bisa dipalsukan — jadi membuktikan pengendalian nomor tanpa mengirim apa pun keluar.
+
+**Alternatives considered:** OTP dikirim dari kita (bergantung pengiriman keluar); verifikasi wajib sebelum memesan (ditolak pemilik); unik keras untuk semua nomor (menyulitkan keluarga satu nomor, dan klaim tanpa bukti memblokir pemilik asli).
+
+**Ringkasan security check (SOP langkah 5):** audit independen `security-auditor`: 0 Critical, 0 High, 1 Medium, 5 Low, 2 Info → semua diperbaiki kecuali SEC-43 (alat admin pelepas nomor/`BATAL`) dan SEC-44 (anonimisasi akun) yang dicatat terbuka; SEC-32 ditutup. Bukti: `docs/arsitektur-whatsapp-verifikasi.md` §9 (23 uji + 20 uji mutasi, browser + HTTP dengan GOWA palsu, smoke CI). `bun audit`: tidak ada dependency baru.
+
+**Affects:** `prisma/schema.prisma` + migrasi `20261022120000_whatsapp_verification`, `lib/auth/{whatsappVerify,contact,rateLimit,tokens}.ts`, `lib/whatsapp/{webhook,client}.ts`, `lib/notifications/{notify,integrations,templates/whatsapp}.ts`, `app/api/v1/webhooks/whatsapp`, `app/api/v1/auth/whatsapp/*`, `app/api/v1/admin/system/users/[id]`, `WhatsappVerifyCard`, profil/dashboard/panel admin, `scripts/{test-whatsapp,test-notify,buat-env-production}`, env examples, CI.
+

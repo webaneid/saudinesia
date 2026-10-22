@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { ProfileForm } from './ProfileForm'
 import { DeletionRequestCard } from './DeletionRequestCard'
+import { WhatsappVerifyCard } from '@/components/shared/WhatsappVerifyCard'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -15,7 +16,7 @@ export default async function ProfilePage({ params }: Props) {
   const user = await prisma.user.findUnique({
     where: { id: session.userId },
     select: {
-      fullName: true, email: true, phone: true, whatsapp: true,
+      fullName: true, email: true, phone: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true,
       address: true, // docs/arsitektur-alamat.md §9
     },
   })
@@ -31,6 +32,8 @@ export default async function ProfilePage({ params }: Props) {
         initialData={{ fullName: user.fullName, email: user.email ?? '', phone: user.phone ?? '', whatsapp: user.whatsapp ?? '' }}
         initialAddress={user.address}
       />
+      {/* key = nomor: berganti nomor → kartu dimuat ulang dari server (verifikasi dicabut saat nomor berubah) */}
+      <WhatsappVerifyCard key={user.whatsapp ?? ''} hasNumber={Boolean(user.whatsapp)} initialVerified={Boolean(user.whatsappVerifiedAt && user.verifiedWhatsapp === user.whatsapp)} />
       <DeletionRequestCard />
     </div>
   )

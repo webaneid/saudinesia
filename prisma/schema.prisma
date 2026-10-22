@@ -17,6 +17,12 @@ model User {
   // Kontak (docs/arsitektur-auth.md §3.1): digit E.164 tanpa "+", TIDAK diverifikasi dan TIDAK unik — bukan identitas.
   phone           String?
   whatsapp        String?
+  // Verifikasi WhatsApp lewat pesan MASUK (ADR-0002, docs/arsitektur-whatsapp-verifikasi.md). WhatsApp hanya dikirim ke nomor terverifikasi.
+  // `verifiedWhatsapp` = salinan nomor yang terbukti, kolom UNIK: satu nomor hanya untuk satu akun TERVERIFIKASI (nomor belum terverifikasi boleh sama).
+  // Prisma tak bisa mengekspresikan indeks unik parsial, jadi keunikan dicapai lewat kolom terpisah yang hanya terisi saat terverifikasi.
+  // Mengubah `whatsapp` mengosongkan keduanya.
+  whatsappVerifiedAt DateTime?
+  verifiedWhatsapp   String?   @unique
   // Bukti email milik pemilik akun (tautan verifikasi / reset password / Google). Login mensyaratkan ini DAN isActive.
   emailVerifiedAt DateTime?
   // Identitas Google (klaim `sub` ID token — stabil, TIDAK berubah walau emailnya berubah). Hanya jamaah; staf tak pernah tersambung.
@@ -105,6 +111,7 @@ enum UserRole {
 enum AuthTokenType {
   registration
   password_reset
+  whatsapp_verification
 }
 
 model AuthToken {

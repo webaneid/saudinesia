@@ -69,4 +69,26 @@ async function sendMessage(payload: SendPayload): Promise<WhatsAppResult> {
   return { status: 'failed', error: lastError ?? 'unknown' }
 }
 
-export const whatsapp = { sendMessage }
+export type GatewayStatus = { reachable: boolean; connected: boolean | null }
+
+/**
+ * Status gateway untuk panel admin: dapat dijangkau? perangkat WhatsApp masuk (logged in)? GOWA tak punya event putus-koneksi, jadi hanya
+ * diperiksa saat dipanggil. Tidak pernah melempar; bentuk respons yang tak dikenali → connected null (tidak diketahui).
+ */
+async function status(): Promise<GatewayStatus> {
+  const url = process.env.WA_GATEWAY_URL
+  if (!url) return { reachable: false, connected: null }
+  const token = process.env.WA_GATEWAY_TOKEN
+  try {
+    const res = await fetch(`${url}/app/status`, { headers: token ? { Authorization: `Bearer ${token}` } : {}, signal: AbortSignal.timeout(4000) })
+    if (!res.ok) return { reachable: true, connected: null }
+    const json = (await res.json().catch(() => null)) as { results?: { is_logged_in?: unknown; is_connected?: unknown } } | null
+    const r = json?.results
+    const flag = typeof r?.is_logged_in === 'boolean' ? r.is_logged_in : typeof r?.is_connected === 'boolean' ? r.is_connected : null
+    return { reachable: true, connected: flag }
+  } catch {
+    return { reachable: false, connected: null }
+  }
+}
+
+export const whatsapp = { sendMessage, status }
