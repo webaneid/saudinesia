@@ -7,7 +7,7 @@ import { integrationStatus } from '@/lib/notifications/integrations'
 export async function GET() {
   try {
     await requireSuperAdmin()
-    return NextResponse.json(ok(integrationStatus()))
+    return NextResponse.json(ok(await integrationStatus()))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

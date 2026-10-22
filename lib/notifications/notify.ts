@@ -44,7 +44,7 @@ export async function notify(input: NotifyInput): Promise<ChannelOutcome[]> {
 }
 
 async function run({ userId, bookingId = null, event, dedupe = false }: NotifyInput): Promise<ChannelOutcome[]> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, whatsapp: true, fullName: true } })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true, fullName: true } })
   if (!user) return []
 
   const deliver = (channel: 'whatsapp' | 'email', recipient: string, preview: string, send: () => Promise<SendOutcome>) =>
@@ -59,6 +59,9 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   if (wa && user.whatsapp) {
     const phone = user.whatsapp
     tasks.push(deliver('whatsapp', phone, wa.slice(0, 200), async () => {
+      // WhatsApp HANYA ke nomor yang sudah dibuktikan milik pemilik akun (ADR-0002) — menutup risiko pesan ke nomor orang lain (SEC-32).
+      // Nomor belum terverifikasi: email saja (email tak terpengaruh).
+      if (!user.whatsappVerifiedAt || user.verifiedWhatsapp !== phone) return { status: 'skipped' as const, reason: 'Nomor WhatsApp belum terverifikasi' }
       // Penjaga defensif: WhatsApp hanya untuk akun yang tercatat menyetujuinya (UU PDP) — jangan bergantung pada "kebetulan hanya dua jalur
       // yang mengisi nomor". Dan batas harian per NOMOR TUJUAN: nomor tak terverifikasi bisa milik orang lain; pesan beruntun ke orang yang
       // tak mengenal Saudinesia membahayakan nomor gateway (alasan lingkup WhatsApp diperkecil). Email tetap terkirim.

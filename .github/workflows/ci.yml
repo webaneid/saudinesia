@@ -215,7 +215,23 @@ jobs:
             r = await fetch('http://localhost:3000/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
             if (r.status !== 401) fail('POST /bookings tanpa sesi harus 401: ' + r.status)
             r = await fetch('http://localhost:3000/id/lengkapi-data', { redirect: 'manual' }); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('/id/login')) fail('lengkapi-data tanpa sesi harus ke login: ' + r.status)
-            console.log('OK: auth email + Google aman di image produksi')
+            // Webhook WhatsApp (verifikasi nomor): publik, satu-satunya penjaga = tanda tangan HMAC.
+            const wh = 'http://localhost:3000/api/v1/webhooks/whatsapp'
+            const secret = process.env.WHATSAPP_WEBHOOK_SECRET
+            if (!secret) fail('WHATSAPP_WEBHOOK_SECRET tidak ada di container web (skrip env harus membuatnya)')
+            const { createHmac } = await import('node:crypto')
+            const sign = (b, s) => 'sha256=' + createHmac('sha256', s).update(b).digest('hex')
+            const msg = JSON.stringify({ event: 'message', payload: { id: 'x', chat_id: '628111222333@s.whatsapp.net', from: '628111222333@s.whatsapp.net', is_from_me: false, body: 'halo' } })
+            r = await fetch(wh, { method: 'POST', body: msg }); if (r.status !== 401) fail('webhook tanpa tanda tangan harus 401: ' + r.status)
+            r = await fetch(wh, { method: 'POST', body: msg, headers: { 'X-Hub-Signature-256': sign(msg, 'secret-salah') } }); if (r.status !== 401) fail('webhook tanda tangan salah harus 401: ' + r.status)
+            r = await fetch(wh, { method: 'POST', body: msg + ' ', headers: { 'X-Hub-Signature-256': sign(msg, secret) } }); if (r.status !== 401) fail('webhook body diubah setelah ditandatangani harus 401: ' + r.status)
+            r = await fetch(wh, { method: 'POST', body: msg, headers: { 'X-Hub-Signature-256': sign(msg, secret) } }); j = await r.json()
+            if (r.status !== 200 || j.data?.handled !== false) fail('webhook sah, pesan biasa: harus 200 handled=false, dapat ' + r.status + JSON.stringify(j))
+            const ver = JSON.stringify({ event: 'message', payload: { id: 'y', chat_id: '628111222333@s.whatsapp.net', from: '628111222333@s.whatsapp.net', is_from_me: false, body: 'VERIF AAAAAAAA' } })
+            r = await fetch(wh, { method: 'POST', body: ver, headers: { 'X-Hub-Signature-256': sign(ver, secret) } }); j = await r.json()
+            if (r.status !== 200 || j.data?.handled !== false) fail('kode verifikasi tak dikenal harus 200 handled=false: ' + r.status + JSON.stringify(j))
+            r = await fetch('http://localhost:3000/api/v1/auth/whatsapp/verification', { method: 'POST' }); if (r.status !== 401) fail('POST whatsapp/verification tanpa sesi harus 401: ' + r.status)
+            console.log('OK: auth email + Google + webhook WhatsApp aman di image produksi')
           "
 
       - name: Log layanan (hanya bila gagal)

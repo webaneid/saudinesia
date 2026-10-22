@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,6 +39,7 @@ function toAddressValue(a: AddressRecord): AddressValue {
 }
 
 export function ProfileForm({ locale, needsConsent, initialData, initialAddress }: ProfileFormProps) {
+  const router = useRouter()
   const [fullName, setFullName] = useState(initialData.fullName)
   const [address,  setAddress]  = useState<AddressValue>(toAddressValue(initialAddress))
   const [contact,  setContact]  = useState<ContactValue>(() => contactFromStored(initialData.phone, initialData.whatsapp))
@@ -73,6 +75,7 @@ export function ProfileForm({ locale, needsConsent, initialData, initialAddress 
       const cj = await c.json()
       if (!cj.success) { setError(cj.error ?? 'Gagal menyimpan nomor.'); return }
       setSuccess(true)
+      router.refresh() // status verifikasi WhatsApp bergantung pada nomor yang baru disimpan
     } catch {
       setError('Terjadi kesalahan.')
     } finally {

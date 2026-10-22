@@ -40,7 +40,10 @@ const EMPTY_SITE_FORM = { platformName: '', metaTitle: '', metaDescription: '', 
 type IntegrationStatus = {
   appUrl: { set: boolean; value: string | null }
   email: { configured: boolean; hasApiKey: boolean; from: string | null; hasReplyTo: boolean }
-  whatsapp: { configured: boolean; hasToken: boolean }
+  whatsapp: {
+    configured: boolean; hasToken: boolean; webhookSecretSet: boolean; businessNumberSet: boolean; webhookUrl: string | null
+    gateway: { reachable: boolean; connected: boolean | null }
+  }
   google: { configured: boolean; redirectUri: string | null }
 }
 type TestEmailResult = { status: 'sent' | 'failed' | 'skipped'; detail: string | null; to: string }
@@ -308,9 +311,25 @@ export default function SettingsPage() {
                 <li className="flex items-start justify-between gap-3 py-2">
                   <div>
                     <p className="font-medium text-admin-ink">WhatsApp (GOWA)</p>
-                    <p className="text-[11px] text-admin-muted">{integrations.whatsapp.configured ? 'Gateway terhubung ke konfigurasi server.' : 'WA_GATEWAY_URL belum diisi — pesan WhatsApp dicatat sebagai "dilewati".'}</p>
+                    <p className="text-[11px] text-admin-muted">
+                      {!integrations.whatsapp.configured
+                        ? 'WA_GATEWAY_URL belum diisi — pesan WhatsApp dicatat sebagai "dilewati"; notifikasi tetap lewat email.'
+                        : !integrations.whatsapp.gateway.reachable
+                          ? 'Gateway tidak dapat dijangkau — WhatsApp gagal terkirim; notifikasi tetap lewat email.'
+                          : integrations.whatsapp.gateway.connected === false
+                            ? 'Gateway aktif tetapi perangkat WhatsApp belum login/terhubung — notifikasi tetap lewat email.'
+                            : integrations.whatsapp.gateway.connected === true
+                              ? 'Gateway aktif dan perangkat WhatsApp terhubung.'
+                              : 'Gateway dapat dijangkau (status perangkat tidak diketahui).'}
+                    </p>
+                    <p className="text-[11px] text-admin-muted">
+                      Verifikasi nomor (pesan masuk): secret webhook {integrations.whatsapp.webhookSecretSet ? 'terisi (kuat)' : 'BELUM diisi / terlalu lemah (WHATSAPP_WEBHOOK_SECRET ≥32 karakter acak — webhook mati)'}, nomor bisnis {integrations.whatsapp.businessNumberSet ? 'terisi' : 'BELUM diisi (NEXT_PUBLIC_BUSINESS_WA)'}.
+                      {integrations.whatsapp.webhookUrl && <> Pasang di GOWA: <code className="text-admin-ink">WHATSAPP_WEBHOOK={integrations.whatsapp.webhookUrl}</code></>}
+                    </p>
                   </div>
-                  <Badge tone={integrations.whatsapp.configured ? 'ok' : 'warning'}>{integrations.whatsapp.configured ? 'Terkonfigurasi' : 'Belum diatur'}</Badge>
+                  <Badge tone={integrations.whatsapp.configured && integrations.whatsapp.gateway.reachable && integrations.whatsapp.gateway.connected !== false ? 'ok' : 'warning'}>
+                    {!integrations.whatsapp.configured ? 'Belum diatur' : !integrations.whatsapp.gateway.reachable ? 'Tidak terjangkau' : integrations.whatsapp.gateway.connected === false ? 'Terputus' : 'Aktif'}
+                  </Badge>
                 </li>
                 <li className="flex items-start justify-between gap-3 py-2">
                   <div>

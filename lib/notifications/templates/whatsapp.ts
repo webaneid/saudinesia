@@ -1,4 +1,11 @@
 export const waTemplates = {
+  // Balasan atas pesan verifikasi yang DIKIRIM PENGGUNA sendiri (percakapan dimulai pengguna — bukan pesan tak diminta).
+  whatsappVerified: (maskedEmail: string) =>
+    `Nomor WhatsApp Anda sudah terverifikasi untuk akun ${maskedEmail}. Notifikasi pesanan dan pembayaran Saudinesia akan dikirim ke nomor ini, selain lewat email.\n\nBukan akun Anda? Hubungi kami segera.`,
+
+  whatsappTaken: () =>
+    `Nomor ini sudah terverifikasi pada akun Saudinesia lain, sehingga tidak bisa dipakai untuk akun ini. Notifikasi tetap dikirim lewat email. Hubungi kami bila perlu bantuan.`,
+
   bookingSubmitted: (code: string, deadline: string) =>
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,
 

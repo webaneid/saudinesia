@@ -57,13 +57,15 @@ function configure(opts: { wa?: boolean; email?: boolean } = {}) {
 const tag = `nt${Date.now()}`
 // `phone` di opsi = nomor WhatsApp akun (notifikasi WA memakai User.whatsapp — docs/arsitektur-auth.md §3.5). Telepon SENGAJA berbeda dari
 // WhatsApp: bila notify() keliru memakai `phone`, uji penerima langsung gagal. Akun diberi ConsentLog WhatsApp kecuali `noConsent`.
-const mk = (suffix: string, extra: Partial<{ email: string; phone: string | null; fullName: string; noConsent: boolean }> = {}) => {
+const mk = (suffix: string, extra: Partial<{ email: string; phone: string | null; fullName: string; noConsent: boolean; unverified: boolean }> = {}) => {
   const number = extra.phone === undefined ? `62811${Math.floor(Math.random() * 1e8).toString().padStart(8, '0')}` : extra.phone
   return prisma.user.create({
     data: {
       email: extra.email ?? `${tag}-${suffix}@example.test`, passwordHash: 'x', fullName: extra.fullName ?? `Uji ${suffix}`,
       phone: number ? `62999${number.slice(5)}` : null, whatsapp: number, role: 'pilgrim', isActive: true, emailVerifiedAt: new Date(),
       ...(extra.noConsent ? {} : { consentLogs: { create: { type: 'whatsapp_notifications', version: 'uji' } } }),
+      // Default: nomor TERVERIFIKASI (WhatsApp hanya ke nomor terverifikasi — ADR-0002). `unverified` = belum membuktikan nomor.
+      ...(extra.unverified || !number ? {} : { whatsappVerifiedAt: new Date(), verifiedWhatsapp: number }),
     },
   })
 }
@@ -176,11 +178,9 @@ await t('tanpa ConsentLog WhatsApp → WA "skipped" (alasan tercatat), TIDAK ada
   assert.match(row.error ?? '', /persetujuan/i)
 })
 
-await t('batas harian per NOMOR TUJUAN: setelah 10 WA ke satu nomor, berikutnya "skipped" (nomor tak terverifikasi tak boleh jadi corong spam); email tetap', async () => {
-  configure(); const target = `62811${Date.now().toString().slice(-8)}`
-  const a = await user('wa-cap-a', { phone: target }); const b2 = await user('wa-cap-b', { phone: target }) // dua akun menunjuk nomor yang sama
-  const bk = await booking(a.id); const bk2 = await booking(b2.id)
-  for (let i = 0; i < 10; i++) await notify({ userId: i % 2 ? b2.id : a.id, bookingId: i % 2 ? bk2.id : bk.id, event: confirmed })
+await t('batas harian per nomor terverifikasi: setelah 10 WA, berikutnya "skipped" (lapis tambahan di atas verifikasi); email tetap', async () => {
+  configure(); const a = await user('wa-cap-a'); const bk = await booking(a.id)
+  for (let i = 0; i < 10; i++) await notify({ userId: a.id, bookingId: bk.id, event: confirmed })
   assert.equal(waSeen.length, 10)
   const out = await notify({ userId: a.id, bookingId: bk.id, event: confirmed })
   assert.deepEqual(out.map((o) => `${o.channel}=${o.status}`).sort(), ['email=sent', 'whatsapp=skipped'])
@@ -240,6 +240,27 @@ await t('nomor ada tetapi BELUM ada persetujuan WhatsApp: email terkirim untuk S
     assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent', event.type)
     assert.equal(waSeen.length, 0, event.type)
   }
+})
+
+await t('nomor BELUM terverifikasi: email terkirim untuk SEMUA jenis kejadian; WhatsApp "skipped" (alasan tercatat), gateway tak dipanggil', async () => {
+  for (const event of ALL_EVENTS) {
+    configure(); const u = await user(`fb-unver-${event.type}`, { unverified: true })
+    const out = await notify({ userId: u.id, event })
+    assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent', event.type)
+    assert.notEqual(out.find((o) => o.channel === 'whatsapp')?.status, 'sent', event.type)
+    assert.equal(waSeen.length, 0, event.type)
+  }
+  configure(); const u = await user('unver-log', { unverified: true })
+  await notify({ userId: u.id, event: confirmed })
+  assert.match((await logs(u.id)).find((l) => l.channel === 'whatsapp')?.error ?? '', /belum terverifikasi/)
+})
+
+await t('nomor diverifikasi untuk nomor LAIN (verifiedWhatsapp ≠ whatsapp) tak dianggap terverifikasi', async () => {
+  configure(); const u = await user('unver-stale')
+  await prisma.user.update({ where: { id: u.id }, data: { verifiedWhatsapp: '6289999999999' } }) // nomor aktif berbeda dari yang terbukti
+  const out = await notify({ userId: u.id, event: confirmed })
+  assert.equal(out.find((o) => o.channel === 'whatsapp')?.status, 'skipped')
+  assert.equal(waSeen.length, 0)
 })
 
 await t('gateway WhatsApp error 500: email tetap terkirim', async () => {

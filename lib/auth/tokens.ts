@@ -9,6 +9,7 @@ import { TOKEN_PATTERN } from '@/lib/auth/tokenPattern'
 export const TOKEN_TTL_MS: Record<AuthTokenType, number> = {
   registration: 24 * 60 * 60 * 1000,
   password_reset: 30 * 60 * 1000,
+  whatsapp_verification: 15 * 60 * 1000, // kode pendek diterbitkan oleh lib/auth/whatsappVerify.ts (bukan issueToken)
 }
 
 export { TOKEN_PATTERN }

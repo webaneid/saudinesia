@@ -11,7 +11,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const parsed = userAdminUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const user = await prisma.user.update({ where: { id }, data: parsed.data, select: { id: true, role: true, isActive: true } })
+    // Akun dinonaktifkan → nomor WhatsApp terverifikasinya DILEPAS (kunci unik tak boleh menahan nomor yang bisa jadi sudah didaur ulang operator).
+    const release = parsed.data.isActive === false ? { whatsappVerifiedAt: null, verifiedWhatsapp: null } : {}
+    const user = await prisma.user.update({ where: { id }, data: { ...parsed.data, ...release }, select: { id: true, role: true, isActive: true } })
     return NextResponse.json(ok(user))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
