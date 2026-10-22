@@ -346,6 +346,25 @@ await t('Resend galat 422 → failed (tidak melempar), tanpa token/alamat di pes
   assert.ok(!JSON.stringify(r).includes('TTTT'))
 })
 
+await t('DEV: email gagal/ditolak (kunci placeholder) → tautan tetap dicetak ke LOG SERVER; di luar development TIDAK pernah dicetak', async () => {
+  const printed: string[] = []; const origLog = console.log; const origErr = console.error
+  console.log = (...a: unknown[]) => { printed.push(a.join(' ')) }; console.error = () => {}
+  const run = async (nodeEnv: string, status: number) => {
+    config(); mailStatus = status; env.NODE_ENV = nodeEnv; printed.length = 0
+    await sendAuthEmail('registration', 'x@example.test', { name: 'B', locale: 'id', token: 'T'.repeat(43) })
+    return printed.join('\n')
+  }
+  try {
+    const failed401 = await run('development', 401)
+    assert.ok(failed401.includes('?token=' + 'T'.repeat(43)), 'dev + Resend menolak (401) → tautan harus dicetak')
+    config({ key: false }); env.NODE_ENV = 'development'; printed.length = 0
+    await sendAuthEmail('registration', 'x@example.test', { name: 'B', locale: 'id', token: 'T'.repeat(43) })
+    assert.ok(printed.join('').includes('?token='), 'dev + Resend belum dikonfigurasi → tautan dicetak')
+    assert.ok(!(await run('development', 200)).includes('?token='), 'email terkirim → tautan TIDAK dicetak')
+    for (const prod of ['production', 'test', 'staging', '']) assert.ok(!(await run(prod, 401)).includes('?token='), `NODE_ENV="${prod}" tak boleh mencetak tautan`)
+  } finally { console.log = origLog; console.error = origErr; env.NODE_ENV = 'test' }
+})
+
 await mail.stop()
 await prisma.authToken.deleteMany({ where: { OR: [{ email: { startsWith: tag } }, { user: { email: { startsWith: tag } } }] } })
 await prisma.consentLog.deleteMany({ where: { user: { email: { startsWith: tag } } } })

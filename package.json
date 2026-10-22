@@ -12,6 +12,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "bun prisma/seed.ts",
+    "db:deploy": "prisma migrate deploy",
+    "dev:eval": "bun scripts/dev-eval.ts",
     "test": "bun scripts/test-rate-limit.ts && bun scripts/test-email.ts && bun scripts/test-notify.ts && bun scripts/test-auth.ts && bun scripts/test-google.ts && bun scripts/test-whatsapp.ts"
   },
   "prisma": {
