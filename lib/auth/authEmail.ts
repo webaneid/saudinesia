@@ -18,8 +18,9 @@ export async function sendAuthEmail(kind: AuthEmailKind, to: string, ctx: AuthEm
 
   if (result.status !== 'sent') console.error(`[auth-email] ${kind} ${result.status}: ${result.status === 'skipped' ? result.reason : result.error}`)
 
-  // Dev persis 'development' dan Resend belum dikonfigurasi: tautan ke LOG SERVER (tidak pernah ke respons HTTP).
-  if (result.status === 'skipped' && process.env.NODE_ENV === 'development' && ctx.token) {
+  // Dev persis 'development' dan email TIDAK terkirim (Resend belum dikonfigurasi ATAU kunci placeholder/ditolak): tautan ke LOG SERVER (tidak pernah ke
+  // respons HTTP). Dulu hanya untuk 'skipped' — kunci dev placeholder membuat Resend menolak ('failed') sehingga daftar/lupa password buntu di dev.
+  if (result.status !== 'sent' && process.env.NODE_ENV === 'development' && ctx.token) {
     const link = content.text.split('\n').find((l) => l.includes('?token='))
     if (link) console.log(`\n[DEV] ${kind} → ${link.slice(link.indexOf('http'))}\n`)
   }

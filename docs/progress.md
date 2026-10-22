@@ -663,3 +663,11 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] **Email sebagai jaring pengaman** (2026-10-22): `notify()` menjalankan WhatsApp dan email **paralel** (gateway macet tak lagi menunda email ≈34 dtk); email dikirim untuk semua kejadian tanpa syarat WhatsApp; peringatan keras bila tak ada kanal yang sampai. Diuji untuk SETIAP jenis kejadian × (gateway belum dikonfigurasi, akun tanpa nomor, tanpa persetujuan, gateway 500, gateway mati, gateway lambat) + uji mutasi.
 - [x] **Verifikasi nomor** (2026-10-22, diuji lokal dengan GOWA palsu): kode lewat pesan masuk (webhook GOWA bertanda tangan HMAC, mati tanpa secret kuat), WhatsApp hanya ke nomor terverifikasi, 1 nomor = 1 akun terverifikasi, tidak menghalangi pemesanan, status GOWA di panel admin, kartu di profil + banner dashboard. 23 uji + 20 uji mutasi + smoke CI; audit independen 0 Critical/High (SEC-38..45). **Belum:** uji ke GOWA asli (pemilik mengonfigurasi webhook), SEC-43 (alat admin lepas nomor), SEC-44 (anonimisasi akun).
 
+---
+
+## Evaluasi lokal tanpa layanan luar (2026-10-22)
+
+- [x] `bun run dev:eval` (`scripts/dev-eval.ts`): simulasi **Resend** (kotak masuk yang bisa diklik), **GOWA** (pesan keluar + simulator pesan masuk bertanda tangan HMAC), dan **Google** (pemilih akun palsu; OAuth/PKCE/ID token RSA sungguhan) + aplikasi — tanpa dependency baru dan tanpa mengubah `.env.local`. Panduan + daftar periksa: `docs/evaluasi-lokal.md`. Diverifikasi di browser: daftar manual → kotak masuk → aktivasi, verifikasi WhatsApp lewat simulator, login Google.
+- [x] Perbaikan dev: tautan daftar/reset kini dicetak ke terminal untuk email yang GAGAL (kunci placeholder `re_dev…` membuat Resend menolak → sebelumnya buntu), diuji + uji mutasi.
+- [x] `bun run db:deploy`; database dev diselaraskan (3 migrasi tertinggal diterapkan setelah `pg_dump`).
+
