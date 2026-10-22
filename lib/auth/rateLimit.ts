@@ -21,6 +21,7 @@ export const LIMITS = {
   authTokenIp:        { limit: 30, windowSec: 600 },  // pratinjau/penyelesaian tautan per IP (token 256-bit tak bisa ditebak; ini pembatas kasar)
   resetIp:        { limit: 10, windowSec: 3600 }, // reset password per IP
   contactUpdateUser:  { limit: 5,  windowSec: 86400 }, // ubah telepon/WhatsApp per akun — nomor tak terverifikasi tak boleh jadi alat mengirim pesan ke nomor orang lain berulang-ulang
+  deletionRequestUser: { limit: 3, windowSec: 86400 }, // pengajuan hapus akun per akun (tiap pengajuan masuk antrean superadmin)
   bookingCreateUser:  { limit: 20, windowSec: 3600 },  // booking baru per akun (tiap booking memicu 3 WhatsApp ke nomor akun)
   whatsappVerifyUser: { limit: 5,  windowSec: 3600 },  // permintaan kode verifikasi WhatsApp per akun
   webhookIp:          { limit: 3000, windowSec: 600 }, // webhook WhatsApp (sudah bertanda tangan) per IP sumber — pagar kasar; SEMUA pesan masuk ke nomor bisnis terhitung
