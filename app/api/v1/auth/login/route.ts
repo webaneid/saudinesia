@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { loginSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
-import { clientIp, consume, peek, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
+import { clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
 
 // Hash bcrypt cost 12 yang valid, tidak cocok dengan password mana pun yang dipakai pengguna — hanya untuk menyamakan waktu.
 const DUMMY_HASH = '$2b$12$mMjECRUCpXjI1zuGrztAd.jA/C6.JUsjG4mWPzlh9aGhJLtg1mD7C'
@@ -26,26 +26,30 @@ export async function POST(request: Request) {
 
     const { email, password } = parsed.data
 
-    // 2. Per akun: hanya yang GAGAL dihitung, dan dicek (peek) sebelum membandingkan password. Dua lapis:
-    //    akun+IP (rapat — pengguna sah tidak terkunci oleh penyerang di IP lain) dan akun saja (longgar —
-    //    menahan brute-force terdistribusi dari banyak IP). Kunci memakai email huruf kecil.
+    // 2. Per akun: SETIAP percobaan DIRESERVASI secara atomik (`consume`) SEBELUM bcrypt, dan dihapus (`reset`) bila password benar.
+    //    Dua lapis: akun+IP (rapat — pengguna sah tidak terkunci oleh penyerang di IP lain) dan akun saja (longgar — menahan
+    //    brute-force terdistribusi dari banyak IP). Kunci memakai email huruf kecil.
+    //    Dulu: `peek` (baca) sebelum bcrypt lalu `consume` sesudahnya — SEC-26: N percobaan paralel semuanya lolos `peek` karena belum ada
+    //    yang selesai dihitung, sehingga burst melewati batas. Reservasi-dulu menutup celah itu: hanya `limit` percobaan pertama yang
+    //    pernah mencapai bcrypt, secepat apa pun datangnya.
     const acct = email.trim().toLowerCase()
     const acctIp = ip ? policy('loginAcctIp', `${acct}|${ip}`) : null
     const acctAny = policy('loginAcct', acct)
-    const [a, b] = await Promise.all([acctIp ? peek(acctIp) : null, peek(acctAny)])
-    const blocked = [a, b].filter((x) => x && !x.allowed)
-    if (blocked.length > 0) return tooManyRequests(Math.max(...blocked.map((x) => x!.retryAfterSec)))
+    //    BERURUTAN, bukan paralel (S26-T01): percobaan yang sudah ditolak lapis akun+IP TIDAK boleh menaikkan lapis akun-saja — kalau tidak,
+    //    satu IP yang melewati batas per-IP menambah `loginAcct` ratusan kali dan menguncinya untuk semua orang (satu IP cukup menggembok akun
+    //    korban; dulu butuh minimal dua IP). Tiap `consume` tetap atomik, jadi atomisitas SEC-26 terjaga.
+    const first = acctIp ? await consume(acctIp) : null
+    if (first && !first.allowed) return tooManyRequests(first.retryAfterSec)
+    const second = await consume(acctAny)
+    if (!second.allowed) return tooManyRequests(second.retryAfterSec)
 
     const user = await prisma.user.findUnique({
       where: { email },
       select: { id: true, passwordHash: true, role: true, isActive: true, emailVerifiedAt: true, sessionVersion: true },
     })
 
-    // Same error for "not found" and "wrong password" — prevent email enumeration. Keduanya dihitung sebagai gagal.
-    const invalid = async () => {
-      await Promise.all([acctIp ? consume(acctIp) : null, consume(acctAny)])
-      return NextResponse.json(err('Email atau password salah.'), { status: 401 })
-    }
+    // Same error for "not found" and "wrong password" — prevent email enumeration. Keduanya sudah terhitung (reservasi di atas).
+    const invalid = () => NextResponse.json(err('Email atau password salah.'), { status: 401 })
 
     // Akun tidak ada tetap membayar biaya bcrypt yang sama (hash tiruan) — selisih waktu tak membocorkan email terdaftar.
     if (!user) {
@@ -55,6 +59,10 @@ export async function POST(request: Request) {
 
     const match = await compare(password, user.passwordHash)
     if (!match) return invalid()
+
+    // Password terbukti benar: hitungan reservasi dihapus SEKARANG (juga bila status akun di bawah menolak) — pengguna sah tidak membawa
+    // hitungan gagal ke sesi berikutnya, dan akun nonaktif/belum terverifikasi yang berpassword benar tidak terkunci oleh percobaannya sendiri.
+    await reset(...(acctIp ? [acctIp, acctAny] : [acctAny]))
 
     // Status akun baru diungkap SETELAH password terbukti benar — sebelum itu membedakan "akun nonaktif" dari "salah password"
     // membocorkan keberadaan akun (enumerasi email).
@@ -66,8 +74,6 @@ export async function POST(request: Request) {
       return NextResponse.json(err('Email belum diverifikasi. Gunakan "Lupa password" untuk mengaktifkan akun.'), { status: 403 })
     }
 
-    // Berhasil: pengguna sah tidak membawa hitungan gagal ke sesi berikutnya.
-    await reset(...(acctIp ? [acctIp, acctAny] : [acctAny]))
     // Versi yang dilihat saat password diperiksa dibawa ke penerbitan: reset password yang commit di celah bcrypt membuat ini ditolak (S18-B).
     try {
       await createSession(user.id, user.sessionVersion)

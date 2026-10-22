@@ -100,6 +100,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 1. **Superadmin pertama** — `scripts/create-superadmin.ts` (ikut ke image web). Jalankan di server:
    `docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy exec web bun scripts/create-superadmin.ts --email <email> --name "<nama>"`
    lalu ketik password dua kali (tidak ditampilkan; tidak lewat argumen supaya tak masuk riwayat shell). Otomasi: `exec -T` + `--password-stdin`.
+   (Sejak SEC-27 `bun run db:seed` menolak sendiri di luar mesin dev: `NODE_ENV` harus `development`, host DB lokal, dan DB tanpa jamaah/booking/akun nyata; seed juga tidak ada di image mana pun.)
    **Jangan** memakai `bun run db:seed` di production: menghapus data katalog/harga **dan** membuat akun
    `admin@saudinesia.local` dengan password default yang diketahui (`Admin@1234`), menimpa password bila akunnya sudah ada.
    Perilaku skrip: hanya menambah satu baris `users`; menolak bila sudah ada superadmin (kecuali `--additional`); menolak
@@ -130,7 +131,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 7. Tulis `deploy.yml` (build+push 2 image, scp, SSH, health check, rollback). Baru setelah itu semantic-release.
 8. Jadwalkan backup (`backup-db.sh`, `backup-minio.sh`) dan uji restore.
 9. **Blocker keamanan yang masih terbuka** (`docs/lessons-learned.md`): SEC-05 (sisa 1 advisory *high* tanpa versi perbaikan — `braces`, hanya build/dev; keputusan `next-intl` 4 menunggu pemilik), ~~SEC-18 (sesi tak bisa dicabut)~~ — selesai 2026-10-22,
-   ~~SEC-44 (hapus akun UU PDP)~~ — selesai 2026-10-22, **tetapi aturan retensi (`docs/arsitektur-hapus-akun.md` §2) perlu ditinjau penasihat hukum/pajak**, serta SEC-26/27 (batas login atomik; seed tanpa penjaga — jangan jalankan `db:seed` di server).
+   ~~SEC-44 (hapus akun UU PDP)~~ — selesai 2026-10-22, **tetapi aturan retensi (`docs/arsitektur-hapus-akun.md` §2) perlu ditinjau penasihat hukum/pajak**, ~~serta SEC-26/27~~ — selesai 2026-10-22.
 10. **Uji dengan layanan asli sebelum membuka ke jamaah:** Resend (domain SPF/DKIM/DMARC + email masuk inbox), **Google** (redirect URI terdaftar, aplikasi *In production*, dan pastikan login **mendarat di dashboard**, bukan
     terpental ke halaman login — cookie sesi sudah `Lax`), GOWA (bentuk `from` bukan `@lid`, `/app/status`). Pastikan DB produksi **tidak berisi akun pra-migrasi** (migrasi auth menandai semua `isActive=true` sebagai email terverifikasi).
 

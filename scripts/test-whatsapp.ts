@@ -194,8 +194,8 @@ const freshIp = () => `198.51.100.${++ipN}`
 const jid = (digits: string) => `${digits}@s.whatsapp.net`
 const verifMsg = (digits: string, code: string, extra: Record<string, unknown> = {}) => msg({ chat_id: jid(digits), from: jid(digits), body: `VERIF ${code}`, ...extra })
 
-await t('secret tak ada / terlalu pendek / bawaan GOWA / placeholder → webhook MATI (503) walau tanda tangan cocok dengan secret lemah itu', async () => {
-  for (const weak of [undefined, '', 'secret', 'ganti_dengan_string_acak_panjang', 'x'.repeat(31), 'CHANGEME', '   ']) {
+await t('secret tak ada / terlalu pendek / berentropi rendah (S26-T02) / bawaan GOWA / placeholder → webhook MATI (503) walau tanda tangan cocok dengan secret lemah itu', async () => {
+  for (const weak of [undefined, '', 'secret', 'ganti_dengan_string_acak_panjang', 'x'.repeat(31), 'CHANGEME', '   ', 'a'.repeat(40), 'ab'.repeat(20), 'abcdefg'.repeat(6)]) {
     if (weak === undefined) delete env.WHATSAPP_WEBHOOK_SECRET; else env.WHATSAPP_WEBHOOK_SECRET = weak
     assert.equal(webhookSecret(), null, String(weak))
     const body = msg()

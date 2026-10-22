@@ -19,9 +19,13 @@ const MIN_SECRET_LENGTH = 32
  * `secret`, placeholder `.env.example`, atau < 32 karakter) tidak diterima: bisa ditebak online dan memalsukan verifikasi nomor.
  * `scripts/buat-env-production.sh` membuat 64 karakter hex.
  */
+const MIN_DISTINCT_SECRET_CHARS = 8
+
 export function webhookSecret(): string | null {
   const s = process.env.WHATSAPP_WEBHOOK_SECRET?.trim()
   if (!s || s.length < MIN_SECRET_LENGTH || WEAK_SECRETS.has(s.toLowerCase())) return null
+  // Entropi minimal (sama dengan JWT_SECRET): 32 karakter yang sama berulang lolos panjang tapi bisa ditebak (S26-T02).
+  if (new Set(s).size < MIN_DISTINCT_SECRET_CHARS) return null
   return s
 }
 
@@ -54,7 +58,9 @@ export async function processWebhook({ rawBody, signature, ip }: WebhookInput): 
   if (Buffer.byteLength(rawBody) > WEBHOOK_MAX_BODY_BYTES) return { status: 413, error: 'Terlalu besar' }
 
   if (!verifyWebhookSignature(secret, rawBody, signature)) {
-    // GOWA yang sah tak pernah salah tanda tangan → setiap kegagalan dihitung per IP; menebak secret secara online ikut terblokir.
+    // GOWA yang sah tak pernah salah tanda tangan → setiap kegagalan dihitung per IP. CATATAN JUJUR (S26-T02): ini mengubah 401 → 429 untuk tebakan
+    // SALAH, tapi tebakan benar tetap lolos (verifikasi dulu, hitung kemudian) — yang sebenarnya melindungi adalah secret ≥32 karakter berentropi cukup
+    // (HMAC-SHA256 tak bisa ditebak online), bukan penghitung ini. Menghitung SEBELUM verifikasi akan menolak lonjakan pesan GOWA yang sah.
     if (ip) {
       const h = await consume(policy('webhookBadSigIp', ip))
       if (!h.allowed) return { status: 429, error: 'Terlalu banyak percobaan', retryAfterSec: h.retryAfterSec }

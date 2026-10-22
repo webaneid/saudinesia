@@ -180,7 +180,7 @@ await t('setiap penulis User yang mengubah password/peran/status/kepemilikan men
   // Hanya field yang MEMBUTUHKAN pencabutan sesi. phone/whatsapp/nama/alamat tidak.
   const SENSITIVE = /\b(passwordHash|role|isActive|googleSub|emailVerifiedAt)\b\s*[:,}]/
   // Penjelasan wajib untuk tiap pengecualian. seed.ts = dev-only (SEC-27); bukan jalur produksi.
-  const ALLOW: Record<string, string> = { 'prisma/seed.ts': 'seed pengembangan, SEC-27' }
+  const ALLOW: Record<string, string> = { 'prisma/seed.ts': 'seed pengembangan, dijaga seedGuard (SEC-27; test-seed-guard menjalankannya nyata)' }
   const bad: string[] = []
   for (const f of files) {
     if (ALLOW[f]) continue

@@ -129,6 +129,11 @@ jobs:
           IMG="ghcr.io/$IMG_REPO/web:$IMG_TAG"
           ! docker run --rm --entrypoint sh "$IMG" -c 'ls -A /app | grep -E "^\.env|^docs$|^\.git$|^\.claude$"' || { echo "image web berisi berkas terlarang"; exit 1; }
           test "$(docker run --rm --entrypoint id "$IMG" -u)" != "0" || { echo "image web berjalan sebagai root"; exit 1; }
+          # Seed pengembangan (SEC-27) tidak boleh ada di image mana pun — image migrate membawa DATABASE_URL produksi.
+          for I in "ghcr.io/$IMG_REPO/web:$IMG_TAG" "ghcr.io/$IMG_REPO/migrate:$IMG_TAG"; do
+            # Bentuk POSITIF (test ! -e ... && test ! -e ...): galat `docker run` sendiri (exit 125-127) ikut menggagalkan langkah, bukan dianggap lolos.
+            docker run --rm --entrypoint sh "$I" -c 'test ! -e /app/prisma/seed.ts && test ! -e /app/prisma/seedGuard.ts' || { echo "seed ada di image $I (atau docker run gagal)"; exit 1; }
+          done
 
       # Hanya layanan yang tidak butuh image GHCR eksternal: MinIO buatan sendiri baru ada setelah minio-image.yml
       # dijalankan, jadi di sini tidak dinyalakan (web hanya menyentuh MinIO saat unggah/preview; presign offline).

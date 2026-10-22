@@ -13,8 +13,8 @@ export type Hit = { allowed: boolean; count: number; limit: number; retryAfterSe
 /** Semua angka di satu tempat. Ubah di sini, bukan di route. */
 export const LIMITS = {
   loginIp:        { limit: 20, windowSec: 900 },  // semua percobaan login dari satu IP
-  loginAcctIp:    { limit: 5,  windowSec: 900 },  // GAGAL login per akun+IP
-  loginAcct:      { limit: 30, windowSec: 3600 }, // GAGAL login per akun, dari mana pun (brute-force terdistribusi)
+  loginAcctIp:    { limit: 5,  windowSec: 900 },  // percobaan login per akun+IP (direservasi sebelum bcrypt; dihapus bila password benar)
+  loginAcct:      { limit: 30, windowSec: 3600 }, // percobaan login per akun, dari mana pun (brute-force terdistribusi); hanya yang lolos lapis akun+IP
   authEmailSendEmail: { limit: 3,  windowSec: 600 },  // email auth (daftar / lupa password) ke SATU alamat — cegah spam ke korban & kuota Resend
   authEmailSendIp:    { limit: 10, windowSec: 3600 }, // permintaan yang memicu email auth per IP
   googleIp:           { limit: 30, windowSec: 600 },  // start/callback/complete login Google per IP (menahan pembuatan akun massal & pemanggilan token endpoint Google)
@@ -108,7 +108,7 @@ export async function consume(p: Policy): Promise<Hit> {
   return memoryHit(p, true)
 }
 
-/** Lihat hitungan tanpa menambah (dipakai untuk "gagal per akun": dicek sebelum, dihitung hanya bila gagal). */
+/** Lihat hitungan tanpa menambah. TIDAK untuk membatasi kredensial: peek-lalu-consume tidak atomik (SEC-26) — pakai `consume` dulu. Kini hanya dipakai tes/diagnostik. */
 export async function peek(p: Policy): Promise<Hit> {
   if (devBypass()) return { allowed: true, count: 0, limit: p.limit, retryAfterSec: 0 }
   const res = await viaRedis(async (r) => {

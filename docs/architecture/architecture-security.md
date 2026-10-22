@@ -80,7 +80,7 @@
 - **Mass assignment**: body request tidak boleh langsung ke `prisma.*.create/update` — parse dengan Zod `.strict()`
   (`lib/validators/adminUpdates.ts` contoh), supaya field `passwordHash`/`role`/`bookedQuota`, dst. tidak bisa diubah (SEC-03).
 - **Pembuatan superadmin pertama** hanya lewat `scripts/create-superadmin.ts` (tanpa kredensial default; `db:seed` tidak
-  boleh dipakai di production — menghapus data dan membuat `admin@saudinesia.local` / `Admin@1234`).
+  boleh dipakai di production — menghapus data dan membuat `admin@saudinesia.local` / `Admin@1234`; sejak SEC-27 dijaga fail-closed oleh `prisma/seedGuard.ts` dan dikecualikan dari semua image).
 - 5 role: `pilgrim`, `agent`, `admin`, `manager`, `superadmin`
   (`prisma/schema.prisma` `enum UserRole`).
 - **Belum ada** implementasi UU PDP secara formal (consent record, privacy
