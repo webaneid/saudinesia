@@ -5,4 +5,9 @@ useDefault = true
 [allowlist]
 description = "Nilai dummy khusus CI/test — bukan rahasia sungguhan"
 # Hanya nilai PERSIS ini yang dikecualikan (bukan seluruh file ci.yml).
-regexes = ['''ci-secret-yang-panjangnya-lebih-dari-32-karakter''']
+regexes = [
+  '''ci-secret-yang-panjangnya-lebih-dari-32-karakter''',
+  # Positif palsu `generic-api-key` di docs/decisions.md (catatan keputusan editor teks, 2026-10-23): kalimat
+  # "Uji penolakan API dari sesi admin: tautan/gambar/H1/kunci tak dikenal/..." terbaca sebagai `api … : <nilai>`.
+  '''tautan/gambar/H1/kunci''',
+]
