@@ -13,11 +13,13 @@ import { PilgrimDocuments } from '@/components/admin/PilgrimDocuments'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
 export default async function AdminBookingDetail({ params }: Props) {
   const { locale, id } = await params
+  await requireAdminPage(locale)
   const { banks, businessName } = getPaymentConfig()
 
   const booking = await prisma.booking.findUnique({

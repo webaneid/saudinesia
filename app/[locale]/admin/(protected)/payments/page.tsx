@@ -5,6 +5,7 @@ import { formatRupiah } from '@/lib/utils'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -21,6 +22,7 @@ type QueueRow = Prisma.BookingGetPayload<{
 
 export default async function AdminPayments({ params, searchParams }: Props) {
   const { locale } = await params
+  await requireAdminPage(locale)
   const sp = await searchParams
   const list = parseListParams(sp)
 

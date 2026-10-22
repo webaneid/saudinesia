@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     if (!result.ok) return NextResponse.json(err('Akun dengan email ini sudah ada. Silakan masuk.'), { status: 409 })
 
     await clearSignupCookie()
-    await createSession({ userId: result.user.id, role: result.user.role })
+    await createSession(result.user.id)
     void notify({ userId: result.user.id, event: { type: 'welcome', name: result.user.fullName }, dedupe: true })
     return NextResponse.json(ok({ role: result.user.role }))
   } catch (error) {

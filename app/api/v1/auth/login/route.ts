@@ -38,7 +38,7 @@ export async function POST(request: Request) {
 
     const user = await prisma.user.findUnique({
       where: { email },
-      select: { id: true, passwordHash: true, role: true, isActive: true, emailVerifiedAt: true },
+      select: { id: true, passwordHash: true, role: true, isActive: true, emailVerifiedAt: true, sessionVersion: true },
     })
 
     // Same error for "not found" and "wrong password" — prevent email enumeration. Keduanya dihitung sebagai gagal.
@@ -68,7 +68,13 @@ export async function POST(request: Request) {
 
     // Berhasil: pengguna sah tidak membawa hitungan gagal ke sesi berikutnya.
     await reset(...(acctIp ? [acctIp, acctAny] : [acctAny]))
-    await createSession({ userId: user.id, role: user.role })
+    // Versi yang dilihat saat password diperiksa dibawa ke penerbitan: reset password yang commit di celah bcrypt membuat ini ditolak (S18-B).
+    try {
+      await createSession(user.id, user.sessionVersion)
+    } catch (e) {
+      if (e instanceof Error && e.message === 'Unauthorized') return invalid()
+      throw e
+    }
     return NextResponse.json(ok({ role: user.role }))
   } catch (error) {
     console.error('[auth/login]', error instanceof Error ? error.name : error)

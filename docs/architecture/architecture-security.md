@@ -67,8 +67,8 @@
   diawali dari situs lain → callback Google asli mendarat di `/login` padahal sesi sudah dibuat (direproduksi dengan Google palsu di situs berbeda), dan tautan dari email tampak "logout". CSRF tetap tertutup: Lax tidak dikirim
   pada POST/PUT/DELETE lintas-situs dan tidak ada operasi pengubah data berbentuk GET. `Secure` aktif di semua lingkungan kecuali `NODE_ENV === 'development'` persis (fail-closed). `JWT_SECRET` divalidasi
   (`lib/auth/secret.ts`: ≥32 karakter, bukan placeholder/awalan contoh, entropi tidak rendah).
-- **Sesi stateless tak bisa dicabut (SEC-18, Medium, blocker go-live):** `role` dibaca dari JWT 7 hari tanpa cek DB; menonaktifkan/menurunkan akun, reset password, dan penautan Google tidak mencabut sesi yang ada
-  (termasuk akses admin ke dokumen paspor). Perbaikan: `tokenVersion` atau cek `isActive`/`role` ke DB (minimal jalur admin).
+- **Pencabutan sesi (SEC-18, selesai 2026-10-22):** JWT membawa `ver` = `User.sessionVersion`; `resolveSessionToken()` (`lib/auth/session.ts`) menolak token bila akun tak ada / nonaktif / email belum terbukti / versi tak cocok, dan mengambil `role` dari DB
+  (bukan token). Versi dinaikkan saat password direset, Google disambung ke akun lama, dan peran/`isActive` berubah nyata (`lib/auth/adminUsers.ts`, termasuk reaktivasi). Middleware Edge hanya gerbang kasar — keputusan akses di `getSession()` dan, untuk halaman admin Server Component, `requireAdminPage()` (layout tidak dirender ulang pada navigasi lunak — SEC-52). Detail: `docs/arsitektur-auth.md` §11.
 - Role check: `middleware.ts` cek `ADMIN_ROLES`/`SUPERADMIN_ROLES` di level
   edge untuk redirect awal, **tapi** tiap Route Handler admin/superadmin
   WAJIB re-check role sendiri lewat `lib/auth/session.ts`

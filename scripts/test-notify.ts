@@ -9,13 +9,9 @@ import { notify } from '@/lib/notifications/notify'
 import type { NotificationEvent } from '@/lib/notifications/events'
 import { startFakeServer, type FakeRequest } from './lib/fakeServer'
 import { waMessage } from '@/lib/notifications/events'
+import { assertThrowawayDb } from './lib/testDb'
 
-const url = process.env.DATABASE_URL ?? ''
-const dbName = url.split('/').pop()?.split('?')[0] ?? ''
-if (!/(test|_ci|tmp)/i.test(dbName)) {
-  console.error(`DITOLAK: database "${dbName}" bukan database uji (harus memuat test / _ci / tmp). Set DATABASE_URL ke database sekali pakai.`)
-  process.exit(2)
-}
+await assertThrowawayDb()
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void>) {

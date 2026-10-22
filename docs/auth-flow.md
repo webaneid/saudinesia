@@ -16,6 +16,7 @@
 | Kontak | Telepon + WhatsApp wajib (dua kolom, E.164) lewat "Lengkapi Data" / form daftar |
 | WhatsApp | **Kanal notifikasi saja**, hanya ke nomor **terverifikasi** (pesan masuk ke nomor bisnis, webhook GOWA). Email selalu terkirim untuk semua kejadian |
 | Sesi | JWT 7 hari, cookie `httpOnly; Secure; SameSite=Lax` (Lax — Strict merusak login Google dan tautan dari email; keputusan 2026-10-22) |
+| Pencabutan sesi | Token membawa `ver` = `User.sessionVersion`; tiap `getSession()` memeriksa DB (akun ada, aktif, terverifikasi, versi cocok) dan membaca `role` dari DB. Versi naik saat reset password, Google disambung ke akun lama, peran/status diubah admin (termasuk reaktivasi) — `arsitektur-auth.md` §11 |
 
 GOWA/WhatsApp bukan dependensi auth: login, daftar, dan reset tetap jalan walau GOWA mati.
 

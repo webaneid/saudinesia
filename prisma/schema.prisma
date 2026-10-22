@@ -30,6 +30,9 @@ model User {
   role            UserRole  @default(pilgrim)
   // Hanya "boleh login (tidak dinonaktifkan admin)" — BUKAN lagi penanda "belum verifikasi" (itu emailVerifiedAt).
   isActive        Boolean   @default(true)
+  // Pencabutan sesi (SEC-18, docs/arsitektur-auth.md §11): JWT membawa `ver`; getSession() menolak token yang `ver`-nya ≠ kolom ini.
+  // Dinaikkan saat password diganti/direset, akun dinonaktifkan, peran diubah, atau akun Google disambung ke akun lama.
+  sessionVersion  Int       @default(0)
   addressId       String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

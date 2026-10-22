@@ -1,7 +1,8 @@
 import createIntlMiddleware from 'next-intl/middleware'
 import { type NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
-import { ADMIN_ROLES } from '@/lib/auth/session'
+// roles (bukan session): session.ts memakai Prisma, tidak boleh ikut ke bundel Edge. Middleware hanya gerbang kasar — keputusan akses ada di getSession().
+import { ADMIN_ROLES } from '@/lib/auth/roles'
 
 const LOCALES = ['id', 'en'] as const
 const DEFAULT_LOCALE = 'id'
@@ -21,7 +22,7 @@ async function getRole(request: NextRequest): Promise<string | null> {
   if (!token) return null
   try {
     const secret = new TextEncoder().encode(process.env.JWT_SECRET ?? '')
-    const { payload } = await jwtVerify(token, secret)
+    const { payload } = await jwtVerify(token, secret, { algorithms: ['HS256'] })
     return (payload as { role?: string }).role ?? null
   } catch {
     return null

@@ -39,7 +39,8 @@ export async function resolveGoogleLogin(identity: GoogleIdentity): Promise<Goog
   // Klaim atomik: hanya satu pemanggil yang menyambung akun yang googleSub-nya masih kosong.
   const linked = await prisma.user.updateMany({
     where: { id: byEmail.id, googleSub: null },
-    data: { googleSub: identity.sub, ...(legacyUnverified ? { emailVerifiedAt: new Date(), passwordHash } : {}) },
+    // Password lama dibuang → sesi lama akun itu (bisa milik pihak yang memasang akun lebih dulu) ikut dicabut (SEC-18).
+    data: { googleSub: identity.sub, ...(legacyUnverified ? { emailVerifiedAt: new Date(), passwordHash, sessionVersion: { increment: 1 } } : {}) },
   })
   if (linked.count === 0) {
     const again = await prisma.user.findUnique({ where: { id: byEmail.id }, select: { googleSub: true } })

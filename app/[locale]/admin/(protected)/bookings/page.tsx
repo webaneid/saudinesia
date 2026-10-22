@@ -11,6 +11,7 @@ import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { FilterPills } from '@/components/admin/data-table/FilterPills'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -27,6 +28,7 @@ const isBookingStatus = (v: string | undefined): v is BookingStatus =>
 
 export default async function AdminBookings({ params, searchParams }: Props) {
   const { locale } = await params
+  await requireAdminPage(locale)
   const sp = await searchParams
   const list = parseListParams(sp)
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined

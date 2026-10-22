@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
-import { getSession, MANAGER_ROLES } from '@/lib/auth/session'
+import { MANAGER_ROLES } from '@/lib/auth/session'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { formatRupiah } from '@/lib/utils'
 import { BookOpen, CreditCard, FileText, Clock, Package, Star, KeyRound, Building2 } from 'lucide-react'
 import Link from 'next/link'
@@ -13,8 +14,8 @@ type Props = { params: Promise<{ locale: string }> }
 
 export default async function AdminOverview({ params }: Props) {
   const { locale } = await params
-  const session = await getSession()
-  const isManager = MANAGER_ROLES.includes(session?.role ?? 'admin' as never)
+  const session = await requireAdminPage(locale)
+  const isManager = MANAGER_ROLES.includes(session.role)
 
   const [pendingPayment, paymentReview, pendingVisa, confirmedToday] = await Promise.all([
     prisma.booking.count({ where: { status: 'awaiting_payment' } }),

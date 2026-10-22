@@ -24,7 +24,7 @@ export async function POST(request: Request) {
         : NextResponse.json(err('Tautan tidak valid atau sudah kedaluwarsa. Daftar ulang untuk mendapat tautan baru.'), { status: 401 })
     }
 
-    await createSession({ userId: result.user.id, role: result.user.role })
+    await createSession(result.user.id)
     void notify({ userId: result.user.id, event: { type: 'welcome', name: result.user.fullName }, dedupe: true })
     return NextResponse.json(ok({ role: result.user.role }))
   } catch (error) {

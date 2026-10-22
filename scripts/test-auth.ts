@@ -18,13 +18,9 @@ import { isContactComplete, requireContactForBooking, updateContact } from '@/li
 import { readFileSync } from 'node:fs'
 import { contactSchema } from '@/lib/validators/auth'
 import { startFakeServer, type FakeRequest } from './lib/fakeServer'
+import { assertThrowawayDb } from './lib/testDb'
 
-const url = process.env.DATABASE_URL ?? ''
-const dbName = url.split('/').pop()?.split('?')[0] ?? ''
-if (!/(test|_ci|tmp)/i.test(dbName)) {
-  console.error(`DITOLAK: database "${dbName}" bukan database uji (harus memuat test / _ci / tmp).`)
-  process.exit(2)
-}
+await assertThrowawayDb()
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void>) {

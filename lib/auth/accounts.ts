@@ -115,7 +115,8 @@ export async function resetPassword(rawToken: string, newPassword: string): Prom
     await tx.user.update({
       where: { id: user.id },
       // Tautan terkirim ke kotak masuk = bukti kepemilikan email (juga mengaktifkan akun lama yang belum terverifikasi).
-      data: { passwordHash, ...(user.emailVerifiedAt ? {} : { emailVerifiedAt: new Date() }) },
+      // sessionVersion naik: semua sesi lama (termasuk yang dicuri penyerang) mati; sesi baru diterbitkan pemanggil SETELAH ini (SEC-18).
+      data: { passwordHash, sessionVersion: { increment: 1 }, ...(user.emailVerifiedAt ? {} : { emailVerifiedAt: new Date() }) },
     })
     await tx.authToken.deleteMany({ where: { userId: user.id, type: 'password_reset', usedAt: null } })
     return { ok: true as const, user: { id: user.id, role: user.role } }

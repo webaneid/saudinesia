@@ -4,6 +4,7 @@ import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -34,6 +35,7 @@ const hotelColumns: Column<HotelQuotaRow>[] = [
 
 export default async function AdminQuotas({ params, searchParams }: Props) {
   const { locale } = await params
+  await requireAdminPage(locale)
   const sp = await searchParams
   const list = parseListParams(sp)
 
