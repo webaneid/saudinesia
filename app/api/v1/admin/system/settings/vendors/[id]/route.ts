@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { isRecordNotFound } from '@/lib/admin/errors'
 import { addressSchema } from '@/lib/validators/address'
 import { upsertAddress } from '@/lib/address/prepare'
 import { z } from 'zod'
@@ -39,6 +40,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
+    if (isRecordNotFound(e)) return NextResponse.json(err('Vendor tidak ditemukan'), { status: 404 })
     console.error('[admin/system/settings/vendors/[id]/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
@@ -57,6 +59,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
+    if (isRecordNotFound(e)) return NextResponse.json(err('Vendor tidak ditemukan'), { status: 404 })
     console.error('[admin/system/settings/vendors/[id]/DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
