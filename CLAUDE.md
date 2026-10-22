@@ -195,6 +195,13 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 
 ---
 
+## i18n (next-intl 4)
+
+- The locale list lives ONLY in `i18n/routing.ts` (`defineRouting`); never re-declare `['id','en']` elsewhere. Validate any locale taken from a URL/param with `hasLocale(routing.locales, x)` before using it (e.g. the dynamic import of `i18n/messages/<locale>.json`)
+- `next-intl` and `use-intl` are pinned to the same exact version (`package.json` `overrides`); bump them together and verify on the production artifact (`bun server.js`) — see `docs/rencana-next-intl-4.md`. `scripts/test-i18n-routing.ts` locks the routing/auth-gate properties (no off-origin redirects, protected routes stay protected). The middleware gate matches the CANONICAL path (`lib/auth/gatePath.ts`: decodeURI, strip tab/CR/LF, `\\`→`/`, collapse `/+`) because next-intl rewrites to that form — matching the raw path lets `/id/%61dmin` or `/id//admin` slip past (SEC-59); page/API guards remain the real access control
+
+---
+
 ## Tiptap
 
 - Active extensions: `StarterKit`, `Link`, `Image`, `Placeholder` — add others only when spec explicitly requires. **Tiptap is on v3 (since SEC-05, 2026-10-22; not imported anywhere yet):** v3 `StarterKit` already bundles `Link` and `Underline`, so register `Link` only via `StarterKit.configure({ link: {...} })` (or set `link: false` first) — adding it again duplicates the extension

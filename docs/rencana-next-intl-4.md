@@ -1,7 +1,6 @@
 # Rencana — upgrade `next-intl` 3.26 → 4 (SEC-05, sisa advisory)
 
-> Status: **RENCANA, belum dieksekusi** (2026-10-22). Dokumen ini hasil riset + **spike nyata** di worktree terpisah; tidak ada kode aplikasi yang diubah.
-> Keputusan ada di pemilik (§6). Konteks: `docs/lessons-learned.md` SEC-05; pelajaran proses: bump dependency diuji di **artefak produksi** (`bun server.js`), bukan hanya build/dev (memori proyek, CLAUDE.md § Security).
+> Status: **DIEKSEKUSI 2026-10-22 (opsi A, disetujui pemilik) — as-built di §10.** Dokumen ini hasil riset + **spike nyata** di worktree terpisah, lalu dieksekusi persis sesuai §7. Konteks: `docs/lessons-learned.md` SEC-05; pelajaran proses: bump dependency diuji di **artefak produksi** (`bun server.js`), bukan hanya build/dev (memori proyek, CLAUDE.md § Security).
 
 ## 1. Mengapa ini ada
 
@@ -99,3 +98,18 @@ Sumber: [catatan rilis next-intl 4.0](https://next-intl.dev/blog/next-intl-4-0);
 ## 9. Ukuran pekerjaan
 
 Satu PR, kira-kira 1–2 jam kerja termasuk verifikasi dan review. Tidak butuh perubahan skema, migrasi, atau pengujian layanan eksternal.
+
+## 10. As-built (2026-10-22)
+
+Keputusan pemilik: **opsi A**. Cookie locale: `localeCookie: false` (rekomendasi; pemilik tidak keberatan) — mudah dibalik bila pengalih bahasa dibangun. Waktu: sebelum go-live.
+
+| Langkah | Hasil |
+|---|---|
+| 0. Tes karakterisasi di atas v3 | `scripts/test-i18n-routing.ts` (7 tes; 14 jalur bermusuhan, locale, rute terlindungi tamu & berperan, matcher, penjaga sumber) hijau di v3; **10 mutan terbunuh** (rute dibuka, peran dihapus, matcher dilonggarkan, redirect lintas host, token tak diverifikasi, dst.); masuk `bun run test`/CI |
+| 1. Bump | `next-intl@4.14.9` persis + `overrides.use-intl: 4.14.9`; lock bergeser pada 49 paket, seluruhnya keluarga `next-intl`/`use-intl`/`intl-messageformat`/`@formatjs`/`@swc`/`@parcel`/`icu-minify`/`po-parser`/`negotiator` + 3 paket `@eloqnt/*` milik `next-intl` 4.14.9; **tak ada** paket PDF/gambar/React/Prisma/MinIO |
+| 2. Kode | `i18n/routing.ts` (satu sumber locale, `localeCookie: false`); `middleware.ts` → `createIntlMiddleware(routing)`; `i18n/request.ts` → `hasLocale`; `app/[locale]/layout.tsx` → `hasLocale` + provider tanpa prop. **Penyimpangan dari rencana:** matcher middleware **tidak diubah** — spike dan tes menunjukkan tak ada kebutuhan, dan `/api` tetap dilewati oleh early-return; mengubahnya hanya menambah risiko tanpa manfaat |
+| 3. Verifikasi artefak produksi | `tsc`, `next build` (0 baris `error:`), `bun server.js` (standalone): `/id` `/en` `/id/login` `/en/login` `/id/hotels` `/id/transport` `/id/visa` 200, `/` → `/id`, `/id/admin` → login, `/id/dashboard` → login, `//evil.com` → 308 ke origin sama, **tak ada cookie `NEXT_LOCALE`**, `Accept-Language: en` → `/en`, invoice PDF 200, log server bersih; `bun install --frozen-lockfile` lulus; `bun audit` 7 → 5; middleware 58,1 → 51,8 kB |
+| 4. Review & dokumen | Lihat register SEC-05 dan `docs/decisions.md` 2026-10-22 |
+
+**Tambahan dari review (2026-10-22):** review menemukan celah LAMA pada gerbang middleware (path mentah vs path kanonik yang di-rewrite next-intl). Perbandingan langsung membuktikan perilakunya **identik di v3 dan v4**, jadi bukan regresi upgrade; diperbaiki di PR yang sama (`lib/auth/gatePath.ts`, SEC-59) dan dikunci tes. Pelajaran umum: tes karakterisasi harus mencakup **rewrite**, bukan hanya redirect — rewrite menentukan halaman yang dirender.
+

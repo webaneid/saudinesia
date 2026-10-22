@@ -1,9 +1,6 @@
-import { NextIntlClientProvider } from 'next-intl'
-import { getMessages } from 'next-intl/server'
+import { NextIntlClientProvider, hasLocale } from 'next-intl'
 import { notFound } from 'next/navigation'
-
-const locales = ['id', 'en'] as const
-type Locale = (typeof locales)[number]
+import { routing } from '@/i18n/routing'
 
 export default async function LocaleLayout({
   children,
@@ -13,12 +10,11 @@ export default async function LocaleLayout({
   params: Promise<{ locale: string }>
 }) {
   const { locale } = await params
-  if (!locales.includes(locale as Locale)) notFound()
+  if (!hasLocale(routing.locales, locale)) notFound()
 
-  const messages = await getMessages()
-
+  // v4: locale dan messages diwarisi dari i18n/request.ts — tak perlu getMessages() maupun prop.
   return (
-    <NextIntlClientProvider locale={locale} messages={messages}>
+    <NextIntlClientProvider>
       {children}
     </NextIntlClientProvider>
   )
