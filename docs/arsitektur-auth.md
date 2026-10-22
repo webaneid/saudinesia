@@ -262,7 +262,7 @@ jamaah) sampai 7 hari; reset password tidak menendang penyerang yang sudah mencu
 
 Penjaga `isActive`/`emailVerifiedAt` di `resolveSessionToken` adalah lapisan kedua: akun yang dimatikan **langsung di DB** (SQL manual, kode masa depan tanpa kenaikan versi) tetap menolak token.
 
-**Yang belum ada (sengaja):** tombol "keluar dari semua perangkat" bagi pengguna; anonimisasi akun UU PDP (SEC-44) akan memakai mekanisme yang sama (naikkan versi + `isActive=false`).
+**Yang belum ada (sengaja):** tombol "keluar dari semua perangkat" bagi pengguna; anonimisasi akun UU PDP (SEC-44) — **sudah dibuat 2026-10-22** dan memakai mekanisme ini (naikkan versi + `isActive=false`), lihat `docs/arsitektur-hapus-akun.md`.
 
 **Biaya.** Setiap request terautentikasi kini menyentuh DB satu kali (PK lookup, 4 kolom). Diterima: instansi tunggal, dan cek ini adalah inti pencabutan. Bila kelak jadi masalah: cache TTL pendek per instans (mengorbankan pencabutan seketika) —
 keputusan harus eksplisit.

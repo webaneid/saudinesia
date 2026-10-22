@@ -82,6 +82,8 @@ model AccountDeletionRequest {
   requestedAt   DateTime              @default(now())
   processedAt   DateTime?
   processedById String?
+  // Bukti akuntabilitas UU PDP (docs/arsitektur-hapus-akun.md): jumlah baris yang dihapus/dianonimkan per jenis — TANPA PII.
+  erasureSummary Json?
 
   user        User  @relation("DeletionRequestUser", fields: [userId], references: [id])
   processedBy User? @relation("DeletionRequestProcessedBy", fields: [processedById], references: [id])
@@ -93,6 +95,7 @@ enum DeletionRequestStatus {
   pending
   completed
   rejected
+  withdrawn // ditarik pemilik akun selagi pending (DEL-02)
 }
 
 enum UserRole {

@@ -18,6 +18,7 @@ export const VISA_TONE: Record<string, BadgeTone> = {
   in_review: 'accent',
   issued: 'ok',
   rejected: 'danger',
+  withdrawn: 'neutral',
 }
 
 export const DELETION_REQUEST_TONE: Record<string, BadgeTone> = {

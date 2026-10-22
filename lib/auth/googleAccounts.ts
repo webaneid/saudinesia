@@ -14,7 +14,7 @@ export type GoogleResolution =
   | { kind: 'refused'; reason: 'staff' | 'inactive' | 'conflict' }
 
 /** Hash dari 32 byte acak yang tak pernah disimpan: akun Google-only tak punya password yang bisa ditebak. */
-const unusablePasswordHash = () => hash(randomBytes(32).toString('hex'), 12)
+export const unusablePasswordHash = () => hash(randomBytes(32).toString('hex'), 12)
 
 export async function resolveGoogleLogin(identity: GoogleIdentity): Promise<GoogleResolution> {
   // 1. Sudah pernah tersambung — `sub` adalah kunci yang stabil (email bisa berubah di sisi Google).

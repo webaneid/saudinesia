@@ -22,8 +22,8 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
     itemType: z.literal('transport'),
     transportQuotaId: z.string().uuid(),
     numPassengers:    z.number().int().min(1),
-    pickupDetail:     z.string().optional(),
-    dropoffDetail:    z.string().optional(),
+    pickupDetail:     z.string().max(300).optional(),
+    dropoffDetail:    z.string().max(300).optional(),
   }),
   z.object({
     itemType: z.literal('muthowif'),

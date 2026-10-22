@@ -23,10 +23,9 @@ export async function GET(req: Request) {
     )
     return NextResponse.json(ok(items, meta))
   } catch (e) {
-    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
-      return NextResponse.json(err('Forbidden'), { status: 403 })
-    }
-    console.error('[admin/deletion-requests/GET]', e)
+    if (e instanceof Error && e.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
+    if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
+    console.error('[admin/deletion-requests/GET]', e instanceof Error ? e.name : e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
