@@ -1,7 +1,8 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { unusablePasswordHash } from '@/lib/auth/googleAccounts'
-import { deleteObject as deleteStoredObject } from '@/lib/storage/minio'
+import { deleteObject as deleteStoredObject, deleteObjectsByPrefix } from '@/lib/storage/minio'
+import { sweepErasedAccount } from '@/lib/account/erasureSweep'
 import { sendEmail, type EmailInput, type EmailResult } from '@/lib/email/resend'
 import { accountDeletedEmail, deletionRejectedEmail, deletionRequestedEmail } from '@/lib/email/accountTemplates'
 
@@ -33,9 +34,13 @@ export type ErasureCounts = {
 
 export type DeletionDeps = {
   deleteObject: (key: string) => Promise<void>
+  /** Sapuan per awalan `pilgrims/<id>/` (SEC-57) — menangkap berkas yang masuk terlambat. */
+  deleteByPrefix: (prefix: string) => Promise<number>
+  /** Batas tunggu sapuan segera (ms). Lewat batas: permintaan admin kembali, sapuan jalan terus di latar, cron harian menjamin. */
+  sweepTimeoutMs?: number
   sendEmail: (input: EmailInput) => Promise<EmailResult>
 }
-const defaultDeps: DeletionDeps = { deleteObject: deleteStoredObject, sendEmail }
+const defaultDeps: DeletionDeps = { deleteObject: deleteStoredObject, deleteByPrefix: (prefix) => deleteObjectsByPrefix(prefix), sendEmail }
 
 type Db = Prisma.TransactionClient
 
@@ -200,6 +205,15 @@ export async function executeDeletion(
   const mail = accountDeletedEmail(captured.fullName)
   const sent = await deps.sendEmail({ to: captured.email, subject: mail.subject, html: mail.html, text: mail.text })
   if (sent.status === 'failed') console.error('[account-deletion] email konfirmasi gagal terkirim')
+
+  // Sapuan segera (SEC-57): berkas yang sedang diunggah / log notifikasi yang sedang terbang saat commit. Yang masih lolos disapu cron harian
+  // (lib/cron/erasureSweepJob.ts, jendela 7 hari). Gagal tidak membatalkan apa pun — penghapusan sudah final.
+  // Dibatasi waktu (S57-LOW3): MinIO yang menggantung / booking grup besar tak boleh membuat request superadmin menunggu (504 di proxy) —
+  // penghapusan sudah final; yang tersisa dijamin cron harian.
+  const sweep = sweepErasedAccount(userId, { deleteByPrefix: deps.deleteByPrefix }).catch((e) => {
+    console.error('[account-deletion] sapuan awal gagal; cron harian akan mengulang:', e instanceof Error ? e.name : e)
+  })
+  await Promise.race([sweep, new Promise<void>((resolve) => setTimeout(resolve, deps.sweepTimeoutMs ?? 10_000).unref())])
   return { ok: true, summary }
 }
 

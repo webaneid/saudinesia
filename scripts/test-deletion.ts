@@ -9,6 +9,8 @@ import { readFileSync } from 'node:fs'
 import { compare, hash } from 'bcryptjs'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { sweepErasedAccount, sweepRecentErasures } from '@/lib/account/erasureSweep'
+import { deleteObjectsByPrefix } from '@/lib/storage/minio'
 import { MIN_WAIT_HOURS, executeDeletion, previewDeletion, rejectDeletion, submitDeletionRequest, withdrawDeletionRequest, type DeletionDeps } from '@/lib/account/deletion'
 import { issueSessionToken, resolveSessionToken } from '@/lib/auth/session'
 import { assertThrowawayDb } from './lib/testDb'
@@ -38,13 +40,15 @@ const ORIGINAL_PASSWORD = 'Sandi-Asli-123!'
 // ── Penyimpanan & email palsu ──
 function fakeDeps(opts: { failKeys?: boolean } = {}) {
   const deleted: string[] = []
+  const prefixes: string[] = []
   const mails: { to: string; subject: string; text: string }[] = []
   let failing = opts.failKeys ?? false
   const deps: DeletionDeps = {
     deleteObject: async (key) => { if (failing) throw new Error('minio down'); deleted.push(key) },
+    deleteByPrefix: async (prefix) => { prefixes.push(prefix); return 0 },
     sendEmail: async (i) => { mails.push({ to: i.to, subject: i.subject, text: i.text }); return { status: 'sent', id: 'x' } },
   }
-  return { deps, deleted, mails, setFailing: (v: boolean) => { failing = v } }
+  return { deps, deleted, prefixes, mails, setFailing: (v: boolean) => { failing = v } }
 }
 
 type Seeded = {
@@ -390,6 +394,7 @@ await t('DEL-03 deterministik: penolakan dipicu TEPAT saat berkas sedang dihapus
   let rejection: Promise<{ ok: boolean }> | null = null
   const deps: DeletionDeps = {
     sendEmail: f.deps.sendEmail,
+    deleteByPrefix: f.deps.deleteByPrefix,
     deleteObject: async (key) => {
       rejection ??= rejectDeletion(s.requestId, admin.id, 'menyelip', f.deps) // dijalankan di dalam transaksi eksekusi
       await new Promise((r) => setTimeout(r, 400)) // beri waktu penolakan menembus bila TIDAK ada kunci
@@ -412,6 +417,123 @@ await t('permintaan pending ke-2 pada akun yang SUDAH dianonimkan → not_pendin
   assert.equal(!r.ok && r.reason, 'not_pending'); assert.equal(f.mails.length, 1)
 })
 
+console.log('== penyapuan tulis terlambat (SEC-57) ==')
+
+/** Menyuntikkan tulis TERLAMBAT pada akun yang sudah dianonimkan: baris dokumen, manifest berisi PII, dan log notifikasi dengan penerima asli. */
+async function injectLateWrites(s: Seeded, email: string) {
+  await prisma.document.create({ data: { bookingPilgrimId: s.pilgrimId, docType: 'passport', fileName: 'terlambat.pdf', filePath: `pilgrims/${s.pilgrimId}/passport/terlambat.pdf` } })
+  await prisma.bookingPilgrim.update({ where: { id: s.pilgrimId }, data: { fieldValues: { fullName: 'Muncul Lagi', passportNumber: 'LATE999' } } })
+  await prisma.notificationLog.create({ data: { userId: s.userId, channel: 'email', type: 'booking_submitted', recipient: email, messagePreview: 'isi asli', status: 'sent' } })
+}
+
+await t('penyapuan: tulis terlambat (dokumen, manifest, log dengan penerima asli) dibersihkan; awalan objek per jamaah diminta', async () => {
+  const s = await seed(); const f = fakeDeps()
+  assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, f.deps)).ok, true)
+  assert.ok(f.prefixes.includes(`pilgrims/${s.pilgrimId}/`), 'sapuan segera sesudah commit meminta awalan jamaah')
+  await injectLateWrites(s, s.email)
+  const r = await sweepErasedAccount(s.userId, { deleteByPrefix: f.deps.deleteByPrefix })
+  assert.ok(r, 'akun terhapus harus disapu')
+  assert.equal(r!.documents, 1); assert.equal(r!.notificationLogs, 1); assert.equal(r!.prefixes, 1)
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 0)
+  assert.deepEqual((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: s.pilgrimId } })).fieldValues, {})
+  for (const l of await prisma.notificationLog.findMany({ where: { userId: s.userId } })) { assert.equal(l.recipient, '[dihapus]'); assert.equal(l.messagePreview, null) }
+})
+
+await t('penyapuan KONSERVATIF: akun hidup, atau berformat terhapus tanpa permintaan completed → null, tidak ada yang disentuh (kontrol positif di atas)', async () => {
+  const live = await seed(); const f = fakeDeps()
+  await injectLateWrites(live, live.email) // data yang SAH pada akun hidup — tidak boleh tersapu
+  assert.equal(await sweepErasedAccount(live.userId, { deleteByPrefix: f.deps.deleteByPrefix }), null)
+  assert.equal(f.prefixes.length, 0, 'tidak ada panggilan penyimpanan untuk akun hidup')
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: live.pilgrimId } }), 3)
+  assert.notDeepEqual((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: live.pilgrimId } })).fieldValues, {})
+  // berformat email terhapus tetapi TANPA permintaan selesai (mis. manipulasi manual) → tetap ditolak
+  const fake = await seed()
+  await prisma.user.update({ where: { id: fake.userId }, data: { email: `deleted-${fake.userId}@deleted.invalid` } })
+  assert.equal(await sweepErasedAccount(fake.userId, { deleteByPrefix: f.deps.deleteByPrefix }), null)
+  assert.equal(await sweepErasedAccount('00000000-0000-0000-0000-000000000000', { deleteByPrefix: f.deps.deleteByPrefix }), null)
+  assert.equal(f.prefixes.length, 0)
+})
+
+await t('sweepRecentErasures: hanya completed dalam jendela; terlalu lama / pending / ditolak diabaikan; satu akun gagal tak menghentikan yang lain', async () => {
+  const mkErased = async () => {
+    const s = await seed(); const f = fakeDeps()
+    assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, f.deps)).ok, true)
+    await injectLateWrites(s, s.email)
+    return s
+  }
+  const recent = await mkErased()
+  const old = await mkErased(); await prisma.accountDeletionRequest.update({ where: { id: old.requestId }, data: { processedAt: new Date(Date.now() - 30 * 24 * 3_600_000) } })
+  const flaky = await mkErased()
+  const pending = await seed()
+  const seen: string[] = []
+  const deps = { deleteByPrefix: async (prefix: string) => { seen.push(prefix); if (prefix.includes(flaky.pilgrimId)) throw new Error('minio mati'); return 0 } }
+  const origErr = console.error; console.error = () => {}
+  let sum: Awaited<ReturnType<typeof sweepRecentErasures>>
+  try { sum = await sweepRecentErasures(7, deps) } finally { console.error = origErr }
+  assert.ok(seen.includes(`pilgrims/${recent.pilgrimId}/`), 'akun baru disapu')
+  assert.ok(!seen.includes(`pilgrims/${old.pilgrimId}/`), 'akun di luar jendela diabaikan'); assert.ok(!seen.includes(`pilgrims/${pending.pilgrimId}/`), 'pending diabaikan')
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: recent.pilgrimId } }), 0)
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: old.pilgrimId } }), 1, 'di luar jendela: tak disentuh')
+  assert.ok(sum.failed >= 1, 'kegagalan dihitung'); assert.ok(sum.accounts >= 1, 'yang lain tetap diproses')
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: flaky.pilgrimId } }), 1, 'akun yang gagal tak setengah-tersapu menghapus baris tanpa objek')
+})
+
+await t('S57-LOW1: kegagalan PARSIAL removeObjects dilempar (bukan dilaporkan sukses) tanpa membocorkan nama kunci; semua berhasil → jumlah; daftar kosong → 0', async () => {
+  const uuid = '3f00facc-1857-4a9b-9918-fa65273c27c8'; const prefix = `pilgrims/${uuid}/`
+  const names = [`${prefix}passport/1-rahasia-budi.pdf`, `${prefix}ktp/2.jpg`, `${prefix}x/3.pdf`]
+  assert.equal(await deleteObjectsByPrefix(prefix, { list: async () => names, remove: async () => [] }), 3, 'kontrol positif')
+  assert.equal(await deleteObjectsByPrefix(prefix, { list: async () => [], remove: async () => { throw new Error('tak boleh dipanggil') } }), 0)
+  await assert.rejects(deleteObjectsByPrefix(prefix, { list: async () => names, remove: async () => [{ Code: 'AccessDenied', Key: names[0] }] }), (e: Error) => /1 dari 3 objek gagal/.test(e.message) && !/rahasia|passport|budi/.test(e.message))
+  await assert.rejects(deleteObjectsByPrefix(prefix, { list: async () => { throw new Error('list gagal') }, remove: async () => [] }), /list gagal/)
+})
+
+await t('S57-LOW1 end-to-end: removeObjects parsial gagal → baris Document TIDAK dihapus (berkas masih ada, jangan dilaporkan bersih) dan dihitung gagal', async () => {
+  const s = await seed(); const f = fakeDeps()
+  assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, f.deps)).ok, true)
+  await injectLateWrites(s, s.email)
+  const failing = { deleteByPrefix: (prefix: string) => deleteObjectsByPrefix(prefix, { list: async () => [`${prefix}terlambat.pdf`], remove: async () => [{ Code: 'AccessDenied' }] }) }
+  await assert.rejects(sweepErasedAccount(s.userId, failing), /gagal dihapus/)
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 1, 'baris Document harus tetap ada agar sapuan berikutnya mencoba lagi')
+  const origErr = console.error; console.error = () => {}
+  try { const sum = await sweepRecentErasures(7, failing); assert.ok(sum.failed >= 1) } finally { console.error = origErr }
+  // kontrol: setelah penyimpanan pulih, sapuan berikutnya menuntaskan
+  assert.ok(await sweepErasedAccount(s.userId, { deleteByPrefix: async () => 1 }))
+  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 0)
+})
+
+await t('S57-LOW3: sapuan memakai paralelisme TERBATAS (≤5 sekaligus, >1 membuktikan paralel) untuk booking dengan banyak jamaah', async () => {
+  const s = await seed()
+  await prisma.bookingPilgrim.createMany({ data: Array.from({ length: 11 }, () => ({ bookingId: s.bookingId, fieldValues: {} })) })
+  let inflight = 0, peak = 0; const swept = new Set<string>()
+  const deps = { deleteByPrefix: async (prefix: string) => { swept.add(prefix); inflight++; peak = Math.max(peak, inflight); await new Promise((r) => setTimeout(r, 25)); inflight--; return 0 } }
+  const f = fakeDeps()
+  assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, { ...f.deps, deleteByPrefix: deps.deleteByPrefix })).ok, true)
+  assert.ok(peak > 1 && peak <= 5, `puncak paralelisme ${peak} harus 2..5`)
+  assert.equal(swept.size, 12, 'SEMUA 12 jamaah harus tersapu (1 asli + 11 tambahan), bukan hanya gelombang pertama')
+})
+
+await t('S57-LOW3: MinIO menggantung → executeDeletion tetap kembali dalam batas waktu (penghapusan final; cron menjamin sisanya)', async () => {
+  const s = await seed(); const f = fakeDeps()
+  const hanging = { ...f.deps, deleteByPrefix: () => new Promise<number>(() => {}), sweepTimeoutMs: 200 }
+  const started = Date.now()
+  const r = await Promise.race([executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, hanging), new Promise<'macet'>((res) => setTimeout(() => res('macet'), 8000))])
+  assert.notEqual(r, 'macet', 'executeDeletion macet menunggu sapuan')
+  assert.equal((r as { ok: boolean }).ok, true); assert.ok(Date.now() - started < 6000)
+  assert.equal((await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: s.requestId } })).status, 'completed')
+})
+
+await t('deleteObjectsByPrefix: awalan selain `pilgrims/<uuid>/` DITOLAK sebelum menyentuh SDK (awalan kosong = hapus seluruh bucket); kontrol: awalan sah lolos validasi', async () => {
+  const uuid = '3f00facc-1857-4a9b-9918-fa65273c27c8'
+  for (const bad of ['', '/', 'pilgrims/', 'pilgrims', 'pilgrims/x/', `pilgrims/${uuid}`, `other/${uuid}/`, `pilgrims/${uuid}/passport/`, `pilgrims/${uuid}/../`, '../', `pilgrims//${uuid}/`, `PILGRIMS/${uuid}/`, `pilgrims/${uuid.toUpperCase()}/`, `pilgrims/${uuid}/\n`, `pilgrims/${uuid}/ `, `pilgrims/${uuid}/\t`, `\npilgrims/${uuid}/`, `pilgrims/${uuid}/%2e%2e/`]) {
+    await assert.rejects(deleteObjectsByPrefix(bad), /tidak valid/, JSON.stringify(bad))
+  }
+  // kontrol positif: validasi lolos dan baru gagal di jaringan (port tertutup) — pesan galatnya BUKAN "tidak valid"
+  const keep = { e: env.MINIO_ENDPOINT, p: env.MINIO_PORT }; env.MINIO_ENDPOINT = '127.0.0.1'; env.MINIO_PORT = '1'
+  try {
+    await assert.rejects(deleteObjectsByPrefix(`pilgrims/${uuid}/`), (e: Error) => !/tidak valid/.test(e.message))
+  } finally { env.MINIO_ENDPOINT = keep.e; env.MINIO_PORT = keep.p }
+})
+
 console.log('== penjaga sumber ==')
 
 await t('route admin: hanya lewat executeDeletion/rejectDeletion, .strict(), wajib confirmEmail untuk completed, tak ada update langsung', async () => {
@@ -432,6 +554,16 @@ await t('route pengajuan: hanya pilgrim + rate limit + lewat submit/withdraw; GE
     const src = readFileSync(f, 'utf8')
     assert.match(src, /requireSuperAdmin\(\)/, f); assert.match(src, /status: 401/, f); assert.match(src, /status: 403/, f)
   }
+})
+
+await t('SEC-57 penjaga sumber: unggah dokumen memeriksa ulang pemilik sebelum menulis baris; cron penyapuan terdaftar; penyapuan memeriksa akun terhapus + completed', async () => {
+  const up = readFileSync('app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts', 'utf8')
+  const post = up.slice(up.indexOf('export async function POST'))
+  const guard = post.search(/if \(!owner\?\.isActive\) \{[\s\S]*?deleteObject\(objectKey\)[\s\S]*?return NextResponse\.json\(err\('Unauthorized'\), \{ status: 401 \}\)/)
+  assert.ok(guard > 0 && guard < post.indexOf('prisma.document.create'), 'pemilik nonaktif → buang berkas + 401, SEBELUM document.create')
+  assert.match(readFileSync('instrumentation-node.ts', 'utf8'), /startErasureSweepJob\(\)/)
+  const sw = readFileSync('lib/account/erasureSweep.ts', 'utf8')
+  assert.ok(sw.includes('ERASED_EMAIL.test') && sw.includes("status: 'completed'"))
 })
 
 await t('tiap kolom userId pada skema punya perlakuan eksplisit di penghapusan (skema bertambah → tes ini merah sampai ditinjau)', async () => {

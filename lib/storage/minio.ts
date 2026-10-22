@@ -99,6 +99,42 @@ export async function getObjectBuffer(objectKey: string): Promise<Buffer> {
   })
 }
 
+// Awalan yang boleh disapu: HANYA satu direktori entitas `pilgrims/<uuid>/`. Validasi ketat karena awalan kosong / terlalu pendek (`""`,
+// `pilgrims/`) akan menghapus seluruh bucket dokumen — kesalahan pemanggil tidak boleh sampai ke SDK.
+const SWEEP_PREFIX = /^pilgrims\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/$/
+
+/** Pintu I/O untuk penyapuan — dapat disuntik di tes (kegagalan per objek tak bisa dipicu dari MinIO lokal biasa). */
+export type PrefixIo = {
+  list: (prefix: string) => Promise<string[]>
+  /** Mengembalikan daftar GALAT per objek (kosong = semua terhapus), sama seperti `removeObjects` di SDK. */
+  remove: (names: string[]) => Promise<unknown[]>
+}
+const sdkPrefixIo: PrefixIo = {
+  list: (prefix) =>
+    new Promise<string[]>((resolve, reject) => {
+      const names: string[] = []
+      const stream = client().listObjectsV2(BUCKET, prefix, true)
+      stream.on('data', (o) => { if (o.name) names.push(o.name) })
+      stream.on('end', () => resolve(names))
+      stream.on('error', reject)
+    }),
+  remove: async (names) => (await client().removeObjects(BUCKET, names)) as unknown[],
+}
+
+/**
+ * Hapus SEMUA objek di bawah `pilgrims/<uuid>/` (penyapuan setelah penghapusan akun, SEC-57). Mengembalikan jumlah objek yang dihapus.
+ * `removeObjects` di SDK TIDAK melempar saat sebagian objek gagal (hanya mengembalikan daftar galat) — di sini kegagalan parsial dilempar,
+ * supaya pemanggil tak menghapus baris `Document` dan melaporkan sukses sementara berkas PII masih ada (S57-LOW1). Pesan tanpa nama kunci.
+ */
+export async function deleteObjectsByPrefix(prefix: string, io: PrefixIo = sdkPrefixIo): Promise<number> {
+  if (!SWEEP_PREFIX.test(prefix)) throw new Error('prefix penyapuan tidak valid')
+  const names = await io.list(prefix)
+  if (names.length === 0) return 0
+  const errors = await io.remove(names)
+  if (errors.length > 0) throw new Error(`sapuan: ${errors.length} dari ${names.length} objek gagal dihapus`)
+  return names.length
+}
+
 export async function ensureBucketExists(): Promise<void> {
   const exists = await client().bucketExists(BUCKET)
   if (!exists) {

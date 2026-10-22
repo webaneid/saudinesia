@@ -197,7 +197,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 
 ## Tiptap
 
-- Active extensions: `StarterKit`, `Link`, `Image`, `Placeholder` — add others only when spec explicitly requires
+- Active extensions: `StarterKit`, `Link`, `Image`, `Placeholder` — add others only when spec explicitly requires. **Tiptap is on v3 (since SEC-05, 2026-10-22; not imported anywhere yet):** v3 `StarterKit` already bundles `Link` and `Underline`, so register `Link` only via `StarterKit.configure({ link: {...} })` (or set `link: false` first) — adding it again duplicates the extension
 - Always serialize to **JSON** (`editor.getJSON()`) — never HTML — and store JSON in DB
 - To render saved content server-side: `generateHTML(json, extensions)`; client-side: `<EditorContent editor={editor} />`
 - Tiptap editor instances live in Client Components only — never instantiate in a Server Component
