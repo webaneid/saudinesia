@@ -138,10 +138,25 @@
   .admin-badge-blue  { @apply text-xs px-2 py-0.5 rounded-full bg-admin-accent/10 text-admin-accent-strong font-semibold; }
   .admin-badge-amber { @apply text-xs px-2 py-0.5 rounded-full bg-admin-warning/10 text-admin-warning font-semibold; }
   .admin-badge-gray  { @apply text-xs px-2 py-0.5 rounded-full bg-admin-spot text-admin-muted font-semibold; }
+
+  /* === Teks kaya (docs/arsitektur-editor-teks.md): isi editor DAN tampilan RichTextView. Token shadcn, jadi ikut tema
+     admin (hijau) maupun publik. Hanya elemen yang ada di daftar putih lib/rich-text/schema.ts. === */
+  .rich-text                { @apply text-sm leading-relaxed text-foreground; }
+  .rich-text > * + *        { @apply mt-3; }
+  .rich-text h2             { @apply text-base font-bold tracking-tight; }
+  .rich-text h3             { @apply text-sm font-semibold; }
+  .rich-text ul             { @apply list-disc space-y-1 pl-5; }
+  .rich-text ol             { @apply list-decimal space-y-1 pl-5; }
+  .rich-text-editing        { @apply min-h-40; }
+  .rich-text-editing p.is-editor-empty:first-child::before { content: attr(data-placeholder); @apply pointer-events-none float-left h-0 text-muted-foreground/70; }
+  .rich-text-fullscreen .rich-text-editing { min-height: 60dvh; @apply sm:px-5 sm:py-4 sm:text-base; }
 }
 
 @layer utilities {
   /* Gulir tanpa scrollbar terlihat (menu samping) — tetap bisa digulir dengan roda/sentuh/keyboard. */
   .scrollbar-none { scrollbar-width: none; }
   .scrollbar-none::-webkit-scrollbar { display: none; }
+  /* Input angka tanpa panah naik/turun (rentang hari yang sempit): panah memakan lebar dan memotong digit. */
+  .no-spin { -moz-appearance: textfield; appearance: textfield; }
+  .no-spin::-webkit-outer-spin-button, .no-spin::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
 }
