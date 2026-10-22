@@ -15,6 +15,10 @@ updates:
         versions: [">=19.3.0"] # 19.3.x membuat `next build` crash di internal Bun ("Expected CommonJS module to have a function wrapper")
       - dependency-name: "react-dom"
         versions: [">=19.3.0"]
+      - dependency-name: "next-intl"
+        update-types: ["version-update:semver-major"] # sudah di 4.x (docs/rencana-next-intl-4.md); mayor berikutnya perlu spike di artefak produksi Bun dulu
+      - dependency-name: "use-intl"
+        update-types: ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"] # disematkan persis sama dengan next-intl (override) — naik bersama next-intl saja
       - dependency-name: "@react-pdf/renderer"
         update-types: ["version-update:semver-minor", "version-update:semver-patch"] # 4.9 menarik @react-pdf/* + pdfkit baru → invoice 500 di produksi (modul `#standard-fonts`)
     groups:

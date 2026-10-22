@@ -1,17 +1,16 @@
 import createIntlMiddleware from 'next-intl/middleware'
+import { routing } from '@/i18n/routing'
 import { type NextRequest, NextResponse } from 'next/server'
 import { jwtVerify } from 'jose'
 // roles (bukan session): session.ts memakai Prisma, tidak boleh ikut ke bundel Edge. Middleware hanya gerbang kasar — keputusan akses ada di getSession().
 import { ADMIN_ROLES } from '@/lib/auth/roles'
+import { canonicalGatePath } from '@/lib/auth/gatePath'
 
-const LOCALES = ['id', 'en'] as const
-const DEFAULT_LOCALE = 'id'
+const LOCALES = routing.locales
+const DEFAULT_LOCALE = routing.defaultLocale
 const COOKIE_NAME = 'snd-session'
 
-const intlMiddleware = createIntlMiddleware({
-  locales: LOCALES,
-  defaultLocale: DEFAULT_LOCALE,
-})
+const intlMiddleware = createIntlMiddleware(routing)
 
 const PROTECTED       = ['/dashboard', '/bookings', '/groups', '/profile', '/lengkapi-data']
 const ADMIN_PATHS     = ['/admin']
@@ -30,12 +29,15 @@ async function getRole(request: NextRequest): Promise<string | null> {
 }
 
 export async function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl
+  const pathname = canonicalGatePath(request.nextUrl.pathname)
 
   if (pathname.startsWith('/api')) return NextResponse.next()
 
-  const locale = LOCALES.find((l) => pathname.startsWith(`/${l}`)) ?? DEFAULT_LOCALE
-  const pathWithoutLocale = pathname.replace(new RegExp(`^/${locale}`), '') || '/'
+  // Locale = segmen pertama PERSIS (tanpa membedakan huruf besar/kecil, seperti next-intl): `/idadmin` bukan locale `id`, `/ID/admin` adalah `id`.
+  const first = pathname.split('/')[1] ?? ''
+  const matched = LOCALES.find((l) => l === first.toLowerCase())
+  const locale = matched ?? DEFAULT_LOCALE
+  const pathWithoutLocale = matched ? pathname.slice(first.length + 1) || '/' : pathname
 
   const isPublicOverride = PUBLIC_OVERRIDES.some((r) => pathWithoutLocale.startsWith(r))
   const needsAuth  = !isPublicOverride && PROTECTED.some((r) => pathWithoutLocale.startsWith(r))
