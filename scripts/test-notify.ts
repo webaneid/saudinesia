@@ -35,8 +35,9 @@ type Req = FakeRequest
 let waSeen: Req[] = []
 let mailSeen: Req[] = []
 let waStatus = 200
+let waDelayMs = 0 // simulasi gateway lambat
 let mailScript: number[] = []
-const wa = await startFakeServer((req) => { waSeen.push(req); return { status: waStatus } })
+const wa = await startFakeServer(async (req) => { waSeen.push(req); if (waDelayMs) await new Promise((r) => setTimeout(r, waDelayMs)); return { status: waStatus } })
 const mail = await startFakeServer((req) => {
   mailSeen.push(req)
   const status = mailScript.shift() ?? 200
@@ -49,7 +50,7 @@ function configure(opts: { wa?: boolean; email?: boolean } = {}) {
   if (useEmail) { env.RESEND_API_KEY = 're_test_key'; env.RESEND_FROM = 'Saudinesia <noreply@saudinesia.test>'; env.RESEND_API_URL = `http://127.0.0.1:${mail.port}` }
   else { delete env.RESEND_API_KEY; delete env.RESEND_FROM }
   env.APP_URL = 'https://saudinesia.test'
-  waSeen = []; mailSeen = []; waStatus = 200; mailScript = []
+  waSeen = []; mailSeen = []; waStatus = 200; waDelayMs = 0; mailScript = []
 }
 
 // ───────────── data uji ─────────────
@@ -196,6 +197,90 @@ await t('contact_changed: email saja (tanpa WhatsApp), isi memberi tahu perubaha
   assert.match(String(mailSeen[0]!.body.subject), /diubah/)
 })
 
+console.log('== email sebagai jaring pengaman ==')
+
+// Jaminan produk (2026-10-22): bila WhatsApp tidak bisa dipakai (gateway mati/belum dikonfigurasi/diblokir, nomor tak ada, belum terverifikasi),
+// SEMUA pemberitahuan tetap sampai lewat email. Diuji untuk SETIAP jenis kejadian, bukan sampel.
+const ALL_EVENTS: NotificationEvent[] = [
+  { type: 'booking_submitted', code: 'SND-1', deadline: 'besok' },
+  { type: 'payment_reminder_12h', code: 'SND-1', deadline: 'besok' },
+  { type: 'payment_reminder_22h', code: 'SND-1', deadline: 'besok' },
+  { type: 'payment_confirmed', code: 'SND-1' },
+  { type: 'payment_rejected', code: 'SND-1' },
+  { type: 'auto_cancelled', code: 'SND-1' },
+  { type: 'visa_status_change', code: 'SND-1', status: 'approved' },
+  { type: 'contact_changed' },
+  { type: 'welcome', name: 'Budi' },
+  { type: 'test' },
+]
+
+await t('gateway WhatsApp BELUM dikonfigurasi: email terkirim untuk SEMUA jenis kejadian', async () => {
+  for (const event of ALL_EVENTS) {
+    configure({ wa: false }); const u = await user(`fb-nocfg-${event.type}`)
+    const out = await notify({ userId: u.id, event })
+    assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent', event.type)
+    assert.equal(mailSeen.length, 1, event.type)
+    assert.notEqual(out.find((o) => o.channel === 'whatsapp')?.status, 'sent', event.type)
+  }
+})
+
+await t('akun TANPA nomor WhatsApp: email terkirim untuk SEMUA jenis kejadian (tanpa baris WA)', async () => {
+  for (const event of ALL_EVENTS) {
+    configure(); const u = await user(`fb-nonum-${event.type}`, { phone: null })
+    const out = await notify({ userId: u.id, event })
+    assert.deepEqual(out.map((o) => `${o.channel}=${o.status}`), ['email=sent'], event.type)
+    assert.equal(waSeen.length, 0, event.type)
+  }
+})
+
+await t('nomor ada tetapi BELUM ada persetujuan WhatsApp: email terkirim untuk SEMUA jenis kejadian, gateway tak dipanggil', async () => {
+  for (const event of ALL_EVENTS) {
+    configure(); const u = await user(`fb-nocons-${event.type}`, { noConsent: true })
+    const out = await notify({ userId: u.id, event })
+    assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent', event.type)
+    assert.equal(waSeen.length, 0, event.type)
+  }
+})
+
+await t('gateway WhatsApp error 500: email tetap terkirim', async () => {
+  configure(); waStatus = 500; const u = await user('fb-500'); const b = await booking(u.id)
+  const out = await notify({ userId: u.id, bookingId: b.id, event: confirmed })
+  assert.equal(out.find((o) => o.channel === 'whatsapp')?.status, 'failed')
+  assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent')
+})
+
+await t('gateway WhatsApp MATI total (koneksi ditolak): email tetap terkirim', async () => {
+  configure(); env.WA_GATEWAY_URL = 'http://127.0.0.1:1'; const u = await user('fb-down'); const b = await booking(u.id)
+  const out = await notify({ userId: u.id, bookingId: b.id, event: confirmed })
+  assert.equal(out.find((o) => o.channel === 'whatsapp')?.status, 'failed')
+  assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent')
+})
+
+await t('gateway LAMBAT: email TIDAK menunggu WhatsApp (kanal paralel) — email tiba jauh sebelum WhatsApp selesai', async () => {
+  configure(); waDelayMs = 2500; const u = await user('fb-slow'); const b = await booking(u.id)
+  const t0 = Date.now()
+  const out = await notify({ userId: u.id, bookingId: b.id, event: confirmed })
+  const total = Date.now() - t0
+  assert.equal(out.find((o) => o.channel === 'email')?.status, 'sent')
+  assert.equal(out.find((o) => o.channel === 'whatsapp')?.status, 'sent')
+  assert.ok(total >= 2400, `WhatsApp lambat harus ikut ditunggu notify (ukur ${total}ms)`)
+  assert.ok(mailSeen[0]!.at - t0 < 1500, `email harus dikirim paralel, bukan setelah WhatsApp (tiba ${mailSeen[0]!.at - t0}ms setelah mulai)`)
+})
+
+await t('TIDAK ADA kanal yang sampai (WhatsApp mati DAN email dimatikan admin): peringatan keras tercatat, tanpa PII, tidak melempar', async () => {
+  configure({ wa: false }); const u = await user('fb-none')
+  const row = (await prisma.siteSetting.findFirst()) ?? (await prisma.siteSetting.create({ data: {} })) // baris yang SAMA dengan yang dibaca notify()
+  await prisma.siteSetting.update({ where: { id: row.id }, data: { emailNotificationsEnabled: false } })
+  const logged: string[] = []; const orig = console.error; console.error = (...a: unknown[]) => { logged.push(a.join(' ')) }
+  let out
+  try { out = await notify({ userId: u.id, event: confirmed }) } finally { console.error = orig }
+  await prisma.siteSetting.update({ where: { id: row.id }, data: { emailNotificationsEnabled: originalSetting?.emailNotificationsEnabled ?? true } })
+  assert.ok(out.every((o) => o.status === 'skipped'))
+  const warn = logged.find((l) => l.includes('TIDAK ADA kanal'))
+  assert.ok(warn, 'peringatan harus ada')
+  assert.ok(!warn!.includes(u.email) && !warn!.includes(u.whatsapp ?? 'x'), 'tanpa PII')
+})
+
 console.log('== penerima & kanal ==')
 
   await t('akun tanpa nomor → hanya email; kejadian tanpa pesan WA (welcome) → hanya email', async () => {
@@ -215,7 +300,7 @@ console.log('== penerima & kanal ==')
 
   await t('saklar admin emailNotificationsEnabled=false → email "skipped", WA tidak terpengaruh', async () => {
     configure(); const u = await user('h')
-    const row = originalSetting ?? (await prisma.siteSetting.create({ data: {} }))
+    const row = (await prisma.siteSetting.findFirst()) ?? (await prisma.siteSetting.create({ data: {} })) // baris yang SAMA dengan yang dibaca notify()
     await prisma.siteSetting.update({ where: { id: row.id }, data: { emailNotificationsEnabled: false } })
     const out = await notify({ userId: u.id, event: confirmed })
     await prisma.siteSetting.update({ where: { id: row.id }, data: { emailNotificationsEnabled: originalSetting?.emailNotificationsEnabled ?? true } })
