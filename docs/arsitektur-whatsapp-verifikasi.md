@@ -20,7 +20,7 @@ Yang belum terkonfirmasi (perlu dicoba pada instalasi Sumopod Anda): bentuk pers
 
 Permintaan pemilik: bila GOWA tidak aktif atau tidak ada nomor aktif, **semua notifikasi lewat email — pengguna tidak boleh kehilangan pemberitahuan hanya karena WhatsApp tidak ada.**
 - `notify()` menjalankan WhatsApp dan email **paralel** (sebelumnya berurutan: gateway macet = timeout 10 dtk × 3 percobaan + jeda ≈ 34 dtk menunda email).
-- Email dikirim untuk **semua** jenis kejadian tanpa syarat WhatsApp. WhatsApp hanya untuk 5 kejadian (booking, pengingat, pembayaran) dan hanya bila ada nomor + persetujuan (kelak: + terverifikasi).
+- Email dikirim untuk **semua** jenis kejadian tanpa syarat WhatsApp. WhatsApp hanya untuk 5 kejadian (booking, pengingat, pembayaran) dan hanya bila ada nomor + persetujuan (+ terverifikasi — sudah dieksekusi, §9).
 - Bila **tidak ada** kanal yang sampai (WhatsApp mati **dan** email dimatikan admin/belum dikonfigurasi): peringatan keras tercatat (tanpa PII) — `[notify] TIDAK ADA kanal yang terkirim …`.
 - Uji (`scripts/test-notify.ts`): untuk **setiap** jenis kejadian email terkirim saat gateway belum dikonfigurasi, akun tanpa nomor, tanpa persetujuan; plus gateway 500, gateway mati total, gateway lambat (email tiba sebelum WhatsApp selesai), dan kasus "tidak ada kanal". Uji mutasi: kembali ke berurutan dan mematikan peringatan — keduanya tertangkap.
 - Sisa celah yang disadari: bila admin mematikan saklar email **dan** WhatsApp tak tersedia, tak ada yang sampai (hanya diberi peringatan). Saklar email adalah saklar darurat sengaja.

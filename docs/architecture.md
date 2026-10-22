@@ -1,3 +1,7 @@
+> **ARSIP DESAIN AWAL — bagian AUTH-nya USANG (2026-10-22).** Alur login/registrasi **OTP WhatsApp** (§C "WhatsApp OTP Login", tabel `otp_requests`, rute `/api/auth/otp/*`, `lib/auth/otp.ts`,
+> `users.phone UNIQUE NOT NULL`, tipe notifikasi `'otp'`) **sudah dihapus**: auth kini berbasis email (+ Google) tanpa OTP — ADR-0001, `docs/arsitektur-auth.md`, `docs/auth-flow.md`;
+> verifikasi nomor WhatsApp lewat pesan masuk — ADR-0002, `docs/arsitektur-whatsapp-verifikasi.md`. Bagian lain dokumen ini tetap arsip; modul punya `docs/arsitektur-<modul>.md` (lihat CLAUDE.md).
+
 # Saudinesia — Architecture
 
 > **Catatan modularisasi (2026-07-08):** dokumen ini adalah desain arsitektur awal dan sebagian sudah basi dibanding implementasi aktual. Setiap modul produk kini punya dokumen arsitektur tersendiri yang jadi **source of truth** untuk modul itu, menggantikan bagian terkait di sini: `docs/arsitektur-visa.md`, `docs/arsitektur-transportasi.md`, `docs/arsitektur-muthowif.md`, `docs/arsitektur-umroh.md` (booking core — wizard, pembayaran, pembatalan, cron). Modul lain (Hotel, Haji sebagai produk katalog, Katering & Tour, Paket, Group Booking) belum punya dokumen terpisah. Lihat `CLAUDE.md` bagian "Dokumentasi Arsitektur per Modul".

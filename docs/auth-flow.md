@@ -1,170 +1,80 @@
-> **DISUPERSEDE 2026-10-21 oleh `docs/arsitektur-auth.md` dan ADR-0001** (auth berbasis email, tanpa OTP WhatsApp).
-> Dokumen ini dipertahankan sebagai riwayat; bagian verifikasi akun / reset password / peran WhatsApp di bawah sudah TIDAK berlaku
-> setelah Fase 1 dieksekusi.
+# Saudinesia — Alur Auth (ringkasan operasional)
 
-# Saudinesia — Auth Flow (Final)
+> **Sumber kebenaran as-built: `docs/arsitektur-auth.md`** (+ `docs/arsitektur-whatsapp-verifikasi.md`, ADR-0001, ADR-0002). Dokumen ini hanya ringkasan alur
+> untuk dibaca cepat. Ditulis ulang 2026-10-22 (Fase 4): versi sebelumnya (OTP WhatsApp, `verify-phone`, `resetToken`, `OtpInput`) sudah tidak berlaku
+> dan seluruh kodenya dihapus.
 
 ## Prinsip
 
 | Concern | Mekanisme |
 |---------|-----------|
-| Login | Email + Password |
-| Verifikasi akun baru | OTP ke WhatsApp (ganti email verification) |
-| Reset password | OTP ke WhatsApp → set password baru |
-| Notifikasi booking/visa | WhatsApp (GOWA) |
+| Identitas | **Email** (disimpan huruf kecil). Tidak dapat diubah dari profil (SEC-17) |
+| Masuk jamaah | Email + password, **atau** Google (OAuth + PKCE buatan sendiri) |
+| Masuk staf (admin/manager/superadmin) | **Hanya** email + password di `/admin/login`. Google ditolak untuk staf |
+| Verifikasi akun baru | Tautan email (pemilik email memilih password SETELAH mengklik — akun belum ada sebelum itu) |
+| Reset password | Tautan email (30 menit, sekali pakai) |
+| Kontak | Telepon + WhatsApp wajib (dua kolom, E.164) lewat "Lengkapi Data" / form daftar |
+| WhatsApp | **Kanal notifikasi saja**, hanya ke nomor **terverifikasi** (pesan masuk ke nomor bisnis, webhook GOWA). Email selalu terkirim untuk semua kejadian |
+| Sesi | JWT 7 hari, cookie `httpOnly; Secure; SameSite=Lax` (Lax — Strict merusak login Google dan tautan dari email; keputusan 2026-10-22) |
 
-GOWA = notification layer, bukan auth dependency.  
-Login tetap bisa meski GOWA down.
+GOWA/WhatsApp bukan dependensi auth: login, daftar, dan reset tetap jalan walau GOWA mati.
 
----
+## Aturan password
+Minimal 8 karakter, ada huruf, angka, dan karakter spesial; maksimal **72 byte** (batas bcrypt; karakter non-ASCII dihitung per byte).
 
-## Password Rules
-- Minimal 8 karakter
-- Minimal 1 huruf (a-z / A-Z)
-- Minimal 1 angka (0-9)
-- Minimal 1 karakter spesial (`!@#$%^&*` dll)
+## Peran & cara akun dibuat
 
----
+| Peran | Dibuat oleh | Masuk |
+|-------|-------------|-------|
+| `pilgrim` | Daftar mandiri (manual atau Google) | Email+password atau Google |
+| `admin` / `manager` | Superadmin (Sistem → Pengguna) | Email+password |
+| `superadmin` | `scripts/create-superadmin.ts` (seed hanya dev) | Email+password |
 
-## User Roles & Cara Akun Dibuat
+## Alur
 
-| Role | Cara dibuat | Login |
-|------|-------------|-------|
-| Pilgrim / Agent | Self-register | Email + Password |
-| Admin (Ops) | Dibuat Super Admin di dashboard | Email + Password |
-| Super Admin | Seed script | Email + Password |
+**Daftar manual** (`/register`): nama, email, telepon, WhatsApp → respons seragam "Cek Email Anda" → email berisi tautan → `/register/complete?token=…`
+(halaman menampilkan isian, **tidak** mengonsumsi token) → centang persetujuan privasi + notifikasi WhatsApp, pilih password → akun dibuat (email terverifikasi) → dashboard.
+Email yang sudah terdaftar mendapat email "Anda sudah punya akun" (tanpa tautan sakti); responsnya sama persis.
 
----
+**Login** (`POST /auth/login`): password salah dan akun tak ada sama-sama 401; status akun (nonaktif / email belum terverifikasi) baru diungkap setelah password benar.
 
-## Alur Detail
+**Lupa password** (`/forgot-password` → email → `/reset-password?token=…`): respons seragam; token sekali pakai; berhasil → langsung masuk.
 
-### 1. Registrasi (Pilgrim & Agent)
+**Google** (`GET /auth/google/start` → Google → `/auth/google/callback`): state + nonce + PKCE, ID token diverifikasi penuh.
+`sub` dikenal → masuk; email cocok akun **jamaah** aktif → tersambung otomatis; staf → ditolak; pengguna baru → `/register/google` (setujui privasi) → akun dibuat → "Lengkapi Data".
 
-```
-Step 1 — Form:
-  • Nama lengkap
-  • Email
-  • Password (strength: huruf + angka + spesial, min 8)
-  • Nomor WhatsApp
+**Lengkapi Data** (`/lengkapi-data`): jamaah dengan telepon/WhatsApp kosong dialihkan dari semua halaman jamaah (layout); `POST /bookings` juga menolak (422).
 
-  POST /api/v1/auth/register
-    → Validasi semua field
-    → Cek email belum dipakai
-    → Hash password (bcrypt)
-    → Buat user (isActive: false)
-    → Kirim OTP ke WhatsApp
+**Verifikasi WhatsApp** (Profil / banner dashboard): kode `VERIF XXXXXXXX` dikirim pengguna **dari nomornya ke nomor bisnis**; webhook GOWA bertanda tangan HMAC mencocokkan pengirim dengan nomor akun.
+Tidak menghalangi pemesanan. Satu nomor = satu akun terverifikasi. Mengganti nomor mencabut verifikasi.
 
-Step 2 — Verifikasi WA:
-  • Input 6 digit OTP
+**Logout** (`POST /auth/logout`): hapus cookie.
 
-  POST /api/v1/auth/verify-phone { phone, code }
-    → Verifikasi OTP dari otp_requests
-    → Set user.isActive = true, phoneVerifiedAt = now()
-    → Buat session (JWT cookie)
-    → Redirect ke /dashboard
-```
-
-### 2. Login
+## Rute
 
 ```
-POST /api/v1/auth/login { email, password }
-  → Cari user by email
-  → Cek isActive (harus true)
-  → bcrypt.compare(password, passwordHash)
-  → Buat session
-  → Redirect ke /dashboard atau /admin
+POST /api/v1/auth/register                    daftar (tanpa password; kirim tautan)
+POST /api/v1/auth/registration/preview        lihat isian dari token (tidak mengonsumsi)
+POST /api/v1/auth/registration/complete       token + password + persetujuan → buat akun + sesi
+POST /api/v1/auth/login                       email + password → sesi
+POST /api/v1/auth/logout                      hapus cookie
+POST /api/v1/auth/forgot-password             kirim tautan reset (respons seragam)
+POST /api/v1/auth/reset-password              token + password baru → sesi
+GET/PUT /api/v1/auth/profile                  nama/alamat (TANPA email)
+PUT  /api/v1/auth/contact                     telepon + WhatsApp (+ persetujuan sekali)
+GET  /api/v1/auth/google/start                awal OAuth
+GET  /api/v1/auth/google/callback             callback OAuth
+POST /api/v1/auth/google/complete             pengguna Google baru: setujui privasi → akun
+POST /api/v1/auth/whatsapp/verification       terbitkan kode verifikasi (sesi)
+GET  /api/v1/auth/whatsapp/status             status verifikasi (polling)
+POST /api/v1/webhooks/whatsapp                webhook GOWA (publik; HMAC; mati tanpa secret kuat)
 ```
 
-### 3. Forgot Password
+## Halaman
 
 ```
-Step 1 — Masukkan email:
-  POST /api/v1/auth/forgot-password { email }
-    → Cari user by email, cek phoneVerifiedAt tidak null
-    → Kirim OTP ke phone
-    → Return { phone: "628xxx***xxx" } (masked)
-
-Step 2 — Masukkan OTP:
-  POST /api/v1/auth/verify-reset-otp { phone, code }
-    → Verifikasi OTP
-    → Buat resetToken (UUID) + resetTokenExp (+ 15 menit)
-    → Simpan ke user
-    → Return { resetToken }
-
-Step 3 — Password baru:
-  POST /api/v1/auth/reset-password { resetToken, newPassword }
-    → Cari user by resetToken, cek exp belum lewat
-    → Validasi password strength
-    → Hash + update password
-    → Clear resetToken
-    → Buat session
-    → Redirect ke dashboard
+/[locale]/(auth)/login · register · register/complete · register/google · forgot-password · reset-password · lengkapi-data
+/[locale]/admin/login          staf: email + password
 ```
 
-### 4. Logout
-
-```
-POST /api/v1/auth/logout → clear cookie
-```
-
----
-
-## Schema Changes (Prisma)
-
-### Kolom baru di `users`:
-
-```
-email            String   @unique          ← primary login identifier
-passwordHash     String                    ← bcrypt hash
-phoneVerifiedAt  DateTime?                 ← null = WA belum diverifikasi
-resetToken       String?                   ← UUID satu kali pakai
-resetTokenExp    DateTime?                 ← expired 15 menit
-```
-
-### Kolom yang berubah:
-
-```
-fullName   String    ← dari nullable jadi required
-phone      String?   ← tetap optional di DB, required di form registrasi
-isActive   Boolean   ← false saat register, true setelah OTP verify
-```
-
----
-
-## API Routes
-
-```
-POST /api/v1/auth/register          → daftar (nama+email+password+phone)
-POST /api/v1/auth/verify-phone      → verifikasi OTP WA → aktifkan akun
-POST /api/v1/auth/login             → email + password → session
-POST /api/v1/auth/logout            → clear cookie
-POST /api/v1/auth/forgot-password   → email → OTP ke WA
-POST /api/v1/auth/verify-reset-otp  → OTP → resetToken
-POST /api/v1/auth/reset-password    → resetToken + password baru
-PUT  /api/v1/auth/profile           → update nama/email
-```
-
----
-
-## Halaman UI
-
-```
-/[locale]/(auth)/login/             ← email + password (ganti OTP form)
-/[locale]/(auth)/register/          ← step 1: form | step 2: OTP verify
-/[locale]/(auth)/forgot-password/   ← step 1: email | step 2: OTP | step 3: password baru
-/[locale]/admin/login/              ← email + password, dark theme (ganti OTP form)
-```
-
----
-
-## Komponen Tetap Dipakai
-
-- `OtpInput`, `OtpCountdown`, `useOtpCountdown` — dipakai di register step 2 & forgot password
-- `lib/auth/otp.ts` — `generateOtp`, `storeOtp`, `verifyAndConsumeOtp`
-- `lib/auth/session.ts` — tidak berubah
-
-## Dependensi Baru
-
-```bash
-bun add bcryptjs && bun add -D @types/bcryptjs
-```
+Evaluasi lokal tanpa layanan luar: `docs/evaluasi-lokal.md` (`bun run dev:eval`).

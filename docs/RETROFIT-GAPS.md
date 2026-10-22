@@ -1,3 +1,5 @@
+> **Catatan 2026-10-22:** rujukan "WhatsApp OTP" di laporan audit retrofit ini adalah keadaan saat audit (2026-09-10). OTP WhatsApp sudah dihapus — auth kini email/Google (`docs/arsitektur-auth.md`).
+
 # Retrofit Gaps — Saudinesia
 
 > Dibuat: 2026-09-10, hasil audit `retrofit-adopt` (template `master-typescript`).

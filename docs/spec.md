@@ -1,3 +1,7 @@
+> **Catatan 2026-10-22:** butir spesifikasi auth berbasis **OTP WhatsApp** di dokumen ini (login/registrasi OTP, hitung mundur OTP, rate limit OTP, "OTP login | Yes | No") **sudah digantikan**:
+> daftar/masuk jamaah = email + password dengan tautan verifikasi **atau Google**; staf = password; WhatsApp hanya kanal notifikasi ke nomor terverifikasi. Lihat ADR-0001/0002,
+> `docs/arsitektur-auth.md`, `docs/auth-flow.md`. Dokumen ini adalah spesifikasi awal (arsip) untuk bagian tersebut.
+
 # Saudinesia — Product Specification
 
 **Platform:** Web PWA (Progressive Web App)

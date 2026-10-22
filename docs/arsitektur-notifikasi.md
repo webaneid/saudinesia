@@ -1,10 +1,11 @@
 # Arsitektur — Notifikasi (Email Resend + WhatsApp, satu pintu)
 
-> Status: **FASE 1–4 SELESAI & TERVERIFIKASI (2026-10-21)** — lihat §10–§11. Dokumen ini adalah source of truth as-built untuk
-> notifikasi email+WhatsApp. (Login Google: `docs/arsitektur-login-google.md`, belum dieksekusi.) Pola acuan: smart-ai (`architecture-notifications.md`, repo terpisah). Tujuan operasional: **saat produksi
+> Status: **FASE 1–4 SELESAI & TERVERIFIKASI (2026-10-21), diperbarui 2026-10-22** — lihat §10–§12. Dokumen ini adalah source of truth as-built untuk
+> notifikasi email+WhatsApp. **§12 memuat perubahan sesudahnya** (lingkup WhatsApp diperkecil, WhatsApp hanya ke nomor terverifikasi, kanal paralel, email jaring
+> pengaman) yang menggantikan bagian terkait di §3–§4 dan §9. Auth: `docs/arsitektur-auth.md`. Pola acuan: smart-ai (`architecture-notifications.md`, repo terpisah). Tujuan operasional: **saat produksi
 > cukup mengisi kredensial (env) lalu menekan "Kirim email uji" di admin** — tanpa mengubah kode.
 
-## 1. Keadaan aktual (recheck 2026-10-21 terhadap kode)
+## 1. Keadaan AWAL sebelum implementasi (riwayat; recheck 2026-10-21 terhadap kode saat itu)
 
 | Fakta | Bukti |
 |---|---|
@@ -37,9 +38,9 @@
  pemicu (route / cron)
         │  notify({ userId, bookingId?, event })          ← SATU pintu, tidak pernah melempar error
         ▼
- lib/notifications/notify.ts ──► muat user (email, phone) ► tentukan kanal
+ lib/notifications/notify.ts ──► muat user (email, whatsapp) ► tentukan kanal (PARALEL, §12)
         │                                  │
-        │ WhatsApp (jika ada nomor)        │ Email (jika ada email & saklar aktif)
+        │ WhatsApp (nomor TERVERIFIKASI)   │ Email (jika ada email & saklar aktif)
         ▼                                  ▼
  lib/whatsapp/client.ts            lib/email/resend.ts  ──► Resend HTTP API
  (kini MENGEMBALIKAN hasil)        (retry, idempotency key)
@@ -52,22 +53,23 @@
   baru = satu entri, kompiler memaksa kedua kanal diisi.
 - `lib/email/templates.ts` — satu layout (tabel, CSS inline, hijau brand) + konten per kejadian; **semua nilai dinamis di-escape**.
 - `lib/email/resend.ts` — `sendEmail()` → `{status:'sent'|'skipped'|'failed'}`; **tidak pernah melempar**.
-- Penerima: email akun; email placeholder/tak valid tidak dikirimi. Nomor WA hanya bila ada.
+- Penerima: email akun; email placeholder/tak valid tidak dikirimi. WhatsApp hanya ke `User.whatsapp` yang **terverifikasi** dan sudah menyetujui (§12).
 
 ## 4. Matriks kejadian
 
 | Kejadian | Pemicu | WA | Email | Dedupe |
 |---|---|---|---|---|
-| `booking_submitted` | `POST /api/v1/bookings` sukses (**baru** — sebelumnya tak pernah dikirim) | ya | ya (ringkasan + batas bayar + tautan) | per booking |
+| `booking_submitted` | `POST /api/v1/bookings` sukses (**baru** — sebelumnya tak pernah dikirim) | ya (nomor terverifikasi) | ya (ringkasan + batas bayar + tautan) | per booking |
 | `payment_reminder_12h` / `_22h` | cron :30 | ya | ya | per booking+kanal, hanya yang `sent` |
 | `payment_confirmed` / `payment_rejected` | admin konfirmasi/tolak | ya | ya | tidak (bisa berulang) |
-| `auto_cancelled` | cron tiap jam | ya | ya | per booking |
-| `visa_status_change` | admin ubah status visa | ya | ya | tidak |
+| `auto_cancelled` | cron tiap jam | **tidak** (email saja, §12) | ya | per booking |
+| `visa_status_change` | admin ubah status visa | **tidak** (email saja, §12) | ya | tidak |
+| `contact_changed` | pemilik mengubah telepon/WhatsApp yang sudah ada | tidak | ya (peringatan keamanan) | tidak |
 | `departure_reminder_7d` / `_1d` | **belum ada pemicu** — di luar scope fase ini (dicatat) | — | — | — |
 | `refund_approved` | **belum ada pemicu** — di luar scope | — | — | — |
 | `welcome` | pendaftaran selesai (password/Google) | tidak | ya | per user |
 | `test` | admin "Kirim email uji" | tidak | ya | tidak |
-| OTP | tetap **WA saja** (kanal login/verifikasi; tidak lewat email) | ya | tidak | — |
+| ~~OTP~~ | **Tidak ada lagi** — OTP WhatsApp dihapus dari auth (ADR-0001); verifikasi akun/reset lewat tautan email, verifikasi nomor lewat pesan masuk (ADR-0002) | — | — | — |
 
 **Dedupe per kanal**: pengingat tidak dikirim ulang bila kanal itu sudah `sent`; `failed`/`skipped` dicoba lagi di siklus berikutnya
 (jendela pengingat 2 jam memberi ≥ 1 kesempatan ulang) — memperbaiki kelemahan §1.
@@ -97,6 +99,8 @@ API: `GET /api/v1/admin/system/integrations`, `POST /api/v1/admin/system/integra
 | `RESEND_FROM` | pengirim, mis. `Saudinesia <noreply@domain.com>` — **domain harus terverifikasi di Resend** |
 | `RESEND_REPLY_TO` | opsional |
 | `APP_URL` | origin publik untuk tautan di email (runtime; `scripts/buat-env-production.sh` mengisinya) |
+| `WHATSAPP_WEBHOOK_SECRET` | secret webhook GOWA (verifikasi nomor) — ≥32 karakter acak; lemah/kosong = webhook mati (§12, `docs/arsitektur-whatsapp-verifikasi.md`) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | login Google (opsional; `docs/arsitektur-auth.md` §3.4) — tidak memengaruhi notifikasi |
 
 Urutan saat produksi: (1) daftar domain di Resend → pasang DNS **SPF, DKIM, dan DMARC** → tunggu "Verified"; (2) buat API key (izin
 *sending*); (3) isi `RESEND_API_KEY`/`RESEND_FROM` di `.env.production` server, `docker compose up -d web`; (4) admin → **Kirim email uji**;
@@ -116,7 +120,7 @@ Urutan saat produksi: (1) daftar domain di Resend → pasang DNS **SPF, DKIM, da
 
 - Tanpa antrean: bila proses mati tepat saat mengirim, pesan itu hilang (log berstatus `failed`/tidak ada). Outbox = fase berikutnya.
 - Tanpa webhook Resend: status `sent` = diterima Resend, **bukan** dijamin masuk inbox (bounce/komplain tak terlacak).
-- Email bukan kanal OTP/login.
+- Email **adalah** jalur kritis auth (verifikasi pendaftaran, reset password, email auth lewat `lib/auth/authEmail.ts` — bukan `notify()`); domain pengirim terverifikasi = syarat go-live. Tidak ada OTP.
 - Pengiriman at-least-once untuk jalur WA (timeout setelah gateway terlanjur mengirim → retry bisa dobel).
 
 ## 10. Fase eksekusi
@@ -141,3 +145,15 @@ Urutan saat produksi: (1) daftar domain di Resend → pasang DNS **SPF, DKIM, da
   email/nomor). Temuan Low baru: SEC-16 (lihat `docs/lessons-learned.md`).
 - **Belum diverifikasi:** pengiriman ke Resend NYATA (butuh kredensial + domain terverifikasi — dikerjakan saat produksi lewat tombol
   "Kirim email uji"), dan jalur pemicu booking/pembayaran end-to-end lewat browser (dicakup uji `notify` + typecheck, bukan alur UI).
+
+## 12. Perubahan setelah Fase 4 notifikasi (2026-10-22) — menggantikan §3/§4/§9 yang bertentangan
+
+- **Lingkup WhatsApp diperkecil** (ADR-0001): `waMessage` hanya untuk `booking_submitted`, `payment_reminder_12h/22h`, `payment_confirmed`, `payment_rejected`. Status visa, auto-cancel, welcome,
+  `contact_changed`, test = **email saja**. Template WA yang tak terpakai dipertahankan di `templates/whatsapp.ts` (diberi catatan).
+- **WhatsApp hanya ke nomor TERVERIFIKASI** (ADR-0002): `whatsappVerifiedAt` dan `verifiedWhatsapp === whatsapp`, ditambah `ConsentLog` WhatsApp dan batas 10 pesan/nomor/24 jam. Selain itu kanal WA berstatus `skipped` dengan alasan.
+- **Kanal berjalan PARALEL** (`Promise.allSettled`): email tidak menunggu WhatsApp (gateway macet ≈34 dtk sebelumnya menunda email) dan satu kanal tak pernah menggugurkan yang lain.
+- **Email jaring pengaman yang dijamin:** semua kejadian selalu dikirim lewat email apa pun kondisi WhatsApp (belum dikonfigurasi, mati, diblokir, tanpa nomor, tanpa persetujuan, belum terverifikasi) — diuji
+  untuk SETIAP jenis kejadian. Bila tidak ada kanal yang sampai (WhatsApp mati dan email dimatikan admin) tercatat peringatan keras tanpa PII.
+- Penerima WA memakai `User.whatsapp` (bukan `phone`). Klien WA mengirim E.164 apa adanya.
+- Bukti: `scripts/test-notify.ts` (29 uji) + `scripts/test-whatsapp.ts`; lihat `docs/arsitektur-whatsapp-verifikasi.md` §2 dan §9.
+
