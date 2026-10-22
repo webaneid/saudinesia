@@ -208,6 +208,7 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 - Always serialize to **JSON** (`editor.getJSON()`) — never HTML — and store JSON in DB
 - To render saved content server-side: `generateHTML(json, extensions)`; client-side: `<EditorContent editor={editor} />`
 - Tiptap editor instances live in Client Components only — never instantiate in a Server Component
+- **Pakai komponen universal, jangan membuat editor baru:** `RichTextEditor` / `RichTextView` di `components/shared/rich-text/` + `richTextField()` di `lib/validators/richText.ts` (satu daftar putih node/format di `lib/rich-text/schema.ts`; rancangan dan cara pakai: `docs/arsitektur-editor-teks.md`). Tampilan memakai `RichTextView` (JSON → elemen React), bukan `generateHTML`. Kolom teks kaya WAJIB divalidasi `richTextField()` di server; kanal tanpa format (WhatsApp/email/ekspor) memakai `plainText()`. Tiptap dan `prosemirror-*` harus satu versi di `bun.lock` (dijaga `scripts/test-rich-text.ts`) — dua versi `prosemirror-model` membuat editor error saat Enter/daftar (SEC-60)
 
 ---
 

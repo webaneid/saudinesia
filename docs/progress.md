@@ -677,3 +677,14 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] Perbaikan dev: tautan daftar/reset kini dicetak ke terminal untuk email yang GAGAL (kunci placeholder `re_dev…` membuat Resend menolak → sebelumnya buntu), diuji + uji mutasi.
 - [x] `bun run db:deploy`; database dev diselaraskan (3 migrasi tertinggal diterapkan setelah `pg_dump`).
 
+---
+
+## Editor Teks Kaya + Redesain Halaman Admin Visa (`docs/arsitektur-editor-teks.md`, 2026-10-23)
+
+- [x] **Fase 1 — Komponen editor universal** (2026-10-23): `components/shared/rich-text/` (`RichTextEditor` dimuat dinamis, `RichTextView` tanpa Tiptap/`dangerouslySetInnerHTML`), `lib/rich-text/` (daftar putih tunggal + helper), `lib/validators/richText.ts` (`richTextField()`, salinan bersih), kelas `.rich-text` di `globals.css`, `scripts/test-rich-text.ts` (16 tes, masuk `bun run test`/CI). Skema: paragraf, H2/H3, tebal/miring/garis bawah, daftar; tombol layar penuh untuk teks panjang. Pola dari smart-ai, tanpa tabel (lebih ringan).
+- [x] **Fase 2 — Halaman admin Visa** (2026-10-23): redesain tiga tab (Informasi / Persyaratan dokumen / Harga dan HPP) + tile ringkasan + bilah simpan saat ada perubahan; `Switch` dan `Tabs` baru di `components/admin/ui/`; `description` memakai editor; `POST/PUT /admin/products/visa` `.strict()` + `richTextField()`; katalog publik `/visa` memakai `RichTextView`. Perbaikan tumpangan: `VendorPicker` yang kehilangan fokus tiap ketikan, galat simpan yang dulu diam, tombol urut dokumen yang sungguhan (dulu ikon kosmetik), konfirmasi hapus inline (dulu `confirm()`).
+- [x] **SEC-60** (dependensi): salinan ProseMirror bersarang di `bun.lock` membuat editor error saat Enter/daftar → `overrides` `prosemirror-model`/`prosemirror-transform` + tes penjaga lockfile. Terverifikasi di dev dan artefak produksi.
+- [ ] Pasang `RichTextEditor` di `description` modul lain (Hotel, Muthowif, Haji, Paket Umroh, Paket Ziarah, Situs Wisata, Katering) — kandidat di `docs/arsitektur-editor-teks.md` §6.
+- [x] **SEC-61(a)** (2026-10-23): `P2025` → 404 di 28 handler tulis by-id (17 route) lewat `lib/admin/errors.ts`; `seasons/[id]` DELETE tak lagi menjawab 403 untuk semua galat. Terbukti sebelum 500 → sesudah 404.
+- [ ] SEC-61(b) (Low, terbuka): akses daftar vendor (`GET /admin/system/settings/vendors`) untuk peran `manager`.
+

@@ -55,3 +55,11 @@ Admin Saudinesia memakai bahasa visual yang sama dengan admin smart-ai: palet hi
 **3b — struktur.** Tabel di halaman list katalog diganti `DataTable` (kartu di HP). **Tanpa pagination** untuk list katalog: itu master data kurasi yang kecil, dan API `GET`-nya juga dikonsumsi tanpa halaman oleh picker di halaman lain (mis. daftar hotel di builder paket) — memberi default `limit=20` akan memotong picker diam-diam. Ini pengecualian sadar dari aturan "semua list admin dipaginasi" di CLAUDE.md, dicatat di `docs/decisions.md`.
 
 **Catatan hasil eksekusi Fase 3.** 3a dan 3b dieksekusi sesuai rancangan, dengan tiga penyimpangan sadar: (1) override `--primary`/`--ring` ber-scope `.admin-canvas` ditambahkan — tak terantisipasi di rancangan, ditemukan saat verifikasi visual (tombol `AddressPicker` masih biru karena memakai token shadcn semantik, bukan kelas palet); (2) `quotas` — daftar hotel ikut dipaginasi (sebelumnya `findMany` tanpa batas), bukan hanya diganti ke `DataTable`; (3) halaman detail `[id]` hanya dimigrasi palet-nya, bukan strukturnya. **Cara pakai untuk halaman baru:** shell/`PageHeader`/`Card`/`Badge`/`Button`/`FormField`/`DataTable` dari `components/admin/`; warna hanya lewat token `admin-*`; form padat boleh memakai kelas `admin-inp`/`admin-select`/`admin-btn-sm`/`admin-form-panel`; list transaksional wajib `lib/admin/pagination.ts`. Pengecualian pagination untuk katalog produk dijelaskan di `docs/decisions.md` 2026-10-21.
+
+## Pembaruan 2026-10-23 — `Switch` dan `Tabs`
+
+Dua primitif baru di `components/admin/ui/`, lahir dari redesain halaman edit Visa (`docs/arsitektur-editor-teks.md` §7) dan menggantikan saklar yang tadinya diketik ulang tiga kali di satu halaman:
+- `Switch` — `role="switch"`, `label` wajib (nama aksesibel), pasangkan dengan teks status di sebelahnya.
+- `Tabs` (+ `tabId`/`tabPanelId`) — bilah tab bergaris bawah, panah kiri/kanan berpindah tab, bisa digeser di HP. Pola pemakaian: render semua panel dan sembunyikan dengan atribut `hidden` (bukan unmount) supaya isian yang belum disimpan tidak hilang saat pindah tab.
+Halaman edit produk lain (`hotels/[id]`, `packages/[id]`, dst.) belum memakainya.
+

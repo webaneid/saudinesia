@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 const requirementSchema = z.object({
   docType:     z.string().min(1),
@@ -17,12 +18,12 @@ const createSchema = z.object({
   name:         z.string().min(1),
   country:      z.string().default('Saudi Arabia'),
   visaType:     z.string().min(1),
-  description:  z.string().optional(),
+  description:  richTextField().nullish(), // teks kaya, lihat docs/arsitektur-editor-teks.md
   requirements: z.array(requirementSchema).default([]),
   priceLabel:   z.string().optional(),
   processDays:  z.coerce.number().int().positive().default(14),
   isActive:     z.boolean().default(true),
-})
+}).strict()
 
 export async function GET() {
   try {
@@ -45,14 +46,14 @@ export async function POST(req: Request) {
     await requireManager()
     const body = await req.json()
     const parsed = createSchema.safeParse(body)
-    if (!parsed.success) return NextResponse.json(err('Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const { name, country, visaType, description, requirements, priceLabel, processDays, isActive } = parsed.data
     // requirements Json TETAP diisi untuk kompatibilitas mundur (dibaca kode lama yang belum
     // pindah, docs/arsitektur-dokumen.md §5), tapi DocumentRequirement (di bawah) adalah sumber
     // kebenaran BARU — pemanggil baru pakai getDocumentRequirements(), bukan field ini.
     const product = await prisma.visaProduct.create({
-      data: { name, country, visaType, description, requirements, price: 0, priceLabel: priceLabel ?? 'per orang', processDays, isActive },
+      data: { name, country, visaType, description: emptyToNull(description), requirements, price: 0, priceLabel: priceLabel ?? 'per orang', processDays, isActive },
     })
     if (requirements.length > 0) {
       await prisma.documentRequirement.createMany({
