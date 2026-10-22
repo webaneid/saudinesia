@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { UserRole } from '@prisma/client'
 import { emailSchema, passwordSchema } from './auth'
+import { richTextField } from './richText'
 
 // Skema UPDATE untuk rute admin yang dulu meneruskan body mentah ke prisma.update (mass assignment).
 // `.strict()` — field di luar daftar DITOLAK (400), bukan diabaikan diam-diam, supaya klien yang salah ketahuan.
@@ -38,13 +39,32 @@ const nullableDate = z
   })
 
 /**
+ * POST /api/v1/admin/products/haji. Sebelumnya route membaca body mentah tanpa Zod (angka NaN, tipe liar masuk ke Prisma).
+ * Kuota terpakai (pendingQuota/bookedQuota) tidak ada: dikelola mesin booking.
+ */
+export const hajiProductCreateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    hajiType: z.enum(['furoda', 'khusus', 'reguler', 'plus']),
+    year: z.number().int().min(2000).max(2100),
+    description: richTextField().nullish(), // teks kaya (docs/arsitektur-editor-teks.md)
+    departureDate: nullableDate.optional(),
+    returnDate: nullableDate.optional(),
+    durationDays: z.number().int().min(1).max(365).nullable().optional(),
+    includes: z.array(z.string().max(300)).max(100).default([]),
+    price: z.number().min(0),
+    totalQuota: z.number().int().min(0),
+  })
+  .strict()
+
+/**
  * PUT /api/v1/admin/products/haji/[id]. pendingQuota/bookedQuota SENGAJA tidak ada: dikelola mesin booking
  * (lib/quota/adapters) — mengubahnya dari body merusak hitungan kuota.
  */
 export const hajiProductUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
-    description: z.string().max(5000).nullable().optional(),
+    description: richTextField().nullish(), // teks kaya (docs/arsitektur-editor-teks.md); dulu string maks 5000 — JSON dokumen jauh lebih panjang dari teksnya
     hajiType: z.enum(['furoda', 'khusus', 'reguler', 'plus']).optional(),
     year: z.number().int().min(2000).max(2100).optional(),
     departureDate: nullableDate.optional(),

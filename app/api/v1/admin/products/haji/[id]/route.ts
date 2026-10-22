@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { hajiProductUpdateSchema } from '@/lib/validators/adminUpdates'
+import { emptyToNull } from '@/lib/validators/richText'
+import { isRecordNotFound } from '@/lib/admin/errors'
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -20,7 +22,11 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
       }
     }
 
-    return NextResponse.json(ok(await prisma.hajiProduct.update({ where: { id }, data: parsed.data })))
+    const { description, ...fields } = parsed.data
+    return NextResponse.json(ok(await prisma.hajiProduct.update({
+      where: { id },
+      data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
+    })))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -39,5 +45,12 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     const { id } = await params
     await prisma.hajiProduct.update({ where: { id }, data: { isActive: false } })
     return NextResponse.json(ok(null))
-  } catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
+      return NextResponse.json(err('Forbidden'), { status: 403 })
+    }
+    if (isRecordNotFound(e)) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
+    console.error('[admin/products/haji/[id]/DELETE]', e instanceof Error ? e.name : e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
 }

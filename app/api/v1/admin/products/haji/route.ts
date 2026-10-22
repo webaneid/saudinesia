@@ -2,28 +2,37 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { hajiProductCreateSchema } from '@/lib/validators/adminUpdates'
+import { emptyToNull } from '@/lib/validators/richText'
 
 export async function GET() {
   try {
     await requireManager()
     return NextResponse.json(ok(await prisma.hajiProduct.findMany({ orderBy: { year: 'asc' } })))
-  } catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
+      return NextResponse.json(err('Forbidden'), { status: 403 })
+    }
+    console.error('[admin/products/haji/GET]', e instanceof Error ? e.name : e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
 }
 
 export async function POST(req: Request) {
   try {
     await requireManager()
-    const b = await req.json()
-    const p = await prisma.hajiProduct.create({ data: {
-      name: b.name, hajiType: b.hajiType, year: +b.year,
-      description: b.description || null,
-      departureDate: b.departureDate ? new Date(b.departureDate) : null,
-      returnDate: b.returnDate ? new Date(b.returnDate) : null,
-      durationDays: b.durationDays ? +b.durationDays : null,
-      includes: b.includes ?? [],
-      price: +b.price, priceLabel: 'per orang',
-      totalQuota: +b.totalQuota, images: [],
-    }})
+    const parsed = hajiProductCreateSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    const { description, ...d } = parsed.data
+    const p = await prisma.hajiProduct.create({
+      data: { ...d, description: emptyToNull(description), priceLabel: 'per orang', images: [] },
+    })
     return NextResponse.json(ok(p), { status: 201 })
-  } catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
+      return NextResponse.json(err('Forbidden'), { status: 403 })
+    }
+    console.error('[admin/products/haji/POST]', e instanceof Error ? e.name : e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
 }

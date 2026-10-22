@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, UserRound, Upload, Trash2 } from 'lucide-react'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type Muthowif = {
   id: string; name: string; bio: string | null; languages: string[]
@@ -128,9 +129,9 @@ export default function MuthowifEditPage({ params }: Props) {
             <p className="text-xs text-admin-muted mb-1">Nama</p>
             <input className="admin-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 min-w-0">
             <p className="text-xs text-admin-muted mb-1">Bio</p>
-            <textarea className="admin-inp" rows={3} value={form.bio} onChange={e => setForm(f => ({ ...f, bio: e.target.value }))} />
+            <RichTextEditor id="muthowif-bio" title="Bio muthowif" value={form.bio} onChange={bio => setForm(f => ({ ...f, bio }))} placeholder="Latar belakang, pengalaman membimbing, bahasa, dan gaya bimbingan…" />
           </div>
           <div>
             <p className="text-xs text-admin-muted mb-1">Bahasa (pisah koma)</p>

@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -173,7 +174,7 @@ export default function MuthowifPage() {
           <div className="grid md:grid-cols-2 gap-3">
             <div><p className="text-xs text-admin-muted mb-1">Nama</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Bahasa (pisah koma)</p><input className="admin-inp" value={form.languages} onChange={set('languages')} placeholder="Bahasa Indonesia, Arab" /></div>
-            <div className="md:col-span-2"><p className="text-xs text-admin-muted mb-1">Bio</p><textarea className="admin-inp" rows={2} value={form.bio} onChange={set('bio')} /></div>
+            <div className="md:col-span-2 min-w-0"><p className="text-xs text-admin-muted mb-1">Bio</p><RichTextEditor id="muthowif-new-bio" title="Bio muthowif" value={form.bio} onChange={bio => setForm(p => ({ ...p, bio }))} placeholder="Latar belakang, pengalaman membimbing, bahasa…" /></div>
             <div><p className="text-xs text-admin-muted mb-1">Kapasitas/hari</p><input type="number" className="admin-inp" value={form.dailyCapacity} onChange={set('dailyCapacity')} /></div>
           </div>
           <div className="flex gap-2">

@@ -7,6 +7,7 @@ import { UserRound, Star, Globe, Users, ArrowLeft } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -47,7 +48,7 @@ export default async function MuthowifDetailPage({ params }: Props) {
           </div>
         </div>
 
-        <p className="text-muted-foreground leading-relaxed">{guide.bio}</p>
+        <RichTextView value={guide.bio} className="text-base text-muted-foreground" />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="rounded-lg bg-muted/50 p-4 space-y-1">

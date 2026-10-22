@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah, formatDistance } from '@/lib/utils'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -134,7 +135,7 @@ export default async function HotelDetailPage({ params }: Props) {
       {hotel.description && (
         <div className="rounded-xl border p-5">
           <h2 className="font-semibold mb-2">Tentang Hotel</h2>
-          <p className="text-sm text-muted-foreground leading-relaxed">{hotel.description}</p>
+          <RichTextView value={hotel.description} className="text-muted-foreground" />
         </div>
       )}
 

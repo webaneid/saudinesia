@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { emptyToNull, richTextField, sanitizeRichText, RichTextError } from '../lib/validators/richText'
 import { hasContent, plainText, toEditorContent } from '../lib/rich-text/doc'
 import { RichTextView } from '../components/shared/rich-text/RichTextView'
+import { hajiProductCreateSchema, hajiProductUpdateSchema } from '../lib/validators/adminUpdates'
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -152,6 +153,24 @@ await t('RichTextView: teks berbahaya di-escape (tidak ada jalur HTML mentah), t
   assert.match(render('<b>x</b>'), /&lt;b&gt;x&lt;\/b&gt;/)
   assert.equal(render(null), '')
   assert.equal(render('   '), '')
+})
+
+await t('skema Haji: payload form admin lolos; kunci liar, tipe salah, dan teks kaya berbahaya ditolak; deskripsi panjang sah', () => {
+  const formPayload = {
+    name: 'Haji Furoda 2027', hajiType: 'furoda', year: 2027, departureDate: null, returnDate: '2027-07-10', durationDays: 40,
+    price: 150000000, totalQuota: 50, description: doc(p(text('Program lengkap'))), includes: ['Visa Haji', 'Akomodasi Makkah'],
+  }
+  assert.equal(hajiProductCreateSchema.safeParse(formPayload).success, true)
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, description: '' }).success, true) // editor dikosongkan
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, bookedQuota: 99 }).success, false) // kuota milik mesin booking
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, price: 'mahal' }).success, false)
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, year: NaN }).success, false)
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, description: doc(p(text('x', ['link']))) }).success, false)
+  const long = doc(...Array.from({ length: 400 }, (_, i) => p(text(`Paragraf nomor ${i} dengan isi yang cukup panjang untuk menambah ukuran dokumen JSON.`))))
+  assert.ok(long.length > 5000) // batas lama (5000) akan menolak ini
+  assert.equal(hajiProductUpdateSchema.safeParse({ description: long }).success, true)
+  assert.equal(hajiProductUpdateSchema.safeParse({ description: null }).success, true)
+  assert.equal(hajiProductUpdateSchema.safeParse({ description: doc({ type: 'image' }) }).success, false)
 })
 
 await t('penjaga dependensi: bun.lock tanpa salinan ProseMirror/Tiptap bersarang (dua versi prosemirror-model = editor error saat Enter/daftar)', async () => {

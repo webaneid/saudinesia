@@ -3,12 +3,13 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 // Harga TIDAK ada di sini secara sengaja — sekarang milik MuthowifServicePrice, satu layanan
 // flat, bukan per-orang (docs/arsitektur-muthowif.md §9).
 const createSchema = z.object({
   name:          z.string().min(1),
-  bio:           z.string().optional(),
+  bio:           richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   languages:     z.array(z.string()).default([]),
   dailyCapacity: z.coerce.number().int().positive().default(50),
   isActive:      z.boolean().default(true),
@@ -32,7 +33,7 @@ export async function POST(req: Request) {
     await requireManager()
     const parsed = createSchema.safeParse(await req.json())
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const m = await prisma.muthowif.create({ data: parsed.data })
+    const m = await prisma.muthowif.create({ data: { ...parsed.data, bio: emptyToNull(parsed.data.bio) } })
     return NextResponse.json(ok(m), { status: 201 })
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
