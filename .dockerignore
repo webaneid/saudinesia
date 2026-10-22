@@ -18,6 +18,12 @@ infra/
 scripts/*
 !scripts/create-superadmin.ts
 
+# Seed pengembangan: menghapus data katalog & membuat akun demo ber-password default (SEC-27). Tidak ada gunanya di image mana pun —
+# image `migrate` membawa DATABASE_URL produksi, jadi `prisma db seed` dari sana akan mengenai DB produksi. Penjaga di dalam seed
+# (prisma/seedGuard.ts) tetap ada; ini lapisan kedua.
+prisma/seed.ts
+prisma/seedGuard.ts
+
 # Git & CI
 .git/
 .github/

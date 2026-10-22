@@ -32,7 +32,7 @@ Port aplikasi bisa diganti: `EVAL_APP_PORT=6270 bun run dev:eval`. Data yang dib
 | `ops@saudinesia.local` | admin | `Admin@1234` |
 
 Masuk di http://localhost:6260/id/admin/login. Staf **hanya** password (Google ditolak untuk staf). Superadmin baru: `bun scripts/create-superadmin.ts --email … --name "…" --password-stdin`.
-Jangan menjalankan `bun run db:seed` hanya untuk evaluasi — ia menghapus data katalog/harga.
+Jangan menjalankan `bun run db:seed` hanya untuk evaluasi — ia menghapus data katalog/harga. Sejak SEC-27 seed menolak sendiri bila database berisi jamaah, booking, atau akun non-demo (mis. setelah Anda mendaftar lewat `dev:eval`); `SEED_FORCE=1 bun run db:seed` hanya untuk database buangan.
 
 ## Daftar periksa evaluasi
 

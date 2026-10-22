@@ -4,7 +4,7 @@
 // PENGAMAN: menulis user/token sementara → menolak jalan kecuali nama database memuat "test", "_ci" atau "tmp".
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { compare } from 'bcryptjs'
+import { compare, hash } from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { completeRegistration, previewRegistration, requestPasswordReset, requestRegistration, resetPassword } from '@/lib/auth/accounts'
 import { hashToken, issueToken, peekToken } from '@/lib/auth/tokens'
@@ -415,6 +415,71 @@ await t('DEV: email gagal/ditolak (kunci placeholder) → tautan tetap dicetak k
     for (const prod of ['production', 'test', 'staging', '']) assert.ok(!(await run(prod, 401)).includes('?token='), `NODE_ENV="${prod}" tak boleh mencetak tautan`)
   } finally { console.log = origLog; console.error = origErr; env.NODE_ENV = 'test' }
 })
+
+console.log('== batas login per akun (SEC-26) ==')
+
+// Hermetik (S26-T08): Bun memuat .env.local (REDIS_URL dev) otomatis — tanpa ini tes memakai Redis dev sungguhan, tidak membersihkannya,
+// dan gagal pada eksekusi ketiga dalam 15 menit. Di sini batas SELALU memakai memori proses.
+delete env.REDIS_URL
+
+// Memanggil handler login langsung: jalur gagal (401/429) tidak menyentuh cookies(); jalur sukses melempar di createSession (di luar
+// request) → 500, TAPI itu terjadi SETELAH reset hitungan — cukup untuk membuktikan perilaku batas.
+const { POST: loginPost } = await import('@/app/api/v1/auth/login/route')
+const { peek: peekLimit, policy: limitPolicy, __resetForTests: resetLimits } = await import('@/lib/auth/rateLimit')
+const loginReq = (email: string, password: string, ip: string) =>
+  new Request('http://localhost/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip }, body: JSON.stringify({ email, password }) })
+
+await t('SEC-26: burst PARALEL dari satu IP — hanya `limit` (5) percobaan pertama yang mencapai bcrypt; sisanya 429 (dulu semuanya lolos peek)', async () => {
+  resetLimits()
+  const email = `${tag}-burst@example.test`
+  await prisma.user.create({ data: { email, passwordHash: await hash('Sandi-Asli-123!', 12), fullName: 'Burst', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+  const codes = await Promise.all(Array.from({ length: 12 }, () => loginPost(loginReq(email, 'salah-semua', '203.0.113.50')).then((r) => r.status)))
+  assert.equal(codes.filter((c) => c === 401).length, 5, `401 harus tepat 5 (limit akun+IP): ${codes.join(',')}`)
+  assert.equal(codes.filter((c) => c === 429).length, 7, `sisanya 429: ${codes.join(',')}`)
+})
+
+await t('S26-T01: satu IP yang melewati batasnya TIDAK menaikkan batas akun-saja — 20 percobaan paralel dari 1 IP → loginAcct tepat 5 (dulu 20; satu IP cukup menggembok akun)', async () => {
+  resetLimits()
+  const email = `${tag}-grief@example.test`
+  const ip = '203.0.113.99'
+  const codes = await Promise.all(Array.from({ length: 20 }, () => loginPost(loginReq(email, 'salah', ip)).then((r) => r.status)))
+  assert.equal(codes.filter((c) => c === 401).length, 5, codes.join(','))
+  assert.equal(codes.filter((c) => c === 429).length, 15, codes.join(','))
+  assert.equal((await peekLimit(limitPolicy('loginAcct', email))).count, 5, 'hanya yang lolos lapis akun+IP boleh menaikkan lapis akun-saja')
+  // kontrol: pengguna sah dari IP LAIN tidak terkunci oleh banjir satu IP itu
+  assert.equal((await peekLimit(limitPolicy('loginAcct', email))).allowed, true)
+  assert.notEqual((await loginPost(loginReq(email, 'salah', '203.0.113.100'))).status, 429, 'IP lain tetap dilayani')
+})
+
+await t('SEC-26: burst TERDISTRIBUSI (IP berbeda-beda, akun sama) — batas per akun (30/jam) tetap ditegakkan', async () => {
+  resetLimits()
+  const email = `${tag}-dist@example.test`
+  const codes = await Promise.all(Array.from({ length: 36 }, (_, i) => loginPost(loginReq(email, 'salah', `198.51.100.${i + 1}`)).then((r) => r.status)))
+  // akun tak ada → tetap dihitung (anti-enumerasi); tiap IP hanya 1 percobaan sehingga yang membatasi adalah lapis akun-saja
+  assert.equal(codes.filter((c) => c === 401).length, 30, codes.join(','))
+  assert.equal(codes.filter((c) => c === 429).length, 6, codes.join(','))
+})
+
+await t('SEC-26: password BENAR menghapus hitungan (tidak terbawa) — bahkan bila status akun menolak; kontrol: yang salah tetap terhitung', async () => {
+  resetLimits()
+  const email = `${tag}-reset@example.test`
+  await prisma.user.create({ data: { email, passwordHash: await hash('Sandi-Asli-123!', 4), fullName: 'Reset', role: 'pilgrim', isActive: false, emailVerifiedAt: new Date() } })
+  const ip = '203.0.113.77'
+  const ap = limitPolicy('loginAcctIp', `${email}|${ip}`), aa = limitPolicy('loginAcct', email)
+  for (let i = 0; i < 3; i++) assert.equal((await loginPost(loginReq(email, 'salah', ip))).status, 401)
+  assert.equal((await peekLimit(ap)).count, 3, 'kontrol: gagal terhitung')
+  const ok = await loginPost(loginReq(email, 'Sandi-Asli-123!', ip))
+  assert.equal(ok.status, 403, 'akun nonaktif + password benar → 403 (status diungkap setelah password terbukti)')
+  assert.equal((await peekLimit(ap)).count, 0, 'hitungan akun+IP harus kembali 0'); assert.equal((await peekLimit(aa)).count, 0, 'hitungan akun harus kembali 0')
+})
+
+await t('SEC-26: penjaga sumber — login mereservasi (consume) sebelum bcrypt dan tidak memakai peek', async () => {
+  const src = readFileSync('app/api/v1/auth/login/route.ts', 'utf8').replace(/\/\/[^\n]*/g, '')
+  assert.doesNotMatch(src, /\bpeek\(/)
+  assert.doesNotMatch(src, /Promise\.all\(\[[^\]]*consume\(/, 'consume lapis akun+IP dan akun-saja harus BERURUTAN (S26-T01), bukan paralel')
+  assert.ok(src.indexOf('consume(acctAny)') > 0 && src.indexOf('consume(acctAny)') < src.indexOf('compare(password, user.passwordHash)'), 'consume harus sebelum compare')
+})
+resetLimits()
 
 await mail.stop()
 await prisma.authToken.deleteMany({ where: { OR: [{ email: { startsWith: tag } }, { user: { email: { startsWith: tag } } }] } })

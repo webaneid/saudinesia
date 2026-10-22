@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client'
 import { hash } from 'bcryptjs'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '../lib/manifest/constants'
+import { isLoopbackDb, seedDataProblem, seedEnvProblem, seedTarget } from './seedGuard'
 
 const prisma = new PrismaClient()
 
@@ -14,6 +15,14 @@ function addDays(date: Date, days: number) {
 
 // ─── Main ─────────────────────────────────────────────────────
 async function main() {
+  // PENJAGA (SEC-27) — sebelum menyentuh apa pun. Lihat prisma/seedGuard.ts.
+  const envProblem = seedEnvProblem({ nodeEnv: process.env.NODE_ENV, databaseUrl: process.env.DATABASE_URL, allowHost: process.env.SEED_ALLOW_HOST, superadminPassword: process.env.SUPERADMIN_PASSWORD })
+  if (envProblem) { console.error(`❌ Seed DITOLAK: ${envProblem}`); process.exit(2) }
+  console.log(`🎯 Sasaran seed: ${seedTarget(process.env.DATABASE_URL)}`)
+  const dataProblem = await seedDataProblem(prisma, process.env.SEED_FORCE === '1')
+  if (dataProblem) { console.error(`❌ Seed DITOLAK: ${dataProblem}`); process.exit(2) }
+  const loopback = isLoopbackDb(process.env.DATABASE_URL)
+
   console.log('🌱 Seeding Saudinesia...\n')
 
   // ── 1. Superadmin ────────────────────────────────────────────
@@ -24,27 +33,33 @@ async function main() {
   await prisma.user.upsert({
     where: { email },
     create: { email, passwordHash, fullName: process.env.SUPERADMIN_NAME ?? 'Super Admin', role: 'superadmin', isActive: true, emailVerifiedAt: new Date() },
-    update: { passwordHash, role: 'superadmin', isActive: true, emailVerifiedAt: new Date() },
+    // Mengembalikan akun demo ke kredensial dev yang terdokumentasi — sesi lama dicabut (aturan SEC-18: penulis passwordHash menaikkan versi).
+    update: { passwordHash, role: 'superadmin', isActive: true, emailVerifiedAt: new Date(), sessionVersion: { increment: 1 } },
   })
   console.log('✓ Superadmin:', email)
 
   // ── 1b. Contoh akun manager & admin ──────────────────────────
-  // (hanya dibuat jika belum ada — untuk keperluan demo role-based access)
-  const managerEmail = 'manager@saudinesia.local'
-  const adminEmail   = 'ops@saudinesia.local'
-  const demoHash     = await hash('Admin@1234', 12)
+  // (hanya dibuat jika belum ada — untuk keperluan demo role-based access). HANYA di database loopback: password default publik
+  // ("Admin@1234", tertulis di repo) tidak boleh dipasang di database yang bisa dijangkau jaringan (S26-T06).
+  if (loopback) {
+    const managerEmail = 'manager@saudinesia.local'
+    const adminEmail   = 'ops@saudinesia.local'
+    const demoHash     = await hash('Admin@1234', 12)
 
-  await prisma.user.upsert({
-    where: { email: managerEmail },
-    create: { email: managerEmail, passwordHash: demoHash, fullName: 'Manajer Produk', role: 'manager', isActive: true, emailVerifiedAt: new Date() },
-    update: {},
-  })
-  await prisma.user.upsert({
-    where: { email: adminEmail },
-    create: { email: adminEmail, passwordHash: demoHash, fullName: 'Staff Operasional', role: 'admin', isActive: true, emailVerifiedAt: new Date() },
-    update: {},
-  })
-  console.log('✓ Demo users: manager@saudinesia.local, ops@saudinesia.local (password: Admin@1234)')
+    await prisma.user.upsert({
+      where: { email: managerEmail },
+      create: { email: managerEmail, passwordHash: demoHash, fullName: 'Manajer Produk', role: 'manager', isActive: true, emailVerifiedAt: new Date() },
+      update: {},
+    })
+    await prisma.user.upsert({
+      where: { email: adminEmail },
+      create: { email: adminEmail, passwordHash: demoHash, fullName: 'Staff Operasional', role: 'admin', isActive: true, emailVerifiedAt: new Date() },
+      update: {},
+    })
+    console.log('✓ Demo users: manager@saudinesia.local, ops@saudinesia.local (password: Admin@1234)')
+  } else {
+    console.log('↷ Akun demo manager/ops dilewati (database non-loopback)')
+  }
 
   // ── 2. Seasons ───────────────────────────────────────────────
   await prisma.season.deleteMany()
