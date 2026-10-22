@@ -2465,3 +2465,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `lib/admin/errors.ts` (BARU), 17 route di `app/api/v1/admin/products/**` dan `system/settings/vendors/[id]`, `products/seasons/[id]/route.ts`, `docs/lessons-learned.md` (SEC-61), `docs/progress.md`
 
+## 2026-10-23 — Editor teks kaya dipasang di Hotel, Muthowif (`bio`), dan Haji
+
+**Decision:** Komponen editor universal dipasang di `Hotel.description`, `Muthowif.bio`, dan `HajiProduct.description` dengan pola yang sama seperti Visa: kolom `String` tetap, JSON dokumen di dalamnya, validasi server `richTextField()` + `emptyToNull()`, tampilan `RichTextView`. Di tempat yang tampil sebagai kartu ber-`line-clamp` (beranda dan daftar Muthowif) dipakai `plainText()`, bukan `RichTextView`. Haji mendapat `hajiProductCreateSchema` (`.strict()`) karena POST-nya tak punya validasi sama sekali. API katalog publik **tidak diubah**: tetap mengembalikan kolomnya apa adanya (teks polos atau string JSON).
+
+**Rationale:** Deskripsi produk punya potensi panjang; satu komponen yang sudah teruji (Visa) lebih murah dan aman daripada editor per modul. Tanpa validasi server, deskripsi Haji tak bisa dipercaya (batas lama `maks 5000` karakter juga akan menolak JSON dokumen yang sah). Ringkasan teks polos di kartu mencegah JSON bocor ke tampilan.
+
+**Alternatives considered:** Menambah field turunan `descriptionText` di API katalog sekarang (ditolak: tak ada konsumen dalam aplikasi, ditunda sampai ada yang butuh). Menampilkan deskripsi Haji di halaman publik dan membangun halaman edit Haji (ditolak: keputusan produk di luar permintaan; dicatat sebagai batasan). Mengubah `HotelService.description` (ditolak: teks pendek satu baris).
+
+**Security check:** 0 Critical/High. Perbaikan menumpang di Haji (POST tanpa Zod, `catch → 403` pada GET/DELETE) masuk SEC-61. `bun audit` tidak berubah (tak ada dependensi baru). Uji penolakan API: tautan di 6 jalur (Hotel/Muthowif/Haji × POST/PUT), kunci liar, tipe salah, body null → 400.
+
+**Verifikasi:** typecheck, `bun run build` 0 error (salinan terpisah), `scripts/test-rich-text.ts` 17 tes, browser (teks lama termuat → ditambah daftar/judul → JSON bersih di DB → detail publik benar; beranda/daftar Muthowif tanpa JSON; produk Haji dibuat lewat UI). Data uji dipulihkan/dihapus.
+
+**Affects:** `app/api/v1/admin/products/{hotels,muthowif,haji}/**` (route POST/PUT; Haji GET/DELETE), `lib/validators/adminUpdates.ts`, form admin Hotel/Muthowif/Haji, halaman publik `hotels/[id]`, `muthowif` (daftar, detail), beranda, `app/globals.css` (judul teks kaya), `scripts/test-rich-text.ts`, `docs/arsitektur-editor-teks.md` (§6, §8), `docs/arsitektur-hotel.md`, `docs/arsitektur-muthowif.md`, `docs/lessons-learned.md`, `docs/progress.md`
+

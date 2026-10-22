@@ -65,8 +65,7 @@ Sisi API: `description: richTextField().nullish()` lalu `'' → null` (`emptyToN
 
 ## 6. Kandidat pemakaian berikutnya (belum dikerjakan)
 
-`description` di Hotel, Muthowif, Haji, Paket Umroh, Paket Ziarah, Situs Wisata, Katering — tiap kolom cukup mengganti
-`<textarea>` + validator + titik tampil. Tabel bisa ditambah di `schema.ts` + toolbar bila ada modul yang butuh.
+`description` di Paket Umroh, Paket Ziarah, Situs Wisata, Katering (dan `HotelService.description`/instruksi dokumen bila ingin) — tiap kolom cukup mengganti `<textarea>` + validator + titik tampil. Sudah dipasang: Visa (Fase 2), Hotel, Muthowif (kolom `bio`), Haji (Fase 3, §8). Tabel bisa ditambah di `schema.ts` + toolbar bila ada modul yang butuh.
 
 ## 7. Hasil eksekusi (2026-10-23)
 
@@ -79,3 +78,23 @@ Sisi API: `description: richTextField().nullish()` lalu `'' → null` (`emptyToN
 2. Layar penuh memakai `!m-0`: induk `space-y-*` memberi `margin-top` pada anak sehingga `fixed inset-0` bergeser 12 px. Portal ke `document.body` tidak dipakai (menjaga satu pohon DOM dan token tema admin); konsekuensinya komponen tidak boleh berada di dalam leluhur ber-`transform`/`filter`.
 3. Tabel tidak ditambahkan (lebih ringan, sesuai permintaan "minimalis").
 4. Form buat produk di halaman daftar Visa tetap `<textarea>` teks polos (sah; berubah jadi editor saat halaman edit dibuka) — di luar permintaan.
+
+## 8. Fase 3 — Hotel, Muthowif, Haji (2026-10-23)
+
+| Modul | Kolom | Admin (editor) | Tampil |
+|---|---|---|---|
+| Hotel | `Hotel.description` | `hotels/[id]` dan form buat di `hotels/page.tsx` | detail publik `RichTextView` |
+| Muthowif | `Muthowif.bio` (tidak ada kolom `description`) | `muthowif/[id]` dan form buat di `muthowif/page.tsx` | detail publik `RichTextView`; **beranda dan daftar memakai `plainText(bio)`** (kartu ber-`line-clamp`, JSON tidak boleh bocor) |
+| Haji | `HajiProduct.description` | form buat di `haji/page.tsx` | **tidak ditampilkan di mana pun** (halaman publik Haji memang belum menampilkan deskripsi) |
+
+Server: `richTextField().nullish()` + `emptyToNull()` di POST/PUT Hotel dan Muthowif; Haji memakai `hajiProductCreateSchema` baru (`.strict()`, di `lib/validators/adminUpdates.ts`) dan skema ubah yang batas `string maks 5000`-nya diganti `richTextField()` (JSON dokumen jauh lebih panjang dari teksnya; batas lama akan menolak deskripsi panjang yang sah).
+
+**Perbaikan yang menumpang di Haji:** `POST /admin/products/haji` dulu membaca body mentah tanpa Zod (`+b.year` → NaN, tipe liar langsung ke Prisma) dan `catch → 403` untuk semua galat; kini tervalidasi dan galat dibedakan. `GET` daftar dan `DELETE` Haji ikut dibenahi dari `catch → 403` (id tak dikenal → 404).
+
+**Batasan yang diketahui:**
+1. Kontrak API katalog publik (`/api/v1/catalog/hotels|muthowif|visa`) mengembalikan kolom itu **apa adanya**: data lama = teks polos, data yang diedit lewat editor = string JSON dokumen. Tak ada konsumen di dalam aplikasi (diperiksa); konsumen luar harus memakai `RichTextView`/`plainText()`. Bila konsumen luar muncul, tambahkan field turunan teks polos (mis. `descriptionText`) alih-alih mengubah kolomnya.
+2. Admin Haji hanya punya form **buat** dan tombol aktif/nonaktif — belum ada halaman edit, jadi deskripsi Haji yang sudah ada hanya bisa diubah lewat `PUT /admin/products/haji/[id]`.
+3. Halaman publik Haji belum menampilkan deskripsi; menampilkannya (ringkasan `plainText` pada kartu) adalah keputusan produk tersendiri.
+4. Teks polos lama (semua data sekarang) dibuka di editor sebagai paragraf per baris dan baru berubah menjadi JSON saat disimpan.
+
+**Verifikasi (browser dev):** teks lama termuat di editor Hotel dan Muthowif, ditambah daftar/judul lalu disimpan → JSON bersih di DB → tampil benar di detail publik; beranda dan daftar Muthowif menampilkan ringkasan teks polos tanpa JSON; produk Haji dibuat lewat UI dengan deskripsi H3 + paragraf. API menolak (400) tautan di keenam jalur (Hotel/Muthowif/Haji × POST/PUT), kunci liar (`bookedQuota`), tipe salah, dan body null di Haji POST. `scripts/test-rich-text.ts` kini 17 tes (+skema Haji). Data uji dibersihkan/dipulihkan.
