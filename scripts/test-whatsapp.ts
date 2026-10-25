@@ -5,7 +5,7 @@ import { createHmac } from 'node:crypto'
 import { prisma } from '@/lib/db'
 import {
   VERIFICATION_TTL_MS, completeWhatsappVerification, generateCode, jidToDigits, normalizeCode, parseVerificationMessage,
-  requestWhatsappVerification, verifyWebhookSignature,
+  parseCancelMessage, releaseWhatsappVerification, requestWhatsappVerification, verifyWebhookSignature,
 } from '@/lib/auth/whatsappVerify'
 import { updateContact } from '@/lib/auth/contact'
 import { processWebhook, maskEmail, webhookSecret, WEBHOOK_MAX_BODY_BYTES } from '@/lib/whatsapp/webhook'
@@ -306,6 +306,86 @@ await t('route admin: menonaktifkan akun MELEPAS nomor terverifikasi (penjaga ta
   assert.ok(hookSrc.includes('processWebhook(') && hookSrc.includes('webhookSecret()') && hookSrc.includes('readLimited('))
   const post = hookSrc.slice(hookSrc.indexOf('export async function POST'))
   assert.ok(post.indexOf('webhookSecret()') > 0 && post.indexOf('webhookSecret()') < post.indexOf('readLimited(request'), 'secret dicek SEBELUM membaca body')
+})
+
+console.log('== pelepasan verifikasi (SEC-43) ==')
+
+await t('parseCancelMessage: hanya "BATAL" / "BATAL VERIF(IKASI)"; kalimat lain, kata mirip, terlalu panjang, bukan string → false', () => {
+  for (const good of ['BATAL', 'batal', '  Batal  ', 'BATAL VERIF', 'batal verifikasi']) assert.equal(parseCancelMessage(good), true, good)
+  for (const bad of ['batalkan', 'BATAL SEMUA', 'tolong BATAL', 'BATAL VERIF K7Q2M9XD', 'x'.repeat(100), '', null, undefined, 5]) assert.equal(parseCancelMessage(bad), false, String(bad))
+})
+
+await t('releaseWhatsappVerification: melepas verifikasi (nomor kontak tetap, kode menunggu dihanguskan), lewat nomor ATAU userId; kedua kali/tak terverifikasi → released=false; akun lain tak tersentuh', async () => {
+  const number = num(60), otherNumber = num(61); const a = await mk(number); const bystander = await mk(otherNumber)
+  await completeWhatsappVerification({ code: await request(a.id), senderDigits: number })
+  await completeWhatsappVerification({ code: await request(bystander.id), senderDigits: otherNumber })
+  // kode menunggu yang masih hidup (mis. diterbitkan sebelum akun terverifikasi) — harus ikut hangus; dibuat langsung karena request() menolak akun terverifikasi
+  await prisma.authToken.create({ data: { type: 'whatsapp_verification', tokenHash: `uji-${number}`, userId: a.id, payload: { whatsapp: number }, expiresAt: new Date(Date.now() + 60_000) } })
+  assert.equal(await prisma.authToken.count({ where: { userId: a.id, type: 'whatsapp_verification', usedAt: null } }), 1)
+  const r = await releaseWhatsappVerification({ digits: number })
+  assert.deepEqual(r, { released: true, userId: a.id, email: a.email })
+  const after = await prisma.user.findUniqueOrThrow({ where: { id: a.id } })
+  assert.equal(after.whatsappVerifiedAt, null); assert.equal(after.verifiedWhatsapp, null); assert.equal(after.whatsapp, number, 'nomor kontak tetap')
+  assert.equal(await prisma.authToken.count({ where: { userId: a.id, type: 'whatsapp_verification', usedAt: null } }), 0)
+  assert.deepEqual(await releaseWhatsappVerification({ digits: number }), { released: false })
+  assert.ok((await prisma.user.findUniqueOrThrow({ where: { id: bystander.id } })).verifiedWhatsapp, 'akun lain tak boleh tersentuh')
+  // lewat userId (jalur admin) + akun yang tak terverifikasi / tak ada
+  assert.deepEqual(await releaseWhatsappVerification({ userId: a.id }), { released: false })
+  assert.equal((await releaseWhatsappVerification({ userId: bystander.id })).released, true)
+  assert.deepEqual(await releaseWhatsappVerification({ userId: '00000000-0000-0000-0000-000000000000' }), { released: false })
+})
+
+await t('setelah dilepas, nomor yang tadinya "taken" bisa dibuktikan akun baru (inti kasus nomor daur ulang)', async () => {
+  const number = num(62); const oldOwner = await mk(number); const newOwner = await mk(number)
+  await completeWhatsappVerification({ code: await request(oldOwner.id), senderDigits: number })
+  const codeNew = await request(newOwner.id)
+  assert.deepEqual(await completeWhatsappVerification({ code: codeNew, senderDigits: number }), { ok: false, reason: 'taken' })
+  await releaseWhatsappVerification({ digits: number })
+  assert.deepEqual(pickOk(await completeWhatsappVerification({ code: await request(newOwner.id), senderDigits: number })), { ok: true, userId: newOwner.id })
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: oldOwner.id } })).verifiedWhatsapp, null)
+})
+
+await t('webhook BATAL: pemegang nomor melepas; dibalas HANYA saat ada yang dilepas (email tersamar, ke pengirim); tanpa verifikasi / grup / chat≠pengirim / is_from_me → diam; pesan "taken" menyebut BATAL', async () => {
+  const number = num(63); const u = await mk(number)
+  await completeWhatsappVerification({ code: await request(u.id), senderDigits: number })
+  const cancel = (digits: string, extra: Record<string, unknown> = {}) => msg({ chat_id: jid(digits), from: jid(digits), body: 'BATAL', ...extra })
+  for (const [name, body] of [
+    ['grup', msg({ chat_id: '12036@g.us', from: jid(number), body: 'BATAL' })],
+    ['chat ≠ pengirim', cancel(number, { chat_id: jid(num(64)) })],
+    ['is_from_me', cancel(number, { is_from_me: true })],
+    ['pesan lain', cancel(number, { body: 'BATAL SEMUA' })],
+    ['nomor lain yang tak terverifikasi', cancel(num(65))],
+  ] as const) {
+    const r = await hook(body)
+    assert.deepEqual({ status: r.status, handled: r.handled, reply: r.reply }, { status: 200, handled: false, reply: undefined }, name)
+  }
+  assert.ok((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).verifiedWhatsapp, 'tak satu pun di atas boleh melepas')
+  const ok = await hook(cancel(number))
+  assert.equal(ok.handled, true); assert.equal(ok.reply?.phone, number)
+  assert.ok(ok.reply?.message.includes(maskEmail(u.email)) && !ok.reply?.message.includes(u.email))
+  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).verifiedWhatsapp, null)
+  const again = await hook(cancel(number)); assert.deepEqual({ handled: again.handled, reply: again.reply }, { handled: false, reply: undefined })
+  const shared = num(66); const a = await mk(shared); const b = await mk(shared)
+  await completeWhatsappVerification({ code: await request(a.id), senderDigits: shared })
+  const taken = await hook(verifMsg(shared, await request(b.id)))
+  assert.match(taken.reply?.message ?? '', /BATAL/)
+})
+
+await t('webhook BATAL dibatasi per pengirim: setelah 5 pesan/jam berikutnya diabaikan (verifikasi tak terlepas walau sah)', async () => {
+  const number = num(67); const u = await mk(number)
+  const cancel = msg({ chat_id: jid(number), from: jid(number), body: 'BATAL' })
+  for (let i = 0; i < 5; i++) await hook(cancel) // tak ada yang terverifikasi → tak ada efek, tapi tetap terhitung
+  await completeWhatsappVerification({ code: await request(u.id), senderDigits: number })
+  const blocked = await hook(cancel)
+  assert.deepEqual({ handled: blocked.handled, reply: blocked.reply }, { handled: false, reply: undefined })
+  assert.ok((await prisma.user.findUniqueOrThrow({ where: { id: u.id } })).verifiedWhatsapp)
+})
+
+await t('route admin lepas WhatsApp: superadmin, tanpa body, log audit tanpa PII; daftar pengguna menyertakan whatsappVerifiedAt', () => {
+  const route = readFileSync(new URL('../app/api/v1/admin/system/users/[id]/whatsapp/route.ts', import.meta.url), 'utf8')
+  assert.match(route, /requireSuperAdmin\(\)/); assert.match(route, /releaseWhatsappVerification\(\{ userId: id \}\)/)
+  assert.doesNotMatch(route, /\.json\(\)/); assert.doesNotMatch(route, /console\.info\([^)]*\$\{[^}]*(email|whatsapp)/i, 'log audit tak boleh menyisipkan email/nomor')
+  assert.match(readFileSync(new URL('../app/api/v1/admin/system/users/route.ts', import.meta.url), 'utf8'), /whatsappVerifiedAt: true/)
 })
 
 await t('businessWaDigits: nomor bisnis 8–15 digit; placeholder (628xxxxxxxxxx → "628"), kosong, berawalan 0, kepanjangan → "" (tak dianggap terisi)', () => {

@@ -33,6 +33,11 @@ export function parseVerificationMessage(body: unknown): string | null {
   return m?.[1] ? normalizeCode(m[1]) : null
 }
 
+/** Pesan pelepasan: PERSIS `BATAL` (atau `BATAL VERIF`/`BATAL VERIFIKASI`) — pemilik nomor saat ini mencabut verifikasi nomornya di akun mana pun (SEC-43). */
+export function parseCancelMessage(body: unknown): boolean {
+  return typeof body === 'string' && body.length <= 64 && /^\s*BATAL(?:\s+VERIF(?:IKASI)?)?\s*$/i.test(body)
+}
+
 /** JID pribadi `628…@s.whatsapp.net` (boleh bersufiks perangkat `:12`) → digit. LID/grup/lainnya → null (tak bisa dipetakan ke nomor). */
 export function jidToDigits(jid: unknown): string | null {
   if (typeof jid !== 'string') return null
@@ -126,3 +131,34 @@ export async function completeWhatsappVerification(input: { code: string; sender
 
 /** Nomor akun berganti persis di antara pembacaan dan penulisan: transaksi di-rollback (kode tidak terbakar). */
 class RaceLost extends Error {}
+
+// ───────────── pelepasan (SEC-43) ─────────────
+
+export type ReleaseResult = { released: false } | { released: true; userId: string; email: string }
+
+/**
+ * Lepas verifikasi nomor WhatsApp: `whatsappVerifiedAt`/`verifiedWhatsapp` dikosongkan dan kode verifikasi yang menunggu dihanguskan. Nomor
+ * kontak (`whatsapp`) TIDAK dihapus — akun hanya berhenti menerima WhatsApp sampai nomor itu dibuktikan lagi. Notifikasi tetap lewat email.
+ *
+ * Dua pemanggil sah, keduanya membuktikan hak:
+ *  - `{ digits }` — pengirim pesan `BATAL` (JID diautentikasi WhatsApp) = pemegang nomor SAAT INI. Menolong pemilik nomor daur ulang yang
+ *    nomornya masih "terverifikasi" di akun pemilik lama (tanpa ini nomornya terkunci untuk akun baru: `taken`).
+ *  - `{ userId }` — superadmin lewat panel (nomor disalahgunakan / permintaan bantuan).
+ * Penulisan bersyarat pada nomor yang dibaca: dua pelepasan/verifikasi bersamaan tidak saling menimpa.
+ */
+export async function releaseWhatsappVerification(target: { userId: string } | { digits: string }): Promise<ReleaseResult> {
+  return prisma.$transaction(async (tx) => {
+    const user = await tx.user.findFirst({
+      where: 'userId' in target ? { id: target.userId } : { verifiedWhatsapp: target.digits },
+      select: { id: true, email: true, verifiedWhatsapp: true },
+    })
+    if (!user?.verifiedWhatsapp) return { released: false as const }
+    const cleared = await tx.user.updateMany({
+      where: { id: user.id, verifiedWhatsapp: user.verifiedWhatsapp },
+      data: { whatsappVerifiedAt: null, verifiedWhatsapp: null },
+    })
+    if (cleared.count !== 1) return { released: false as const }
+    await tx.authToken.deleteMany({ where: { userId: user.id, type: 'whatsapp_verification', usedAt: null } })
+    return { released: true as const, userId: user.id, email: user.email }
+  })
+}

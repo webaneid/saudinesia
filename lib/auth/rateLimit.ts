@@ -27,6 +27,7 @@ export const LIMITS = {
   whatsappVerifyUser: { limit: 5,  windowSec: 3600 },  // permintaan kode verifikasi WhatsApp per akun
   webhookIp:          { limit: 3000, windowSec: 600 }, // webhook WhatsApp (sudah bertanda tangan) per IP sumber — pagar kasar; SEMUA pesan masuk ke nomor bisnis terhitung
   webhookBadSigIp:    { limit: 30, windowSec: 600 },   // tanda tangan SALAH per IP — GOWA sah tak pernah salah; menahan tebakan secret online
+  webhookCancelSender: { limit: 5, windowSec: 3600 },  // pesan BATAL (lepas verifikasi) per nomor PENGIRIM — pelepasan terlalu sering = penyalahgunaan
   webhookSender:      { limit: 10, windowSec: 3600 },  // pesan verifikasi per nomor PENGIRIM — membatasi tebakan kode per nomor
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
 } as const satisfies Record<string, { limit: number; windowSec: number }>

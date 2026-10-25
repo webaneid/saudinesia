@@ -18,7 +18,7 @@ export async function GET(req: Request) {
         // id sebagai tie-breaker: createdAt bisa kembar, dan halaman harus stabil antar request
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         ...range,
-        select: { id: true, fullName: true, email: true, phone: true, role: true, isActive: true, createdAt: true },
+        select: { id: true, fullName: true, email: true, phone: true, role: true, isActive: true, createdAt: true, whatsappVerifiedAt: true },
       }),
     )
     return NextResponse.json(ok(items, meta))

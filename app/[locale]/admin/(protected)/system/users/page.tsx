@@ -9,7 +9,7 @@ import { useListPage } from '@/components/admin/data-table/useListPage'
 import { Badge } from '@/components/admin/ui/Badge'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 
-type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null }
+type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null; whatsappVerifiedAt: string | null }
 
 export default function UsersPage() {
   const { page, limit, setPage } = useListPage()
@@ -64,6 +64,14 @@ export default function UsersPage() {
     }
     await load()
   }
+  // SEC-43: lepas verifikasi WhatsApp (nomor daur ulang/disalahgunakan). Nomor kontak tetap; akun hanya berhenti menerima WhatsApp.
+  async function releaseWhatsapp(u: User) {
+    if (!window.confirm(`Lepas verifikasi WhatsApp akun ${u.email}? Notifikasi WhatsApp berhenti sampai nomor dibuktikan lagi (email tetap).`)) return
+    setNotice(null)
+    const r = await fetch(`/api/v1/admin/system/users/${u.id}/whatsapp`, { method: 'DELETE' })
+    if (!r.ok) setNotice('Verifikasi WhatsApp gagal dilepas.')
+    await load()
+  }
   const toggleActive = (id: string, isActive: boolean) => updateUser(id, { isActive: !isActive })
   const changeRole = (id: string, role: string) => updateUser(id, { role })
 
@@ -85,9 +93,16 @@ export default function UsersPage() {
     {
       key: 'actions', header: '', align: 'right',
       cell: u => (
-        <button onClick={() => toggleActive(u.id, u.isActive)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
-          {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-        </button>
+        <div className="flex items-center justify-end gap-3">
+          {u.whatsappVerifiedAt && (
+            <button onClick={() => releaseWhatsapp(u)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+              Lepas WhatsApp
+            </button>
+          )}
+          <button onClick={() => toggleActive(u.id, u.isActive)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+            {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+          </button>
+        </div>
       ),
     },
   ]
