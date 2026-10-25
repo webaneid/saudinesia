@@ -178,6 +178,20 @@ await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lew
   assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru di halaman produk yang belum memakai vendorQuickAddError')
 })
 
+await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa POSTGRES_PASSWORD, Redis berpassword, generator env menyamakan sandi', () => {
+  const compose = read('docker-compose.prod.yml')
+  const services = (compose.slice(compose.indexOf('\nservices:'), compose.indexOf('\nnetworks:')).match(/^  [a-z]+:\s*$/gm) ?? []).length
+  assert.ok(services >= 6, `hanya ${services} service terbaca — penjaga ini tak bermakna`)
+  assert.equal((compose.match(/<<: \*hardening/g) ?? []).length, services, 'setiap service harus memakai *hardening (no-new-privileges)')
+  assert.match(compose, /x-hardening: &hardening\n  security_opt:\n    - no-new-privileges:true/)
+  assert.match(compose, /environment:\n      POSTGRES_PASSWORD: ""/, 'web harus mengosongkan POSTGRES_PASSWORD')
+  assert.match(compose, /"--requirepass", "\$\{REDIS_PASSWORD:\?/, 'Redis wajib berpassword')
+  assert.ok(!/^\s+ports:[\s\S]*?(5432|6379|9000|9001)/m.test(compose), 'tidak ada port data store yang diekspos')
+  const gen = read('scripts/buat-env-production.sh'), example = read('.env.production.example')
+  assert.match(gen, /REDIS_PASSWORD=\$PW_REDIS/); assert.match(gen, /REDIS_URL=redis:\/\/:\$PW_REDIS@redis:6379/)
+  assert.match(example, /^REDIS_PASSWORD=$/m); assert.match(example, /^REDIS_URL=redis:\/\/:CHANGE_ME@redis:6379/m)
+})
+
 await t('SEC-47: /address — GET/PUT lewat canAccessAddress (BOLA), POST dibatasi addressCreateUser, body rusak tidak 500', () => {
   const byId = read(routes.find(f => rel(f).endsWith('v1/address/[id]/route.ts')) ?? '')
   for (const verb of ['GET', 'PUT']) {
