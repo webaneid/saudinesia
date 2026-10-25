@@ -197,3 +197,5 @@ Semua 6 fase dieksekusi berurutan, tiap fase digerbangi `bun run build` 0 error 
 - Dicatat (bukan bug): data seed hotel saat ini **hanya punya Hotel Madinah aktif** (tidak ada Hotel Makkah dengan period+roomType aktif) — dropdown Hotel Makkah kosong karena memang tidak ada data, bukan kesalahan filter kota.
 - Data test dibersihkan (`DELETE FROM packages ...`) setelah verifikasi — tabel `packages`/`package_hotel_options`/`package_visa_options`/`package_catering_options`/`product_costs (productType='package')` dikonfirmasi kembali 0 baris.
 - Katalog publik (`/packages`) dikonfirmasi menampilkan state kosong dengan benar ("Paket lengkap akan segera tersedia") tanpa error server, setelah data test dihapus.
+
+> **Pembaruan 2026-10-25:** `Package.description` kini **teks kaya** (JSON dokumen Tiptap di kolom `String?` yang sama; teks polos lama tetap sah). Form buat/edit admin memakai `RichTextEditor`; `POST/PUT /admin/products/packages[/id]` memvalidasi lewat `richTextField()`; kartu publik memakai `RichTextView`. Lihat `docs/arsitektur-editor-teks.md` §9.
