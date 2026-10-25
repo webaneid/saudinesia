@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { toCatalogHaji } from '@/lib/haji/catalog'
 
 const q = z.object({ hajiType: z.string().optional(), year: z.coerce.number().optional() })
 
@@ -15,6 +16,9 @@ export async function GET(request: Request) {
       where: { isActive: true, ...(hajiType && { hajiType }), ...(year && { year }) },
       orderBy: [{ year: 'asc' }, { price: 'asc' }],
     })
-    return NextResponse.json(ok(products.map(p => ({ ...p, price: Number(p.price), available: p.totalQuota - p.bookedQuota })), { total: products.length }))
+    // Peta eksplisit (tanpa kolom kuota mentah) dan produk yang belum berharga ditaruh paling akhir.
+    const items = products.map(toCatalogHaji)
+    items.sort((a, b) => Number(!a.priced) - Number(!b.priced)) // sort stabil: urutan tahun/harga dipertahankan di dalam tiap kelompok
+    return NextResponse.json(ok(items, { total: items.length }))
   } catch (e) { console.error('[catalog/haji]', e); return NextResponse.json(err('Internal server error'), { status: 500 }) }
 }

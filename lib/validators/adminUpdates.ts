@@ -87,7 +87,7 @@ export const hajiProductCreateSchema = z
     returnDate: nullableDate.optional(),
     durationDays: z.number().int().min(1).max(365).nullable().optional(),
     includes: z.array(z.string().max(300)).max(100).default([]),
-    price: z.number().min(0),
+    // `price` SENGAJA tidak ada: harga Haji = cache dari Komponen Biaya (docs/arsitektur-komponen-biaya.md §3.3), bukan masukan admin.
     totalQuota: z.number().int().min(0),
   })
   .strict()
@@ -106,7 +106,6 @@ export const hajiProductUpdateSchema = z
     returnDate: nullableDate.optional(),
     durationDays: z.number().int().min(1).max(365).nullable().optional(),
     includes: z.array(z.string().max(300)).max(100).optional(),
-    price: z.number().min(0).optional(),
     totalQuota: z.number().int().min(0).optional(),
     isActive: z.boolean().optional(),
   })

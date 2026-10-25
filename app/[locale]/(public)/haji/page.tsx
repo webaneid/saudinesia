@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { hajiAvailable, hajiPriced } from '@/lib/haji/catalog'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -65,7 +66,7 @@ export default async function HajiCatalogPage({ params }: Props) {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
             {items.map(p => {
-              const sisa = p.totalQuota - p.bookedQuota
+              const sisa = hajiAvailable(p)
               const includes = p.includes as string[]
               return (
                 <div key={p.id} className="rounded-xl border bg-card p-5 space-y-4 hover:border-primary hover:shadow-sm transition-all">
@@ -104,11 +105,17 @@ export default async function HajiCatalogPage({ params }: Props) {
 
                   <div className="pt-2 border-t space-y-3">
                     <div>
-                      <p className="text-xs text-muted-foreground">Mulai dari</p>
-                      <p className="text-xl font-bold text-primary">
-                        {formatRupiah(Number(p.price))}
-                        <span className="text-xs font-normal text-muted-foreground"> /orang</span>
-                      </p>
+                      {hajiPriced(p) ? (
+                        <>
+                          <p className="text-xs text-muted-foreground">Mulai dari</p>
+                          <p className="text-xl font-bold text-primary">
+                            {formatRupiah(Number(p.price))}
+                            <span className="text-xs font-normal text-muted-foreground"> /orang</span>
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm font-medium text-muted-foreground">Harga belum ditetapkan</p>
+                      )}
                     </div>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

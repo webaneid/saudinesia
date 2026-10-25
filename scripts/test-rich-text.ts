@@ -158,12 +158,13 @@ await t('RichTextView: teks berbahaya di-escape (tidak ada jalur HTML mentah), t
 await t('skema Haji: payload form admin lolos; kunci liar, tipe salah, dan teks kaya berbahaya ditolak; deskripsi panjang sah', () => {
   const formPayload = {
     name: 'Haji Furoda 2027', hajiType: 'furoda', year: 2027, departureDate: null, returnDate: '2027-07-10', durationDays: 40,
-    price: 150000000, totalQuota: 50, description: doc(p(text('Program lengkap'))), includes: ['Visa Haji', 'Akomodasi Makkah'],
+    totalQuota: 50, description: doc(p(text('Program lengkap'))), includes: ['Visa Haji', 'Akomodasi Makkah'],
   }
   assert.equal(hajiProductCreateSchema.safeParse(formPayload).success, true)
   assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, description: '' }).success, true) // editor dikosongkan
   assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, bookedQuota: 99 }).success, false) // kuota milik mesin booking
-  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, price: 'mahal' }).success, false)
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, price: 150000000 }).success, false) // harga = cache Komponen Biaya, bukan masukan (docs/arsitektur-komponen-biaya.md §3.3)
+  assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, totalQuota: 'banyak' }).success, false)
   assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, year: NaN }).success, false)
   assert.equal(hajiProductCreateSchema.safeParse({ ...formPayload, description: doc(p(text('x', ['link']))) }).success, false)
   const long = doc(...Array.from({ length: 400 }, (_, i) => p(text(`Paragraf nomor ${i} dengan isi yang cukup panjang untuk menambah ukuran dokumen JSON.`))))
