@@ -93,27 +93,27 @@ console.log('== pencabutan ==')
 await t('nonaktif → token ditolak SEKETIKA; diaktifkan kembali lewat admin → token LAMA tetap mati, token baru jalan', async () => {
   const u = await mk({ role: 'admin' }); const old = await issueSessionToken(u.id)
   assert.ok(await resolveSessionToken(old))
-  await updateUserByAdmin(u.id, { isActive: false })
+  await updateUserByAdmin(u.id, { isActive: false }, null)
   assert.equal(await resolveSessionToken(old), null)
-  await updateUserByAdmin(u.id, { isActive: true })
+  await updateUserByAdmin(u.id, { isActive: true }, null)
   assert.equal(await resolveSessionToken(old), null, 'token lama tidak boleh hidup lagi setelah reaktivasi')
   assert.ok(await resolveSessionToken(await issueSessionToken(u.id)))
 })
 
 await t('perubahan peran lewat admin → sesi lama dicabut; permintaan yang tidak mengubah apa pun TIDAK menendang', async () => {
   const u = await mk({ role: 'admin' }); const tok = await issueSessionToken(u.id)
-  await updateUserByAdmin(u.id, { role: 'admin', isActive: true }) // sama persis dengan keadaan sekarang
+  await updateUserByAdmin(u.id, { role: 'admin', isActive: true }, null) // sama persis dengan keadaan sekarang
   assert.ok(await resolveSessionToken(tok), 'no-op tidak boleh mencabut sesi')
-  await updateUserByAdmin(u.id, { role: 'manager' })
+  await updateUserByAdmin(u.id, { role: 'manager' }, null)
   assert.equal(await resolveSessionToken(tok), null)
   assert.equal((await resolveSessionToken(await issueSessionToken(u.id)))?.role, 'manager')
 })
 
-await t('updateUserByAdmin: id tak ada → null; nonaktif melepas nomor WhatsApp terverifikasi', async () => {
-  assert.equal(await updateUserByAdmin('00000000-0000-0000-0000-000000000000', { isActive: false }), null)
+await t('updateUserByAdmin: id tak ada → not_found; nonaktif melepas nomor WhatsApp terverifikasi', async () => {
+  assert.deepEqual(await updateUserByAdmin('00000000-0000-0000-0000-000000000000', { isActive: false }, null), { ok: false, reason: 'not_found' })
   const num = `62${Math.floor(8e9 + Math.random() * 1e9)}`
   const u = await mk({ whatsapp: num, whatsappVerifiedAt: new Date(), verifiedWhatsapp: num })
-  await updateUserByAdmin(u.id, { isActive: false })
+  await updateUserByAdmin(u.id, { isActive: false }, null)
   const after = await prisma.user.findUnique({ where: { id: u.id } })
   assert.equal(after?.verifiedWhatsapp, null); assert.equal(after?.whatsappVerifiedAt, null)
 })
@@ -165,7 +165,7 @@ await t('updateUserByAdmin bersamaan (S18-C): dua permintaan paralel pada akun y
   const u = await mk({ role: 'admin' }); const tok = await issueSessionToken(u.id)
   // A menonaktifkan, B mengirim isActive:true. Apa pun urutannya, hasil akhirnya salah satu dari dua keadaan konsisten
   // DAN token lama mati (setidaknya satu perubahan nyata terjadi → versi naik).
-  await Promise.all([updateUserByAdmin(u.id, { isActive: false }), updateUserByAdmin(u.id, { isActive: true })])
+  await Promise.all([updateUserByAdmin(u.id, { isActive: false }, null), updateUserByAdmin(u.id, { isActive: true }, null)])
   assert.equal(await resolveSessionToken(tok), null)
   const row = await prisma.user.findUnique({ where: { id: u.id }, select: { sessionVersion: true } })
   assert.ok((row?.sessionVersion ?? 0) >= 1)

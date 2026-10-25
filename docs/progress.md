@@ -701,7 +701,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [x] **SEC-08 (Medium) — SELESAI 2026-10-25:** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
 - [ ] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`.
 - [x] **SEC-12 (Low) — SELESAI (tertutup SEC-44, dibuktikan 2026-10-25):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
-- [ ] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir.
+- [x] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir. (Selesai 2026-10-25, Fase B)
 - [ ] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA).
 - [ ] **SEC-49 (Low, sebagian):** `await req.json()` tanpa `.catch` di beberapa route tersisa.
 - [ ] **SEC-50 (Low):** `catalog/flight` publik membocorkan `totalSeats/pendingSeats/bookedSeats`.
@@ -756,4 +756,6 @@ Lanjutan agenda setelah SEC-07/08. Arah produk tetap ditunda (keputusan pemilik)
 Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata (termasuk kasus yang harus ditolak), security check, dokumentasi.
 
 **Hasil Fase A — SEC-12 (2026-10-25):** tidak perlu perubahan kode; celah sudah tertutup SEC-44. Dibuktikan nyata (409 pada dua upaya menimpa permintaan `rejected`, baris tak berubah) dan register dikoreksi.
+
+**Hasil Fase B — SEC-13 (2026-10-25):** `updateUserByAdmin` kini menerima aktor dan mengembalikan hasil terpisah (`not_found`/`self`/`last_superadmin`); route memetakan dua penolakan ke 422 dengan pesan Indonesia, halaman pengguna menampilkannya. Kunci transaksi: akun target + semua superadmin aktif, urut `id`. Tes baru `scripts/test-admin-users.ts` (7 kasus, masuk `bun run test`; 15 putaran paralel dua-superadmin-saling-menurunkan) — uji kebalikan: tanpa kunci superadmin, kedua permintaan lolos dan tes gagal. Uji HTTP nyata (ubah-diri 422 ×2, no-op diri 200, akun lain 200, id tak ada 404, body rusak 400, tanpa cookie 403). Catatan: `last_superadmin` lewat HTTP hanya terjangkau lewat balapan dua superadmin (aktor harus superadmin aktif), dibuktikan di tingkat fungsi. Build produksi terisolasi 0 error; tanpa dependensi baru. Security check: 0 temuan baru (mengetatkan otorisasi; SQL mentah memakai parameter tagged-template).
 
