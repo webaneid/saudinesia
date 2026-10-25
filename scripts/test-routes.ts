@@ -178,6 +178,21 @@ await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lew
   assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru di halaman produk yang belum memakai vendorQuickAddError')
 })
 
+await t('SEC-11: semua `uses:` di workflow dipin ke SHA commit 40 hex (tag bisa dipindah), dan bun-version bukan `latest`', () => {
+  const dir = '.github/workflows'
+  const files = (readdirSync(dir) as string[]).filter(f => /\.ya?ml$/.test(f))
+  assert.ok(files.length >= 2, 'workflow tidak ditemukan — penjaga ini tak bermakna')
+  const bad: string[] = []
+  for (const f of files) {
+    read(join(dir, f)).split('\n').forEach((line, i) => {
+      const m = line.match(/^\s*(?:-\s*)?uses:\s*(\S+)/)
+      if (m && !m[1]!.startsWith('./') && !/@[0-9a-f]{40}$/.test(m[1]!)) bad.push(`${f}:${i + 1} ${m[1]}`)
+      if (/bun-version:\s*latest\b/.test(line)) bad.push(`${f}:${i + 1} bun-version latest`)
+    })
+  }
+  assert.deepEqual(bad, [], 'action belum dipin ke SHA / Bun tidak dipin (rantai pasok CI):')
+})
+
 await t('SEC-47: /address — GET/PUT lewat canAccessAddress (BOLA), POST dibatasi addressCreateUser, body rusak tidak 500', () => {
   const byId = read(routes.find(f => rel(f).endsWith('v1/address/[id]/route.ts')) ?? '')
   for (const verb of ['GET', 'PUT']) {
