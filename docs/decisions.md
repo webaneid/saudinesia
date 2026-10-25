@@ -2610,3 +2610,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 14 suite lulus; snapshot DOM/teks sebelum/sesudah identik kecuali selisih yang disengaja; jalur galat UI diuji; penjaga dimutasi.
 
 **Affects:** `components/admin/pricing/CostComponentsPanel.tsx`, `VendorCurrencyField.tsx` (baru), `products/packages/[id]/page.tsx`, `products/tour-packages/[id]/page.tsx`, route `tour-packages/simulate` (dihapus), `scripts/test-cost-components.ts`, `scripts/test-routes.ts`, `docs/arsitektur-komponen-biaya.md`.
+
+## 2026-10-26 — Komponen Biaya universal, Fase 3: harga Haji dari komponen + CRUD aman
+
+**Decision:** `HajiProduct.price` menjadi cache dari Komponen Biaya (jumlah harga jual per komponen, margin tipe `haji`) — bukan masukan admin (skema menolak `price`); produk baru berharga 0 dan **tidak dapat dipesan** sampai berharga (422, `ItemNotBookableError`) atau bila nonaktif. Hapus Haji = hapus sungguhan bila belum pernah dipesan (beserta baris polimorfik miliknya), selain itu nonaktif + pesan; produk nonaktif dapat diaktifkan kembali. Katalog publik memakai peta eksplisit dan menghitung ketersediaan dengan `pending`. Cron kurs menghitung ulang semua produk Haji (termasuk nonaktif).
+
+**Rationale:** Harga manual tak terhubung ke HPP/kurs dan memungkinkan Haji berharga 0 dipesan gratis (SEC-66). Pemilik menegaskan bahwa kesalahan manusia harus bisa dikoreksi (CRUD lengkap), tanpa membuat booking/invoice yatim — karena itu hapus keras hanya saat tak ada booking. Produk nonaktif tetap dihitung ulang supaya tak tampil dengan harga basi saat diaktifkan kembali.
+
+**Alternatives considered:** Harga manual tetap boleh bila belum ada komponen (ditolak: dua sumber harga, jalan pintas gratis); menyembunyikan produk berharga 0 dari katalog (ditolak untuk sekarang: 'Harga belum ditetapkan' lebih informatif; dapat diubah); cascade hapus booking (ditolak: merusak data keuangan); soft-delete saja (ditolak pemilik: kesalahan input harus benar-benar bisa dihapus).
+
+**Security check (SOP langkah 5):** 0 Critical/High pada kode yang diubah. Menutup SEC-66 (Medium) dan SEC-67 (Low). Checklist: route `[id]` `requireManager()` di awal, Zod strict, galat dibedakan, tanpa SQL mentah; hapus keras hanya lewat transaksi dengan cek booking + fallback FK; log tanpa PII; cron punya pemanggil (`grep` + penjaga). `bun audit` tidak berubah.
+
+**Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 15 suite lulus; HTTP nyata end-to-end termasuk booking Haji sungguhan; 7 mutasi tertangkap.
+
+**Affects:** `lib/pricing/computeHajiPrice.ts`, `costComponentOwners.ts`, `lib/haji/{delete,catalog}.ts`, `lib/booking/errors.ts`, `lib/quota/adapters/haji.ts`, `lib/validators/adminUpdates.ts`, `lib/cron/exchangeRateJob.ts`, `app/api/v1/admin/products/haji/**`, `app/api/v1/bookings/route.ts`, `app/api/v1/catalog/haji/route.ts`, halaman publik `/haji`, halaman daftar admin Haji, `scripts/test-haji-pricing.ts`, `scripts/test-rich-text.ts`, `package.json`.

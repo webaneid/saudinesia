@@ -7,6 +7,7 @@ import { refreshAllTransportPricingCaches } from '@/lib/pricing/refreshTransport
 import { refreshAllMuthowifServicePriceCaches } from '@/lib/pricing/refreshMuthowifServicePriceCache'
 import { refreshAllTourPackagePriceCaches } from '@/lib/pricing/refreshTourPackagePriceCache'
 import { refreshAllPackagePriceCaches } from '@/lib/pricing/refreshPackagePriceCache'
+import { refreshAllHajiPriceCaches } from '@/lib/pricing/computeHajiPrice'
 
 const API_BASE = 'https://open.er-api.com/v6/latest'
 const PAIRS: Array<{ from: string; to: string }> = [
@@ -119,6 +120,12 @@ export async function refreshExchangeRates(): Promise<void> {
       console.log(`[cron] Cache harga paket umroh di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
     } catch (err) {
       console.error('[cron] refreshAllPackagePriceCaches gagal:', err)
+    }
+    try {
+      await refreshAllHajiPriceCaches(updatedCurrencies)
+      console.log(`[cron] Cache harga haji di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
+    } catch (err) {
+      console.error('[cron] refreshAllHajiPriceCaches gagal:', err)
     }
   }
 }

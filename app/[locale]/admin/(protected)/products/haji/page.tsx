@@ -22,7 +22,7 @@ export default function HajiPage() {
   const [show,   setShow]   = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', hajiType: 'furoda', year: new Date().getFullYear() + 1, departureDate: '', returnDate: '', durationDays: 40, price: 150000000, totalQuota: 50, description: '', includes: '' })
+  const [form, setForm] = useState({ name: '', hajiType: 'furoda', year: new Date().getFullYear() + 1, departureDate: '', returnDate: '', durationDays: 40, totalQuota: 50, description: '', includes: '' })
 
   async function load() { const r = await fetch('/api/v1/admin/products/haji'); const j = await r.json(); setList(j.data ?? []); setLoading(false) }
   useEffect(() => { load() }, [])
@@ -31,7 +31,7 @@ export default function HajiPage() {
 
   async function handleSave() {
     setSaving(true)
-    await fetch('/api/v1/admin/products/haji', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, year: +form.year, durationDays: +form.durationDays, price: +form.price, totalQuota: +form.totalQuota, includes: form.includes.split('\n').map(s => s.trim()).filter(Boolean), departureDate: form.departureDate || null, returnDate: form.returnDate || null }) })
+    await fetch('/api/v1/admin/products/haji', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, year: +form.year, durationDays: +form.durationDays, totalQuota: +form.totalQuota, includes: form.includes.split('\n').map(s => s.trim()).filter(Boolean), departureDate: form.departureDate || null, returnDate: form.returnDate || null }) })
     await load(); setShow(false); setSaving(false)
   }
 
@@ -44,7 +44,9 @@ export default function HajiPage() {
     { key: 'name', header: 'Nama', mobile: 'title', cell: h => <span className="text-[13px] font-medium">{h.name}</span> },
     { key: 'type', header: 'Jenis', cell: h => <Badge tone="warning" className="capitalize">{h.hajiType}</Badge> },
     { key: 'year', header: 'Tahun', cell: h => <span className="text-[12px] text-admin-muted">{h.year}</span> },
-    { key: 'price', header: 'Harga', align: 'right', cell: h => <span className="text-[12px] font-semibold tabular-nums text-admin-ink/80">{formatRupiah(h.price)}</span> },
+    { key: 'price', header: 'Harga', align: 'right', cell: h => h.price > 0
+      ? <span className="text-[12px] font-semibold tabular-nums text-admin-ink/80">{formatRupiah(h.price)}</span>
+      : <span className="text-[12px] text-admin-muted">Belum diatur</span> },
     {
       key: 'quota', header: 'Kuota', align: 'right',
       cell: h => {
@@ -80,6 +82,7 @@ export default function HajiPage() {
       {show && (
         <div className="admin-form-panel">
           <p className="text-sm font-semibold text-admin-ink">Produk Haji Baru</p>
+          <p className="text-[11px] text-admin-muted/70">Harga dihitung otomatis dari Komponen Biaya (HPP + kurs + margin) — diisi setelah produk dibuat. Selama belum berharga, produk tidak dapat dipesan.</p>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
             <div className="lg:col-span-2"><p className="text-xs text-admin-muted mb-1">Nama Produk</p><input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Haji Furoda 2027 - Paket Premium" /></div>
             <div><p className="text-xs text-admin-muted mb-1">Jenis Haji</p><select className="admin-select" value={form.hajiType} onChange={set('hajiType')}>{HAJI_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
@@ -87,7 +90,6 @@ export default function HajiPage() {
             <div><p className="text-xs text-admin-muted mb-1">Tanggal Berangkat</p><input type="date" className="admin-inp" value={form.departureDate} onChange={set('departureDate')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Tanggal Kembali</p><input type="date" className="admin-inp" value={form.returnDate} onChange={set('returnDate')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Durasi (hari)</p><input type="number" className="admin-inp" value={form.durationDays} onChange={set('durationDays')} /></div>
-            <div><p className="text-xs text-admin-muted mb-1">Harga/orang (Rp)</p><input type="number" className="admin-inp" value={form.price} onChange={set('price')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Kuota</p><input type="number" className="admin-inp" value={form.totalQuota} onChange={set('totalQuota')} /></div>
             <div className="lg:col-span-3 min-w-0"><p className="text-xs text-admin-muted mb-1">Deskripsi</p><RichTextEditor id="haji-new-description" title="Deskripsi paket haji" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Program perjalanan, fasilitas, syarat, dan catatan penting…" /></div>
             <div className="lg:col-span-3"><p className="text-xs text-admin-muted mb-1">Yang Termasuk (satu baris per item)</p><textarea className="admin-inp" rows={4} value={form.includes} onChange={set('includes')} placeholder={"Visa Haji\nAkomodasi Makkah\nTransportasi Armuzna"} /></div>

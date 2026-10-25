@@ -4,9 +4,28 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { hajiProductUpdateSchema } from '@/lib/validators/adminUpdates'
 import { emptyToNull } from '@/lib/validators/richText'
-import { isRecordNotFound } from '@/lib/admin/errors'
+import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
+import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+type Ctx = { params: Promise<{ id: string }> }
+
+// CRUD lengkap produk Haji (docs/arsitektur-komponen-biaya.md §3.3): GET (satu produk + jumlah booking), PUT (koreksi bidang apa pun, termasuk
+// mengaktifkan kembali), DELETE (hapus sungguhan bila belum pernah dipesan, selain itu nonaktif — lihat lib/haji/delete.ts).
+
+export async function GET(_req: Request, { params }: Ctx) {
+  try {
+    await requireManager()
+    const { id } = await params
+    const product = await prisma.hajiProduct.findUnique({ where: { id } })
+    if (!product) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
+    const bookingCount = await prisma.bookingHaji.count({ where: { hajiProductId: id } })
+    return NextResponse.json(ok({ ...product, price: Number(product.price), bookingCount }))
+  } catch (e) {
+    return authFailureResponse(e, 'admin/products/haji/[id]/GET')
+  }
+}
+
+export async function PUT(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
@@ -23,34 +42,31 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     const { description, ...fields } = parsed.data
-    return NextResponse.json(ok(await prisma.hajiProduct.update({
+    const updated = await prisma.hajiProduct.update({
       where: { id },
       data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
-    })))
+    })
+    return NextResponse.json(ok({ ...updated, price: Number(updated.price) }))
   } catch (e) {
-    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
-      return NextResponse.json(err('Forbidden'), { status: 403 })
-    }
-    if (e && typeof e === 'object' && (e as { code?: string }).code === 'P2025') {
-      return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
-    }
-    console.error('[admin/products/haji/[id]/PUT]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    if (isRecordNotFound(e)) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
+    return authFailureResponse(e, 'admin/products/haji/[id]/PUT')
   }
 }
 
-export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    await prisma.hajiProduct.update({ where: { id }, data: { isActive: false } })
-    return NextResponse.json(ok(null))
+    const result = await deleteOrDeactivateHaji(id)
+    if (!result.found) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
+    if (result.deleted) return NextResponse.json(ok({ deleted: true }))
+    return NextResponse.json(ok({
+      deleted: false,
+      deactivated: true,
+      bookingCount: result.bookingCount,
+      message: `Produk sudah punya ${result.bookingCount} booking sehingga tidak dihapus — produk dinonaktifkan (tidak tampil di katalog) dan data booking tetap aman.`,
+    }))
   } catch (e) {
-    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
-      return NextResponse.json(err('Forbidden'), { status: 403 })
-    }
-    if (isRecordNotFound(e)) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/haji/[id]/DELETE]', e instanceof Error ? e.name : e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return authFailureResponse(e, 'admin/products/haji/[id]/DELETE')
   }
 }

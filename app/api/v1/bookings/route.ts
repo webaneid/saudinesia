@@ -12,6 +12,7 @@ import { ok, err } from '@/lib/validators'
 import { computeSellPrice } from '@/lib/pricing/computeSellPrice'
 import { computeTourPackageBreakdown, baseTotal, totalForVehicle, hotelChoicePrice } from '@/lib/pricing/computeTourPackagePrice'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
+import { ItemNotBookableError } from '@/lib/booking/errors'
 
 // Hari probe kalau jamaah tidak memilih durasi spesifik — sama alasan dengan
 // DEFAULT_PROBE_DAY di lib/pricing/refreshVisaProductCache.ts (bukan hardcode angka bisnis).
@@ -305,6 +306,8 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof Error) {
       if (error.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
+      // Item yang belum/tidak bisa dijual (produk nonaktif, belum berharga) — bukan kuota habis (SEC-66)
+      if (error instanceof ItemNotBookableError) return NextResponse.json(err(error.message), { status: 422 })
       // Quota errors thrown by reserve helpers
       if (error.message.includes('insufficient') || error.message.includes('capacity')) {
         return NextResponse.json(err(error.message), { status: 409 })
