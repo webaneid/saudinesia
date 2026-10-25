@@ -5,6 +5,7 @@ import { Plus } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type Catering = { id: string; name: string; boardType: string; menuStyle: string; pricePerPersonRegular: number }
 
@@ -19,7 +20,7 @@ export default function CateringPage() {
   const [show,   setShow]   = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 150000, pricePerPersonRamadan: 200000, pricePerPersonHajj: 250000 })
+  const [form, setForm] = useState({ name: '', boardType: 'full_board', menuStyle: 'asian', description: '', pricePerPersonRegular: 150000, pricePerPersonRamadan: 200000, pricePerPersonHajj: 250000 })
 
   async function load() { const r = await fetch('/api/v1/admin/products/catering'); const j = await r.json(); setList(j.data ?? []); setLoading(false) }
   useEffect(() => { load() }, [])
@@ -52,6 +53,7 @@ export default function CateringPage() {
             <div><p className="text-xs text-admin-muted mb-1">Harga/org/hari Regular</p><input type="number" className="admin-inp" value={form.pricePerPersonRegular} onChange={set('pricePerPersonRegular')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Harga/org/hari Ramadan</p><input type="number" className="admin-inp" value={form.pricePerPersonRamadan} onChange={set('pricePerPersonRamadan')} /></div>
             <div><p className="text-xs text-admin-muted mb-1">Harga/org/hari Haji</p><input type="number" className="admin-inp" value={form.pricePerPersonHajj} onChange={set('pricePerPersonHajj')} /></div>
+            <div className="md:col-span-2 min-w-0"><p className="text-xs text-admin-muted mb-1">Deskripsi</p><RichTextEditor id="catering-new-description" title="Deskripsi paket katering" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Menu harian, jam makan, dan catatan khusus (alergi, porsi)…" /></div>
           </div>
           <div className="flex gap-2">
             <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50">{saving ? '...' : 'Simpan'}</button>

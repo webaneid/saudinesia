@@ -7,7 +7,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { emptyToNull, richTextField, sanitizeRichText, RichTextError } from '../lib/validators/richText'
 import { hasContent, plainText, toEditorContent } from '../lib/rich-text/doc'
 import { RichTextView } from '../components/shared/rich-text/RichTextView'
-import { hajiProductCreateSchema, hajiProductUpdateSchema } from '../lib/validators/adminUpdates'
+import { cateringOptionCreateSchema, hajiProductCreateSchema, hajiProductUpdateSchema } from '../lib/validators/adminUpdates'
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -171,6 +171,20 @@ await t('skema Haji: payload form admin lolos; kunci liar, tipe salah, dan teks 
   assert.equal(hajiProductUpdateSchema.safeParse({ description: long }).success, true)
   assert.equal(hajiProductUpdateSchema.safeParse({ description: null }).success, true)
   assert.equal(hajiProductUpdateSchema.safeParse({ description: doc({ type: 'image' }) }).success, false)
+})
+
+await t('skema Katering: payload form admin lolos; kunci liar, enum liar, harga negatif/teks, dan teks kaya berbahaya ditolak', () => {
+  const formPayload = {
+    name: 'Full Board – Menu Asia', boardType: 'full_board', menuStyle: 'asian', description: doc(p(text('Sarapan 06.00'))),
+    pricePerPersonRegular: 150000, pricePerPersonRamadan: 200000, pricePerPersonHajj: 250000,
+  }
+  assert.equal(cateringOptionCreateSchema.safeParse(formPayload).success, true)
+  assert.equal(cateringOptionCreateSchema.safeParse({ ...formPayload, description: '' }).success, true)
+  assert.equal(cateringOptionCreateSchema.safeParse({ ...formPayload, isActive: false }).success, false) // kunci di luar daftar
+  assert.equal(cateringOptionCreateSchema.safeParse({ ...formPayload, boardType: 'all_you_can_eat' }).success, false)
+  assert.equal(cateringOptionCreateSchema.safeParse({ ...formPayload, pricePerPersonHajj: -1 }).success, false)
+  assert.equal(cateringOptionCreateSchema.safeParse({ ...formPayload, pricePerPersonRegular: NaN }).success, false)
+  assert.equal(cateringOptionCreateSchema.safeParse({ ...formPayload, description: doc(p(text('x', ['link']))) }).success, false)
 })
 
 await t('penjaga dependensi: bun.lock tanpa salinan ProseMirror/Tiptap bersarang (dua versi prosemirror-model = editor error saat Enter/daftar)', async () => {

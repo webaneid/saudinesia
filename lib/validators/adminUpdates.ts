@@ -39,6 +39,22 @@ const nullableDate = z
   })
 
 /**
+ * POST /api/v1/admin/products/catering. Sebelumnya route membaca body mentah tanpa Zod (harga NaN, tipe liar ke Prisma).
+ * Nilai boardType/menuStyle = opsi yang ditawarkan form admin dan dipetakan label-nya di halaman publik.
+ */
+export const cateringOptionCreateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    boardType: z.enum(['full_board', 'half_board']),
+    menuStyle: z.enum(['asian', 'arabic', 'western']),
+    description: richTextField().nullish(), // teks kaya (docs/arsitektur-editor-teks.md)
+    pricePerPersonRegular: z.number().min(0),
+    pricePerPersonRamadan: z.number().min(0),
+    pricePerPersonHajj: z.number().min(0),
+  })
+  .strict()
+
+/**
  * POST /api/v1/admin/products/haji. Sebelumnya route membaca body mentah tanpa Zod (angka NaN, tipe liar masuk ke Prisma).
  * Kuota terpakai (pendingQuota/bookedQuota) tidak ada: dikelola mesin booking.
  */
