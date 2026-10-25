@@ -38,13 +38,13 @@ jobs:
       # Nilai dummy khusus CI (bukan rahasia) — hanya agar `next build` tidak berhenti karena env kosong.
       JWT_SECRET: ci-secret-yang-panjangnya-lebih-dari-32-karakter
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # gitleaks memindai seluruh commit PR
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.11 # pin; naikkan sengaja bersama Dockerfile (oven/bun)
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -82,7 +82,7 @@ jobs:
         continue-on-error: true
 
       - name: Secret scan (lapis kedua, independen dari hook Claude Code)
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false" # komentar PR butuh izin tulis — hasil cukup di log CI
@@ -100,7 +100,7 @@ jobs:
       IMG_REPO: ci/saudinesia
       IMG_TAG: ci
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Buat .env.production dengan skrip produksi (sekaligus menguji skripnya)
         run: |
@@ -196,8 +196,28 @@ jobs:
           done
           code=$(attempt)
           [ "$code" = "429" ] || { echo "percobaan ke-6: harap 429, dapat $code"; exit 1; }
-          $C exec -T redis redis-cli --scan --pattern 'rl:*' | tee /tmp/rl-keys.txt
+          # Redis berpassword (SEC-10): redis-cli membaca sandi dari REDISCLI_AUTH.
+          RPW="$(grep '^REDIS_PASSWORD=' .env.production | cut -d= -f2-)"
+          $C exec -T -e REDISCLI_AUTH="$RPW" redis redis-cli --scan --pattern 'rl:*' | tee /tmp/rl-keys.txt
           grep -q 'rl:loginAcctIp:' /tmp/rl-keys.txt || { echo "kunci rate limit TIDAK ada di Redis — limiter jatuh ke memori"; exit 1; }
+
+      # Hardening kontainer (SEC-10) dibuktikan pada kontainer yang BENAR-BENAR jalan, bukan hanya pada berkas compose.
+      - name: Smoke - hardening kontainer (no-new-privileges, cap_drop, Redis berpassword, rahasia DB tak ada di web)
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          for SVC in web postgres redis; do
+            ID="$($C ps -q $SVC)"; test -n "$ID" || { echo "kontainer $SVC tidak ditemukan"; exit 1; }
+            docker inspect -f '{{.HostConfig.SecurityOpt}}' "$ID" | grep -q 'no-new-privileges' || { echo "$SVC tanpa no-new-privileges"; exit 1; }
+            docker inspect -f '{{.HostConfig.CapDrop}}' "$ID" | grep -q 'ALL' || { echo "$SVC tanpa cap_drop ALL"; exit 1; }
+          done
+          # Redis menolak klien tanpa sandi, menerima dengan sandi
+          OUT="$($C exec -T redis redis-cli ping 2>&1 || true)"
+          echo "$OUT" | grep -q NOAUTH || { echo "Redis menerima klien tanpa sandi: $OUT"; exit 1; }
+          RPW="$(grep '^REDIS_PASSWORD=' .env.production | cut -d= -f2-)"
+          test "$($C exec -T -e REDISCLI_AUTH="$RPW" redis redis-cli ping)" = "PONG" || { echo "Redis menolak sandi yang benar"; exit 1; }
+          # Rahasia database tidak boleh terbaca proses web (DATABASE_URL tetap ada karena aplikasi memerlukannya)
+          test -z "$($C exec -T web printenv POSTGRES_PASSWORD)" || { echo "POSTGRES_PASSWORD terbaca di kontainer web"; exit 1; }
+          $C exec -T web printenv DATABASE_URL > /dev/null || { echo "DATABASE_URL hilang dari web"; exit 1; }
 
       # Auth email + Google di image produksi (tanpa kredensial Resend/Google — itu justru kondisi yang harus aman): pendaftaran & lupa password
       # membalas seragam, tautan/token tak terbaca dari respons, rute OTP lama sudah tidak ada, Google mati dengan sopan, dan pengaman callback

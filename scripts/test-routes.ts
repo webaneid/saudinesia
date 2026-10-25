@@ -178,6 +178,44 @@ await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lew
   assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru di halaman produk yang belum memakai vendorQuickAddError')
 })
 
+await t('SEC-14: reset-limits hanya superadmin, tanpa body, dan kunci login memakai accountKey yang sama dengan fungsi reset', () => {
+  const route = read(routes.find(f => rel(f).endsWith('system/users/[id]/reset-limits/route.ts')) ?? '')
+  assert.match(route, /requireSuperAdmin\(\)/); assert.match(route, /resetAccountLimits\(user\.email\)/)
+  assert.doesNotMatch(route, /\.json\(\)/, 'tak ada body — id hanya dari path')
+  assert.doesNotMatch(route, /console\.info\([^)]*email/i, 'log audit tak boleh memuat email (PII)')
+  const login = read(routes.find(f => rel(f).endsWith('v1/auth/login/route.ts')) ?? '')
+  assert.match(login, /policy\('loginAcct', acctKey\)/); assert.match(login, /policy\('loginAcctIp', `\$\{acctKey\}\|\$\{ip\}`\)/)
+})
+
+await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa POSTGRES_PASSWORD, Redis berpassword, generator env menyamakan sandi', () => {
+  const compose = read('docker-compose.prod.yml')
+  const services = (compose.slice(compose.indexOf('\nservices:'), compose.indexOf('\nnetworks:')).match(/^  [a-z]+:\s*$/gm) ?? []).length
+  assert.ok(services >= 6, `hanya ${services} service terbaca — penjaga ini tak bermakna`)
+  assert.equal((compose.match(/<<: \*hardening/g) ?? []).length, services, 'setiap service harus memakai *hardening (no-new-privileges)')
+  assert.match(compose, /x-hardening: &hardening\n  security_opt:\n    - no-new-privileges:true/)
+  assert.match(compose, /environment:\n      POSTGRES_PASSWORD: ""/, 'web harus mengosongkan POSTGRES_PASSWORD')
+  assert.match(compose, /"--requirepass", "\$\{REDIS_PASSWORD:\?/, 'Redis wajib berpassword')
+  assert.ok(!/^\s+ports:[\s\S]*?(5432|6379|9000|9001)/m.test(compose), 'tidak ada port data store yang diekspos')
+  const gen = read('scripts/buat-env-production.sh'), example = read('.env.production.example')
+  assert.match(gen, /REDIS_PASSWORD=\$PW_REDIS/); assert.match(gen, /REDIS_URL=redis:\/\/:\$PW_REDIS@redis:6379/)
+  assert.match(example, /^REDIS_PASSWORD=$/m); assert.match(example, /^REDIS_URL=redis:\/\/:CHANGE_ME@redis:6379/m)
+})
+
+await t('SEC-11: semua `uses:` di workflow dipin ke SHA commit 40 hex (tag bisa dipindah), dan bun-version bukan `latest`', () => {
+  const dir = '.github/workflows'
+  const files = (readdirSync(dir) as string[]).filter(f => /\.ya?ml$/.test(f))
+  assert.ok(files.length >= 2, 'workflow tidak ditemukan — penjaga ini tak bermakna')
+  const bad: string[] = []
+  for (const f of files) {
+    read(join(dir, f)).split('\n').forEach((line, i) => {
+      const m = line.match(/^\s*(?:-\s*)?uses:\s*(\S+)/)
+      if (m && !m[1]!.startsWith('./') && !/@[0-9a-f]{40}$/.test(m[1]!)) bad.push(`${f}:${i + 1} ${m[1]}`)
+      if (/bun-version:\s*latest\b/.test(line)) bad.push(`${f}:${i + 1} bun-version latest`)
+    })
+  }
+  assert.deepEqual(bad, [], 'action belum dipin ke SHA / Bun tidak dipin (rantai pasok CI):')
+})
+
 await t('SEC-47: /address — GET/PUT lewat canAccessAddress (BOLA), POST dibatasi addressCreateUser, body rusak tidak 500', () => {
   const byId = read(routes.find(f => rel(f).endsWith('v1/address/[id]/route.ts')) ?? '')
   for (const verb of ['GET', 'PUT']) {

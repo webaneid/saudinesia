@@ -2546,3 +2546,39 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Security check (SOP langkah 5):** 0 Critical/High/Medium baru. Ditinjau: pengirim terautentikasi (HMAC + JID pribadi, chat=pengirim), rate limit per pengirim (punya pemanggil, `grep`), route superadmin tanpa body/PII di log, penulisan bersyarat anti-balapan, tak ada oracle. `bun audit` tidak berubah. Bukti: 3 mutasi tertangkap, HTTP nyata (webhook bertanda tangan + route admin).
 
 **Affects:** `lib/auth/whatsappVerify.ts`, `lib/whatsapp/webhook.ts`, `lib/auth/rateLimit.ts`, `lib/notifications/templates/whatsapp.ts`, `app/api/v1/admin/system/users/[id]/whatsapp/route.ts` (baru), `app/api/v1/admin/system/users/route.ts`, halaman admin pengguna, `scripts/test-whatsapp.ts`, `docs/arsitektur-whatsapp-verifikasi.md`.
+
+## 2026-10-25 — SEC-14: superadmin dapat membuka pembatasan login/email satu akun
+
+**Decision:** Menambah `resetAccountLimits(email)` (hapus `loginAcct`, semua `loginAcctIp` akun itu, dan `authEmailSendEmail`) dan `POST /admin/system/users/[id]/reset-limits` hanya superadmin, dengan tombol di Manajemen Pengguna. Kunci akun login dibentuk `accountKey()` (email ≤64 apa adanya, selain itu di-hash) supaya kunci gabungan `akun|ip` selalu dapat dikenali berdasarkan awalan.
+
+**Rationale:** Lockout-DoS adalah kompromi inheren rate limit; jalan keluar paling kecil adalah buka-kunci manual oleh admin (sudah dicatat di register sebagai opsi). Batas per-IP sengaja tidak disentuh agar tombol ini tak jadi alat melewati perlindungan brute-force dari satu sumber. Endpoint tanpa body, hanya superadmin, dan hanya meninggalkan jejak id (tanpa email).
+
+**Alternatives considered:** CAPTCHA (ditolak/ditunda: keputusan produk + dependensi pihak ketiga); mengosongkan semua kunci `rl:*` (ditolak: melemahkan perlindungan akun lain); menyimpan daftar IP per akun untuk menghapus tepat (ditolak: state tambahan, SCAN berawalan cukup); mengganti hash kunci komposit dengan penyimpanan terpisah (ditolak: perubahan lebih besar tanpa manfaat).
+
+**Security check (SOP langkah 5):** 0 Critical/High/Medium baru; endpoint admin baru ditinjau (superadmin di awal handler, 401/403/404/500 dibedakan, tanpa input body, tanpa PII di log, SCAN memakai pola yang di-escape sehingga email berkarakter glob tak bisa menghapus akun lain — diuji). `bun audit` tidak berubah. Bukti: HTTP nyata, tes unit memori (+Redis di CI), penjaga sumber dimutasi.
+
+**Affects:** `lib/auth/rateLimit.ts`, `app/api/v1/auth/login/route.ts`, `app/api/v1/admin/system/users/[id]/reset-limits/route.ts` (baru), halaman admin pengguna, `scripts/test-rate-limit.ts`, `scripts/test-routes.ts`.
+
+## 2026-10-25 — SEC-10: hardening kontainer produksi (sebagian)
+
+**Decision:** `no-new-privileges` pada semua service; `cap_drop: ALL` pada web & migrate dan pada postgres/redis dengan `cap_add` minimal untuk entrypoint resmi; Redis `--requirepass` dengan `REDIS_PASSWORD` wajib (`REDIS_URL` memuat sandi, dibuat generator env); `POSTGRES_PASSWORD` dikosongkan di kontainer web. minio dan caddy hanya `no-new-privileges`; `cap_drop` mereka ditunda sampai bisa diuji.
+
+**Rationale:** Jaringan internal bukan batas keamanan — satu kontainer terkompromi tak boleh bisa menguras Redis atau membaca rahasia DB tambahan; capability default Docker jauh melebihi kebutuhan. CI sudah menjalankan stack sungguhan (postgres, redis, migrate, web), sehingga setiap pembatasan di empat service itu dibuktikan di sana, bukan ditebak. Server belum live, jadi mengubah kontrak env (REDIS_PASSWORD) sekarang murah.
+
+**Alternatives considered:** `cap_drop ALL` untuk minio/caddy tanpa uji (ditolak: tak ada Docker lokal dan CI tak menjalankannya — risiko outage); `read_only` rootfs (ditunda: Next.js/Prisma menulis cache, perlu tmpfs yang diuji); memisahkan POSTGRES_PASSWORD ke berkas env terpisah (ditolak: mengubah alur deploy; pengosongan lewat `environment` cukup); pin digest image (ditunda ke keputusan pemeliharaan bersama Dependabot docker).
+
+**Security check (SOP langkah 5):** 0 Critical/High; infra ditinjau terhadap checklist infra (non-root tetap, tanpa port data store, tanpa `privileged`/docker.sock, rahasia tidak masuk image). `bun audit` tidak berubah. Bukti: CI job docker (lihat PR), penjaga statis dimutasi, generator env diuji lokal (sandi dan URL cocok).
+
+**Affects:** `docker-compose.prod.yml`, `.env.production.example`, `scripts/buat-env-production.sh`, `.github/workflows/ci.yml`, `scripts/test-routes.ts`, `docs/deployment.md`.
+
+## 2026-10-25 — SEC-11: pin GitHub Actions ke SHA dan Bun ke versi tetap
+
+**Decision:** Semua action pihak ketiga dipin ke SHA commit (dengan komentar versi); `bun-version` CI dipin ke 1.3.11 (sama dengan versi lokal). Penjaga statis di `scripts/test-routes.ts` menolak `uses:` tanpa SHA dan `bun-version: latest`.
+
+**Rationale:** Tag bisa dipindah (kasus tj-actions 2025); workflow ini memegang `contents`/`packages` write di job docker. Bun `latest` membuat CI bisa pecah/berubah tanpa commit (SEC-05 sudah mencatat regresi runtime Bun).
+
+**Alternatives considered:** Hanya mengandalkan Dependabot (ditolak: pembaruan tag tetap mengikuti tag yang bisa dipindah); pin digest `oven/bun` di Dockerfile sekarang (ditunda ke SEC-10, perlu keputusan pemeliharaan).
+
+**Security check (SOP langkah 5):** 0 Critical/High; menutup SEC-11 (Low). Perubahan infra/workflow ditinjau terhadap checklist infra (permissions tidak berubah, tanpa `pull_request_target`). `bun audit` tidak berubah. Bukti: SHA diverifikasi via API, penjaga dimutasi, CI PR hijau.
+
+**Affects:** `.github/workflows/ci.yml`, `.github/workflows/minio-image.yml`, `scripts/test-routes.ts`.
