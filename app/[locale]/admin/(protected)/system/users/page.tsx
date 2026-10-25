@@ -18,7 +18,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [show,   setShow]   = useState(false)
   const [saving, setSaving] = useState(false)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null)
   const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'admin' })
 
   const load = useCallback(async () => {
@@ -60,9 +60,15 @@ export default function UsersPage() {
     })
     if (!r.ok) {
       const j: { error?: string } | null = await r.json().catch(() => null)
-      setNotice(j?.error ?? 'Perubahan gagal disimpan.')
+      setNotice({ text: j?.error ?? 'Perubahan gagal disimpan.', error: true })
     }
     await load()
+  }
+  // SEC-14: korban lockout (30 gagal/jam, atau 3 email/10 mnt) dibebaskan superadmin tanpa menunggu jendela habis.
+  async function resetLimits(id: string) {
+    setNotice(null)
+    const r = await fetch(`/api/v1/admin/system/users/${id}/reset-limits`, { method: 'POST' })
+    setNotice({ text: r.ok ? 'Pembatasan login dan email akun ini sudah dibuka.' : 'Pembatasan gagal dibuka.', error: !r.ok })
   }
   const toggleActive = (id: string, isActive: boolean) => updateUser(id, { isActive: !isActive })
   const changeRole = (id: string, role: string) => updateUser(id, { role })
@@ -85,9 +91,14 @@ export default function UsersPage() {
     {
       key: 'actions', header: '', align: 'right',
       cell: u => (
-        <button onClick={() => toggleActive(u.id, u.isActive)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
-          {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-        </button>
+        <div className="flex items-center justify-end gap-3">
+          <button onClick={() => resetLimits(u.id)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+            Buka pembatasan
+          </button>
+          <button onClick={() => toggleActive(u.id, u.isActive)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+            {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
+          </button>
+        </div>
       ),
     },
   ]
@@ -99,7 +110,7 @@ export default function UsersPage() {
         actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</button>}
       />
 
-      {notice && <p role="alert" className="m-0 text-[13px] font-medium text-admin-danger">{notice}</p>}
+      {notice && <p role={notice.error ? 'alert' : 'status'} className={`m-0 text-[13px] font-medium ${notice.error ? 'text-admin-danger' : 'text-admin-ink'}`}>{notice.text}</p>}
 
       {show && (
         <div className="admin-form-panel">

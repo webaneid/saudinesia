@@ -178,6 +178,15 @@ await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lew
   assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru di halaman produk yang belum memakai vendorQuickAddError')
 })
 
+await t('SEC-14: reset-limits hanya superadmin, tanpa body, dan kunci login memakai accountKey yang sama dengan fungsi reset', () => {
+  const route = read(routes.find(f => rel(f).endsWith('system/users/[id]/reset-limits/route.ts')) ?? '')
+  assert.match(route, /requireSuperAdmin\(\)/); assert.match(route, /resetAccountLimits\(user\.email\)/)
+  assert.doesNotMatch(route, /\.json\(\)/, 'tak ada body — id hanya dari path')
+  assert.doesNotMatch(route, /console\.info\([^)]*email/i, 'log audit tak boleh memuat email (PII)')
+  const login = read(routes.find(f => rel(f).endsWith('v1/auth/login/route.ts')) ?? '')
+  assert.match(login, /policy\('loginAcct', acctKey\)/); assert.match(login, /policy\('loginAcctIp', `\$\{acctKey\}\|\$\{ip\}`\)/)
+})
+
 await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa POSTGRES_PASSWORD, Redis berpassword, generator env menyamakan sandi', () => {
   const compose = read('docker-compose.prod.yml')
   const services = (compose.slice(compose.indexOf('\nservices:'), compose.indexOf('\nnetworks:')).match(/^  [a-z]+:\s*$/gm) ?? []).length

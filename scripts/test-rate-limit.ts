@@ -5,7 +5,7 @@
 // tidak dianggap lolos.
 import assert from 'node:assert/strict'
 import { Redis } from 'ioredis'
-import { LIMITS, __resetForTests, clientIp, consume, peek, policy, reset, tooManyRequests, type Policy } from '@/lib/auth/rateLimit'
+import { LIMITS, __resetForTests, accountKey, clientIp, consume, peek, policy, reset, resetAccountLimits, tooManyRequests, type Policy } from '@/lib/auth/rateLimit'
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -168,6 +168,57 @@ await t('circuit breaker: panggilan berikutnya cepat (tidak menunggu timeout Red
   assert.ok(total < 300, `20 panggilan butuh ${total}ms`)
 })
 
+
+// SEC-14 — tombol "buka pembatasan" superadmin. Dijalankan di mode memori DAN Redis (fungsi yang sama, kunci nyata dari `policy`).
+async function accountResetScenarios(mode: string) {
+  await t(`[${mode}] resetAccountLimits membuka login (akun + akun|IP mana pun) dan email auth satu akun; akun lain dan batas per-IP tak tersentuh`, async () => {
+    const victim = `korban-${Date.now()}-${Math.random()}@example.test`, other = `lain-${Date.now()}-${Math.random()}@example.test`
+    const keys = (email: string) => ({
+      acct: policy('loginAcct', accountKey(email)),
+      ip1: policy('loginAcctIp', `${accountKey(email)}|198.51.100.1`),
+      ip2: policy('loginAcctIp', `${accountKey(email)}|2001:db8::7`),
+      mail: policy('authEmailSendEmail', email),
+    })
+    const v = keys(victim), o = keys(other), ipOnly = policy('loginIp', '198.51.100.1')
+    for (const p of [...Object.values(v), ...Object.values(o), ipOnly]) { await consume(p); await consume(p) }
+    assert.equal(await resetAccountLimits(victim), 4, 'tepat 4 kunci milik korban dihapus')
+    for (const p of Object.values(v)) assert.equal((await peek(p)).count, 0, `${p.key} harus bersih`)
+    for (const p of [...Object.values(o), ipOnly]) assert.equal((await peek(p)).count, 2, `${p.key} tidak boleh tersentuh`)
+    assert.equal(await resetAccountLimits(victim), 0, 'kedua kali tidak ada yang tersisa')
+  })
+
+  await t(`[${mode}] korban benar-benar bisa login lagi: batas penuh lalu dibuka → permintaan berikut diizinkan`, async () => {
+    const email = `penuh-${Date.now()}@example.test`
+    const p = policy('loginAcct', accountKey(email))
+    for (let i = 0; i < LIMITS.loginAcct.limit; i++) await consume(p)
+    assert.equal((await consume(p)).allowed, false, 'terkunci')
+    await resetAccountLimits(email)
+    assert.equal((await consume(p)).allowed, true, 'terbuka setelah reset')
+  })
+
+  await t(`[${mode}] email panjang (di-hash) dan karakter glob di email tetap bisa dibuka; email berawalan sama tidak ikut terhapus`, async () => {
+    const long = `${'a'.repeat(90)}-${Date.now()}@example.test`
+    const lp = policy('loginAcctIp', `${accountKey(long)}|203.0.113.9`)
+    await consume(lp)
+    assert.equal(await resetAccountLimits(long), 1)
+    assert.equal((await peek(lp)).count, 0)
+    const glob = `a*b?c[d]-${Date.now()}@example.test`, decoy = `aXXbYc-${Date.now()}@example.test`
+    const gp = policy('loginAcctIp', `${accountKey(glob)}|203.0.113.9`), dp = policy('loginAcctIp', `${accountKey(decoy)}|203.0.113.9`)
+    await consume(gp); await consume(dp)
+    await resetAccountLimits(glob)
+    assert.equal((await peek(gp)).count, 0); assert.equal((await peek(dp)).count, 1, 'karakter glob tak boleh menghapus akun lain')
+    const prefixA = `ab-${Date.now()}@example.test`, prefixB = `${prefixA}.id`
+    const pa = policy('loginAcctIp', `${accountKey(prefixA)}|203.0.113.9`), pb = policy('loginAcctIp', `${accountKey(prefixB)}|203.0.113.9`)
+    await consume(pa); await consume(pb)
+    await resetAccountLimits(prefixA)
+    assert.equal((await peek(pa)).count, 0); assert.equal((await peek(pb)).count, 1, 'awalan sama bukan akun yang sama')
+  })
+}
+
+console.log('== SEC-14: buka pembatasan akun (memori) ==')
+__resetForTests()
+await accountResetScenarios('memori')
+
 // ───────────────────────── 3. Redis sungguhan ─────────────────────────
 const redisUrl = env.REDIS_TEST_URL
 if (!redisUrl) {
@@ -235,6 +286,17 @@ if (!redisUrl) {
     assert.equal(h.allowed, false)
     const ttl = await probe.ttl(p.key)
     assert.ok(ttl > 0 && ttl <= 60, `ttl setelah penyembuhan=${ttl}`)
+  })
+
+  console.log('== SEC-14: buka pembatasan akun (Redis) ==')
+  await accountResetScenarios('redis')
+  await t('[redis] kunci benar-benar terhapus dari Redis (bukan hanya dianggap bersih oleh peek)', async () => {
+    const email = `redis-${Date.now()}@example.test`
+    const ps = [policy('loginAcct', accountKey(email)), policy('loginAcctIp', `${accountKey(email)}|198.51.100.5`), policy('authEmailSendEmail', email)]
+    for (const p of ps) await consume(p)
+    for (const p of ps) assert.equal(await probe.get(p.key), '1')
+    await resetAccountLimits(email)
+    for (const p of ps) assert.equal(await probe.get(p.key), null, `${p.key} masih ada di Redis`)
   })
 
   await probe.quit()
