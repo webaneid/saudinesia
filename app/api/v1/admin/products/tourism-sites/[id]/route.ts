@@ -5,11 +5,12 @@ import { getPresignedUrl } from '@/lib/storage/minio'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 const updateSchema = z.object({
   name:        z.string().min(1).optional(),
   city:        z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
+  description: richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   gmapsUrl:    z.string().url().nullable().optional().or(z.literal('')),
   isActive:    z.boolean().optional(),
 })
@@ -39,7 +40,11 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json())
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const site = await prisma.tourismSite.update({ where: { id }, data: parsed.data })
+    const { description, ...fields } = parsed.data
+    const site = await prisma.tourismSite.update({
+      where: { id },
+      data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
+    })
     return NextResponse.json(ok(site))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
