@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type Pkg = { id: string; name: string; price: number; isFeatured: boolean; isActive: boolean }
 
@@ -69,7 +70,7 @@ export default function PackagesPage() {
           <p className="text-sm font-semibold text-admin-ink">Paket Baru</p>
           <div className="grid md:grid-cols-2 gap-3">
             <div className="md:col-span-2"><p className="text-xs text-admin-muted mb-1">Nama Paket</p><input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Paket Umroh Hemat 9 Hari" /></div>
-            <div className="md:col-span-2"><p className="text-xs text-admin-muted mb-1">Deskripsi</p><textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} /></div>
+            <div className="md:col-span-2 min-w-0"><p className="text-xs text-admin-muted mb-1">Deskripsi</p><RichTextEditor id="package-new-description" title="Deskripsi paket umroh" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Ringkasan paket, program, dan keunggulan…" /></div>
           </div>
           <div className="flex gap-2">
             <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50">{saving ? 'Menyimpan...' : 'Simpan'}</button>

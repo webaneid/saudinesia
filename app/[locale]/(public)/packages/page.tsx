@@ -4,6 +4,7 @@ import { Package, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -47,7 +48,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
               )}
               <div className="space-y-1">
                 <p className="font-semibold text-lg leading-tight">{pkg.name}</p>
-                {pkg.description && <p className="text-sm text-muted-foreground">{pkg.description}</p>}
+                <RichTextView value={pkg.description} className="text-muted-foreground" />
               </div>
 
               {highlights.length > 0 && (
