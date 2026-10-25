@@ -7,6 +7,7 @@ import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
 import { Switch } from '@/components/admin/ui/Switch'
 import { formatRupiah } from '@/lib/utils'
+import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -268,7 +269,7 @@ function VendorField({ vendors, vendorId, onSelect, currency, onCurrency, onVend
     })
     const j = await r.json().catch(() => null)
     setSaving(false)
-    if (!j?.data?.id) { setError(j?.error ?? 'Vendor gagal dibuat.'); return }
+    if (!j?.data?.id) { setError(vendorQuickAddError(r.status, j?.error)); return }
     onVendorCreated(j.data)
     onSelect(j.data.id)
     setName('')

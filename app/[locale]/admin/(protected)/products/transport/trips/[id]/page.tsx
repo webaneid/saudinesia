@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Trash2, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -38,6 +39,7 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
   const [showQuickAdd, setShowQuickAdd] = useState(false)
   const [newVendorName, setNewVendorName] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [vendorError, setVendorError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}/cost`)
@@ -69,19 +71,19 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
   async function handleQuickAddVendor() {
     if (!newVendorName.trim()) return
     setSavingVendor(true)
+    setVendorError(null)
     const r = await fetch('/api/v1/admin/system/settings/vendors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newVendorName.trim(), category: 'transport' }),
     })
-    const j = await r.json()
+    const j = await r.json().catch(() => null)
     setSavingVendor(false)
-    if (j.data?.id) {
-      onVendorAdded(j.data)
-      setVendorId(j.data.id)
-      setNewVendorName('')
-      setShowQuickAdd(false)
-    }
+    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
+    onVendorAdded(j.data)
+    setVendorId(j.data.id)
+    setNewVendorName('')
+    setShowQuickAdd(false)
   }
 
   const canSave = !!vendorId && Number(hargaKendaraan) > 0
@@ -127,6 +129,7 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
         {vendors.length === 0 && !showQuickAdd && (
           <p className="text-[11px] text-admin-warning">Belum ada vendor transport — tambah dulu.</p>
         )}
+        {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
         <div className="flex items-center gap-2">
           {!showQuickAdd ? (
             <>

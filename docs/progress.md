@@ -704,7 +704,8 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [x] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir. (Selesai 2026-10-25, Fase B)
 - [x] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA). (Selesai 2026-10-25, Fase D)
 - [x] **SEC-49 (Low):** `await req.json()` tanpa `.catch` — selesai 2026-10-25 (Fase E).
-- [ ] **SEC-62 (Medium, baru):** hapus objek MinIO sembarang lewat DELETE images hotel/kendaraan (lihat register).
+- [x] **SEC-62 (Medium):** hapus objek MinIO sembarang lewat DELETE images hotel/kendaraan — selesai 2026-10-25.
+- [x] Polesan UI tambah-vendor-cepat bagi manager (pesan galat jelas) — selesai 2026-10-25.
 - [x] **SEC-50 (Low):** `catalog/flight` publik membocorkan `totalSeats/pendingSeats/bookedSeats`; `health` tanpa cache. (Selesai 2026-10-25, Fase F)
 
 **Hardening infrastruktur & kebijakan (sebelum go-live):**
@@ -770,3 +771,4 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 
 **Penutup rangkaian (2026-10-25):** `bun run test` 13 suite SEMUA LULUS (DB uji `saudinesia_test`), build produksi terisolasi 0 error, `bun audit` 5 (1 high, 4 moderate) — tidak berubah, tanpa dependensi baru. Temuan baru: SEC-62 (Medium, pre-existing).
 
+**Hasil SEC-62 + polesan UI (2026-10-25, PR terpisah setelah #23 ter-merge):** (1) DELETE images hotel/kendaraan hanya menghapus key yang tercatat pada entitas — dibuktikan dengan MinIO lokal sungguhan (objek korban tetap ada). (2) Lima halaman produk + tab Visa menampilkan pesan jelas saat manager (403) mencoba menambah vendor cepat; browser: manager melihat pesan dengan tata letak utuh, superadmin berhasil membuat dan memilih vendor. Dua penjaga baru di `scripts/test-routes.ts` (dimutasi). tsc 0 error, build produksi terisolasi 0 error, `bun run test` 13 suite lulus, tanpa dependensi baru. Security check: 0 temuan baru; menutup satu Medium.

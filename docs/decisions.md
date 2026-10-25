@@ -2520,3 +2520,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** typecheck; `bun run build` 0 error di dist terpisah; `bun run test` 13 suite lulus (suite baru `scripts/test-admin-users.ts`; `scripts/test-routes.ts` bertambah penjaga SEC-61b/47/49/50).
 
 **Affects:** `lib/auth/adminUsers.ts`, `lib/address/access.ts` (baru), `lib/auth/rateLimit.ts`, `app/api/v1/{admin/system/users/[id],admin/system/settings/vendors,address,address/[id],catalog/flight,health}`, 53 route (`.catch`), halaman admin pengguna, `scripts/test-admin-users.ts`, `scripts/test-routes.ts`, `package.json`.
+
+## 2026-10-25 — SEC-62 (hapus objek MinIO sembarang) dan polesan UI tambah-vendor
+
+**Decision:** (1) `DELETE …/images` pada hotel dan kendaraan hanya menghapus objek bila `key` dari body tercatat di `images` entitas itu (selain itu 404); pengecekan mendahului `deleteObject`. (2) Kegagalan 401/403 pada tombol "tambah vendor cepat" di editor HPP ditampilkan sebagai pesan jelas (helper `lib/admin/vendorQuickAdd.ts`), bukan senyap; hak tulis vendor tetap hanya superadmin (SEC-61b).
+
+**Rationale:** Tanpa cek keanggotaan, manager yang tahu atau menebak key bisa menghapus objek bucket mana pun, termasuk scan paspor jamaah. Pesan galat menghilangkan kebingungan tanpa melebarkan hak akses.
+
+**Alternatives considered:** Memvalidasi awalan key (`hotels/<id>/…`) — ditolak: keanggotaan di `images` lebih ketat dan sudah ada sumbernya; menyembunyikan tombol bagi non-superadmin — ditolak: butuh peran di klien dan mengubah 6 layout; membuka POST vendor bagi manager — ditolak: memperluas hak tulis tanpa diminta.
+
+**Security check (SOP langkah 5):** 0 Critical/High, 0 temuan baru; menutup SEC-62 (Medium). Bukti nyata: MinIO + HTTP (key korban/milik entitas lain 404 dan objek utuh; key sendiri 200 dan objek terhapus), browser untuk UI. `bun audit` tidak berubah.
+
+**Verifikasi:** tsc; `bun run build` 0 error di dist terpisah; `bun run test` 13 suite lulus; penjaga dimutasi.
+
+**Affects:** `app/api/v1/admin/products/{hotels/[id]/images,transport/vehicles/[id]/images}/route.ts`, `lib/admin/vendorQuickAdd.ts` (baru), 5 halaman produk + `CostTiersTab.tsx`, `scripts/test-routes.ts`.
