@@ -113,6 +113,35 @@ await t('SEC-61(b): GET vendor terbuka bagi manager TAPI hanya kolom pemilih; ko
   assert.ok(!/requireManager\(\)/.test(byId) && /requireSuperAdmin\(\)/.test(byId), 'PUT/DELETE vendor tetap superadmin')
 })
 
+await t('SEC-50: health — sehat di-cache 5 dtk dan permintaan bersamaan berbagi satu query; gagal TIDAK di-cache (503 lalu pulih)', async () => {
+  const { prisma } = await import('../lib/db')
+  const { GET } = await import('../app/api/v1/health/route')
+  const db = prisma.user as unknown as { findFirst: (...a: unknown[]) => Promise<unknown> }
+  const realFind = db.findFirst, realNow = Date.now
+  let calls = 0, fail = false, clock = realNow()
+  Date.now = () => clock
+  db.findFirst = async () => { calls++; if (fail) throw new Error('db down'); return null }
+  try {
+    const burst = await Promise.all(Array.from({ length: 20 }, () => GET()))
+    assert.ok(burst.every(r => r.status === 200)); assert.equal(calls, 1, '20 permintaan bersamaan → 1 query')
+    clock += 4_000; assert.equal((await GET()).status, 200); assert.equal(calls, 1, 'dalam TTL tak ada query baru')
+    clock += 1_500; assert.equal((await GET()).status, 200); assert.equal(calls, 2, 'lewat TTL → query lagi')
+    clock += 6_000; fail = true
+    assert.equal((await GET()).status, 503); assert.equal((await GET()).status, 503); assert.equal(calls, 4, 'kegagalan tidak di-cache')
+    fail = false; assert.equal((await GET()).status, 200, 'pulih begitu DB kembali')
+    assert.deepEqual(await (await GET()).json(), { success: true, data: { status: 'ok' } }, 'tanpa detail tambahan')
+  } finally {
+    db.findFirst = realFind; Date.now = realNow
+  }
+})
+
+await t('SEC-50: katalog flight memetakan field eksplisit — kolom kuota internal tidak ikut, availableSeats ikut', () => {
+  const src = read(routes.find(f => rel(f).endsWith('v1/catalog/flight/route.ts')) ?? '')
+  assert.match(src, /availableSeats: Math\.max\(0, s\.totalSeats - s\.pendingSeats - s\.bookedSeats\)/)
+  assert.doesNotMatch(src, /\.\.\.s\b/, 'jangan menyebar baris DB mentah ke respons publik')
+  assert.doesNotMatch(src, /(?<!s\.)(totalSeats|pendingSeats|bookedSeats):/, 'kolom kuota mentah tak boleh jadi kunci respons')
+})
+
 await t('SEC-49: setiap `req.json()` diberi `.catch` — body rusak/kosong harus 400, bukan 500', () => {
   const bad: string[] = []
   for (const f of routes) {
