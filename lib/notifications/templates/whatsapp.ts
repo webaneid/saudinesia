@@ -7,7 +7,11 @@ export const waTemplates = {
     `Nomor WhatsApp Anda sudah terverifikasi untuk akun ${maskedEmail}. Notifikasi pesanan dan pembayaran Saudinesia akan dikirim ke nomor ini, selain lewat email.\n\nBukan akun Anda? Hubungi kami segera.`,
 
   whatsappTaken: () =>
-    `Nomor ini sudah terverifikasi pada akun Saudinesia lain, sehingga tidak bisa dipakai untuk akun ini. Notifikasi tetap dikirim lewat email. Hubungi kami bila perlu bantuan.`,
+    `Nomor ini sudah terverifikasi pada akun Saudinesia lain, sehingga tidak bisa dipakai untuk akun ini. Bila nomor ini sekarang milik Anda dan sebelumnya dipakai orang lain, balas *BATAL* untuk melepasnya dari akun tersebut, lalu kirim ulang kode verifikasi Anda. Notifikasi tetap dikirim lewat email.`,
+
+  // Balasan atas pesan BATAL dari pemegang nomor (SEC-43).
+  whatsappReleased: (maskedEmail: string) =>
+    `Verifikasi nomor ini untuk akun ${maskedEmail} sudah dilepas. Nomor ini tidak lagi menerima notifikasi WhatsApp Saudinesia untuk akun tersebut (email tetap dipakai). Untuk memakai nomor ini lagi, verifikasi ulang dari akun Anda.`,
 
   bookingSubmitted: (code: string, deadline: string) =>
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,

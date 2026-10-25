@@ -2535,6 +2535,18 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `app/api/v1/admin/products/{hotels/[id]/images,transport/vehicles/[id]/images}/route.ts`, `lib/admin/vendorQuickAdd.ts` (baru), 5 halaman produk + `CostTiersTab.tsx`, `scripts/test-routes.ts`.
 
+## 2026-10-25 — SEC-43: pelepasan verifikasi WhatsApp (BATAL + alat superadmin)
+
+**Decision:** Menambah `releaseWhatsappVerification` dengan dua pemicu: (1) pesan `BATAL` dari pemegang nomor yang terautentikasi webhook (JID), melepas verifikasi nomor itu dari akun mana pun; (2) `DELETE /admin/system/users/[id]/whatsapp` oleh superadmin. Nomor kontak tidak dihapus; kode menunggu dihanguskan; balasan `BATAL` hanya bila ada yang dilepas.
+
+**Rationale:** Satu nomor = satu akun terverifikasi (ADR-0002) membuat nomor daur ulang terkunci di akun pemilik lama dan pemilik baru hanya mendapat "hubungi kami". Pemegang nomor saat ini adalah pihak yang paling berhak mencabut; JID terautentikasi WhatsApp membuktikannya tanpa mengirim apa pun keluar. Dampak terburuk penyalahgunaan (orang yang benar-benar memegang nomor mencabutnya) hanya menghentikan WhatsApp ke nomor itu — email tetap jaring pengaman.
+
+**Alternatives considered:** Hanya alat admin (ditolak: pemilik nomor tetap bergantung pada CS); membalas BATAL juga saat tak ada yang dilepas (ditolak: oracle penebak nomor terverifikasi); menghapus nomor kontak saat dilepas (ditolak: pengguna harus bisa membuktikan ulang tanpa mengetik ulang); membakar kode saat BATAL dari bukan pemegang nomor (tidak relevan — BATAL tak memakai kode).
+
+**Security check (SOP langkah 5):** 0 Critical/High/Medium baru. Ditinjau: pengirim terautentikasi (HMAC + JID pribadi, chat=pengirim), rate limit per pengirim (punya pemanggil, `grep`), route superadmin tanpa body/PII di log, penulisan bersyarat anti-balapan, tak ada oracle. `bun audit` tidak berubah. Bukti: 3 mutasi tertangkap, HTTP nyata (webhook bertanda tangan + route admin).
+
+**Affects:** `lib/auth/whatsappVerify.ts`, `lib/whatsapp/webhook.ts`, `lib/auth/rateLimit.ts`, `lib/notifications/templates/whatsapp.ts`, `app/api/v1/admin/system/users/[id]/whatsapp/route.ts` (baru), `app/api/v1/admin/system/users/route.ts`, halaman admin pengguna, `scripts/test-whatsapp.ts`, `docs/arsitektur-whatsapp-verifikasi.md`.
+
 ## 2026-10-25 — SEC-14: superadmin dapat membuka pembatasan login/email satu akun
 
 **Decision:** Menambah `resetAccountLimits(email)` (hapus `loginAcct`, semua `loginAcctIp` akun itu, dan `authEmailSendEmail`) dan `POST /admin/system/users/[id]/reset-limits` hanya superadmin, dengan tombol di Manajemen Pengguna. Kunci akun login dibentuk `accountKey()` (email ≤64 apa adanya, selain itu di-hash) supaya kunci gabungan `akun|ip` selalu dapat dikenali berdasarkan awalan.

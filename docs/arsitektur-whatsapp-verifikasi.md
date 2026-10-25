@@ -73,3 +73,11 @@ Pengaman webhook (hasil audit): secret < 32 karakter / bawaan GOWA (`secret`) / 
 - **Audit keamanan independen** (`security-auditor`): 0 Critical, 0 High, 1 Medium, 5 Low, 2 Info — **semua diperbaiki** kecuali dua yang dicatat terbuka (alat admin pelepas nomor + balasan `BATAL`; anonimisasi akun — SEC-43/44).
 - **Belum diverifikasi:** GOWA asli — apakah `from` selalu JID nomor (bukan `@lid`; pesan LID diabaikan diam-diam dan kartu memberi petunjuk setelah 90 dtk), bentuk persis `/app/status` (parser menyerah ke "tidak diketahui"), JID negara tertentu yang beda dari E.164.
 
+## 10. Pelepasan verifikasi (SEC-43, 2026-10-25)
+
+Dua jalur melepas verifikasi nomor (`releaseWhatsappVerification` di `lib/auth/whatsappVerify.ts`): kolom `whatsappVerifiedAt`/`verifiedWhatsapp` dikosongkan dan kode verifikasi yang menunggu dihanguskan; **nomor kontak (`whatsapp`) tetap tersimpan** — akun hanya berhenti menerima WhatsApp sampai nomor dibuktikan lagi (email tidak terpengaruh). Penulisan bersyarat pada nomor yang dibaca, jadi tidak balapan dengan verifikasi/pergantian nomor.
+
+- **Pemegang nomor: balas `BATAL`** (juga `BATAL VERIF`/`BATAL VERIFIKASI`) ke nomor bisnis. Berlaku hanya untuk pesan dari pengirim yang JID-nya terautentikasi WhatsApp, obrolan pribadi (chat = pengirim). Melepas verifikasi nomor itu dari akun mana pun yang memegangnya — inti kasus nomor daur ulang: pemilik lama masih "terverifikasi", pemilik baru terkena `taken`. Balasan (ke pengirim sendiri, email akun tersamar) hanya bila ada yang dilepas; selain itu diam, sehingga tidak bisa dipakai menebak nomor mana yang terverifikasi. Dibatasi 5/jam per pengirim (`webhookCancelSender`). Pesan `taken` kini menyebut `BATAL`.
+- **Superadmin: `DELETE /api/v1/admin/system/users/[id]/whatsapp`** + tombol "Lepas WhatsApp" (muncul bila akun terverifikasi) di Manajemen Pengguna. Tanpa body; log audit hanya id pelaku/target.
+
+Uji: `scripts/test-whatsapp.ts` (+6 uji: parser, pelepasan lewat nomor/id, kasus nomor daur ulang end-to-end, cabang webhook BATAL, batas pengirim, penjaga route) — tiga pengaman dimutasi dan tertangkap; HTTP nyata (tanda tangan salah 401, BATAL sah melepas, manager/tanpa login 403, id tak ada 404, ulang → released=false).

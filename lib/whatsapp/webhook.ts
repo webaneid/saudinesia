@@ -1,4 +1,4 @@
-import { completeWhatsappVerification, jidToDigits, parseVerificationMessage, verifyWebhookSignature } from '@/lib/auth/whatsappVerify'
+import { completeWhatsappVerification, jidToDigits, parseCancelMessage, parseVerificationMessage, releaseWhatsappVerification, verifyWebhookSignature } from '@/lib/auth/whatsappVerify'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 
@@ -80,6 +80,7 @@ export async function processWebhook({ rawBody, signature, ip }: WebhookInput): 
   // Hanya obrolan pribadi dengan JID nomor (bukan grup `@g.us`, bukan LID yang tak bisa dipetakan ke nomor), dan chat harus = pengirim.
   const chat = jidToDigits(p.chat_id)
   const sender = jidToDigits(p.from)
+  if (sender && chat === sender && parseCancelMessage(p.body)) return handleCancel(sender)
   const code = parseVerificationMessage(p.body)
   if (!sender || !code || chat !== sender) return { status: 200, handled: false }
 
@@ -94,6 +95,18 @@ export async function processWebhook({ rawBody, signature, ip }: WebhookInput): 
   if (result.ok) return { status: 200, handled: true, reply: { phone: sender, message: waTemplates.whatsappVerified(maskEmail(result.email)) } }
   if (result.reason === 'taken') return { status: 200, handled: false, reply: { phone: sender, message: waTemplates.whatsappTaken() } }
   return { status: 200, handled: false }
+}
+
+/**
+ * `BATAL` (SEC-43): pemegang nomor saat ini melepas verifikasi nomornya dari akun yang menyimpannya. Dibalas HANYA bila ada yang dilepas, dan hanya
+ * ke pengirim sendiri; tak ada yang dilepas → diam (tak jadi alat menebak nomor mana yang terverifikasi). Dibatasi per pengirim.
+ */
+async function handleCancel(sender: string): Promise<WebhookOutcome> {
+  const bySender = await consume(policy('webhookCancelSender', sender))
+  if (!bySender.allowed) return { status: 200, handled: false }
+  const result = await releaseWhatsappVerification({ digits: sender })
+  if (!result.released) return { status: 200, handled: false }
+  return { status: 200, handled: true, reply: { phone: sender, message: waTemplates.whatsappReleased(maskEmail(result.email)) } }
 }
 
 /** j***@example.test — pemilik nomor mengenali akunnya (atau curiga bila itu bukan akunnya). */

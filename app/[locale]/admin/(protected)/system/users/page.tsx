@@ -9,7 +9,7 @@ import { useListPage } from '@/components/admin/data-table/useListPage'
 import { Badge } from '@/components/admin/ui/Badge'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 
-type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null }
+type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null; whatsappVerifiedAt: string | null }
 
 export default function UsersPage() {
   const { page, limit, setPage } = useListPage()
@@ -64,6 +64,14 @@ export default function UsersPage() {
     }
     await load()
   }
+  // SEC-43: lepas verifikasi WhatsApp (nomor daur ulang/disalahgunakan). Nomor kontak tetap; akun hanya berhenti menerima WhatsApp.
+  async function releaseWhatsapp(u: User) {
+    if (!window.confirm(`Lepas verifikasi WhatsApp akun ${u.email}? Notifikasi WhatsApp berhenti sampai nomor dibuktikan lagi (email tetap).`)) return
+    setNotice(null)
+    const r = await fetch(`/api/v1/admin/system/users/${u.id}/whatsapp`, { method: 'DELETE' })
+    setNotice({ text: r.ok ? 'Verifikasi WhatsApp akun ini sudah dilepas.' : 'Verifikasi WhatsApp gagal dilepas.', error: !r.ok })
+    await load()
+  }
   // SEC-14: korban lockout (30 gagal/jam, atau 3 email/10 mnt) dibebaskan superadmin tanpa menunggu jendela habis.
   async function resetLimits(id: string) {
     setNotice(null)
@@ -92,6 +100,11 @@ export default function UsersPage() {
       key: 'actions', header: '', align: 'right',
       cell: u => (
         <div className="flex items-center justify-end gap-3">
+          {u.whatsappVerifiedAt && (
+            <button onClick={() => releaseWhatsapp(u)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
+              Lepas WhatsApp
+            </button>
+          )}
           <button onClick={() => resetLimits(u.id)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
             Buka pembatasan
           </button>
