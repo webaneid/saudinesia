@@ -55,7 +55,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 | Reverse proxy | `Caddyfile` | TLS otomatis; domain dari env (`APP_DOMAIN`, `FILES_DOMAIN`), tidak ada domain di repo. Host file hanya GET/HEAD dan `frame-ancestors` (preview PDF memakai iframe — `X-Frame-Options: DENY` akan memblokirnya) |
 | Image aplikasi | `Dockerfile` | 2 target: `runner` (standalone Next.js, non-root) dan `migrate` (CLI Prisma). `NEXT_PUBLIC_*` masuk sebagai build-arg |
 | `.dockerignore` | `.dockerignore` | Sebelumnya tidak ada → `COPY . .` menyalin `.env.local` ke layer build |
-| Env production | `.env.production.example`, `scripts/buat-env-production.sh` | Skrip membuat `.env.production` dengan rahasia acak di server; tidak menimpa, izin 600, tidak menampilkan rahasia |
+| Env production | `.env.production.example`, `scripts/buat-env-production.sh` | Skrip membuat `.env.production` dengan rahasia acak di server (termasuk `REDIS_PASSWORD` + `REDIS_URL` yang disamakan — Redis berpassword, SEC-10); tidak menimpa, izin 600, tidak menampilkan rahasia. **`.env.production` yang sudah ada sebelum 2026-10-25 harus ditambah `REDIS_PASSWORD=<acak>` dan `REDIS_URL=redis://:<sandi sama>@redis:6379`** — tanpa itu `docker compose up` menolak jalan (`REDIS_PASSWORD belum diisi`) |
 | Image MinIO | `infra/minio/Dockerfile`, `.github/workflows/minio-image.yml` | MinIO tidak lagi menerbitkan image publik (pengalaman smart-ai) → dibangun sendiri ke GHCR. **Workflow harus dijalankan sekali sebelum deploy pertama** |
 | Health | `GET /api/v1/health` | Publik, hanya status + ping DB |
 
