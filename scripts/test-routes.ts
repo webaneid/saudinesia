@@ -101,6 +101,18 @@ await t('SEC-08: tidak ada route yang membangun data dari body mentah (`const b 
   assert.deepEqual(bad, [])
 })
 
+await t('SEC-61(b): GET vendor terbuka bagi manager TAPI hanya kolom pemilih; kontak/alamat & seluruh penulisan tetap superadmin', () => {
+  const src = read(routes.find(f => rel(f).endsWith('admin/system/settings/vendors/route.ts')) ?? '')
+  const get = src.slice(src.indexOf('export async function GET'), src.indexOf('export async function POST'))
+  assert.match(get, /requireManager\(\)/)
+  assert.doesNotMatch(get, /requireSuperAdmin\(\)/)
+  assert.match(get, /select: \{ id: true, name: true, category: true, country: true, isActive: true \}/, 'cabang manager harus memakai select ramping')
+  assert.doesNotMatch(get.slice(get.indexOf('const full')), /contactInfo|addressId/, 'kolom sensitif tak boleh ada di cabang non-superadmin')
+  assert.match(src.slice(src.indexOf('export async function POST')), /requireSuperAdmin\(\)/)
+  const byId = read(routes.find(f => rel(f).endsWith('admin/system/settings/vendors/[id]/route.ts')) ?? '')
+  assert.ok(!/requireManager\(\)/.test(byId) && /requireSuperAdmin\(\)/.test(byId), 'PUT/DELETE vendor tetap superadmin')
+})
+
 await t('helper galat: authFailureResponse — auth → 403; selain itu → 500 tanpa membocorkan pesan; isRecordNotFound hanya P2025', async () => {
   const origError = console.error
   console.error = () => {}

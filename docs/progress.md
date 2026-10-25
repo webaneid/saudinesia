@@ -688,7 +688,7 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] **Editor di Paket Umroh, Paket Ziarah, Situs Wisata, Katering + deskripsi Haji tampil di publik** (2026-10-25, Fase 4-8, `docs/arsitektur-editor-teks.md` §9): lima fase, tiap fase typecheck + build produksi terisolasi + uji browser + uji penolakan API + security check. Katering butuh kolom baru (migrasi aditif `add_catering_description`); POST Katering sebelumnya tanpa Zod → kini skema ketat. Tes `scripts/test-rich-text.ts` jadi 18.
 - [ ] Keputusan produk (tersisa): tampilkan deskripsi Situs Wisata di halaman publik; halaman edit produk Haji dan Katering di admin.
 - [x] **SEC-61(a)** (2026-10-23): `P2025` → 404 di 28 handler tulis by-id (17 route) lewat `lib/admin/errors.ts`; `seasons/[id]` DELETE tak lagi menjawab 403 untuk semua galat. Terbukti sebelum 500 → sesudah 404.
-- [ ] SEC-61(b) (Low, terbuka): akses daftar vendor (`GET /admin/system/settings/vendors`) untuk peran `manager`.
+- [x] SEC-61(b) (Low): akses daftar vendor untuk peran `manager` — selesai 2026-10-25 (Fase C).
 
 ---
 
@@ -699,7 +699,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 **Paket hardening kecil (usulan satu PR berikutnya):**
 - [x] **SEC-07 (Medium) — SELESAI 2026-10-25:** 11 route stub `ok(null)` tanpa auth yang menjawab sukses (`groups`, `groups/[id]`, `groups/[id]/invite`, `admin/reports`, `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/notifications`, `admin/bookings/[id]/status`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`) — hapus atau amankan.
 - [x] **SEC-08 (Medium) — SELESAI 2026-10-25:** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
-- [ ] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`.
+- [x] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`. (Selesai 2026-10-25, Fase C)
 - [x] **SEC-12 (Low) — SELESAI (tertutup SEC-44, dibuktikan 2026-10-25):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
 - [x] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir. (Selesai 2026-10-25, Fase B)
 - [ ] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA).
@@ -758,4 +758,6 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 **Hasil Fase A — SEC-12 (2026-10-25):** tidak perlu perubahan kode; celah sudah tertutup SEC-44. Dibuktikan nyata (409 pada dua upaya menimpa permintaan `rejected`, baris tak berubah) dan register dikoreksi.
 
 **Hasil Fase B — SEC-13 (2026-10-25):** `updateUserByAdmin` kini menerima aktor dan mengembalikan hasil terpisah (`not_found`/`self`/`last_superadmin`); route memetakan dua penolakan ke 422 dengan pesan Indonesia, halaman pengguna menampilkannya. Kunci transaksi: akun target + semua superadmin aktif, urut `id`. Tes baru `scripts/test-admin-users.ts` (7 kasus, masuk `bun run test`; 15 putaran paralel dua-superadmin-saling-menurunkan) — uji kebalikan: tanpa kunci superadmin, kedua permintaan lolos dan tes gagal. Uji HTTP nyata (ubah-diri 422 ×2, no-op diri 200, akun lain 200, id tak ada 404, body rusak 400, tanpa cookie 403). Catatan: `last_superadmin` lewat HTTP hanya terjangkau lewat balapan dua superadmin (aktor harus superadmin aktif), dibuktikan di tingkat fungsi. Build produksi terisolasi 0 error; tanpa dependensi baru. Security check: 0 temuan baru (mengetatkan otorisasi; SQL mentah memakai parameter tagged-template).
+
+**Hasil Fase C — SEC-61(b) (2026-10-25):** `GET` vendor → `requireManager`; manager mendapat `select` ramping, superadmin tetap `include: address`; urutan kini punya tie-breaker `id`. HTTP nyata: superadmin 200 + `contactInfo`/alamat; manager 200 tanpa kolom itu; admin/pilgrim/tanpa cookie 403; POST/PUT/DELETE manager 403. Penjaga di `scripts/test-routes.ts` (dimutasi: menambah `contactInfo` ke cabang manager → gagal). Build produksi terisolasi (tsc 0 error). Security check: 0 temuan; permukaan baru = daftar nama vendor ke manager (sudah terlihat di tab HPP mereka). Catatan UI: *quick-add* vendor masih 403 diam-diam bagi manager.
 
