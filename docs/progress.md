@@ -702,7 +702,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [x] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`. (Selesai 2026-10-25, Fase C)
 - [x] **SEC-12 (Low) — SELESAI (tertutup SEC-44, dibuktikan 2026-10-25):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
 - [x] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir. (Selesai 2026-10-25, Fase B)
-- [ ] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA).
+- [x] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA). (Selesai 2026-10-25, Fase D)
 - [ ] **SEC-49 (Low, sebagian):** `await req.json()` tanpa `.catch` di beberapa route tersisa.
 - [ ] **SEC-50 (Low):** `catalog/flight` publik membocorkan `totalSeats/pendingSeats/bookedSeats`.
 
@@ -760,4 +760,6 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 **Hasil Fase B — SEC-13 (2026-10-25):** `updateUserByAdmin` kini menerima aktor dan mengembalikan hasil terpisah (`not_found`/`self`/`last_superadmin`); route memetakan dua penolakan ke 422 dengan pesan Indonesia, halaman pengguna menampilkannya. Kunci transaksi: akun target + semua superadmin aktif, urut `id`. Tes baru `scripts/test-admin-users.ts` (7 kasus, masuk `bun run test`; 15 putaran paralel dua-superadmin-saling-menurunkan) — uji kebalikan: tanpa kunci superadmin, kedua permintaan lolos dan tes gagal. Uji HTTP nyata (ubah-diri 422 ×2, no-op diri 200, akun lain 200, id tak ada 404, body rusak 400, tanpa cookie 403). Catatan: `last_superadmin` lewat HTTP hanya terjangkau lewat balapan dua superadmin (aktor harus superadmin aktif), dibuktikan di tingkat fungsi. Build produksi terisolasi 0 error; tanpa dependensi baru. Security check: 0 temuan baru (mengetatkan otorisasi; SQL mentah memakai parameter tagged-template).
 
 **Hasil Fase C — SEC-61(b) (2026-10-25):** `GET` vendor → `requireManager`; manager mendapat `select` ramping, superadmin tetap `include: address`; urutan kini punya tie-breaker `id`. HTTP nyata: superadmin 200 + `contactInfo`/alamat; manager 200 tanpa kolom itu; admin/pilgrim/tanpa cookie 403; POST/PUT/DELETE manager 403. Penjaga di `scripts/test-routes.ts` (dimutasi: menambah `contactInfo` ke cabang manager → gagal). Build produksi terisolasi (tsc 0 error). Security check: 0 temuan; permukaan baru = daftar nama vendor ke manager (sudah terlihat di tab HPP mereka). Catatan UI: *quick-add* vendor masih 403 diam-diam bagi manager.
+
+**Hasil Fase D — SEC-47 (2026-10-25):** `canAccessAddress` (staf atau pemilik lewat `User.addressId`; lainnya 404), `PUT` id tak ada → 404, `POST /address` + policy `addressCreateUser` + `.catch` pada body. Karena tak ada klien yang memanggil endpoint ini, tidak ada UI yang berubah (alur profil/hotel/vendor lewat `upsertAddress` tidak tersentuh). HTTP nyata (lihat register) + penjaga sumber (dimutasi). tsc 0 error. Security check: 0 temuan; hanya mengetatkan akses.
 

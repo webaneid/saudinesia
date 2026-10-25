@@ -113,6 +113,23 @@ await t('SEC-61(b): GET vendor terbuka bagi manager TAPI hanya kolom pemilih; ko
   assert.ok(!/requireManager\(\)/.test(byId) && /requireSuperAdmin\(\)/.test(byId), 'PUT/DELETE vendor tetap superadmin')
 })
 
+await t('SEC-47: /address — GET/PUT lewat canAccessAddress (BOLA), POST dibatasi addressCreateUser, body rusak tidak 500', () => {
+  const byId = read(routes.find(f => rel(f).endsWith('v1/address/[id]/route.ts')) ?? '')
+  for (const verb of ['GET', 'PUT']) {
+    const start = byId.indexOf(`export async function ${verb}`)
+    const block = byId.slice(start, start + 700)
+    assert.match(block, /canAccessAddress\(session, id\)/, `${verb} harus memeriksa kepemilikan`)
+    assert.match(block, /const session = await requireSession\(\)/)
+  }
+  assert.match(byId, /isRecordNotFound\(e\)/)
+  const root = read(routes.find(f => rel(f).endsWith('v1/address/route.ts')) ?? '')
+  assert.match(root, /consume\(policy\('addressCreateUser', session\.userId\)\)/)
+  assert.match(root, /req\.json\(\)\.catch\(/)
+  const access = read('lib/address/access.ts')
+  assert.match(access, /ADMIN_ROLES\.includes\(session\.role\)/)
+  assert.match(access, /me\?\.addressId === addressId/)
+})
+
 await t('helper galat: authFailureResponse — auth → 403; selain itu → 500 tanpa membocorkan pesan; isRecordNotFound hanya P2025', async () => {
   const origError = console.error
   console.error = () => {}

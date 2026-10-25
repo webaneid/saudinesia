@@ -5,13 +5,16 @@ import { ok, err } from '@/lib/validators'
 import { addressSchema } from '@/lib/validators/address'
 import { prepareAddressData } from '@/lib/address/prepare'
 import { getCountryName } from '@/lib/constants/countries'
+import { canAccessAddress } from '@/lib/address/access'
+import { isRecordNotFound } from '@/lib/admin/errors'
 
 type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
   try {
-    await requireSession()
+    const session = await requireSession()
     const { id } = await params
+    if (!(await canAccessAddress(session, id))) return NextResponse.json(err('Alamat tidak ditemukan'), { status: 404 })
     const address = await prisma.address.findUnique({
       where: { id },
       include: { province: true, regency: true, district: true, village: true },
@@ -29,9 +32,10 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
-    await requireSession()
+    const session = await requireSession()
     const { id } = await params
-    const parsed = addressSchema.safeParse(await req.json())
+    if (!(await canAccessAddress(session, id))) return NextResponse.json(err('Alamat tidak ditemukan'), { status: 404 })
+    const parsed = addressSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const prepared = await prepareAddressData(parsed.data)
@@ -41,6 +45,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     return NextResponse.json(ok(address))
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
+    if (isRecordNotFound(e)) return NextResponse.json(err('Alamat tidak ditemukan'), { status: 404 })
     console.error('[address/[id]/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
