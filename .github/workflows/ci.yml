@@ -38,13 +38,13 @@ jobs:
       # Nilai dummy khusus CI (bukan rahasia) — hanya agar `next build` tidak berhenti karena env kosong.
       JWT_SECRET: ci-secret-yang-panjangnya-lebih-dari-32-karakter
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0 # gitleaks memindai seluruh commit PR
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version: latest
+          bun-version: 1.3.11 # pin; naikkan sengaja bersama Dockerfile (oven/bun)
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -82,7 +82,7 @@ jobs:
         continue-on-error: true
 
       - name: Secret scan (lapis kedua, independen dari hook Claude Code)
-        uses: gitleaks/gitleaks-action@v3
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_COMMENTS: "false" # komentar PR butuh izin tulis — hasil cukup di log CI
@@ -100,7 +100,7 @@ jobs:
       IMG_REPO: ci/saudinesia
       IMG_TAG: ci
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Buat .env.production dengan skrip produksi (sekaligus menguji skripnya)
         run: |
