@@ -2596,3 +2596,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 14 suite lulus.
 
 **Affects:** `lib/pricing/costComponents.ts`, `costComponentOwners.ts`, `costComponentHandlers.ts` (baru), `lib/validators/costComponent.ts` (baru), `computePackagePrice.ts`, `computeTourPackagePrice.ts`, 4 route `…/costs` + 2 route `…/costs/simulate` (baru), `scripts/test-cost-components.ts`, `package.json`, `docs/arsitektur-komponen-biaya.md`.
+
+## 2026-10-26 — Komponen Biaya universal, Fase 2: panel UI bersama; CRUD lengkap sebagai prinsip
+
+**Decision:** UI "Komponen Biaya" diekstrak ke `components/admin/pricing/CostComponentsPanel.tsx` (+ `VendorCurrencyField`) dan dipakai Paket Umroh serta Paket Ziarah; panel memuat datanya sendiri dari `apiBase` dan memberi tahu induk lewat `onChanged`. Markup dipindah apa adanya (idiom visual baku dipertahankan). Ditambahkan: pesan galat simpan/hapus, pesan "hanya superadmin" untuk manager, `aria-label`. Prinsip pemilik dicatat: setiap entitas admin harus punya **CRUD lengkap** (Haji: edit + hapus bersemantik aman + aktifkan kembali) — dimasukkan ke rencana F3/F4.
+
+**Rationale:** Dua salinan 190+ baris yang identik sudah menyebabkan pratinjau memakai margin tipe lain (SEC-65) dan kegagalan yang diam. Satu panel membuat Haji (F4) cukup memasang komponen. Verifikasi memakai perbandingan DOM sebelum/sesudah, bukan sekadar build hijau, karena regresi tampilan tidak tertangkap tipe/tes unit.
+
+**Alternatives considered:** Mengekstrak hanya tipe/hook (ditolak: markup tetap terduplikasi); menyatukan juga editor tier/jadwal Hotel/Pesawat/Transport/Visa (di luar scope: model datanya berbeda); membiarkan manager melihat daftar kosong (ditolak: menyesatkan); menunggu browser pane (ditolak: menolak localhost — dipakai Chrome terpasang lewat protokol DevTools, skrip sementara).
+
+**Security check (SOP langkah 5):** 0 Critical/High; 0 temuan baru. UI klien: tanpa `dangerouslySetInnerHTML`, semua teks lewat React; hanya memanggil route superadmin-only yang sudah diuji (F1) dan `settings/vendors` (SEC-61b). Menutup SEC-65. `bun audit` tidak berubah (5).
+
+**Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 14 suite lulus; snapshot DOM/teks sebelum/sesudah identik kecuali selisih yang disengaja; jalur galat UI diuji; penjaga dimutasi.
+
+**Affects:** `components/admin/pricing/CostComponentsPanel.tsx`, `VendorCurrencyField.tsx` (baru), `products/packages/[id]/page.tsx`, `products/tour-packages/[id]/page.tsx`, route `tour-packages/simulate` (dihapus), `scripts/test-cost-components.ts`, `scripts/test-routes.ts`, `docs/arsitektur-komponen-biaya.md`.
