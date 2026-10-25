@@ -700,7 +700,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [x] **SEC-07 (Medium) — SELESAI 2026-10-25:** 11 route stub `ok(null)` tanpa auth yang menjawab sukses (`groups`, `groups/[id]`, `groups/[id]/invite`, `admin/reports`, `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/notifications`, `admin/bookings/[id]/status`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`) — hapus atau amankan.
 - [x] **SEC-08 (Medium) — SELESAI 2026-10-25:** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
 - [ ] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`.
-- [ ] **SEC-12 (Low):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
+- [x] **SEC-12 (Low) — SELESAI (tertutup SEC-44, dibuktikan 2026-10-25):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
 - [ ] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir.
 - [ ] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA).
 - [ ] **SEC-49 (Low, sebagian):** `await req.json()` tanpa `.catch` di beberapa route tersisa.
@@ -735,4 +735,25 @@ Keputusan pemilik 2026-10-25: arah produk (checkout, Group Booking, refund, dst.
 
 **Hasil Fase A — SEC-07 (2026-10-25):** 11 stub dihapus; 13 request tanpa login yang dulu sukses (200/201) kini 404; route dan halaman sah di sekitarnya tidak terpengaruh. Penjaga regresi `scripts/test-routes.ts` masuk `bun run test`/CI (dimutasi). Build produksi terisolasi 0 error; `bun audit` tidak berubah (5; tanpa dependensi baru). Security check: 0 temuan (mengurangi permukaan serang; skrip baru hanya membaca berkas).
 **Hasil Fase B — SEC-08 (2026-10-25):** helper `lib/admin/errors.ts` (`isAuthError`, `authFailureResponse`); 15 blok `catch → 403` diganti (auth → 403, selain itu log + 500); `seasons` POST kini tervalidasi (`seasonCreateSchema`). Tanpa login 15 endpoint terkait tetap 403; dengan sesi admin input salah → 400 berpesan jelas. Penjaga CI di `scripts/test-routes.ts` (dimutasi). Build produksi terisolasi 0 error; `bun audit` tidak berubah. Security check: 0 temuan baru; dicatat di luar cakupan: route admin lama belum memisahkan 401 vs 403.
+
+---
+
+## Hardening SEC-61(b), 12, 13, 47, 49, 50 (rencana 2026-10-25; register `docs/lessons-learned.md`)
+
+Lanjutan agenda setelah SEC-07/08. Arah produk tetap ditunda (keputusan pemilik).
+
+**Hasil recheck kode (sebelum merancang) — beberapa catatan register ternyata basi atau terlalu sempit:**
+
+| Temuan | Hasil recheck | Rencana |
+|---|---|---|
+| SEC-12 | **Sudah tertutup oleh penulisan ulang SEC-44**: `rejectDeletion`/`executeDeletion` memakai klaim atomik `status = pending`, API menjawab 409, dan `scripts/test-deletion.ts` menguji "diproses dua kali → not_pending" (juga paralel). Register tidak diperbarui saat itu | Fase A: buktikan nyata lewat API (permintaan `rejected` tidak bisa ditimpa), tutup di register |
+| SEC-13 | Akurat: `PUT /admin/system/users/[id]` tak tahu siapa pemanggilnya; `updateUserByAdmin` hanya mengunci baris target | Fase B: tolak mengubah peran/menonaktifkan **akun sendiri**, dan tolak bila akibatnya **tak ada superadmin aktif**; kunci semua baris superadmin aktif (urut `id`) agar dua superadmin yang saling menurunkan tidak lolos bersamaan; tes DB baru |
+| SEC-61(b) | Akurat: `GET /admin/system/settings/vendors` hanya superadmin, padahal 6 halaman produk (area `manager`) memuatnya untuk dropdown vendor | Fase C: `GET` → `requireManager`; manager menerima **field ramping** (tanpa `contactInfo`/alamat), superadmin tetap penuh; tulis (POST/PUT/DELETE) tetap superadmin (sesuai catatan register); uji dengan akun manager sungguhan |
+| SEC-47 | Akurat, dengan temuan baru: **tidak ada klien yang memanggil** `address` POST maupun `address/[id]` (semua tulis alamat lewat `upsertAddress` di route pemilik) | Fase D: GET/PUT hanya admin atau pemilik (`User.addressId`), selain itu 404 (tanpa oracle keberadaan); POST dikenai rate limit; endpoint **tidak dihapus** (terdokumentasi di `arsitektur-alamat.md`, mungkin dipakai arah produk baru) |
+| SEC-49 | **Jauh lebih luas dari catatan**: ±60 titik `await req.json()` tanpa `.catch` di route admin/address (catatan hanya menyebut ±8); setelah SEC-08, JSON rusak jadi 500 + log galat, bukan 400 | Fase E: ganti semua ke `.catch(() => null)` (→ `safeParse(null)` → 400); 3 titik destructuring ditangani khusus; penjaga CI di `scripts/test-routes.ts` |
+| SEC-50 | Akurat: `catalog/flight` menyebar `...s` (membocorkan `totalSeats/pendingSeats/bookedSeats`); `health` menyentuh DB tiap request. Tak ada pemakai dalam aplikasi untuk API flight | Fase F: peta eksplisit + `availableSeats` (pola `availableRooms` hotel); `health` di-cache 5 dtk (healthcheck Docker tetap berfungsi — tidak memakai rate limit yang bisa memblokirnya) |
+
+Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata (termasuk kasus yang harus ditolak), security check, dokumentasi.
+
+**Hasil Fase A — SEC-12 (2026-10-25):** tidak perlu perubahan kode; celah sudah tertutup SEC-44. Dibuktikan nyata (409 pada dua upaya menimpa permintaan `rejected`, baris tak berubah) dan register dikoreksi.
 
