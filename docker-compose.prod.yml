@@ -18,6 +18,11 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
+# Hardening kontainer (SEC-10). no-new-privileges: proses tak bisa menaikkan hak lewat setuid/setgid biner.
+x-hardening: &hardening
+  security_opt:
+    - no-new-privileges:true
+
 services:
   # SATU replika saja: cron (auto-cancel, reminder, kurs) jalan di dalam proses lewat node-cron di
   # instrumentation.ts. Lebih dari satu replika = tiap job berjalan ganda (booking dibatalkan/diingatkan dua kali).
@@ -25,6 +30,13 @@ services:
     image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/web:${IMAGE_TAG:-latest}
     restart: unless-stopped
     env_file: .env.production
+    # POSTGRES_PASSWORD hanya dibutuhkan kontainer postgres (+ tertanam di DATABASE_URL); `environment` mengalahkan `env_file`, jadi nilainya
+    # DIKOSONGKAN di sini — satu salinan rahasia DB yang tak perlu terbaca proses web yang dihadapkan ke internet (SEC-10).
+    environment:
+      POSTGRES_PASSWORD: ""
+    <<: *hardening
+    # Non-root (user `bun`) dan tak butuh capability apa pun — port 3000 bukan port istimewa.
+    cap_drop: [ALL]
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -52,6 +64,8 @@ services:
     # HANYA DATABASE_URL — kontainer ini tak butuh JWT_SECRET/GOOGLE_CLIENT_SECRET/RESEND_API_KEY/token GOWA (minimum hak; SEC-10).
     environment:
       DATABASE_URL: ${DATABASE_URL:?DATABASE_URL belum diisi}
+    <<: *hardening
+    cap_drop: [ALL]
     depends_on:
       postgres:
         condition: service_healthy
@@ -69,6 +83,10 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD belum diisi}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    <<: *hardening
+    # Entrypoint resmi mulai sebagai root: memperbaiki kepemilikan direktori data lalu turun ke user `postgres` (gosu). Hanya hak itu yang diberi.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U saudinesia -d saudinesia"]
       interval: 5s
@@ -83,12 +101,18 @@ services:
     logging: *logging
 
   # Rate limit auth (lib/auth/rateLimit.ts). Data berumur pendek: kehilangannya hanya mengosongkan hitungan (ada fallback memori).
+  # Berpassword (SEC-10): jaringan internal bukan batas keamanan — kontainer lain yang terkompromi tak boleh bisa menguras/menghapus
+  # hitungan rate limit. REDIS_PASSWORD yang sama harus ada di REDIS_URL (redis://:<password>@redis:6379) di .env.production.
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru"]
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD belum diisi}"]
     volumes:
       - redis_data:/data
+    <<: *hardening
+    # Entrypoint resmi: root → perbaiki kepemilikan /data → turun ke user `redis`.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
     networks: [internal]
     mem_limit: 192m
     cpus: 0.25
@@ -107,6 +131,7 @@ services:
       MINIO_SITE_REGION: ap-southeast-1
     volumes:
       - minio_data:/data
+    <<: *hardening # cap_drop ditunda: image MinIO tidak dibangun/diuji di CI stack (lihat docs/lessons-learned.md SEC-10)
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/minio/health/live || exit 1"] # alpine: wget busybox
       interval: 10s
@@ -134,6 +159,7 @@ services:
       - caddy_data:/data     # sertifikat TLS — jangan dihapus (rate limit Let's Encrypt)
       - caddy_config:/config
     depends_on: [web, minio]
+    <<: *hardening # cap_drop ditunda: Caddy (bind 80/443) tidak dijalankan di CI stack — perlu uji di server/staging
     networks: [internal]
     mem_limit: 128m
     cpus: 0.25

@@ -2535,6 +2535,18 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `app/api/v1/admin/products/{hotels/[id]/images,transport/vehicles/[id]/images}/route.ts`, `lib/admin/vendorQuickAdd.ts` (baru), 5 halaman produk + `CostTiersTab.tsx`, `scripts/test-routes.ts`.
 
+## 2026-10-25 — SEC-10: hardening kontainer produksi (sebagian)
+
+**Decision:** `no-new-privileges` pada semua service; `cap_drop: ALL` pada web & migrate dan pada postgres/redis dengan `cap_add` minimal untuk entrypoint resmi; Redis `--requirepass` dengan `REDIS_PASSWORD` wajib (`REDIS_URL` memuat sandi, dibuat generator env); `POSTGRES_PASSWORD` dikosongkan di kontainer web. minio dan caddy hanya `no-new-privileges`; `cap_drop` mereka ditunda sampai bisa diuji.
+
+**Rationale:** Jaringan internal bukan batas keamanan — satu kontainer terkompromi tak boleh bisa menguras Redis atau membaca rahasia DB tambahan; capability default Docker jauh melebihi kebutuhan. CI sudah menjalankan stack sungguhan (postgres, redis, migrate, web), sehingga setiap pembatasan di empat service itu dibuktikan di sana, bukan ditebak. Server belum live, jadi mengubah kontrak env (REDIS_PASSWORD) sekarang murah.
+
+**Alternatives considered:** `cap_drop ALL` untuk minio/caddy tanpa uji (ditolak: tak ada Docker lokal dan CI tak menjalankannya — risiko outage); `read_only` rootfs (ditunda: Next.js/Prisma menulis cache, perlu tmpfs yang diuji); memisahkan POSTGRES_PASSWORD ke berkas env terpisah (ditolak: mengubah alur deploy; pengosongan lewat `environment` cukup); pin digest image (ditunda ke keputusan pemeliharaan bersama Dependabot docker).
+
+**Security check (SOP langkah 5):** 0 Critical/High; infra ditinjau terhadap checklist infra (non-root tetap, tanpa port data store, tanpa `privileged`/docker.sock, rahasia tidak masuk image). `bun audit` tidak berubah. Bukti: CI job docker (lihat PR), penjaga statis dimutasi, generator env diuji lokal (sandi dan URL cocok).
+
+**Affects:** `docker-compose.prod.yml`, `.env.production.example`, `scripts/buat-env-production.sh`, `.github/workflows/ci.yml`, `scripts/test-routes.ts`, `docs/deployment.md`.
+
 ## 2026-10-25 — SEC-11: pin GitHub Actions ke SHA dan Bun ke versi tetap
 
 **Decision:** Semua action pihak ketiga dipin ke SHA commit (dengan komentar versi); `bun-version` CI dipin ke 1.3.11 (sama dengan versi lokal). Penjaga statis di `scripts/test-routes.ts` menolak `uses:` tanpa SHA dan `bun-version: latest`.
