@@ -709,7 +709,12 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [x] **SEC-50 (Low):** `catalog/flight` publik membocorkan `totalSeats/pendingSeats/bookedSeats`; `health` tanpa cache. (Selesai 2026-10-25, Fase F)
 
 **Hardening infrastruktur & kebijakan (sebelum go-live):**
-- [ ] SEC-10 (container `no-new-privileges`/`cap_drop`, Redis password), SEC-11 (pin GitHub Actions ke SHA), SEC-14 (lockout-DoS terdistribusi — diterima/mitigasi), SEC-35 (persetujuan terikat versi teks), SEC-43 (alat admin melepas nomor terverifikasi, balasan `BATAL`), SEC-05 (sisa 5 advisory: `braces` tanpa perbaikan hulu + 4 via `minio`).
+- [x] SEC-10 (sebagian), SEC-11, SEC-14, SEC-43 — selesai 2026-10-25 (PR #25–#28). SEC-35 dikerjakan bersama persetujuan WhatsApp saat arah produk jelas. SEC-05: sisa 5 advisory sudah diterima dengan bukti (register).
+- [ ] **WAJIB SEBELUM DEPLOY ke server (server belum dibeli — diputuskan 2026-10-25 disimpan, dikerjakan sambil menyentuh modul terkait):** tiga sisa hardening SEC-10 —
+  1. `cap_drop: ALL` (+ `cap_add` minimal) untuk **minio** dan **caddy** di `docker-compose.prod.yml` (kini hanya `no-new-privileges`; CI tidak menjalankan keduanya, jadi uji di server/staging: Caddy butuh NET_BIND_SERVICE, cek MinIO).
+  2. `read_only: true` rootfs untuk web (dan layanan lain yang memungkinkan) + `tmpfs` untuk yang ditulis (Next.js/Prisma cache, `/tmp`) — wajib diuji di artefak produksi (`bun server.js`) dan di job CI `docker`.
+  3. Pin **digest** image Docker (`oven/bun:1-slim` di `Dockerfile`, `postgres:16-alpine`, `redis:7-alpine`, `caddy`, image MinIO) + aktifkan Dependabot ecosystem `docker` agar patch keamanan tetap masuk. Keputusan pemeliharaan: digest tanpa Dependabot = image membusuk.
+  Daftar ini juga ada di `docs/deployment.md` §6 (butir 0) dan register SEC-10.
 
 **Produk & operasional (arah besar, perlu keputusan):**
 - [ ] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya.

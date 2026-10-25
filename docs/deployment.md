@@ -97,6 +97,12 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 
 ## 6. Sebelum go-live (blocker, urut)
 
+0. **Sisa hardening kontainer (SEC-10) — kerjakan sebelum server dipakai** (disimpan 2026-10-25; server belum dibeli, boleh dikerjakan sambil menyentuh modul terkait):
+   (a) `cap_drop: ALL` + `cap_add` minimal untuk `minio` dan `caddy` (uji di server/staging — CI tidak menjalankan keduanya);
+   (b) `read_only` rootfs + `tmpfs` untuk web, dibuktikan di artefak produksi dan job CI `docker`;
+   (c) pin digest image (`oven/bun`, `postgres`, `redis`, `caddy`, MinIO) bersama Dependabot ecosystem `docker`.
+   Rincian dan alasan: `docs/lessons-learned.md` SEC-10, `docs/decisions.md` 2026-10-25 (SEC-10).
+
 1. **Superadmin pertama** — `scripts/create-superadmin.ts` (ikut ke image web). Jalankan di server:
    `docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy exec web bun scripts/create-superadmin.ts --email <email> --name "<nama>"`
    lalu ketik password dua kali (tidak ditampilkan; tidak lewat argumen supaya tak masuk riwayat shell). Otomasi: `exec -T` + `--password-stdin`.
