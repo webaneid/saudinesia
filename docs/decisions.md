@@ -2582,3 +2582,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Security check (SOP langkah 5):** 0 Critical/High; menutup SEC-11 (Low). Perubahan infra/workflow ditinjau terhadap checklist infra (permissions tidak berubah, tanpa `pull_request_target`). `bun audit` tidak berubah. Bukti: SHA diverifikasi via API, penjaga dimutasi, CI PR hijau.
 
 **Affects:** `.github/workflows/ci.yml`, `.github/workflows/minio-image.yml`, `scripts/test-routes.ts`.
+
+## 2026-10-26 — Komponen Biaya universal, Fase 1: backend bersama
+
+**Decision:** Memindahkan logika Komponen Biaya (hitung per komponen, CRUD, simulasi) ke `lib/pricing/costComponents*.ts` dengan registry pemilik (`package`, `tour_package`); route modul menjadi re-export tipis. Rumus tetap **margin per komponen lalu dijumlah** (keputusan pemilik 2026-10-26). Handler menerima `authorize` yang dapat disuntik (default `requireSuperAdmin`) agar bisa diuji tanpa cookie. Body kini `.strict()`.
+
+**Rationale:** Empat route, dua blok hitung, dan dua fungsi refresh yang identik membuat tiap perbaikan harus dilakukan berkali-kali dan sudah melahirkan tiga celah (SEC-63/64) serta satu salah-pakai tipe (SEC-65). Satu implementasi + registry membuat Haji (Fase 3) cukup satu entri + route tipis. Perilaku lama dibuktikan tidak berubah dengan snapshot sebelum/sesudah, bukan sekadar build hijau — hitung ini ikut menentukan harga booking.
+
+**Alternatives considered:** Menyalin pola ke Haji (ditolak pemilik: duplikasi ketiga); factory route Next dinamis (ditolak: route Next butuh berkas statis); menambah `orderBy` pada hitung komponen (ditunda: murni refactor, urutan dipertahankan); memigrasi Hotel/Pesawat/Transport/Visa/Muthowif (di luar scope: itu editor tier/jadwal, bukan komponen bebas).
+
+**Security check (SOP langkah 5):** 0 Critical/High pada kode yang diubah; menutup SEC-63, SEC-64, SEC-65 (Low); mencatat SEC-66 (Medium, pre-existing, booking Haji berharga 0) dengan jadwal Fase 3. Checklist route handler: Zod strict, `authorize()` pertama di kelima handler (diuji + `grep`), scoping kepemilikan, galat dibedakan (403/400/404/500), tanpa SQL mentah, respons tanpa data internal. `bun audit` tidak berubah. Bukti: snapshot sebelum/sesudah identik, probe celah sebelum/sesudah, HTTP nyata, 5 mutasi tertangkap.
+
+**Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 14 suite lulus.
+
+**Affects:** `lib/pricing/costComponents.ts`, `costComponentOwners.ts`, `costComponentHandlers.ts` (baru), `lib/validators/costComponent.ts` (baru), `computePackagePrice.ts`, `computeTourPackagePrice.ts`, 4 route `…/costs` + 2 route `…/costs/simulate` (baru), `scripts/test-cost-components.ts`, `package.json`, `docs/arsitektur-komponen-biaya.md`.

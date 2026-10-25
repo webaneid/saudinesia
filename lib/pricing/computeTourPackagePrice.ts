@@ -1,18 +1,7 @@
 import { prisma } from '@/lib/db'
-import { getLatestRate, getMarginRule, roundToNearest } from './pricingHelpers'
+import { computeCostComponents, type ComponentBreakdown } from './costComponents'
 
-type CostTier = { minDays: number; maxDays: number; cost: number }
-
-// Flat, tidak day-based — sama alasan Flight/Muthowif/Transport (docs/arsitektur-ziarah.md §8.3).
-const PROBE_DAY = 1
-
-export type ComponentBreakdown = {
-  costComponent: string
-  vendorId: string
-  currency: string
-  hppRupiah: number
-  sellPrice: number
-}
+export type { ComponentBreakdown }
 
 // Kendaraan sbg OPSI (mode user_choice) — pilgrim pilih sendiri saat booking, harga TIDAK masuk
 // ke base total (docs/arsitektur-ziarah.md §12.2/§12.4).
@@ -92,34 +81,7 @@ export async function computeTourPackageBreakdown(tourPackageId: string): Promis
     },
   })
 
-  const costs = await prisma.productCost.findMany({
-    where: { productType: 'tour_package', productId: tourPackageId, isActive: true },
-  })
-
-  const marginRule = await getMarginRule('tour_package')
-  const minMarginPercent = marginRule ? Number(marginRule.minMarginPercent) : 20
-  const roundingIncrement = marginRule ? marginRule.roundingIncrement : 50000
-
-  const components: ComponentBreakdown[] = []
-  for (const c of costs) {
-    const tiers = c.costTiers as unknown as CostTier[]
-    const tier = tiers.find(t => PROBE_DAY >= t.minDays && PROBE_DAY <= t.maxDays)
-    if (!tier) continue
-
-    let hppRupiah: number
-    if (c.currency === 'IDR') {
-      hppRupiah = tier.cost
-    } else {
-      const rate = await getLatestRate(c.currency, 'IDR')
-      if (!rate) continue // kurs tidak ditemukan — skip komponen ini, bukan error total
-      hppRupiah = tier.cost * Number(rate.sellRate)
-    }
-
-    const sellPrice = roundToNearest(hppRupiah * (1 + minMarginPercent / 100), roundingIncrement)
-    components.push({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice })
-  }
-
-  const componentsTotalSellPrice = components.reduce((sum, c) => sum + c.sellPrice, 0)
+  const { components, totalSellPrice: componentsTotalSellPrice } = await computeCostComponents('tour_package', tourPackageId)
 
   // Kendaraan — hanya SATU dari dua sumber ini yang relevan tergantung mode (§12.4).
   const includedTransportPrice = tourPackage.transportMode === 'included' && tourPackage.includedTransportPrice != null

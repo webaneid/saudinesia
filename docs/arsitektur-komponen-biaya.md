@@ -1,6 +1,6 @@
 # Arsitektur — Komponen Biaya (komponen universal ke-6) + penerapannya di Haji
 
-> **Status: RENCANA (2026-10-26) — belum ada kode yang diubah.** Dibuat setelah recheck langsung ke kode (SOP langkah 1) dan dua keputusan pemilik pada 2026-10-26.
+> **Status: Fase 1 SELESAI & TERVERIFIKASI (2026-10-26); Fase 2-5 masih rencana.** Dibuat setelah recheck langsung ke kode (SOP langkah 1) dan dua keputusan pemilik pada 2026-10-26.
 > Dokumen ini menjadi source of truth as-built setelah fase-fasenya dieksekusi (isi §9 diperbarui per fase).
 
 ## 1. Konteks dan keputusan
@@ -108,4 +108,13 @@ Tiap fase satu PR ke `main` (CI `validate` + `docker` hijau, merge setelah perse
 
 ## 9. As-built
 
-_Belum ada — diisi per fase._
+### 9.1 Fase 1 — backend bersama (2026-10-26)
+
+**Dibuat:** `lib/pricing/costComponents.ts` (`ComponentBreakdown`, `computeCostComponents(productType, productId)`), `lib/pricing/costComponentOwners.ts` (registry `package`, `tour_package`), `lib/pricing/costComponentHandlers.ts` (`createCostComponentHandlers(key, { authorize? })` → `collectionGET/POST`, `itemPUT/DELETE`, `simulateGET`), `lib/validators/costComponent.ts` (Zod `.strict()`), `scripts/test-cost-components.ts` (masuk `bun run test`/CI).
+**Diubah:** `computePackagePrice.ts` dan `computeTourPackagePrice.ts` memanggil `computeCostComponents` (blok salinan + import/konstanta yang tak terpakai dihapus; tipe `ComponentBreakdown` di-re-export); empat route `…/costs` menjadi 6 baris re-export; **ditambah** `…/costs/simulate/route.ts` per modul (dipakai UI mulai Fase 2).
+**Disengaja berbeda dari perilaku lama (semua pengetatan):** komponen milik produk lain → 404 (SEC-63); induk/vendor tak ada → 404/400 tanpa baris yatim (SEC-64); body kini `.strict()` — kolom liar (mis. `productType`) → 400 (dulu diabaikan diam-diam); `costComponent` ≤ 120 dan `currency` ≤ 8 karakter; preview memakai margin tipe pemiliknya (SEC-65).
+**Dipertahankan persis:** kontrak respons (GET/POST/PUT/DELETE), urutan pengecekan (auth → body → …), superadmin-only, margin per komponen + pembulatan, komponen tanpa kurs/tier dilewati, urutan baris (tanpa `orderBy` pada `computeCostComponents`).
+
+**Bukti (rekam-lalu-bandingkan, pada DB uji dengan aturan margin berbeda per tipe — package 25 %/100.000, tour_package 30 %/50.000):** snapshot SEBELUM refactor vs SESUDAH — respons `GET costs`, `GET breakdown`, harga tersimpan, skenario POST→PUT→DELETE (harga tiap langkah), 11 kasus penolakan per modul (manager/tanpa login 403, body rusak 400, cost 0 400, id komponen tak ada 404, dst.), `tour-packages/simulate`, katalog `hotel-options`, dan **keluaran `computePackageBreakdown`/`computeTourPackageBreakdown` (dipakai harga booking Ziarah)** — **identik** (snapshot dijalankan dua kali sebelum untuk membuktikan deterministik). Probe celah: G1 PUT lintas modul 200 → 404; G2 500 + 1 baris yatim → 404 + 0; G3 500 → 400. HTTP nyata untuk route `simulate` baru (USD 25: package → 500.000, tour_package → 550.000; manager/tanpa login 403; cost=0 400) dan kolom liar (400).
+**Tes:** `scripts/test-cost-components.ts` 14 uji; 5 mutasi tertangkap (hapus scoping PUT, hapus cek induk, simulate salah tipe, hapus `authorize()` di DELETE, margin atas total bukan per komponen). `bun run test` 14 suite lulus; build produksi terisolasi 0 error; `bun audit` tidak berubah (5).
+**Catatan proses:** `bun run build` menangkap galat tipe di berkas tes (tsc penuh mencakup `scripts/`) — diperbaiki sebelum PR.
