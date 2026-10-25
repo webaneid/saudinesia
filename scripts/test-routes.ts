@@ -167,15 +167,18 @@ await t('SEC-62: DELETE images (hotel/kendaraan) hanya menghapus key yang tercat
 
 await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lewat vendorQuickAddError (tak boleh senyap saat 403 bagi manager)', () => {
   const dir = 'app/[locale]/admin/(protected)/products'
-  const files = ['transport/trips/[id]/page.tsx', 'hotels/[id]/page.tsx', 'flight/[id]/page.tsx', 'tour-packages/[id]/page.tsx', 'packages/[id]/page.tsx', 'visa/[id]/CostTiersTab.tsx']
+  const pageFiles = ['transport/trips/[id]/page.tsx', 'hotels/[id]/page.tsx', 'flight/[id]/page.tsx', 'visa/[id]/CostTiersTab.tsx'].map(f => join(dir, f))
+  // Paket Umroh/Ziarah memakai panel bersama (docs/arsitektur-komponen-biaya.md): tambah-vendor-cepat mereka ada di VendorCurrencyField.
+  const files = [...pageFiles, 'components/admin/pricing/VendorCurrencyField.tsx']
   for (const f of files) {
-    const src = read(join(dir, f))
+    const src = read(f)
     assert.match(src, /vendorQuickAddError\(r\.status, j\?\.error\)/, `${f}: galat tambah-vendor tidak ditampilkan`)
-    assert.ok(src.includes("settings/vendors', {") , `${f}: pemanggil POST vendor tidak ditemukan — daftar berkas uji perlu diperbarui`)
+    assert.ok(src.includes("settings/vendors', {"), `${f}: pemanggil POST vendor tidak ditemukan — daftar berkas uji perlu diperbarui`)
   }
-  const all = readdirSync(dir, { recursive: true }) as string[]
-  const callers = all.filter(f => /\.tsx$/.test(f) && read(join(dir, f)).includes("fetch('/api/v1/admin/system/settings/vendors', {")).sort()
-  assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru di halaman produk yang belum memakai vendorQuickAddError')
+  const scan = (root: string) => (readdirSync(root, { recursive: true }) as string[]).filter(f => /\.tsx$/.test(f)).map(f => join(root, f))
+    .filter(f => read(f).includes("fetch('/api/v1/admin/system/settings/vendors', {"))
+  const callers = [...scan(dir), ...scan('components')].sort()
+  assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru yang belum memakai vendorQuickAddError')
 })
 
 await t('SEC-14: reset-limits hanya superadmin, tanpa body, dan kunci login memakai accountKey yang sama dengan fungsi reset', () => {

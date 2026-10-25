@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Plus, Pencil, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Wallet, Package as PackageIcon } from 'lucide-react'
+import { ArrowLeft, Save, Plus, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Package as PackageIcon } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
-import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
+import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
 
-const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 type Mode = 'included' | 'user_choice' | 'none'
 
 const MODE_LABEL: Record<Mode, string> = {
@@ -21,7 +20,6 @@ type Trip = { id: string; name: string; category: string | null; origin: string;
 type VisaProductRow = { id: string; name: string; visaType: string; price: string }
 type FlightScheduleRow = { id: string; price: string; departureFrom: string; departureTo: string; isActive: boolean; route: { id: string; origin: string; destination: string; isActive: boolean } }
 type CateringOptionRow = { id: string; name: string; pricePerPersonRegular: string }
-type Vendor = { id: string; name: string }
 
 type HotelSlotSchedule = { period: { hotel: { name: string } }; roomType: { name: string } } | null
 type PackageHotelOptionRow = { id: string; slot: string; hotelRoomScheduleId: string; nights: number; hotelRoomSchedule: { period: { hotel: { name: string } }; roomType: { name: string } } }
@@ -58,8 +56,6 @@ type PackageDetail = {
   cateringOptions: PackageCateringOptionRow[]
 }
 
-type CostRow = { id: string; costComponent: string; vendorId: string; vendorName: string; currency: string; cost: number; hppRupiah: number | null; sellPrice: number | null }
-type CostPreview = { hppRupiah: number; sellPrice: number }
 type Breakdown = {
   components: { costComponent: string; vendorId: string; currency: string; hppRupiah: number; sellPrice: number }[]
   componentsTotalSellPrice: number
@@ -122,9 +118,7 @@ export default function PackageBuilderPage({ params }: Props) {
   const [allVisaProducts, setAllVisaProducts] = useState<VisaProductRow[]>([])
   const [allFlightSchedules, setAllFlightSchedules] = useState<FlightScheduleRow[]>([])
   const [allCateringOptions, setAllCateringOptions] = useState<CateringOptionRow[]>([])
-  const [vendors, setVendors] = useState<Vendor[]>([])
 
-  const [costs, setCosts] = useState<CostRow[]>([])
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
 
   // Hotel Makkah/Madinah — form "tetapkan" untuk mode included
@@ -148,15 +142,6 @@ export default function PackageBuilderPage({ params }: Props) {
   const [cateringForm, setCateringForm] = useState({ optionId: '', numPeople: '1', numDays: '1' })
   const [addCateringOption, setAddCateringOption] = useState({ optionId: '', numPeople: '1', numDays: '1' })
 
-  const [showCostForm, setShowCostForm] = useState(false)
-  const [editingCostId, setEditingCostId] = useState<string | null>(null)
-  const [costForm, setCostForm] = useState({ costComponent: '', vendorId: '', currency: 'IDR', cost: '' })
-  const [savingCost, setSavingCost] = useState(false)
-  const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
-  const [newVendorName, setNewVendorName] = useState('')
-  const [savingVendor, setSavingVendor] = useState(false)
-  const [vendorError, setVendorError] = useState<string | null>(null)
-  const [costPreview, setCostPreview] = useState<CostPreview | null>(null)
 
   const loadPackage = useCallback(async (pkgId: string) => {
     const r = await fetch(`/api/v1/admin/products/packages/${pkgId}`)
@@ -178,12 +163,6 @@ export default function PackageBuilderPage({ params }: Props) {
     }
   }, [])
 
-  const loadCosts = useCallback(async (pkgId: string) => {
-    const r = await fetch(`/api/v1/admin/products/packages/${pkgId}/costs`)
-    const j = await r.json()
-    setCosts(j.data ?? [])
-  }, [])
-
   const loadBreakdown = useCallback(async (pkgId: string) => {
     const r = await fetch(`/api/v1/admin/products/packages/${pkgId}/breakdown`)
     const j = await r.json()
@@ -191,42 +170,28 @@ export default function PackageBuilderPage({ params }: Props) {
   }, [])
 
   useEffect(() => {
-    const cost = Number(costForm.cost)
-    if (!cost || cost <= 0) { setCostPreview(null); return }
-    const timer = setTimeout(async () => {
-      const p = new URLSearchParams({ cost: String(cost), currency: costForm.currency })
-      const r = await fetch(`/api/v1/admin/products/tour-packages/simulate?${p}`)
-      const j = await r.json()
-      setCostPreview(j.data ? { hppRupiah: j.data.hppRupiah, sellPrice: j.data.sellPrice } : null)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [costForm.cost, costForm.currency])
-
-  useEffect(() => {
     params.then(async (p) => {
       setId(p.id); setLocale(p.locale)
-      const [, tripsRes, hotelSchedulesRes, visaRes, flightSchedulesRes, cateringRes, vendorsRes] = await Promise.all([
+      const [, tripsRes, hotelSchedulesRes, visaRes, flightSchedulesRes, cateringRes] = await Promise.all([
         loadPackage(p.id),
         fetch('/api/v1/admin/products/transport/trips').then(r => r.json()),
         fetch('/api/v1/admin/products/hotels/schedules').then(r => r.json()),
         fetch('/api/v1/admin/products/visa').then(r => r.json()),
         fetch('/api/v1/admin/products/flight/schedules').then(r => r.json()),
         fetch('/api/v1/admin/products/catering').then(r => r.json()),
-        fetch('/api/v1/admin/system/settings/vendors?category=package').then(r => r.json()),
       ])
       setAllTrips(tripsRes.data ?? [])
       setAllHotelSchedules(hotelSchedulesRes.data ?? [])
       setAllVisaProducts(visaRes.data ?? [])
       setAllFlightSchedules((flightSchedulesRes.data ?? []).filter((s: FlightScheduleRow) => s.isActive && s.route.isActive))
       setAllCateringOptions(cateringRes.data ?? [])
-      setVendors(vendorsRes.data ?? [])
-      await Promise.all([loadCosts(p.id), loadBreakdown(p.id)])
+      await loadBreakdown(p.id)
       setLoaded(true)
     })
-  }, [params, loadPackage, loadCosts, loadBreakdown])
+  }, [params, loadPackage, loadBreakdown])
 
   async function refreshAll() {
-    await Promise.all([loadPackage(id), loadCosts(id), loadBreakdown(id)])
+    await Promise.all([loadPackage(id), loadBreakdown(id)])
   }
 
   async function patch(body: Record<string, unknown>) {
@@ -369,57 +334,6 @@ export default function PackageBuilderPage({ params }: Props) {
       method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cateringOptionId }),
     })
     await refreshAll()
-  }
-
-  // Komponen biaya
-  function openCostForm(c?: CostRow) {
-    if (c) {
-      setEditingCostId(c.id)
-      setCostForm({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, cost: String(c.cost) })
-    } else {
-      setEditingCostId(null)
-      setCostForm({ costComponent: '', vendorId: '', currency: 'IDR', cost: '' })
-    }
-    setShowQuickAddVendor(false); setNewVendorName(''); setCostPreview(null)
-    setShowCostForm(true)
-  }
-
-  async function handleQuickAddVendor() {
-    if (!newVendorName.trim()) return
-    setSavingVendor(true)
-    setVendorError(null)
-    const r = await fetch('/api/v1/admin/system/settings/vendors', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newVendorName.trim(), category: 'package' }),
-    })
-    const j = await r.json().catch(() => null)
-    setSavingVendor(false)
-    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
-    setVendors(vs => [...vs, j.data].sort((a, b) => a.name.localeCompare(b.name)))
-    setCostForm(f => ({ ...f, vendorId: j.data.id }))
-    setNewVendorName(''); setShowQuickAddVendor(false)
-  }
-
-  async function handleSaveCost() {
-    setSavingCost(true)
-    const body = { costComponent: costForm.costComponent, vendorId: costForm.vendorId, currency: costForm.currency, cost: Number(costForm.cost) }
-    if (editingCostId) {
-      await fetch(`/api/v1/admin/products/packages/${id}/costs/${editingCostId}`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-    } else {
-      await fetch(`/api/v1/admin/products/packages/${id}/costs`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-      })
-    }
-    await Promise.all([loadCosts(id), loadBreakdown(id), loadPackage(id)])
-    setSavingCost(false); setShowCostForm(false)
-  }
-
-  async function handleDeleteCost(costId: string) {
-    if (!confirm('Hapus komponen biaya ini?')) return
-    await fetch(`/api/v1/admin/products/packages/${id}/costs/${costId}`, { method: 'DELETE' })
-    await Promise.all([loadCosts(id), loadBreakdown(id), loadPackage(id)])
   }
 
   if (!loaded || !pkg) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
@@ -785,115 +699,13 @@ export default function PackageBuilderPage({ params }: Props) {
       </div>
 
       {/* Komponen biaya */}
-      <div className="admin-form-panel space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Komponen Biaya</p>
-            <p className="text-[11px] text-admin-muted/70 mt-0.5">
-              Tiap komponen (dokumen, admin fee, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-paket-umroh.md §5
-            </p>
-          </div>
-          <button onClick={() => openCostForm()} className="admin-btn-sm flex items-center gap-1 shrink-0"><Plus className="h-3.5 w-3.5" /> Tambah</button>
-        </div>
-
-        {showCostForm && (
-          <div className="space-y-3">
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Nama Komponen</p>
-              <input className="admin-inp" placeholder="Dokumen, Admin Fee, dst"
-                value={costForm.costComponent} onChange={e => setCostForm(f => ({ ...f, costComponent: e.target.value }))} />
-            </div>
-
-            <div className="border border-admin-line rounded-xl p-3 space-y-2">
-              <p className="text-xs font-semibold text-admin-ink">Vendor &amp; Mata Uang</p>
-              {vendors.length === 0 && !showQuickAddVendor && (
-                <p className="text-[11px] text-admin-warning">Belum ada vendor — tambah dulu.</p>
-              )}
-              {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
-              <div className="flex items-center gap-2">
-                {!showQuickAddVendor ? (
-                  <>
-                    <select className="admin-inp flex-1" value={costForm.vendorId} onChange={e => setCostForm(f => ({ ...f, vendorId: e.target.value }))}>
-                      <option value="">Pilih vendor…</option>
-                      {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                    </select>
-                    <button type="button" onClick={() => setShowQuickAddVendor(true)}
-                      className="admin-btn-ghost text-xs shrink-0 flex items-center gap-1">
-                      <Plus className="h-3 w-3" /> Vendor Baru
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <input autoFocus className="admin-inp flex-1" placeholder="Nama vendor"
-                      value={newVendorName} onChange={e => setNewVendorName(e.target.value)}
-                      onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddVendor() } }} />
-                    <button type="button" onClick={handleQuickAddVendor} disabled={savingVendor || !newVendorName.trim()}
-                      className="admin-btn-sm text-xs shrink-0 disabled:opacity-50">{savingVendor ? '...' : 'Simpan'}</button>
-                    <button type="button" onClick={() => { setShowQuickAddVendor(false); setNewVendorName('') }}
-                      className="admin-btn-ghost text-xs shrink-0">Batal</button>
-                  </>
-                )}
-                <select className="admin-inp w-20 shrink-0" value={costForm.currency} onChange={e => setCostForm(f => ({ ...f, currency: e.target.value }))}>
-                  {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-3 items-end">
-              <div>
-                <p className="text-xs text-admin-muted mb-1">Biaya ({costForm.currency})</p>
-                <input className="admin-inp" type="number" placeholder="0"
-                  value={costForm.cost} onChange={e => setCostForm(f => ({ ...f, cost: e.target.value }))} />
-              </div>
-              <div>
-                <p className="text-xs text-admin-muted mb-1">HPP (Rupiah)</p>
-                <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{costPreview ? rupiah(costPreview.hppRupiah) : '—'}</p>
-              </div>
-              <div>
-                <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
-                <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{costPreview ? rupiah(costPreview.sellPrice) : '—'}</p>
-              </div>
-            </div>
-
-            <div className="flex gap-2">
-              <button onClick={handleSaveCost} disabled={savingCost || !costForm.costComponent || !costForm.vendorId || !costForm.cost}
-                className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
-                <Save className="h-3.5 w-3.5" /> {savingCost ? 'Menyimpan...' : 'Simpan Komponen'}
-              </button>
-              <button onClick={() => setShowCostForm(false)} className="admin-btn-ghost text-sm">Batal</button>
-            </div>
-          </div>
-        )}
-
-        <div className="space-y-2">
-          {costs.map(c => (
-            <div key={c.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
-              <div>
-                <p className="text-[13px] font-medium text-admin-ink">{c.costComponent}</p>
-                <p className="text-[11px] text-admin-muted">{c.vendorName} · {c.currency} {c.cost.toLocaleString('id-ID')}{c.hppRupiah != null && ` · HPP ${rupiah(c.hppRupiah)}`}</p>
-              </div>
-              <div className="flex items-center gap-3">
-                {c.sellPrice != null && <p className="text-[13px] font-bold text-admin-accent-strong">{rupiah(c.sellPrice)}</p>}
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => openCostForm(c)} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
-                  <button onClick={() => handleDeleteCost(c.id)} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
-          {costs.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada komponen biaya.</p>}
-          {costs.length > 0 && breakdown && (
-            <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
-              <span className="text-[12px] font-semibold text-admin-ink">Total Komponen</span>
-              <span className="text-[13px] font-bold text-admin-accent-strong">{rupiah(breakdown.componentsTotalSellPrice)}</span>
-            </div>
-          )}
-        </div>
-      </div>
+      <CostComponentsPanel
+        apiBase={`/api/v1/admin/products/packages/${id}/costs`}
+        vendorCategory="package"
+        hint="Tiap komponen (dokumen, admin fee, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-paket-umroh.md §5"
+        namePlaceholder="Dokumen, Admin Fee, dst"
+        onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]) }}
+      />
 
       {/* Preview Harga — 2 blok: dasar (included) vs opsi tambahan (user_choice) */}
       {breakdown && (
