@@ -98,3 +98,34 @@ Server: `richTextField().nullish()` + `emptyToNull()` di POST/PUT Hotel dan Muth
 4. Teks polos lama (semua data sekarang) dibuka di editor sebagai paragraf per baris dan baru berubah menjadi JSON saat disimpan.
 
 **Verifikasi (browser dev):** teks lama termuat di editor Hotel dan Muthowif, ditambah daftar/judul lalu disimpan → JSON bersih di DB → tampil benar di detail publik; beranda dan daftar Muthowif menampilkan ringkasan teks polos tanpa JSON; produk Haji dibuat lewat UI dengan deskripsi H3 + paragraf. API menolak (400) tautan di keenam jalur (Hotel/Muthowif/Haji × POST/PUT), kunci liar (`bookedQuota`), tipe salah, dan body null di Haji POST. `scripts/test-rich-text.ts` kini 17 tes (+skema Haji). Data uji dibersihkan/dipulihkan.
+
+## 9. Fase 4-8 — Haji publik, Paket Umroh, Paket Ziarah, Situs Wisata, Katering (rencana 2026-10-25)
+
+Keputusan pemilik (2026-10-25): deskripsi Haji **tampil di halaman publik**; editor dipasang di Paket Umroh, Paket Ziarah, Situs Wisata, dan Katering; temuan keamanan lama (SEC-07, SEC-08, dst.) **diagendakan untuk sesi berikutnya**, tidak dikerjakan sekarang.
+
+**Hasil recheck kode (sebelum merancang):**
+
+| Modul | Kolom | Admin sekarang | Tampil publik sekarang |
+|---|---|---|---|
+| Haji | `HajiProduct.description` | form buat (editor sudah, §8) | **tidak ada** → ditambah (Fase 4) |
+| Paket Umroh | `Package.description` | `packages/[id]` + form buat di `packages/page.tsx` (`<textarea>`) | `packages/page.tsx` kartu: `<p>{pkg.description}</p>` |
+| Paket Ziarah | `TourPackage.description` | `tour-packages/[id]` + form buat (`<textarea>`) | `tours/page.tsx` kartu: `<p>{p.description}</p>`; API katalog mengembalikan apa adanya |
+| Situs Wisata | `TourismSite.description` | `tourism-sites/[id]` + form buat (`<textarea>`) | **tidak ditampilkan** (halaman publik hanya nama/foto/kota/peta; deskripsi hanya di API katalog) |
+| Katering | **tidak ada kolom** (`CateringOption`: nama, tipe, gaya menu, 3 harga) | form buat saja (tanpa halaman edit) | kartu: nama + badge + harga |
+
+**Rencana per fase (satu fase satu waktu; tiap fase: typecheck, `bun run build` di salinan terpisah, uji browser + uji penolakan API, security check, dokumentasi):**
+
+| Fase | Isi | Catatan |
+|---|---|---|
+| 4 | Halaman publik Haji menampilkan `description` lewat `RichTextView` di kartu | tanpa perubahan skema/API |
+| 5 | Paket Umroh: admin (edit + buat) → `RichTextEditor`; validator POST/PUT → `richTextField()`+`emptyToNull`; kartu publik → `RichTextView` | |
+| 6 | Paket Ziarah: sama; API katalog tidak diubah (kontrak §8) | |
+| 7 | Situs Wisata: admin (edit + buat) + validator saja | Tampil publik **tidak** ditambah (keputusan produk terpisah; dicatat sebagai batasan) |
+| 8 | Katering: **migrasi aditif** `catering_options.description TEXT NULL` (aman, nullable) + form buat → editor + validator + tampil di kartu publik | Migrasi lewat alur non-interaktif (shadow DB sekali pakai berurutan literal, lihat memori proyek); CI memeriksa skema=migrasi |
+
+**Di luar cakupan (sengaja):** halaman edit produk Haji dan Katering di admin (form buat saja), `HotelService.description`, API katalog (tetap apa adanya), penurunan hotel/transport di komponen paket. Agenda temuan lama (SEC-07/08/12/13/14/35/43/47/49/50/61b/10/11) dicatat di `docs/progress.md` sebagai "Agenda sesi berikutnya".
+
+### 9.1 Hasil per fase
+
+- **Fase 4 — Haji publik (2026-10-25):** `(public)/haji/page.tsx` menampilkan `description` lewat `RichTextView` di bawah nama/jenis. Diuji di browser: teks polos lama ("Haji furoda ini boss") tampil apa adanya; isi kaya (H3 + daftar + tebal, disisipkan sementara lalu dipulihkan) tampil benar; tanpa JSON bocor. Build produksi (salinan terpisah) 0 error. Security: 0 temuan (Server Component, tanpa API/dependensi baru). Batasan §8 butir 3 ("halaman publik Haji belum menampilkan deskripsi") **tertutup**.
+
