@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { loginSchema } from '@/lib/validators/auth'
 import { ok, err } from '@/lib/validators'
-import { clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
+import { accountKey, clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
 
 // Hash bcrypt cost 12 yang valid, tidak cocok dengan password mana pun yang dipakai pengguna — hanya untuk menyamakan waktu.
 const DUMMY_HASH = '$2b$12$mMjECRUCpXjI1zuGrztAd.jA/C6.JUsjG4mWPzlh9aGhJLtg1mD7C'
@@ -33,8 +33,9 @@ export async function POST(request: Request) {
     //    yang selesai dihitung, sehingga burst melewati batas. Reservasi-dulu menutup celah itu: hanya `limit` percobaan pertama yang
     //    pernah mencapai bcrypt, secepat apa pun datangnya.
     const acct = email.trim().toLowerCase()
-    const acctIp = ip ? policy('loginAcctIp', `${acct}|${ip}`) : null
-    const acctAny = policy('loginAcct', acct)
+    const acctKey = accountKey(acct) // SEC-14: bentuk kunci yang sama dipakai tombol "reset pembatasan" superadmin
+    const acctIp = ip ? policy('loginAcctIp', `${acctKey}|${ip}`) : null
+    const acctAny = policy('loginAcct', acctKey)
     //    BERURUTAN, bukan paralel (S26-T01): percobaan yang sudah ditolak lapis akun+IP TIDAK boleh menaikkan lapis akun-saja — kalau tidak,
     //    satu IP yang melewati batas per-IP menambah `loginAcct` ratusan kali dan menguncinya untuk semua orang (satu IP cukup menggembok akun
     //    korban; dulu butuh minimal dua IP). Tiap `consume` tetap atomik, jadi atomisitas SEC-26 terjaga.

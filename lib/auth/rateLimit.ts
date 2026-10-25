@@ -121,6 +121,46 @@ export async function peek(p: Policy): Promise<Hit> {
   return { ...m, allowed: m.count < p.limit }
 }
 
+/**
+ * Bentuk identitas AKUN untuk kunci login (SEC-14). Email ≤ 64 karakter dipakai apa adanya; yang lebih panjang di-hash. Panjangnya
+ * dibatasi supaya kunci gabungan `akun|ip` (≤ 64+1+45) tak pernah melewati MAX_ID_LENGTH dan ikut di-hash — kalau ikut di-hash, kunci
+ * per-IP milik satu akun tak bisa lagi dikenali berdasarkan awalan dan tombol "reset pembatasan" tak bisa membukanya.
+ */
+export function accountKey(email: string): string {
+  const e = email.trim().toLowerCase()
+  return e.length > 64 ? `h:${createHash('sha256').update(e).digest('hex')}` : e
+}
+
+const globEscape = (v: string) => v.replace(/[\\*?[\]]/g, '\\$&')
+
+/**
+ * Buka kunci SEMUA pembatasan yang menahan satu akun: login (akun, dan akun+IP dari IP mana pun) dan kirim email auth (daftar /
+ * lupa password) ke alamat itu. Untuk korban lockout-DoS yang meminta bantuan admin (SEC-14). Batas per-IP sengaja TIDAK disentuh.
+ * Mengembalikan jumlah kunci yang dihapus.
+ */
+export async function resetAccountLimits(email: string): Promise<number> {
+  const normalized = email.trim().toLowerCase()
+  const acct = accountKey(normalized)
+  const exact = [policy('loginAcct', acct).key, policy('authEmailSendEmail', normalized).key]
+  const ipPrefix = policy('loginAcctIp', `${acct}|`).key // rl:loginAcctIp:<akun>|  (tanpa hash: komposit dijamin ≤ MAX_ID_LENGTH)
+
+  let removed = 0
+  for (const k of [...memory.keys()]) {
+    if (exact.includes(k) || k.startsWith(ipPrefix)) { memory.delete(k); removed++ }
+  }
+  const viaRedisRemoved = await viaRedis(async (r) => {
+    const keys = new Set(exact)
+    let cursor = '0'
+    do {
+      const [next, batch] = await r.scan(cursor, 'MATCH', `${globEscape(ipPrefix)}*`, 'COUNT', 200)
+      for (const k of batch) keys.add(k)
+      cursor = next
+    } while (cursor !== '0')
+    return r.del(...keys)
+  })
+  return removed + (viaRedisRemoved ?? 0)
+}
+
 export async function reset(...policies: Policy[]): Promise<void> {
   for (const p of policies) memory.delete(p.key)
   await viaRedis((r) => r.del(...policies.map((p) => p.key)))

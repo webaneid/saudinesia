@@ -2534,3 +2534,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error di dist terpisah; `bun run test` 13 suite lulus; penjaga dimutasi.
 
 **Affects:** `app/api/v1/admin/products/{hotels/[id]/images,transport/vehicles/[id]/images}/route.ts`, `lib/admin/vendorQuickAdd.ts` (baru), 5 halaman produk + `CostTiersTab.tsx`, `scripts/test-routes.ts`.
+
+## 2026-10-25 — SEC-14: superadmin dapat membuka pembatasan login/email satu akun
+
+**Decision:** Menambah `resetAccountLimits(email)` (hapus `loginAcct`, semua `loginAcctIp` akun itu, dan `authEmailSendEmail`) dan `POST /admin/system/users/[id]/reset-limits` hanya superadmin, dengan tombol di Manajemen Pengguna. Kunci akun login dibentuk `accountKey()` (email ≤64 apa adanya, selain itu di-hash) supaya kunci gabungan `akun|ip` selalu dapat dikenali berdasarkan awalan.
+
+**Rationale:** Lockout-DoS adalah kompromi inheren rate limit; jalan keluar paling kecil adalah buka-kunci manual oleh admin (sudah dicatat di register sebagai opsi). Batas per-IP sengaja tidak disentuh agar tombol ini tak jadi alat melewati perlindungan brute-force dari satu sumber. Endpoint tanpa body, hanya superadmin, dan hanya meninggalkan jejak id (tanpa email).
+
+**Alternatives considered:** CAPTCHA (ditolak/ditunda: keputusan produk + dependensi pihak ketiga); mengosongkan semua kunci `rl:*` (ditolak: melemahkan perlindungan akun lain); menyimpan daftar IP per akun untuk menghapus tepat (ditolak: state tambahan, SCAN berawalan cukup); mengganti hash kunci komposit dengan penyimpanan terpisah (ditolak: perubahan lebih besar tanpa manfaat).
+
+**Security check (SOP langkah 5):** 0 Critical/High/Medium baru; endpoint admin baru ditinjau (superadmin di awal handler, 401/403/404/500 dibedakan, tanpa input body, tanpa PII di log, SCAN memakai pola yang di-escape sehingga email berkarakter glob tak bisa menghapus akun lain — diuji). `bun audit` tidak berubah. Bukti: HTTP nyata, tes unit memori (+Redis di CI), penjaga sumber dimutasi.
+
+**Affects:** `lib/auth/rateLimit.ts`, `app/api/v1/auth/login/route.ts`, `app/api/v1/admin/system/users/[id]/reset-limits/route.ts` (baru), halaman admin pengguna, `scripts/test-rate-limit.ts`, `scripts/test-routes.ts`.
