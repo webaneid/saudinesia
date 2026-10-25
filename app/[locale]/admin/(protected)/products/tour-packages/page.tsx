@@ -6,6 +6,7 @@ import { Plus, Pencil, Landmark } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type TourPackage = {
   id: string; name: string; price: string | number; isActive: boolean
@@ -94,9 +95,9 @@ export default function TourPackagesPage() {
               <p className="text-xs text-admin-muted mb-1">Nama Paket</p>
               <input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Ziarah Makkah — Sejarah Islam" />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 min-w-0">
               <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-              <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
+              <RichTextEditor id="tourpackage-new-description" title="Deskripsi paket ziarah" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Program ziarah, situs yang dikunjungi, dan catatan untuk jamaah…" />
             </div>
           </div>
           <div className="flex gap-2">
