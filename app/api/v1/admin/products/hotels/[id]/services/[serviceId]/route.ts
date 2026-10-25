@@ -19,7 +19,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { serviceId } = await params
-    const parsed = updateSchema.safeParse(await req.json())
+    const parsed = updateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const service = await prisma.hotelService.update({ where: { id: serviceId }, data: parsed.data })

@@ -41,7 +41,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await requireManager()
-    const parsed = createSchema.safeParse(await req.json())
+    const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const pkg = await prisma.tourPackage.create({ data: { ...parsed.data, description: emptyToNull(parsed.data.description), price: 0 } })
     return NextResponse.json(ok(pkg), { status: 201 })

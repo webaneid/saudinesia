@@ -67,7 +67,7 @@ export async function PUT(req: Request) {
   try {
     await requireSuperAdmin()
     const servicePrice = await getOrCreateServicePrice()
-    const parsed = putSchema.safeParse(await req.json())
+    const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { currency, hargaLayanan } = parsed.data
     const vendor = await getOrCreateSaudinesiaVendor()

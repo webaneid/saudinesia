@@ -18,6 +18,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [show,   setShow]   = useState(false)
   const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
   const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'admin' })
 
   const load = useCallback(async () => {
@@ -48,23 +49,23 @@ export default function UsersPage() {
     await load(); setShow(false); setSaving(false)
   }
 
-  async function toggleActive(id: string, isActive: boolean) {
-    await fetch(`/api/v1/admin/system/users/${id}`, {
+  // Server menolak (422) mengubah akun sendiri atau menyisakan nol superadmin aktif (SEC-13) — tampilkan alasannya, lalu muat ulang
+  // supaya dropdown peran kembali ke nilai sebenarnya.
+  async function updateUser(id: string, change: { isActive?: boolean; role?: string }) {
+    setNotice(null)
+    const r = await fetch(`/api/v1/admin/system/users/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !isActive }),
+      body: JSON.stringify(change),
     })
+    if (!r.ok) {
+      const j: { error?: string } | null = await r.json().catch(() => null)
+      setNotice(j?.error ?? 'Perubahan gagal disimpan.')
+    }
     await load()
   }
-
-  async function changeRole(id: string, role: string) {
-    await fetch(`/api/v1/admin/system/users/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role }),
-    })
-    await load()
-  }
+  const toggleActive = (id: string, isActive: boolean) => updateUser(id, { isActive: !isActive })
+  const changeRole = (id: string, role: string) => updateUser(id, { role })
 
   const columns: Column<User>[] = [
     { key: 'name', header: 'Nama', mobile: 'title', cell: u => <span className="text-[13px] font-medium">{u.fullName ?? '-'}</span> },
@@ -97,6 +98,8 @@ export default function UsersPage() {
         title="Manajemen Pengguna"
         actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</button>}
       />
+
+      {notice && <p role="alert" className="m-0 text-[13px] font-medium text-admin-danger">{notice}</p>}
 
       {show && (
         <div className="admin-form-panel">

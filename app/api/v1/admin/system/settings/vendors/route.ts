@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireSuperAdmin } from '@/lib/auth/session'
+import { requireManager, requireSuperAdmin, SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { addressSchema } from '@/lib/validators/address'
 import { upsertAddress } from '@/lib/address/prepare'
@@ -17,13 +17,16 @@ const createSchema = z.object({
 
 export async function GET(req: Request) {
   try {
-    await requireSuperAdmin()
+    // SEC-61(b): editor produk (manager) memuat daftar vendor untuk dropdown HPP — perlu membaca, tidak perlu mengelola. Manager hanya
+    // dapat kolom pemilih; kontak & alamat vendor tetap khusus superadmin (yang juga satu-satunya yang boleh menulis).
+    const session = await requireManager()
+    const full = SUPERADMIN_ROLES.includes(session.role)
     const category = new URL(req.url).searchParams.get('category')
-    const vendors = await prisma.vendor.findMany({
-      where: category ? { category } : undefined,
-      include: { address: true },
-      orderBy: { name: 'asc' },
-    })
+    const where = category ? { category } : undefined
+    const orderBy = [{ name: 'asc' as const }, { id: 'asc' as const }]
+    const vendors = full
+      ? await prisma.vendor.findMany({ where, include: { address: true }, orderBy })
+      : await prisma.vendor.findMany({ where, select: { id: true, name: true, category: true, country: true, isActive: true }, orderBy })
     return NextResponse.json(ok(vendors))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
@@ -37,7 +40,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     await requireSuperAdmin()
-    const parsed = createSchema.safeParse(await req.json())
+    const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { address, ...rest } = parsed.data
 

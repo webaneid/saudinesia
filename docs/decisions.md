@@ -2506,3 +2506,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** typecheck; `bun run build` 0 error di salinan terpisah tiap fase; `scripts/test-routes.ts` 7 tes; halaman admin terkait tetap 200.
 
 **Affects:** 11 route dihapus (`app/api/v1/{admin/{bookings/[id]/status,hotels,muthowif,notifications,reports,seasons},groups/**,pilgrims/[bookingId]/{,[pilgrimId]/}route.ts}`), `lib/admin/errors.ts`, `lib/validators/adminUpdates.ts` (`seasonCreateSchema`), `app/api/v1/admin/products/{packages,seasons}/route.ts`, route upload/ZIP (hotel/muthowif/situs wisata/kendaraan/zip), `scripts/test-routes.ts`, `package.json` (`test`), `docs/lessons-learned.md`, `docs/progress.md`, `CLAUDE.md`
+
+## 2026-10-25 — Hardening SEC-61(b), 12, 13, 47, 49, 50
+
+**Decision:** (1) **SEC-12:** tidak ada perubahan kode — sudah tertutup SEC-44; dibuktikan (409) dan register dikoreksi. (2) **SEC-13:** `updateUserByAdmin(id, change, actorId)` menolak ubah-diri dan perubahan yang menyisakan nol superadmin aktif (422); transaksi mengunci target + semua superadmin aktif berurut `id`. (3) **SEC-61(b):** `GET` vendor terbuka bagi manager dengan kolom ramping; tulis tetap superadmin. (4) **SEC-47:** `canAccessAddress` (staf atau pemilik via `User.addressId`, selain itu 404) + rate limit `addressCreateUser` pada `POST /address`. (5) **SEC-49:** `.catch(() => null)` pada 58 titik `req.json()` di 53 route + penjaga CI. (6) **SEC-50:** peta eksplisit di `catalog/flight`, cache 5 dtk (hanya hasil sehat) di `health`.
+
+**Rationale:** Semuanya temuan lama di register; masing-masing diperkecil ke perubahan terkecil yang menutup celah, dengan penjaga regresi yang dimutasi (membuktikan tes benar-benar menangkap regresi). Kunci semua superadmin dalam urutan tetap menutup balapan "saling menurunkan" tanpa deadlock. Respons 404 (bukan 403) pada alamat milik orang lain agar keberadaan baris tak bocor.
+
+**Alternatives considered:** SEC-13 lewat `SELECT count` tanpa kunci (ditolak: dimutasi, kedua permintaan lolos); manager mendapat respons vendor penuh (ditolak: kontak/alamat vendor tak dibutuhkan dropdown); cache health di Redis (ditolak: berlebihan, satu replika); menghapus endpoint `address` (ditolak: dipertahankan karena masih bagian kontrak komponen alamat, hanya diperketat).
+
+**Security check (SOP langkah 5):** 0 Critical/High pada kode yang diubah; 1 temuan pre-existing baru **SEC-62 (Medium)** — `DELETE …/images` hotel/kendaraan menghapus objek MinIO dari `key` body tanpa cek kepemilikan — dicatat, dilaporkan, belum diperbaiki. `bun audit`: 5 (tidak berubah). Bukti nyata: HTTP terhadap server dev + DB uji untuk SEC-13 (7 kasus), 61b (matriks 4 peran + tanpa cookie), 47 (BOLA + 429), 49 (sapuan 92 route×metode, 0× 500), 50.
+
+**Verifikasi:** typecheck; `bun run build` 0 error di dist terpisah; `bun run test` 13 suite lulus (suite baru `scripts/test-admin-users.ts`; `scripts/test-routes.ts` bertambah penjaga SEC-61b/47/49/50).
+
+**Affects:** `lib/auth/adminUsers.ts`, `lib/address/access.ts` (baru), `lib/auth/rateLimit.ts`, `app/api/v1/{admin/system/users/[id],admin/system/settings/vendors,address,address/[id],catalog/flight,health}`, 53 route (`.catch`), halaman admin pengguna, `scripts/test-admin-users.ts`, `scripts/test-routes.ts`, `package.json`.

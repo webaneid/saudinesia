@@ -53,7 +53,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    const body = await req.json()
+    const body = await req.json().catch(() => null)
     const parsed = updateSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 

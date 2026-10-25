@@ -36,7 +36,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await requireManager()
-    const parsed = createSchema.safeParse(await req.json())
+    const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { highlights, ...rest } = parsed.data
     const p = await prisma.package.create({ data: { ...rest, description: emptyToNull(rest.description), highlights, images: [], price: 0 } })

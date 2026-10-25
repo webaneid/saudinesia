@@ -20,7 +20,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimI
   try {
     await requireAdmin()
     const { pilgrimId } = await params
-    const parsed = schema.safeParse(await req.json())
+    const parsed = schema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err('Input tidak valid'), { status: 400 })
 
     const { passportNumber, passportExpiry, dateOfBirth, nationality } = parsed.data

@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id: tourPackageId } = await params
-    const parsed = createSchema.safeParse(await req.json())
+    const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const existing = await prisma.tourPackageHotelOption.findUnique({
@@ -49,7 +49,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id: tourPackageId } = await params
-    const parsed = removeSchema.safeParse(await req.json())
+    const parsed = removeSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     await prisma.tourPackageHotelOption.delete({

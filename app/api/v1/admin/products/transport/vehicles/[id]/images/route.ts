@@ -60,7 +60,8 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   catch (e) { return authFailureResponse(e, 'v1/admin/products/transport/vehicles/[id]/images/DELETE') }
 
   const { id } = await params
-  const { key } = await req.json() as { key?: string }
+  const payload = await req.json().catch(() => null) as { key?: unknown } | null
+  const key = typeof payload?.key === 'string' ? payload.key : ''
   if (!key) return NextResponse.json(err('key is required'), { status: 400 })
 
   const vehicle = await prisma.transportVehicle.findUnique({ where: { id }, select: { images: true } })

@@ -12,7 +12,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   try {
     const session = await requireAdmin()
     const { id }  = await params
-    const parsed  = schema.safeParse(await req.json())
+    const parsed  = schema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err('Input tidak valid'), { status: 400 })
 
     const payment = await prisma.payment.findUnique({
