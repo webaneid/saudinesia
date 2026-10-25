@@ -698,7 +698,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 
 **Paket hardening kecil (usulan satu PR berikutnya):**
 - [x] **SEC-07 (Medium) — SELESAI 2026-10-25:** 11 route stub `ok(null)` tanpa auth yang menjawab sukses (`groups`, `groups/[id]`, `groups/[id]/invite`, `admin/reports`, `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/notifications`, `admin/bookings/[id]/status`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`) — hapus atau amankan.
-- [ ] **SEC-08 (Medium):** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
+- [x] **SEC-08 (Medium) — SELESAI 2026-10-25:** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
 - [ ] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`.
 - [ ] **SEC-12 (Low):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
 - [ ] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir.
@@ -734,4 +734,5 @@ Keputusan pemilik 2026-10-25: arah produk (checkout, Group Booking, refund, dst.
 **Di luar cakupan (sengaja):** pemisahan 401 vs 403 (route admin lama menjawab 403 untuk keduanya; bukan bunyi SEC-08), halaman UI `groups`, dan semua agenda lain.
 
 **Hasil Fase A — SEC-07 (2026-10-25):** 11 stub dihapus; 13 request tanpa login yang dulu sukses (200/201) kini 404; route dan halaman sah di sekitarnya tidak terpengaruh. Penjaga regresi `scripts/test-routes.ts` masuk `bun run test`/CI (dimutasi). Build produksi terisolasi 0 error; `bun audit` tidak berubah (5; tanpa dependensi baru). Security check: 0 temuan (mengurangi permukaan serang; skrip baru hanya membaca berkas).
+**Hasil Fase B — SEC-08 (2026-10-25):** helper `lib/admin/errors.ts` (`isAuthError`, `authFailureResponse`); 15 blok `catch → 403` diganti (auth → 403, selain itu log + 500); `seasons` POST kini tervalidasi (`seasonCreateSchema`). Tanpa login 15 endpoint terkait tetap 403; dengan sesi admin input salah → 400 berpesan jelas. Penjaga CI di `scripts/test-routes.ts` (dimutasi). Build produksi terisolasi 0 error; `bun audit` tidak berubah. Security check: 0 temuan baru; dicatat di luar cakupan: route admin lama belum memisahkan 401 vs 403.
 
