@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -43,6 +44,7 @@ export default function FlightEditPage({ params }: Props) {
   const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
   const [newVendorName, setNewVendorName] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [vendorError, setVendorError] = useState<string | null>(null)
 
   // Live preview harga jual — debounce 500ms, sama pola docs/arsitektur-visa.md tapi hanya
   // 1 komponen HPP ("tiket") karena flight tidak punya BRN-equivalent (arsitektur-tiket-pesawat.md §4).
@@ -102,19 +104,19 @@ export default function FlightEditPage({ params }: Props) {
   async function handleQuickAddVendor() {
     if (!newVendorName.trim()) return
     setSavingVendor(true)
+    setVendorError(null)
     const r = await fetch('/api/v1/admin/system/settings/vendors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newVendorName.trim(), category: 'maskapai' }),
     })
-    const j = await r.json()
+    const j = await r.json().catch(() => null)
     setSavingVendor(false)
-    if (j.data?.id) {
-      setVendors(v => [...v, j.data].sort((a, b) => a.name.localeCompare(b.name)))
-      setVendorId(j.data.id)
-      setNewVendorName('')
-      setShowQuickAddVendor(false)
-    }
+    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
+    setVendors(v => [...v, j.data].sort((a, b) => a.name.localeCompare(b.name)))
+    setVendorId(j.data.id)
+    setNewVendorName('')
+    setShowQuickAddVendor(false)
   }
 
   async function handleSaveBasic() {
@@ -237,6 +239,7 @@ export default function FlightEditPage({ params }: Props) {
           {vendors.length === 0 && !showQuickAddVendor && (
             <p className="text-[11px] text-admin-warning">Belum ada vendor/maskapai — tambah dulu.</p>
           )}
+          {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
           <div className="flex items-center gap-2">
             {!showQuickAddVendor ? (
               <>

@@ -82,9 +82,13 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const hotel = await prisma.hotel.findUnique({ where: { id }, select: { images: true } })
   if (!hotel) return NextResponse.json(err('Hotel not found'), { status: 404 })
 
+  // SEC-62: key dari body hanya boleh menghapus objek yang TERCATAT pada hotel ini — tanpa cek, manager bisa menghapus objek bucket mana pun.
+  const current = hotel.images as string[]
+  if (!current.includes(key)) return NextResponse.json(err('Gambar tidak ditemukan'), { status: 404 })
+
   await deleteObject(key).catch(() => {})
 
-  const keys = (hotel.images as string[]).filter(k => k !== key)
+  const keys = current.filter(k => k !== key)
   await prisma.hotel.update({ where: { id }, data: { images: keys } })
 
   return NextResponse.json(ok(null))

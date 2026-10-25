@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Pencil, Trash2, MapPin, Landmark, Building2, Wallet, Bus } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 type Mode = 'included' | 'user_choice' | 'none'
@@ -121,6 +122,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
   const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
   const [newVendorName, setNewVendorName] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [vendorError, setVendorError] = useState<string | null>(null)
   const [costPreview, setCostPreview] = useState<CostPreview | null>(null)
 
   const loadPackage = useCallback(async (pkgId: string) => {
@@ -327,17 +329,17 @@ export default function TourPackageBuilderPage({ params }: Props) {
   async function handleQuickAddVendor() {
     if (!newVendorName.trim()) return
     setSavingVendor(true)
+    setVendorError(null)
     const r = await fetch('/api/v1/admin/system/settings/vendors', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newVendorName.trim(), category: 'tour_package' }),
     })
-    const j = await r.json()
+    const j = await r.json().catch(() => null)
     setSavingVendor(false)
-    if (j.data?.id) {
-      setVendors(vs => [...vs, j.data].sort((a, b) => a.name.localeCompare(b.name)))
-      setCostForm(f => ({ ...f, vendorId: j.data.id }))
-      setNewVendorName(''); setShowQuickAddVendor(false)
-    }
+    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
+    setVendors(vs => [...vs, j.data].sort((a, b) => a.name.localeCompare(b.name)))
+    setCostForm(f => ({ ...f, vendorId: j.data.id }))
+    setNewVendorName(''); setShowQuickAddVendor(false)
   }
 
   async function handleSaveCost() {
@@ -593,6 +595,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
               {vendors.length === 0 && !showQuickAddVendor && (
                 <p className="text-[11px] text-admin-warning">Belum ada vendor — tambah dulu.</p>
               )}
+              {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
               <div className="flex items-center gap-2">
                 {!showQuickAddVendor ? (
                   <>

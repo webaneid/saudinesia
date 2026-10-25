@@ -8,6 +8,7 @@ import { ProductMediaGallery } from '@/components/admin/media/ProductMediaGaller
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -500,6 +501,7 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
   const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
   const [newVendorName, setNewVendorName] = useState('')
   const [savingVendor, setSavingVendor] = useState(false)
+  const [vendorError, setVendorError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   async function loadPrices() {
@@ -552,18 +554,18 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
   async function handleQuickAddVendor() {
     if (!newVendorName.trim()) return
     setSavingVendor(true)
+    setVendorError(null)
     const r = await fetch('/api/v1/admin/system/settings/vendors', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newVendorName.trim(), category: 'hotel' }),
     })
-    const j = await r.json()
+    const j = await r.json().catch(() => null)
     setSavingVendor(false)
-    if (j.data?.id) {
-      setVendorId(j.data.id)
-      setNewVendorName(''); setShowQuickAddVendor(false)
-      onVendorCreated()
-    }
+    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
+    setVendorId(j.data.id)
+    setNewVendorName(''); setShowQuickAddVendor(false)
+    onVendorCreated()
   }
 
   const filledRooms = Object.entries(rooms).filter(([, v]) => Number(v.hargaKamar) > 0)
@@ -609,6 +611,7 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
       {expanded && (
         <div className="border-t border-admin-line p-4 space-y-3 bg-admin-spot/20">
           <p className="text-xs font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Vendor &amp; Mata Uang (berlaku untuk semua tipe kamar di periode ini)</p>
+          {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
           <div className="flex items-center gap-2">
             {!showQuickAddVendor ? (
               <>

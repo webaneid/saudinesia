@@ -152,6 +152,32 @@ await t('SEC-49: setiap `req.json()` diberi `.catch` — body rusak/kosong harus
   assert.deepEqual(bad, [], 'req.json() tanpa .catch(() => null) — SyntaxError dari body rusak jatuh ke catch umum → 500:')
 })
 
+await t('SEC-62: DELETE images (hotel/kendaraan) hanya menghapus key yang tercatat pada entitas itu — cek keanggotaan SEBELUM deleteObject', () => {
+  for (const suffix of ['hotels/[id]/images/route.ts', 'transport/vehicles/[id]/images/route.ts']) {
+    const src = read(routes.find(f => rel(f).endsWith(suffix)) ?? '')
+    const del = src.slice(src.indexOf('export async function DELETE'))
+    const member = del.indexOf('current.includes(key)'), remove = del.indexOf('deleteObject(key)')
+    assert.ok(member > 0 && remove > 0, `${suffix}: cek keanggotaan / deleteObject tidak ditemukan`)
+    assert.ok(member < remove, `${suffix}: cek keanggotaan harus mendahului deleteObject`)
+  }
+  // Satu-satunya pemanggil deleteObject dengan key dari klien adalah dua route ini; sisanya memakai key dari DB.
+  const fromClient = routes.filter(f => /deleteObject\(\s*key\s*\)/.test(read(f))).map(rel).sort()
+  assert.deepEqual(fromClient, ['v1/admin/products/hotels/[id]/images/route.ts', 'v1/admin/products/transport/vehicles/[id]/images/route.ts'])
+})
+
+await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lewat vendorQuickAddError (tak boleh senyap saat 403 bagi manager)', () => {
+  const dir = 'app/[locale]/admin/(protected)/products'
+  const files = ['transport/trips/[id]/page.tsx', 'hotels/[id]/page.tsx', 'flight/[id]/page.tsx', 'tour-packages/[id]/page.tsx', 'packages/[id]/page.tsx', 'visa/[id]/CostTiersTab.tsx']
+  for (const f of files) {
+    const src = read(join(dir, f))
+    assert.match(src, /vendorQuickAddError\(r\.status, j\?\.error\)/, `${f}: galat tambah-vendor tidak ditampilkan`)
+    assert.ok(src.includes("settings/vendors', {") , `${f}: pemanggil POST vendor tidak ditemukan — daftar berkas uji perlu diperbarui`)
+  }
+  const all = readdirSync(dir, { recursive: true }) as string[]
+  const callers = all.filter(f => /\.tsx$/.test(f) && read(join(dir, f)).includes("fetch('/api/v1/admin/system/settings/vendors', {")).sort()
+  assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru di halaman produk yang belum memakai vendorQuickAddError')
+})
+
 await t('SEC-47: /address — GET/PUT lewat canAccessAddress (BOLA), POST dibatasi addressCreateUser, body rusak tidak 500', () => {
   const byId = read(routes.find(f => rel(f).endsWith('v1/address/[id]/route.ts')) ?? '')
   for (const verb of ['GET', 'PUT']) {
