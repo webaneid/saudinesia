@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { buildObjectKey, uploadBuffer, deleteObject, getPresignedUrl } from '@/lib/storage/minio'
 import { ok, err } from '@/lib/validators'
+import { authFailureResponse } from '@/lib/admin/errors'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -13,7 +14,7 @@ const MAX_BYTES = 5 * 1024 * 1024
 // bisa diisi admin. Satu foto per muthowif (bukan galeri) — upload baru menggantikan yang lama.
 export async function POST(req: NextRequest, { params }: Params) {
   try { await requireManager() }
-  catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  catch (e) { return authFailureResponse(e, 'v1/admin/products/muthowif/[id]/photo/POST') }
 
   const { id } = await params
   const muthowif = await prisma.muthowif.findUnique({ where: { id }, select: { photoKey: true } })
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
   try { await requireManager() }
-  catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  catch (e) { return authFailureResponse(e, 'v1/admin/products/muthowif/[id]/photo/DELETE') }
 
   const { id } = await params
   const muthowif = await prisma.muthowif.findUnique({ where: { id }, select: { photoKey: true } })

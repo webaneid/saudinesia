@@ -697,8 +697,8 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live; semuanya sudah tercatat dengan ID, tidak hilang.
 
 **Paket hardening kecil (usulan satu PR berikutnya):**
-- [ ] **SEC-07 (Medium):** 11 route stub `ok(null)` tanpa auth yang menjawab sukses (`groups`, `groups/[id]`, `groups/[id]/invite`, `admin/reports`, `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/notifications`, `admin/bookings/[id]/status`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`) — hapus atau amankan.
-- [ ] **SEC-08 (Medium):** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
+- [x] **SEC-07 (Medium) — SELESAI 2026-10-25:** 11 route stub `ok(null)` tanpa auth yang menjawab sukses (`groups`, `groups/[id]`, `groups/[id]/invite`, `admin/reports`, `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/notifications`, `admin/bookings/[id]/status`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`) — hapus atau amankan.
+- [x] **SEC-08 (Medium) — SELESAI 2026-10-25:** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
 - [ ] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`.
 - [ ] **SEC-12 (Low):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
 - [ ] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir.
@@ -713,4 +713,26 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [ ] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya.
 - [ ] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan.
 - [ ] M15 deployment: VPS, TLS, `migrate deploy`, uji GOWA nyata, smoke test; jadwalkan backup (`scripts/backup-*.sh`).
+
+---
+
+## Hardening SEC-07 dan SEC-08 (rencana 2026-10-25; register `docs/lessons-learned.md`)
+
+Keputusan pemilik 2026-10-25: arah produk (checkout, Group Booking, refund, dst.) **ditunda — akan diubah total**; yang dikerjakan sekarang hanya SEC-07 dan SEC-08 dari agenda.
+
+**Hasil recheck kode (sebelum merancang):**
+- **SEC-07 akurat:** 11 route stub murni (10–18 baris, tanpa auth dan tanpa Prisma, semua method menjawab sukses): `admin/bookings/[id]/status`, `admin/hotels`, `admin/muthowif`, `admin/notifications`, `admin/reports`, `admin/seasons`, `groups`, `groups/[id]`, `groups/[id]/invite`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`. **Tidak ada satu pun pemanggil** (kode, skrip, tes, CI, Caddyfile). `auth/logout` ikut menjawab `ok(null)` tetapi bukan stub (memanggil `clearSession()`). Halaman UI `groups` (3 baris `TODO`) bukan bagian SEC-07 dan tidak disentuh.
+- **SEC-08 lebih sempit dari yang tertulis:** sisa 15 blok `catch → 403`: **4 membungkus seluruh handler** (`products/packages` GET/POST, `products/seasons` GET/POST) dan **11 hanya membungkus pemeriksaan auth** (upload gambar/foto di hotel/muthowif/situs wisata/kendaraan + ZIP dokumen) yang tetap menyembunyikan galat infrastruktur (DB mati saat cek sesi → 403 palsu). Catering dan Haji sudah dibenahi di sesi editor. Satu-satunya route yang masih membaca body mentah tanpa Zod: `products/seasons` POST (`new Date(b.startDate)` → `Invalid Date` → galat DB).
+
+**Rencana (satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata, security check, dokumentasi):**
+
+| Fase | Isi |
+|---|---|
+| A — SEC-07 | Hapus 11 stub (jalur itu menjadi 404, fail-closed). Penjaga regresi di CI: tes yang memindai semua `route.ts` dan gagal bila ada handler `ok(null)` tanpa pemeriksaan auth (allowlist: `auth/logout`) |
+| B — SEC-08 | Helper `lib/admin/errors.ts` (`isAuthError`, `authFailureResponse`); 15 blok `catch` diganti (auth → 403, selain itu → log + 500); `seasons` POST → skema Zod ketat (enum nama musim, tanggal `YYYY-MM-DD`, akhir ≥ awal). Penjaga regresi di CI: tes yang gagal bila ada `catch` yang menjawab 403 tanpa jalur 500, atau pola `const b = await req.json()` |
+
+**Di luar cakupan (sengaja):** pemisahan 401 vs 403 (route admin lama menjawab 403 untuk keduanya; bukan bunyi SEC-08), halaman UI `groups`, dan semua agenda lain.
+
+**Hasil Fase A — SEC-07 (2026-10-25):** 11 stub dihapus; 13 request tanpa login yang dulu sukses (200/201) kini 404; route dan halaman sah di sekitarnya tidak terpengaruh. Penjaga regresi `scripts/test-routes.ts` masuk `bun run test`/CI (dimutasi). Build produksi terisolasi 0 error; `bun audit` tidak berubah (5; tanpa dependensi baru). Security check: 0 temuan (mengurangi permukaan serang; skrip baru hanya membaca berkas).
+**Hasil Fase B — SEC-08 (2026-10-25):** helper `lib/admin/errors.ts` (`isAuthError`, `authFailureResponse`); 15 blok `catch → 403` diganti (auth → 403, selain itu log + 500); `seasons` POST kini tervalidasi (`seasonCreateSchema`). Tanpa login 15 endpoint terkait tetap 403; dengan sesi admin input salah → 400 berpesan jelas. Penjaga CI di `scripts/test-routes.ts` (dimutasi). Build produksi terisolasi 0 error; `bun audit` tidak berubah. Security check: 0 temuan baru; dicatat di luar cakupan: route admin lama belum memisahkan 401 vs 403.
 
