@@ -35,7 +35,7 @@ export async function POST(req: Request, { params }: Ctx) {
   try {
     await requireAdmin()
     const { id: bookingId } = await params
-    const parsed = schema.safeParse(await req.json())
+    const parsed = schema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const bm = await prisma.bookingMuthowif.findFirst({

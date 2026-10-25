@@ -36,7 +36,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    const parsed = updateSchema.safeParse(await req.json())
+    const parsed = updateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const v = await prisma.transportVehicle.update({ where: { id }, data: parsed.data })
     return NextResponse.json(ok(v))

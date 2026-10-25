@@ -49,7 +49,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   try {
     await requireSuperAdmin()
     const { id } = await params
-    const parsed = putSchema.safeParse(await req.json())
+    const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { vendorId, currency, hargaKendaraan } = parsed.data
 

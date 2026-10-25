@@ -703,7 +703,8 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 - [x] **SEC-12 (Low) — SELESAI (tertutup SEC-44, dibuktikan 2026-10-25):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
 - [x] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir. (Selesai 2026-10-25, Fase B)
 - [x] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA). (Selesai 2026-10-25, Fase D)
-- [ ] **SEC-49 (Low, sebagian):** `await req.json()` tanpa `.catch` di beberapa route tersisa.
+- [x] **SEC-49 (Low):** `await req.json()` tanpa `.catch` — selesai 2026-10-25 (Fase E).
+- [ ] **SEC-62 (Medium, baru):** hapus objek MinIO sembarang lewat DELETE images hotel/kendaraan (lihat register).
 - [ ] **SEC-50 (Low):** `catalog/flight` publik membocorkan `totalSeats/pendingSeats/bookedSeats`.
 
 **Hardening infrastruktur & kebijakan (sebelum go-live):**
@@ -762,4 +763,6 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 **Hasil Fase C — SEC-61(b) (2026-10-25):** `GET` vendor → `requireManager`; manager mendapat `select` ramping, superadmin tetap `include: address`; urutan kini punya tie-breaker `id`. HTTP nyata: superadmin 200 + `contactInfo`/alamat; manager 200 tanpa kolom itu; admin/pilgrim/tanpa cookie 403; POST/PUT/DELETE manager 403. Penjaga di `scripts/test-routes.ts` (dimutasi: menambah `contactInfo` ke cabang manager → gagal). Build produksi terisolasi (tsc 0 error). Security check: 0 temuan; permukaan baru = daftar nama vendor ke manager (sudah terlihat di tab HPP mereka). Catatan UI: *quick-add* vendor masih 403 diam-diam bagi manager.
 
 **Hasil Fase D — SEC-47 (2026-10-25):** `canAccessAddress` (staf atau pemilik lewat `User.addressId`; lainnya 404), `PUT` id tak ada → 404, `POST /address` + policy `addressCreateUser` + `.catch` pada body. Karena tak ada klien yang memanggil endpoint ini, tidak ada UI yang berubah (alur profil/hotel/vendor lewat `upsertAddress` tidak tersentuh). HTTP nyata (lihat register) + penjaga sumber (dimutasi). tsc 0 error. Security check: 0 temuan; hanya mengetatkan akses.
+
+**Hasil Fase E — SEC-49 (2026-10-25):** 58 titik di 53 route → `.catch(() => null)`; `safeParse(null)` menghasilkan 400 seperti body tak sah lainnya. Penjaga baru di `scripts/test-routes.ts` (dimutasi). Sapuan HTTP nyata atas 92 kombinasi route×metode tulis: 0× 500. tsc 0 error. Security check: 0 temuan pada kode yang diubah; **temuan pre-existing baru SEC-62 (Medium)** — `DELETE …/images` menghapus objek MinIO dari `key` body tanpa memeriksa kepemilikan — dicatat dan dilaporkan ke pemilik, belum diperbaiki (di luar fase ini).
 

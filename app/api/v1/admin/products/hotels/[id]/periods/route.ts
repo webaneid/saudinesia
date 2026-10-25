@@ -36,7 +36,7 @@ export async function POST(req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    const parsed = createSchema.safeParse(await req.json())
+    const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { periodStart, periodEnd } = parsed.data
 

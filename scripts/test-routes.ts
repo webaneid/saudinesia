@@ -113,6 +113,16 @@ await t('SEC-61(b): GET vendor terbuka bagi manager TAPI hanya kolom pemilih; ko
   assert.ok(!/requireManager\(\)/.test(byId) && /requireSuperAdmin\(\)/.test(byId), 'PUT/DELETE vendor tetap superadmin')
 })
 
+await t('SEC-49: setiap `req.json()` diberi `.catch` — body rusak/kosong harus 400, bukan 500', () => {
+  const bad: string[] = []
+  for (const f of routes) {
+    read(f).split('\n').forEach((line, i) => {
+      if (/\b(req|request)\.json\(\)(?!\s*\.catch\()/.test(line) && !/^\s*\/\//.test(line)) bad.push(`${rel(f)}:${i + 1}`)
+    })
+  }
+  assert.deepEqual(bad, [], 'req.json() tanpa .catch(() => null) — SyntaxError dari body rusak jatuh ke catch umum → 500:')
+})
+
 await t('SEC-47: /address — GET/PUT lewat canAccessAddress (BOLA), POST dibatasi addressCreateUser, body rusak tidak 500', () => {
   const byId = read(routes.find(f => rel(f).endsWith('v1/address/[id]/route.ts')) ?? '')
   for (const verb of ['GET', 'PUT']) {

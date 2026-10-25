@@ -31,7 +31,7 @@ export async function GET() {
 export async function POST(req: Request) {
   try {
     await requireManager()
-    const parsed = createSchema.safeParse(await req.json())
+    const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const m = await prisma.muthowif.create({ data: { ...parsed.data, bio: emptyToNull(parsed.data.bio) } })
     return NextResponse.json(ok(m), { status: 201 })
