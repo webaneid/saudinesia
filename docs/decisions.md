@@ -2534,3 +2534,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error di dist terpisah; `bun run test` 13 suite lulus; penjaga dimutasi.
 
 **Affects:** `app/api/v1/admin/products/{hotels/[id]/images,transport/vehicles/[id]/images}/route.ts`, `lib/admin/vendorQuickAdd.ts` (baru), 5 halaman produk + `CostTiersTab.tsx`, `scripts/test-routes.ts`.
+
+## 2026-10-25 — SEC-11: pin GitHub Actions ke SHA dan Bun ke versi tetap
+
+**Decision:** Semua action pihak ketiga dipin ke SHA commit (dengan komentar versi); `bun-version` CI dipin ke 1.3.11 (sama dengan versi lokal). Penjaga statis di `scripts/test-routes.ts` menolak `uses:` tanpa SHA dan `bun-version: latest`.
+
+**Rationale:** Tag bisa dipindah (kasus tj-actions 2025); workflow ini memegang `contents`/`packages` write di job docker. Bun `latest` membuat CI bisa pecah/berubah tanpa commit (SEC-05 sudah mencatat regresi runtime Bun).
+
+**Alternatives considered:** Hanya mengandalkan Dependabot (ditolak: pembaruan tag tetap mengikuti tag yang bisa dipindah); pin digest `oven/bun` di Dockerfile sekarang (ditunda ke SEC-10, perlu keputusan pemeliharaan).
+
+**Security check (SOP langkah 5):** 0 Critical/High; menutup SEC-11 (Low). Perubahan infra/workflow ditinjau terhadap checklist infra (permissions tidak berubah, tanpa `pull_request_target`). `bun audit` tidak berubah. Bukti: SHA diverifikasi via API, penjaga dimutasi, CI PR hijau.
+
+**Affects:** `.github/workflows/ci.yml`, `.github/workflows/minio-image.yml`, `scripts/test-routes.ts`.
