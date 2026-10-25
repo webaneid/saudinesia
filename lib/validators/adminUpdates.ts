@@ -79,16 +79,16 @@ export const cateringOptionCreateSchema = z
  */
 export const hajiProductCreateSchema = z
   .object({
-    name: z.string().trim().min(1).max(200),
+    name: z.string().trim().min(1, 'Nama produk wajib diisi').max(200, 'Nama produk terlalu panjang'),
     hajiType: z.enum(['furoda', 'khusus', 'reguler', 'plus']),
-    year: z.number().int().min(2000).max(2100),
+    year: z.number({ message: 'Tahun harus berupa angka' }).int().min(2000, 'Tahun minimal 2000').max(2100, 'Tahun maksimal 2100'),
     description: richTextField().nullish(), // teks kaya (docs/arsitektur-editor-teks.md)
     departureDate: nullableDate.optional(),
     returnDate: nullableDate.optional(),
-    durationDays: z.number().int().min(1).max(365).nullable().optional(),
+    durationDays: z.number({ message: 'Durasi harus berupa angka' }).int().min(1, 'Durasi minimal 1 hari').max(365, 'Durasi maksimal 365 hari').nullable().optional(),
     includes: z.array(z.string().max(300)).max(100).default([]),
     // `price` SENGAJA tidak ada: harga Haji = cache dari Komponen Biaya (docs/arsitektur-komponen-biaya.md §3.3), bukan masukan admin.
-    totalQuota: z.number().int().min(0),
+    totalQuota: z.number({ message: 'Kuota harus berupa angka' }).int('Kuota harus bilangan bulat').min(0, 'Kuota total tidak boleh negatif'),
   })
   .strict()
 
@@ -98,15 +98,15 @@ export const hajiProductCreateSchema = z
  */
 export const hajiProductUpdateSchema = z
   .object({
-    name: z.string().trim().min(1).max(200).optional(),
+    name: z.string().trim().min(1, 'Nama produk wajib diisi').max(200, 'Nama produk terlalu panjang').optional(),
     description: richTextField().nullish(), // teks kaya (docs/arsitektur-editor-teks.md); dulu string maks 5000 — JSON dokumen jauh lebih panjang dari teksnya
     hajiType: z.enum(['furoda', 'khusus', 'reguler', 'plus']).optional(),
-    year: z.number().int().min(2000).max(2100).optional(),
+    year: z.number({ message: 'Tahun harus berupa angka' }).int().min(2000, 'Tahun minimal 2000').max(2100, 'Tahun maksimal 2100').optional(),
     departureDate: nullableDate.optional(),
     returnDate: nullableDate.optional(),
-    durationDays: z.number().int().min(1).max(365).nullable().optional(),
+    durationDays: z.number({ message: 'Durasi harus berupa angka' }).int().min(1, 'Durasi minimal 1 hari').max(365, 'Durasi maksimal 365 hari').nullable().optional(),
     includes: z.array(z.string().max(300)).max(100).optional(),
-    totalQuota: z.number().int().min(0).optional(),
+    totalQuota: z.number({ message: 'Kuota harus berupa angka' }).int('Kuota harus bilangan bulat').min(0, 'Kuota total tidak boleh negatif').optional(),
     isActive: z.boolean().optional(),
   })
   .strict()

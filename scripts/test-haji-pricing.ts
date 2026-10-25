@@ -208,6 +208,18 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
   assert.match(readFileSync('lib/haji/delete.ts', 'utf8'), /P2003/)
 })
 
+await t('UI Haji (Fase 4): halaman edit memakai panel Komponen Biaya Haji, punya Simpan (PUT), Hapus/Nonaktifkan (DELETE) dan saklar Aktif; daftar menautkan ke halaman edit; tak ada input harga', () => {
+  const dir = 'app/[locale]/admin/(protected)/products/haji'
+  const edit = readFileSync(`${dir}/[id]/page.tsx`, 'utf8')
+  assert.match(edit, /<CostComponentsPanel[\s\S]*?apiBase=\{`\/api\/v1\/admin\/products\/haji\/\$\{id\}\/costs`\}[\s\S]*?vendorCategory="haji"/)
+  assert.match(edit, /method: 'PUT'/); assert.match(edit, /method: 'DELETE'/); assert.match(edit, /Zona Berbahaya/); assert.match(edit, /confirm\(/)
+  assert.match(edit, /Nonaktifkan Produk/); assert.match(edit, /Hapus Produk/); assert.match(edit, /Aktif \(tampil di katalog\)/)
+  assert.doesNotMatch(edit, /name="price"|form\.price|price: Number\(form/, 'harga bukan masukan')
+  const list = readFileSync(`${dir}/page.tsx`, 'utf8')
+  assert.match(list, /admin\/products\/haji\/\$\{h\.id\}/); assert.match(list, /Kelola/)
+  assert.doesNotMatch(list, /price: \+form|form\.price/, 'form buat tak boleh mengirim harga')
+})
+
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await prisma.productCost.deleteMany({ where: { productType: 'haji', productId: { in: created } } })
 await prisma.hajiProduct.deleteMany({ where: { id: { in: created } } })
