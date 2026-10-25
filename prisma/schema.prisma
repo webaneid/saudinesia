@@ -643,6 +643,7 @@ model CateringOption {
   name                  String
   boardType             String
   menuStyle             String
+  description           String? // teks kaya (JSON dokumen Tiptap atau teks polos) — docs/arsitektur-editor-teks.md §9
   pricePerPersonRegular Decimal @db.Decimal(12, 2)
   pricePerPersonRamadan Decimal @db.Decimal(12, 2)
   pricePerPersonHajj    Decimal @db.Decimal(12, 2)

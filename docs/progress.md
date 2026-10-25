@@ -685,8 +685,32 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] **Fase 2 — Halaman admin Visa** (2026-10-23): redesain tiga tab (Informasi / Persyaratan dokumen / Harga dan HPP) + tile ringkasan + bilah simpan saat ada perubahan; `Switch` dan `Tabs` baru di `components/admin/ui/`; `description` memakai editor; `POST/PUT /admin/products/visa` `.strict()` + `richTextField()`; katalog publik `/visa` memakai `RichTextView`. Perbaikan tumpangan: `VendorPicker` yang kehilangan fokus tiap ketikan, galat simpan yang dulu diam, tombol urut dokumen yang sungguhan (dulu ikon kosmetik), konfirmasi hapus inline (dulu `confirm()`).
 - [x] **SEC-60** (dependensi): salinan ProseMirror bersarang di `bun.lock` membuat editor error saat Enter/daftar → `overrides` `prosemirror-model`/`prosemirror-transform` + tes penjaga lockfile. Terverifikasi di dev dan artefak produksi.
 - [x] **Fase 3 — Editor di Hotel, Muthowif (`bio`), dan Haji** (2026-10-23): form admin + validator server + tampilan publik (`RichTextView`; beranda/daftar Muthowif memakai `plainText`). Haji: `hajiProductCreateSchema` baru (POST sebelumnya tanpa Zod), `GET`/`DELETE` Haji dibenahi dari `catch → 403`. Tes `scripts/test-rich-text.ts` jadi 17. Lihat `docs/arsitektur-editor-teks.md` §8 untuk batasan (admin Haji belum punya halaman edit; halaman publik Haji belum menampilkan deskripsi).
-- [ ] Pasang `RichTextEditor` di `description` Paket Umroh, Paket Ziarah, Situs Wisata, Katering — kandidat di `docs/arsitektur-editor-teks.md` §6.
-- [ ] Keputusan produk: tampilkan deskripsi Haji di halaman publik, dan halaman edit produk Haji di admin.
+- [x] **Editor di Paket Umroh, Paket Ziarah, Situs Wisata, Katering + deskripsi Haji tampil di publik** (2026-10-25, Fase 4-8, `docs/arsitektur-editor-teks.md` §9): lima fase, tiap fase typecheck + build produksi terisolasi + uji browser + uji penolakan API + security check. Katering butuh kolom baru (migrasi aditif `add_catering_description`); POST Katering sebelumnya tanpa Zod → kini skema ketat. Tes `scripts/test-rich-text.ts` jadi 18.
+- [ ] Keputusan produk (tersisa): tampilkan deskripsi Situs Wisata di halaman publik; halaman edit produk Haji dan Katering di admin.
 - [x] **SEC-61(a)** (2026-10-23): `P2025` → 404 di 28 handler tulis by-id (17 route) lewat `lib/admin/errors.ts`; `seasons/[id]` DELETE tak lagi menjawab 403 untuk semua galat. Terbukti sebelum 500 → sesudah 404.
 - [ ] SEC-61(b) (Low, terbuka): akses daftar vendor (`GET /admin/system/settings/vendors`) untuk peran `manager`.
+
+---
+
+## Agenda sesi berikutnya — temuan lama (diputuskan 2026-10-25: tidak dikerjakan di sesi editor)
+
+Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live; semuanya sudah tercatat dengan ID, tidak hilang.
+
+**Paket hardening kecil (usulan satu PR berikutnya):**
+- [ ] **SEC-07 (Medium):** 11 route stub `ok(null)` tanpa auth yang menjawab sukses (`groups`, `groups/[id]`, `groups/[id]/invite`, `admin/reports`, `admin/hotels`, `admin/muthowif`, `admin/seasons`, `admin/notifications`, `admin/bookings/[id]/status`, `pilgrims/[bookingId]`, `pilgrims/[bookingId]/[pilgrimId]`) — hapus atau amankan.
+- [ ] **SEC-08 (Medium):** sisa `catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }` (16 tempat per 2026-10-25) — bedakan 401/403/400/404/500 seperti aturan CLAUDE.md.
+- [ ] **SEC-61(b) (Low):** `GET /admin/system/settings/vendors` hanya superadmin padahal tab Harga/HPP dipakai `manager`.
+- [ ] **SEC-12 (Low):** `PATCH /admin/deletion-requests/[id]` memproses ulang permintaan yang sudah selesai/ditolak.
+- [ ] **SEC-13 (Low):** superadmin bisa menurunkan/menonaktifkan dirinya sendiri atau superadmin terakhir.
+- [ ] **SEC-47 (Low):** `address/[id]` GET/PUT tanpa cek kepemilikan (BOLA).
+- [ ] **SEC-49 (Low, sebagian):** `await req.json()` tanpa `.catch` di beberapa route tersisa.
+- [ ] **SEC-50 (Low):** `catalog/flight` publik membocorkan `totalSeats/pendingSeats/bookedSeats`.
+
+**Hardening infrastruktur & kebijakan (sebelum go-live):**
+- [ ] SEC-10 (container `no-new-privileges`/`cap_drop`, Redis password), SEC-11 (pin GitHub Actions ke SHA), SEC-14 (lockout-DoS terdistribusi — diterima/mitigasi), SEC-35 (persetujuan terikat versi teks), SEC-43 (alat admin melepas nomor terverifikasi, balasan `BATAL`), SEC-05 (sisa 5 advisory: `braces` tanpa perbaikan hulu + 4 via `minio`).
+
+**Produk & operasional (arah besar, perlu keputusan):**
+- [ ] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya.
+- [ ] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan.
+- [ ] M15 deployment: VPS, TLS, `migrate deploy`, uji GOWA nyata, smoke test; jadwalkan backup (`scripts/backup-*.sh`).
 

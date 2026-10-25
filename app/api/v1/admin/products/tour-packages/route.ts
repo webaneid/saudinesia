@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 // price TIDAK ada di sini secara sengaja — cache dari computeTourPackageBreakdown()
 // (docs/arsitektur-ziarah.md §8.3), diisi lewat endpoint costs, bukan manual. Mode
@@ -11,7 +12,7 @@ import { z } from 'zod'
 // setelah paket dibuat, bukan saat create.
 const createSchema = z.object({
   name:        z.string().min(1),
-  description: z.string().optional(),
+  description: richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   isActive:    z.boolean().default(true),
 })
 
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
     await requireManager()
     const parsed = createSchema.safeParse(await req.json())
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const pkg = await prisma.tourPackage.create({ data: { ...parsed.data, price: 0 } })
+    const pkg = await prisma.tourPackage.create({ data: { ...parsed.data, description: emptyToNull(parsed.data.description), price: 0 } })
     return NextResponse.json(ok(pkg), { status: 201 })
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

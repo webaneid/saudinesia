@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, MapPin, Upload, Trash2 } from 'lucide-react'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type TourismSite = {
   id: string; name: string; city: string | null; description: string | null
@@ -135,9 +136,9 @@ export default function TourismSiteEditPage({ params }: Props) {
             <p className="text-xs text-admin-muted mb-1">Link Google Maps</p>
             <input className="admin-inp" value={form.gmapsUrl} onChange={e => setForm(f => ({ ...f, gmapsUrl: e.target.value }))} placeholder="https://maps.google.com/..." />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 min-w-0">
             <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-            <textarea className="admin-inp" rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            <RichTextEditor id="tourismsite-description" title="Deskripsi situs wisata" value={form.description} onChange={description => setForm(f => ({ ...f, description }))} placeholder="Sejarah singkat, makna, dan hal yang perlu diketahui jamaah…" />
           </div>
         </div>
 

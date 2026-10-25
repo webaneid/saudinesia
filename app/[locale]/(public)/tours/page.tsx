@@ -3,6 +3,7 @@ import { getPresignedUrl } from '@/lib/storage/minio'
 import { MapPin } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import Link from 'next/link'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -36,7 +37,7 @@ export default async function ToursPage({ params }: Props) {
           return (
             <div key={p.id} className="rounded-xl border p-5 space-y-4">
               <h3 className="font-semibold">{p.name}</h3>
-              {p.description && <p className="text-sm text-muted-foreground leading-relaxed">{p.description}</p>}
+              <RichTextView value={p.description} className="text-muted-foreground" />
 
               {p.transportMode === 'user_choice' && p.transportTrip && (
                 <div className="flex items-center gap-1.5 text-xs text-teal-700 bg-teal-50 rounded px-2 py-1 w-fit">

@@ -3,6 +3,7 @@ import { detectSeason } from '@/lib/utils/season'
 import { UtensilsCrossed, CheckCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -35,6 +36,7 @@ export default async function CateringPage({ params }: Props) {
                 <Badge variant="secondary">{menuLabel[o.menuStyle] ?? o.menuStyle}</Badge>
               </div>
               <Badge variant="outline">{boardLabel[o.boardType] ?? o.boardType}</Badge>
+              <RichTextView value={o.description} className="text-muted-foreground" />
             </div>
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground">Per orang / hari</p>

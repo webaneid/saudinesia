@@ -5,13 +5,14 @@ import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
 import { z } from 'zod'
+import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 // transportTripId/includedTransportPricingId nullable eksplisit — admin bisa MELEPAS (kirim
 // null), bukan cuma "tidak diubah". transportMode/hotelMode adalah pemilih 3-mode (included/
 // user_choice/none) — docs/arsitektur-ziarah.md §12.
 const updateSchema = z.object({
   name:                      z.string().min(1).optional(),
-  description:               z.string().nullable().optional(),
+  description:               richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   isActive:                  z.boolean().optional(),
   transportMode:             z.enum(['included', 'user_choice', 'none']).optional(),
   transportTripId:           z.string().min(1).nullable().optional(),
@@ -59,6 +60,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const data: Record<string, unknown> = { ...parsed.data }
+    if (parsed.data.description !== undefined) data.description = emptyToNull(parsed.data.description)
 
     // includedTransportPricingId — snapshot harga SERVER-SIDE ke includedTransportPrice saat
     // dikunci (sama prinsip TourPackageHotel.pricePerNight, §10.10). Kalau dilepas (null),

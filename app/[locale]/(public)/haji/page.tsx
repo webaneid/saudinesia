@@ -4,6 +4,7 @@ import { Star, Calendar, Users, ArrowRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -77,6 +78,8 @@ export default async function HajiCatalogPage({ params }: Props) {
                       <span className="text-xs text-muted-foreground">Tahun {p.year}</span>
                     </div>
                   </div>
+
+                  <RichTextView value={p.description} className="text-muted-foreground" />
 
                   {p.departureDate && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

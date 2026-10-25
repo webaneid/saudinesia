@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Pencil, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Wallet, Package as PackageIcon } from 'lucide-react'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 type Mode = 'included' | 'user_choice' | 'none'
@@ -448,9 +449,9 @@ export default function PackageBuilderPage({ params }: Props) {
             <p className="text-xs text-admin-muted mb-1">Nama Paket</p>
             <input className="admin-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
           </div>
-          <div className="md:col-span-2">
+          <div className="md:col-span-2 min-w-0">
             <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-            <textarea className="admin-inp" rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            <RichTextEditor id="package-description" title="Deskripsi paket umroh" value={form.description} onChange={description => setForm(f => ({ ...f, description }))} placeholder="Ringkasan paket, program, dan keunggulan…" />
           </div>
           <div>
             <p className="text-xs text-admin-muted mb-1">Label Harga</p>

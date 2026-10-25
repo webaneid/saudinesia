@@ -6,6 +6,7 @@ import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type TourismSite = { id: string; name: string; city: string | null; isActive: boolean }
 
@@ -85,9 +86,9 @@ export default function TourismSitesPage() {
               <p className="text-xs text-admin-muted mb-1">Link Google Maps (opsional)</p>
               <input className="admin-inp" value={form.gmapsUrl} onChange={set('gmapsUrl')} placeholder="https://maps.google.com/..." />
             </div>
-            <div className="md:col-span-2">
+            <div className="md:col-span-2 min-w-0">
               <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-              <textarea className="admin-inp" rows={2} value={form.description} onChange={set('description')} />
+              <RichTextEditor id="tourismsite-new-description" title="Deskripsi situs wisata" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Sejarah singkat, makna, dan hal yang perlu diketahui jamaah…" />
             </div>
           </div>
           <div className="flex gap-2">
