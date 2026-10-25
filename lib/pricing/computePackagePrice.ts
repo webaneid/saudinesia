@@ -1,18 +1,7 @@
 import { prisma } from '@/lib/db'
-import { getLatestRate, getMarginRule, roundToNearest } from './pricingHelpers'
+import { computeCostComponents, type ComponentBreakdown } from './costComponents'
 
-type CostTier = { minDays: number; maxDays: number; cost: number }
-
-// Flat, tidak day-based — sama alasan Flight/Muthowif/Transport/Ziarah (docs/arsitektur-paket-umroh.md §5).
-const PROBE_DAY = 1
-
-export type ComponentBreakdown = {
-  costComponent: string
-  vendorId: string
-  currency: string
-  hppRupiah: number
-  sellPrice: number
-}
+export type { ComponentBreakdown }
 
 export type VehicleOption = { transportPricingId: string; vehicleName: string; vehiclePrice: number }
 
@@ -105,30 +94,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
     },
   })
 
-  const costs = await prisma.productCost.findMany({ where: { productType: 'package', productId: packageId, isActive: true } })
-  const marginRule = await getMarginRule('package')
-  const minMarginPercent = marginRule ? Number(marginRule.minMarginPercent) : 20
-  const roundingIncrement = marginRule ? marginRule.roundingIncrement : 50000
-
-  const components: ComponentBreakdown[] = []
-  for (const c of costs) {
-    const tiers = c.costTiers as unknown as CostTier[]
-    const tier = tiers.find(t => PROBE_DAY >= t.minDays && PROBE_DAY <= t.maxDays)
-    if (!tier) continue
-
-    let hppRupiah: number
-    if (c.currency === 'IDR') {
-      hppRupiah = tier.cost
-    } else {
-      const rate = await getLatestRate(c.currency, 'IDR')
-      if (!rate) continue
-      hppRupiah = tier.cost * Number(rate.sellRate)
-    }
-
-    const sellPrice = roundToNearest(hppRupiah * (1 + minMarginPercent / 100), roundingIncrement)
-    components.push({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice })
-  }
-  const componentsTotalSellPrice = components.reduce((sum, c) => sum + c.sellPrice, 0)
+  const { components, totalSellPrice: componentsTotalSellPrice } = await computeCostComponents('package', packageId)
 
   // Hotel Makkah
   const hotelMakkah: HotelSlotBreakdown = pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahNumRooms != null && pkg.includedHotelMakkahPrice != null
