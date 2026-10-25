@@ -38,6 +38,25 @@ const nullableDate = z
     return d
   })
 
+const isoDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal harus berformat YYYY-MM-DD')
+  .refine(v => !Number.isNaN(new Date(v).getTime()), 'Tanggal tidak valid')
+  .transform(v => new Date(v))
+
+/**
+ * POST /api/v1/admin/products/seasons. Sebelumnya `new Date(b.startDate)` dari body mentah (tanggal rusak → Invalid Date → galat DB
+ * → 403). Nama = nilai yang dipahami `detectSeason()` (lib/utils/season.ts) dan ditawarkan form admin.
+ */
+export const seasonCreateSchema = z
+  .object({
+    name: z.enum(['regular', 'ramadan', 'hajj']),
+    startDate: isoDate,
+    endDate: isoDate,
+  })
+  .strict()
+  .refine(v => v.endDate >= v.startDate, { message: 'Tanggal akhir tidak boleh sebelum tanggal mulai', path: ['endDate'] })
+
 /**
  * POST /api/v1/admin/products/catering. Sebelumnya route membaca body mentah tanpa Zod (harga NaN, tipe liar ke Prisma).
  * Nilai boardType/menuStyle = opsi yang ditawarkan form admin dan dipetakan label-nya di halaman publik.

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { buildObjectKey, uploadBuffer, deleteObject, getPresignedUrl } from '@/lib/storage/minio'
 import { ok, err } from '@/lib/validators'
+import { authFailureResponse } from '@/lib/admin/errors'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -11,7 +12,7 @@ const MAX_BYTES   = 5 * 1024 * 1024
 
 export async function GET(_: NextRequest, { params }: Params) {
   try { await requireManager() }
-  catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  catch (e) { return authFailureResponse(e, 'v1/admin/products/transport/vehicles/[id]/images/GET') }
 
   const { id } = await params
   const vehicle = await prisma.transportVehicle.findUnique({ where: { id }, select: { images: true } })
@@ -26,7 +27,7 @@ export async function GET(_: NextRequest, { params }: Params) {
 
 export async function POST(req: NextRequest, { params }: Params) {
   try { await requireManager() }
-  catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  catch (e) { return authFailureResponse(e, 'v1/admin/products/transport/vehicles/[id]/images/POST') }
 
   const { id } = await params
   const vehicle = await prisma.transportVehicle.findUnique({ where: { id }, select: { id: true, images: true } })
@@ -56,7 +57,7 @@ export async function POST(req: NextRequest, { params }: Params) {
 
 export async function DELETE(req: NextRequest, { params }: Params) {
   try { await requireManager() }
-  catch { return NextResponse.json(err('Forbidden'), { status: 403 }) }
+  catch (e) { return authFailureResponse(e, 'v1/admin/products/transport/vehicles/[id]/images/DELETE') }
 
   const { id } = await params
   const { key } = await req.json() as { key?: string }

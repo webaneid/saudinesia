@@ -6,6 +6,7 @@ import { getObjectBuffer } from '@/lib/storage/minio'
 import { DOC_LABEL } from '@/lib/constants/booking'
 import { err } from '@/lib/validators'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
+import { authFailureResponse } from '@/lib/admin/errors'
 
 export const dynamic = 'force-dynamic'
 
@@ -14,9 +15,7 @@ type Params = { params: Promise<{ id: string }> }
 export async function GET(req: NextRequest, { params }: Params) {
   try {
     await requireAdmin()
-  } catch {
-    return NextResponse.json(err('Forbidden'), { status: 403 })
-  }
+  } catch (e) { return authFailureResponse(e, 'v1/admin/bookings/[id]/documents/zip/GET') }
 
   const { id: bookingId } = await params
 
