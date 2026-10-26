@@ -51,12 +51,12 @@ await t('vendorNameKey (TS) == lower(regexp_replace(btrim(name), \'\\s+\', \' \'
   }
 })
 
-await t('keunikan (nameKey, countryCode): duplikat ditolak; negara lain diizinkan; vendor lama tanpa nameKey (null) tak bertabrakan', async () => {
+await t('keunikan (nameKey, countryCode): duplikat ditolak; negara lain diizinkan; nameKey/countryCode NOT NULL (tanpa keduanya ditolak)', async () => {
   const a = await mkVendor('Unik')
   assert.ok(await rejects(prisma.vendor.create({ data: { name: 'dup', nameKey: a.nameKey, countryCode: 'SA' } })), 'duplikat harus ditolak')
   const other = await prisma.vendor.create({ data: { name: 'dup', nameKey: a.nameKey, countryCode: 'ID' } }); created.vendors.push(other.id)
-  const l1 = await prisma.vendor.create({ data: { name: 'legacy1' } }), l2 = await prisma.vendor.create({ data: { name: 'legacy2' } }); created.vendors.push(l1.id, l2.id)
-  assert.ok(l1.id && l2.id)
+  const bare = prisma.vendor.create({ data: { name: 'legacy1' } as never }) // tipe sengaja dilonggarkan: yang diuji adalah penolakan DB
+  assert.ok(await rejects(bare), 'vendor tanpa nameKey/countryCode harus ditolak (NOT NULL)')
 })
 
 await t('FK: vendor yang dirujuk PreferredVendor atau ProductCost TIDAK bisa dihapus (Restrict); vendor sistem unik', async () => {

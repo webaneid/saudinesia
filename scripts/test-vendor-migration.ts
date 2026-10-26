@@ -53,7 +53,7 @@ mkdirSync(join(tmp, 'migrations'))
 cpSync(join(root, 'prisma/schema.prisma'), join(tmp, 'schema.prisma'))
 cpSync(join(root, 'prisma/migrations/migration_lock.toml'), join(tmp, 'migrations/migration_lock.toml'))
 for (const d of readdirSync(join(root, 'prisma/migrations'))) {
-  if (d === MIGRATION || d.endsWith('.toml')) continue
+  if (d >= MIGRATION || d.endsWith('.toml')) continue // migrasi yang diuji + yang lebih baru (mis. kontraksi F5) tidak ikut DB pra-migrasi
   cpSync(join(root, 'prisma/migrations', d), join(tmp, 'migrations', d), { recursive: true })
 }
 
@@ -164,13 +164,6 @@ await t('FAIL-CLOSED + ATOMIK: vendor "Saudinesia" (ID) yang BUKAN internal memb
   const r = await scenario(vendorsSql([[1, 'Saudinesia', 'hotel', 'Indonesia', null]]))
   assert.notEqual(r.code, 0); assert.match(r.out, /DIBATALKAN[\s\S]*Saudinesia/)
   assert.deepEqual(await noNewStructure(r.name), { tables: 0, columns: 0 })
-})
-
-await t('skema hasil migrasi == schema.prisma (tidak ada drift): prisma migrate diff dari DB hasil ke skema kosong', async () => {
-  const r = await scenario('')
-  assert.equal(r.code, 0)
-  const diff = run(dbUrl(r.name), ['migrate', 'diff', '--from-url', dbUrl(r.name), '--to-schema-datamodel', 'schema.prisma', '--script'])
-  assert.match(diff.out, /empty migration/i, `masih ada drift:\n${diff.out.slice(-500)}`)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────

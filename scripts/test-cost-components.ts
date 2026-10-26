@@ -37,7 +37,7 @@ const pkgH = createCostComponentHandlers('package', { authorize: authOk })
 const tourH = createCostComponentHandlers('tour_package', { authorize: authOk })
 
 // ── fixture ──────────────────────────────────────────────────────────────────────────────────────────────────────────
-const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, category: 'package', country: 'Saudi Arabia' } })
+const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, nameKey: `${tag} vendor`.toLowerCase(), countryCode: 'SA' } })
 const pkg = await prisma.package.create({ data: { name: `${tag} paket`, price: 0 } })
 const tour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah`, price: 0 } })
 const stamp = new Date()

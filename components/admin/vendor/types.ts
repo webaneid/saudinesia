@@ -16,8 +16,7 @@ export type VendorAddressRecord = {
 export type VendorRecord = {
   id: string
   name: string
-  /** null hanya pada vendor yang dibuat jalur lama di masa-antara F1–F4 — admin diminta melengkapinya. */
-  countryCode: string | null
+  countryCode: string
   isActive: boolean
   isSystem: boolean
   contactName: string | null
@@ -34,7 +33,7 @@ export type VendorRecord = {
 
 export type VendorFormState = {
   name: string
-  countryCode: string | null
+  countryCode: string | null // null hanya pada formulir baru yang belum memilih negara
   categoryIds: string[]
   contactName: string
   contact: ContactValue

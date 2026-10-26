@@ -7,7 +7,7 @@ import type { VendorCreate, VendorUpdate } from '@/lib/validators/vendor'
 import { getVendorUsage, type VendorUsage } from './integrity'
 
 // Layanan vendor + kategori (ADR-0003, docs/arsitektur-vendor.md §3). SATU-SATUNYA tempat yang menulis tabel `vendors` dan `vendor_categories`
-// (route hanya memanggil fungsi ini). Kolom legacy (`category`, `country`, `contactInfo`) tidak pernah ditulis di sini — dihapus di F5.
+// (route hanya memanggil fungsi ini). Kolom teks bebas lama sudah dihapus (migrasi kontraksi F5).
 
 export type ServiceError = { ok: false; status: 400 | 404 | 409; message: string }
 const fail = (status: ServiceError['status'], message: string): ServiceError => ({ ok: false, status, message })

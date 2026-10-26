@@ -48,7 +48,7 @@ export function VendorForm({ vendor, categories, initialName, initialCategoryIds
     () => categories.filter(c => c.isActive || form.categoryIds.includes(c.id)),
     [categories, form.categoryIds],
   )
-  const needsCompletion = !!vendor && (vendor.countryCode === null || vendor.categories.length === 0)
+  const needsCompletion = !!vendor && vendor.categories.length === 0
 
   const set = <K extends keyof VendorFormState>(key: K, value: VendorFormState[K]) => setForm(prev => ({ ...prev, [key]: value }))
   const toggleCategory = (id: string) =>
@@ -84,7 +84,7 @@ export function VendorForm({ vendor, categories, initialName, initialCategoryIds
     <div className="grid gap-5">
       {needsCompletion && (
         <p className="m-0 rounded-xl bg-admin-warning/14 px-3 py-2 text-sm text-admin-ink">
-          Vendor ini berasal dari data lama dan belum lengkap — pilih negara dan kategori yang benar lalu simpan.
+          Vendor ini belum punya kategori — pilih kategori yang benar lalu simpan.
         </p>
       )}
 

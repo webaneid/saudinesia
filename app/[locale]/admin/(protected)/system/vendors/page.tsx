@@ -26,9 +26,9 @@ type VendorRow = Awaited<ReturnType<typeof listVendors>>[number]
 const STATUS_OPTIONS = [{ value: 'active', label: 'Aktif' }, { value: 'inactive', label: 'Nonaktif' }]
 const str = (v: string | string[] | undefined) => (typeof v === 'string' ? v : undefined)
 
-/** Vendor dari alur lama yang belum dilengkapi admin: tanpa negara, atau hanya berkategori "Lainnya" (hasil pemetaan migrasi). */
+/** Vendor yang belum dikategorikan dengan benar: tanpa kategori, atau hanya "Lainnya" (hasil pemetaan migrasi data lama). */
 const needsReview = (v: VendorRow) =>
-  v.countryCode === null || v.categories.length === 0 || (v.categories.length === 1 && v.categories[0]?.slug === VENDOR_CATEGORY_SLUGS.other)
+  v.categories.length === 0 || (v.categories.length === 1 && v.categories[0]?.slug === VENDOR_CATEGORY_SLUGS.other)
 
 export default async function VendorsPage({ params, searchParams }: Props) {
   const { locale } = await params
@@ -64,7 +64,7 @@ export default async function VendorsPage({ params, searchParams }: Props) {
     },
     {
       key: 'country', header: 'Negara',
-      cell: v => <span className="text-[12px]">{v.countryCode ? (getCountryName(v.countryCode) ?? v.countryCode) : '-'}</span>,
+      cell: v => <span className="text-[12px]">{getCountryName(v.countryCode) ?? v.countryCode}</span>,
     },
     {
       key: 'categories', header: 'Kategori',
