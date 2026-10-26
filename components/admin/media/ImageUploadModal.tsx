@@ -88,7 +88,7 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-admin-line">
           <h2 className="text-[15px] font-bold text-admin-ink">Upload Foto</h2>
-          <button onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-admin-spot grid place-items-center text-admin-muted/70 transition-colors">
+          <button type="button" onClick={onClose} className="h-8 w-8 rounded-lg hover:bg-admin-spot grid place-items-center text-admin-muted/70 transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
@@ -167,12 +167,14 @@ export function ImageUploadModal({ open, uploading, error, onClose, onUpload }: 
         {/* Footer */}
         <div className="px-5 pb-5 flex gap-2">
           <button
+            type="button"
             onClick={onClose} disabled={uploading}
             className="flex-1 h-10 rounded-xl border border-admin-line text-[13px] font-medium text-admin-ink/80 hover:bg-admin-spot disabled:opacity-50 transition-colors"
           >
             Batal
           </button>
           <button
+            type="button"
             onClick={handleSubmit} disabled={!file || uploading || done}
             className="flex-1 h-10 rounded-xl bg-admin-accent text-white text-[13px] font-semibold hover:bg-admin-accent-strong disabled:opacity-40 transition-colors"
           >

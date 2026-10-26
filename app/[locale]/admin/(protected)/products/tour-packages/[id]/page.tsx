@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Pencil, Trash2, MapPin, Landmark, Building2, Bus } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { MediaField } from '@/components/admin/media/MediaField'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -292,6 +293,10 @@ export default function TourPackageBuilderPage({ params }: Props) {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h1 className="admin-h1 flex items-center gap-2"><Landmark className="h-5 w-5 text-admin-accent" /> {pkg.name}</h1>
+      </div>
+
+      <div className="admin-form-panel">
+        <MediaField productType="tour_package" productId={pkg.id} label="Galeri Paket Ziarah" />
       </div>
 
       {/* Info dasar */}

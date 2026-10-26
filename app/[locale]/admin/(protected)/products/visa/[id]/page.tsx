@@ -146,7 +146,7 @@ export default function VisaEditPage({ params }: Props) {
 
       {/* Semua panel tetap ter-mount (hanya disembunyikan) supaya isian yang belum disimpan dan riwayat undo editor tidak hilang saat pindah tab. */}
       <div id={tabPanelId('info')} role="tabpanel" aria-labelledby={tabId('info')} hidden={tab !== 'info'}>
-        <ProductInfoTab form={form} onChange={patchForm} price={price} locale={locale} productName={product.name} onShowPrice={() => setTab('price')} onDelete={remove} />
+        <ProductInfoTab productId={product.id} form={form} onChange={patchForm} price={price} locale={locale} productName={product.name} onShowPrice={() => setTab('price')} onDelete={remove} />
       </div>
       <div id={tabPanelId('docs')} role="tabpanel" aria-labelledby={tabId('docs')} hidden={tab !== 'docs'}>
         <RequirementsTab reqs={reqs} onChange={setRequirements} />

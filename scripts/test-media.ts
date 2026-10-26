@@ -210,15 +210,29 @@ await t('registry: setiap pemilik punya mode/max/label dan exists() yang bekerja
 })
 
 // ── penjaga sumber ──
-await t('penjaga sumber: HANYA lib/media/service.ts menulis product_images; route generik tipis; jembatan lama tak menulis kolom foto lama', () => {
+await t('penjaga sumber: HANYA lib/media/service.ts menulis product_images; route generik tipis; jembatan dan komponen foto lama sudah hilang', () => {
   const walk = (dir: string): string[] => (require('node:fs').readdirSync(dir, { withFileTypes: true }) as Array<{ name: string; isDirectory: () => boolean }>).flatMap(e => e.isDirectory() ? walk(`${dir}/${e.name}`) : /\.(ts|tsx)$/.test(e.name) ? [`${dir}/${e.name}`] : [])
   const writers = [...walk('app'), ...walk('lib'), ...walk('components')].filter(f => f !== 'lib/media/service.ts' && /prisma\.productImage\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\(/.test(readFileSync(f, 'utf8')))
   assert.deepEqual(writers, [], 'penulis product_images selain layanan')
   for (const f of ['app/api/v1/admin/media/[productType]/[productId]/route.ts', 'app/api/v1/admin/media/[productType]/[productId]/[imageId]/route.ts']) assert.match(readFileSync(f, 'utf8'), /createMediaHandlers\(\)/)
-  const legacy = readFileSync('lib/media/legacyRoutes.ts', 'utf8')
-  assert.doesNotMatch(legacy, /prisma\./, 'jembatan tak boleh menyentuh Prisma langsung'); assert.doesNotMatch(legacy, /\.(images|photoKey|featuredImageKey)\s*[:=]/)
+  for (const gone of ['lib/media/legacyRoutes.ts', 'components/admin/media/ProductMediaGallery.tsx', 'app/api/v1/admin/products/hotels/[id]/images/route.ts', 'app/api/v1/admin/products/muthowif/[id]/photo/route.ts']) assert.ok(!require('node:fs').existsSync(gone), `${gone}: jembatan/komponen lama harus sudah dihapus (F2)`)
   const handlers = readFileSync('lib/media/handlers.ts', 'utf8')
   assert.equal((handlers.match(/await requireWrite\(\)/g) ?? []).length, 5, 'setiap verb memanggil requireWrite lebih dulu')
+})
+
+await t('F2: SETIAP tipe di registry punya <MediaField productType="…"> di halaman edit-nya; tak ada unggah foto ad-hoc (input file / route foto lama) di halaman admin', () => {
+  const dir = 'app/[locale]/admin/(protected)/products/'
+  const pages: Record<keyof typeof MEDIA_OWNERS, string> = {
+    hotel: 'hotels/[id]/page.tsx', tour_package: 'tour-packages/[id]/page.tsx', vehicle: 'transport/vehicles/[id]/page.tsx', haji: 'haji/[id]/page.tsx',
+    package: 'packages/[id]/page.tsx', catering: 'catering/[id]/page.tsx', visa: 'visa/[id]/ProductInfoTab.tsx', muthowif: 'muthowif/[id]/page.tsx', tourism_site: 'tourism-sites/[id]/page.tsx',
+  }
+  assert.deepEqual(Object.keys(pages).sort(), Object.keys(MEDIA_OWNERS).sort(), 'tipe baru di registry wajib dipetakan ke halaman edit')
+  for (const [type, file] of Object.entries(pages)) assert.match(readFileSync(dir + file, 'utf8'), new RegExp(`<MediaField\\s[^>]*productType="${type}"`), `${type}: MediaField tidak terpasang di ${file}`)
+  const walk = (d: string): string[] => (require('node:fs').readdirSync(d, { withFileTypes: true }) as Array<{ name: string; isDirectory: () => boolean }>).flatMap(e => e.isDirectory() ? walk(`${d}/${e.name}`) : e.name.endsWith('.tsx') ? [`${d}/${e.name}`] : [])
+  const adhoc = walk('app/[locale]/admin').filter(f => /type="file"|\/photo`|\/images`/.test(readFileSync(f, 'utf8')))
+  assert.deepEqual(adhoc, [], 'unggah foto ad-hoc di halaman admin (pakai MediaField)')
+  const field = readFileSync('components/admin/media/MediaField.tsx', 'utf8')
+  assert.equal((field.match(/<button\b(?![^>]*type=)/g) ?? []).length, 0, 'semua <button> di MediaField harus bertipe (aman di dalam form)')
 })
 
 // ── pembersihan ──

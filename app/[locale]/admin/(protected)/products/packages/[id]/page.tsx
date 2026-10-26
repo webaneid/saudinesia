@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Package as PackageIcon } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { MediaField } from '@/components/admin/media/MediaField'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -355,6 +356,10 @@ export default function PackageBuilderPage({ params }: Props) {
           <ArrowLeft className="h-4 w-4" />
         </button>
         <h1 className="admin-h1 flex items-center gap-2"><PackageIcon className="h-5 w-5 text-admin-primary-medium" /> {pkg.name}</h1>
+      </div>
+
+      <div className="admin-form-panel">
+        <MediaField productType="package" productId={pkg.id} label="Foto Unggulan Paket Umroh" />
       </div>
 
       {/* Info dasar */}

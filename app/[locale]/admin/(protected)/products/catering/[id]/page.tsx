@@ -8,6 +8,7 @@ import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Switch } from '@/components/admin/ui/Switch'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { MediaField } from '@/components/admin/media/MediaField'
 
 type Catering = {
   id: string; name: string; boardType: string; menuStyle: string; description: string | null
@@ -36,6 +37,7 @@ export default function EditCateringPage() {
       headerAside={<Badge tone={e.item?.isActive ? 'ok' : 'neutral'}>{e.item?.isActive ? 'Aktif' : 'Nonaktif'}</Badge>}
       onSubmit={() => e.save({ ...form, pricePerPersonRegular: +form.pricePerPersonRegular, pricePerPersonRamadan: +form.pricePerPersonRamadan, pricePerPersonHajj: +form.pricePerPersonHajj })}
       saving={e.saving} canSubmit={!!form.name.trim()} error={e.error} notice={e.notice}
+      top={<MediaField productType="catering" productId={id} label="Foto Unggulan Katering" />}
       remove={{ confirmText: 'Hapus paket katering ini? Bila sudah dipakai booking atau paket, ia hanya dinonaktifkan (bisa diaktifkan kembali).', onDelete: e.remove, deleting: e.deleting }}
     >
       <div className="grid gap-3 md:grid-cols-2">
