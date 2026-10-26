@@ -33,7 +33,7 @@ const SRC = `HJ_TEST_${tag}`
 const H = createCostComponentHandlers('haji', { authorize: async () => undefined })
 const asManager = createCostComponentHandlers('haji', { authorize: async () => { throw new Error('Forbidden') } })
 
-const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, category: 'haji', country: 'Saudi Arabia' } })
+const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, nameKey: `${tag} vendor`.toLowerCase(), countryCode: 'SA' } })
 await prisma.exchangeRate.createMany({ data: [
   { fromCurrency: 'USD', toCurrency: 'IDR', midRate: 16000, spreadPercent: 2.5, sellRate: 16400, source: SRC, fetchedAt: new Date(Date.now() + 1000) },
   { fromCurrency: 'SAR', toCurrency: 'IDR', midRate: 4250, spreadPercent: 2.5, sellRate: 4350, source: SRC, fetchedAt: new Date(Date.now() + 1000) },

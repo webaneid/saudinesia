@@ -38,6 +38,8 @@ Tiga masalah yang membuat ini butuh arsitektur sendiri (bukan sekadar field tamb
 
 ### 3.1 `Vendor` (Syarikah)
 
+> **DIGANTIKAN (vendor F5, 2026-10-26):** model `Vendor` di bawah (kolom `category`/`country`/`contactInfo` teks bebas) sudah tidak ada. Skema, API, UI, dan aturan integritas vendor yang berlaku ada di **`docs/arsitektur-vendor.md`** (ADR-0003). Isi bagian ini dipertahankan sebagai riwayat saja.
+
 ```prisma
 model Vendor {
   id          String   @id @default(uuid())
@@ -590,6 +592,8 @@ Ganti probe hari-1 dengan `Math.min(...durationFeeRules.map(r => r.fee))`, dihit
 ---
 
 ## 18. Kategori Vendor: Field `category` untuk Filter per Konteks Pemakaian
+
+> **DIGANTIKAN (vendor F5, 2026-10-26):** kategori teks bebas per modul diganti tabel `VendorCategory` yang dikelola admin (many-to-many) dan `VendorPicker` dengan konteks — lihat `docs/arsitektur-vendor.md`. Bagian ini hanya riwayat; jangan dipakai sebagai acuan implementasi.
 
 > **Status: SELESAI & TERVERIFIKASI (2026-07-19).** Ditemukan lewat audit modul Flight (`docs/decisions.md` 2026-07-19 "Audit Ulang") + diskusi lanjutan dengan user: `Vendor` dipakai sebagai entitas generik lintas modul (Visa = "syarikah", Flight = "maskapai") lewat `ProductCost.vendorId` yang sama — ini disengaja (lihat §8.1) supaya arsitektur harga reusable tanpa model baru per modul. Tapi konsekuensinya: dropdown vendor di form HPP Flight menampilkan **semua** vendor tanpa filter, termasuk syarikah visa yang tidak relevan (dan sebaliknya). User minta solusi yang tetap murah (bukan bongkar jadi model terpisah per konteks — itu akan merusak reuse `ProductCost`/`computeSellPrice()`/`PreferredVendor` yang sudah dibuktikan jalan di 2 modul), sekaligus siap dipakai modul Hotel nanti tanpa migrasi ulang. Dieksekusi & diverifikasi lewat browser (§18.7).
 

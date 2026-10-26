@@ -10,7 +10,7 @@ import { VENDOR_CONTEXT_CATEGORIES, type VendorContext } from '@/lib/constants/v
 import { VendorForm } from './VendorForm'
 import type { VendorCategoryOption, VendorRecord } from './types'
 
-type VendorItem = { id: string; name: string; countryCode: string | null; isActive: boolean }
+type VendorItem = { id: string; name: string; countryCode: string; isActive: boolean }
 
 type Props = {
   value: string

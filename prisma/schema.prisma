@@ -1155,18 +1155,12 @@ model NotificationLog {
 // Scope awal: Visa saja (docs/arsitektur-visa.md §9). Skema generik untuk modul lain nanti.
 
 // Entitas vendor TUNGGAL (ADR-0003, docs/arsitektur-vendor.md). Semua referensi vendor = FK ke sini.
-// FASE EKSPANSI (F1-F4): kolom LEGACY (`category`, `country`, `contactInfo`) masih ada, sudah dimigrasikan ke kolom/relasi baru,
-// dan TIDAK ditulis kode baru; dihapus di F5 (migrasi kontraksi, sekaligus `nameKey`/`countryCode` jadi NOT NULL).
+// Kolom lama (`category`, `country`, `contactInfo`) sudah dihapus oleh migrasi kontraksi F5; `nameKey`/`countryCode` NOT NULL.
 model Vendor {
   id                  String   @id @default(uuid())
   name                String
-  // ── LEGACY (dihapus di F5) ──
-  category            String? // teks bebas per modul — digantikan `categories`
-  country             String   @default("Saudi Arabia") // teks bebas — digantikan `countryCode`
-  contactInfo         String? // teks bebas — digantikan kolom kontak terstruktur + `notes`
-  // ── BARU ──
-  nameKey             String? // lower(trim(name)) spasi ganda dilipat — untuk keunikan (nameKey, countryCode)
-  countryCode         String? // ISO 3166-1 alpha-2 (lib/constants/countries.ts)
+  nameKey             String // lower(trim(name)) spasi ganda dilipat — untuk keunikan (nameKey, countryCode)
+  countryCode         String // ISO 3166-1 alpha-2 (lib/constants/countries.ts)
   contactName         String? // PIC
   phoneCountryCode    String? // ISO negara kode telepon (pola ContactPicker)
   phone               String?

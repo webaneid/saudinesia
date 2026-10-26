@@ -104,6 +104,16 @@ await t('F4: editor biaya Pesawat/Transport/Hotel tidak lagi "Tersimpan ✓" saa
   }
 })
 
+await t('F5: model Vendor tak lagi punya kolom lama (category/country/contactInfo); nameKey & countryCode wajib; tak ada kode yang membacanya', () => {
+  const schema = read('prisma/schema.prisma')
+  const block = schema.slice(schema.indexOf('model Vendor {'), schema.indexOf('}', schema.indexOf('model Vendor {')))
+  assert.doesNotMatch(block, /^\s+(category|country|contactInfo)\s/m, 'kolom lama masih ada di skema')
+  assert.match(block, /^\s+nameKey\s+String\s/m); assert.match(block, /^\s+countryCode\s+String\s/m)
+  const files = [...walk('app'), ...walk('lib'), ...walk('components')]
+  const readers = files.filter(f => /\bcontactInfo\b|vendor\.(category|country)\b/.test(read(f)))
+  assert.deepEqual(readers, [], 'kode masih menyentuh kolom vendor lama')
+})
+
 const record = (over: Partial<VendorRecord> = {}): VendorRecord => ({
   id: 'v1', name: 'Hotel A', countryCode: 'SA', isActive: true, isSystem: false, contactName: null, phoneCountryCode: null, phone: null,
   whatsappCountryCode: null, whatsapp: null, email: null, website: null, notes: null, categories: [], address: null, ...over,
@@ -126,9 +136,9 @@ await t('formStateToBody: kode negara hanya dikirim bila nomornya ada; alamat ko
   assert.ok('address' in filled)
 })
 
-await t('vendorToFormState: vendor lama tanpa negara/kategori tidak membuat formulir rusak', () => {
-  const s = vendorToFormState(record({ countryCode: null }))
-  assert.equal(s.countryCode, null)
+await t('vendorToFormState: vendor tanpa kategori tidak membuat formulir rusak', () => {
+  const s = vendorToFormState(record())
+  assert.equal(s.countryCode, 'SA')
   assert.deepEqual(s.categoryIds, [])
   assert.equal(s.contact.phoneCountryCode, 'ID')
   const back = vendorToFormState(record({ phoneCountryCode: 'SA', phone: '501234567', whatsappCountryCode: 'SA', whatsapp: '501234567', categories: [{ id: 'c1', slug: 'hotel', name: 'Hotel', isActive: true }] }))
