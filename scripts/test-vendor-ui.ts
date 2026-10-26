@@ -63,6 +63,47 @@ await t('menu Sistem memuat Vendor dan breadcrumb berlabel', () => {
   assert.equal(LABEL_SEGMEN.categories, 'Kategori')
 })
 
+await t('F4: satu pemilih vendor — tak ada jalur lama (settings/vendors, quick-add), tak ada <select> vendor buatan sendiri, VendorPicker dipakai di semua editor', () => {
+  const files = [...walk('app'), ...walk('components'), ...walk('lib')]
+  const legacy = files.filter(f => /settings\/vendors|vendorQuickAdd|legacyBridge/.test(read(f)))
+  assert.deepEqual(legacy, [], 'jalur vendor lama masih dirujuk')
+  const adHoc = files.filter(f => /vendors?\.map\([^)]*<option/.test(read(f)))
+  assert.deepEqual(adHoc, [], 'dropdown vendor buatan sendiri (pakai VendorPicker)')
+  const users = files.filter(f => /<VendorPicker\b/.test(read(f))).map(f => f.replace(/\\/g, '/')).sort()
+  assert.deepEqual(users, [
+    'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx',
+    'app/[locale]/admin/(protected)/products/hotels/[id]/page.tsx',
+    'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx',
+    'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx',
+    'components/admin/pricing/VendorCurrencyField.tsx',
+  ])
+})
+
+await t('F4: VendorPicker hanya menawarkan "Vendor Baru" kepada superadmin dan membuka VendorForm yang sama di modal; hanya vendor aktif dipilih baru', () => {
+  const src = read('components/admin/vendor/VendorPicker.tsx')
+  assert.match(src, /isSuperAdmin && \(\s*<button/, 'tombol Vendor Baru harus dibatasi superadmin')
+  assert.match(src, /isSuperAdmin && \(\s*<Modal/, 'modal harus dibatasi superadmin')
+  assert.match(src, /<VendorForm\b/); assert.match(src, /status: 'active'/)
+  assert.match(read('app/[locale]/admin/(protected)/layout.tsx'), /<AdminRoleProvider isSuperAdmin=\{isSuperAdmin\}>/)
+})
+
+await t('F4: editor biaya Pesawat/Transport/Hotel tidak lagi "Tersimpan ✓" saat server menolak (vendor nonaktif → 400) — respons diperiksa dan galat ditampilkan', () => {
+  const dir = 'app/[locale]/admin/(protected)/products/'
+  for (const [f, call, errVar] of [
+    ['flight/[id]/page.tsx', 'schedules/${id}/cost', 'setCostError'],
+    ['transport/trips/[id]/page.tsx', 'pricing/${pricing.id}/cost', 'setSaveError'],
+    ['hotels/[id]/page.tsx', 'periods/${period.id}/prices', 'setSaveError'],
+  ] as const) {
+    const src = read(dir + f)
+    const i = src.indexOf("method: 'PUT'", src.indexOf(call))
+    assert.ok(i > 0, `${f}: panggilan simpan tidak ditemukan`)
+    const after = src.slice(i, i + 900)
+    assert.match(after, /if \(!r\.ok\)/, `${f}: respons simpan tidak diperiksa`)
+    assert.ok(after.includes(errVar + '('), `${f}: galat simpan tidak ditampilkan`)
+    assert.ok(after.indexOf('!r.ok') < after.search(/setSaved\(true\)|setCostSaved\(true\)/), `${f}: penanda sukses mendahului pemeriksaan`)
+  }
+})
+
 const record = (over: Partial<VendorRecord> = {}): VendorRecord => ({
   id: 'v1', name: 'Hotel A', countryCode: 'SA', isActive: true, isSystem: false, contactName: null, phoneCountryCode: null, phone: null,
   whatsappCountryCode: null, whatsapp: null, email: null, website: null, notes: null, categories: [], address: null, ...over,

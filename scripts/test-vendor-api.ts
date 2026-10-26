@@ -10,7 +10,6 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/db'
 import { createVendorHandlers } from '@/lib/vendors/handlers'
 import { createCostComponentHandlers } from '@/lib/pricing/costComponentHandlers'
-import { legacyCategoryToSlug, legacyCountryToCode } from '@/lib/vendors/legacyBridge'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -203,7 +202,7 @@ await t('kategori bawaan sistem tak bisa dinonaktifkan/dihapus (409), tapi boleh
   assert.equal((await json(await su.categoryPUT(req({ isActive: true }), ctx(used.id)))).body.data.isActive, true)
 })
 
-console.log('== integrasi dengan route biaya + jembatan ==')
+console.log('== integrasi dengan route biaya ==')
 
 await t('route biaya bersama: vendor NONAKTIF → 400 jelas (menyebut menu Vendor), vendor tak ada → 400, aktif → 201', async () => {
   const H = createCostComponentHandlers('haji', { authorize: async () => undefined })
@@ -215,12 +214,6 @@ await t('route biaya bersama: vendor NONAKTIF → 400 jelas (menyebut menu Vendo
   const inactive = await json(await post(v.id)); assert.equal(inactive.status, 400); assert.match(inactive.body.error!, /nonaktif.*menu Vendor/)
   assert.equal((await post(randomUUID())).status, 400)
   await prisma.productCost.deleteMany({ where: { productId: haji.id } }); await prisma.hajiProduct.delete({ where: { id: haji.id } })
-})
-
-await t('jembatan lama: pemetaan kategori lama → slug (label modul → other) dan negara teks → ISO (Inggris/Indonesia/kode; tak dikenal → null)', () => {
-  assert.deepEqual(['syarikah', 'maskapai', 'hotel', 'transport', 'internal', 'package', 'tour_package', 'haji', null, 'xyz'].map(legacyCategoryToSlug),
-    ['visa', 'airline', 'hotel', 'transport', 'internal', 'other', 'other', 'other', 'other', 'other'])
-  assert.deepEqual(['Saudi Arabia', ' saudi arabia ', 'Indonesia', 'Arab Saudi', 'SA', 'Atlantis', '', null].map(legacyCountryToCode), ['SA', 'SA', 'ID', 'SA', 'SA', null, null, null])
 })
 
 console.log('== penjaga sumber ==')

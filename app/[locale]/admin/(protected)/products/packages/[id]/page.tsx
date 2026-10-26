@@ -701,7 +701,6 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Komponen biaya */}
       <CostComponentsPanel
         apiBase={`/api/v1/admin/products/packages/${id}/costs`}
-        vendorCategory="package"
         hint="Tiap komponen (dokumen, admin fee, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-paket-umroh.md §5"
         namePlaceholder="Dokumen, Admin Fee, dst"
         onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]) }}

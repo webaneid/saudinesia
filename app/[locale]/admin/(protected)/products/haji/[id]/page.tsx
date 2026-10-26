@@ -164,7 +164,6 @@ export default function HajiEditPage({ params }: Props) {
       {/* Komponen biaya — harga produk dihitung dari sini */}
       <CostComponentsPanel
         apiBase={`/api/v1/admin/products/haji/${id}/costs`}
-        vendorCategory="haji"
         hint="Tiap komponen (visa, akomodasi, transportasi, dst) dapat margin sendiri, baru dijumlah jadi harga per orang — lihat docs/arsitektur-komponen-biaya.md"
         namePlaceholder="Visa Haji, Akomodasi Makkah, Transportasi, dst"
         onChanged={async () => { touch(); await load(id, false) }}

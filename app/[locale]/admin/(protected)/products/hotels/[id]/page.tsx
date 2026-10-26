@@ -8,12 +8,11 @@ import { ProductMediaGallery } from '@/components/admin/media/ProductMediaGaller
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
-import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
+import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
 type RoomType = { id: string; name: string; defaultCapacity: number }
-type Vendor = { id: string; name: string; category: string | null }
 type Schedule = {
   id: string; roomTypeId: string; roomType: RoomType
   price: number; totalQuota: number; pendingQuota: number; bookedQuota: number; isActive: boolean
@@ -75,7 +74,6 @@ export default function HotelDetailPage() {
   const [periodForm, setPeriodForm] = useState({ periodStart: '', periodEnd: '' })
   const [periodError, setPeriodError] = useState('')
 
-  const [vendors, setVendors] = useState<Vendor[]>([])
   const [expandedPeriodId, setExpandedPeriodId] = useState<string | null>(null)
 
   const [services, setServices] = useState<HotelService[]>([])
@@ -114,18 +112,13 @@ export default function HotelDetailPage() {
     const j = await r.json()
     setPeriods(j.data ?? [])
   }
-  async function loadVendors() {
-    const r = await fetch('/api/v1/admin/system/settings/vendors?category=hotel')
-    const j = await r.json()
-    setVendors(j.data ?? [])
-  }
   async function loadServices() {
     const r = await fetch(`/api/v1/admin/products/hotels/${id}/services`)
     const j = await r.json()
     setServices(j.data ?? [])
   }
 
-  useEffect(() => { loadHotel(); loadImages(); loadRoomTypes(); loadPeriods(); loadVendors(); loadServices() }, [id])
+  useEffect(() => { loadHotel(); loadImages(); loadRoomTypes(); loadPeriods(); loadServices() }, [id])
 
   function set(k: string) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -393,10 +386,8 @@ export default function HotelDetailPage() {
               period={p}
               hotelId={hotel.id}
               roomTypes={roomTypes}
-              vendors={vendors}
               expanded={expandedPeriodId === p.id}
               onToggle={() => setExpandedPeriodId(expandedPeriodId === p.id ? null : p.id)}
-              onVendorCreated={loadVendors}
               onSaved={loadPeriods}
             />
           ))}
@@ -489,19 +480,16 @@ export default function HotelDetailPage() {
 
 type RoomPriceInput = { hargaKamar: string; totalQuota: string; preview: { hppRupiah: number; sellPrice: number } | null }
 
-function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, onVendorCreated, onSaved }: {
-  period: Period; hotelId: string; roomTypes: RoomType[]; vendors: Vendor[]
-  expanded: boolean; onToggle: () => void; onVendorCreated: () => void; onSaved: () => void
+function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: {
+  period: Period; hotelId: string; roomTypes: RoomType[]
+  expanded: boolean; onToggle: () => void; onSaved: () => void
 }) {
   const [vendorId, setVendorId] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [rooms, setRooms] = useState<Record<string, RoomPriceInput>>({})
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-  const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
-  const [newVendorName, setNewVendorName] = useState('')
-  const [savingVendor, setSavingVendor] = useState(false)
-  const [vendorError, setVendorError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
 
   async function loadPrices() {
@@ -551,29 +539,13 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currency, JSON.stringify(Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, v.hargaKamar])))])
 
-  async function handleQuickAddVendor() {
-    if (!newVendorName.trim()) return
-    setSavingVendor(true)
-    setVendorError(null)
-    const r = await fetch('/api/v1/admin/system/settings/vendors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newVendorName.trim(), category: 'hotel' }),
-    })
-    const j = await r.json().catch(() => null)
-    setSavingVendor(false)
-    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
-    setVendorId(j.data.id)
-    setNewVendorName(''); setShowQuickAddVendor(false)
-    onVendorCreated()
-  }
-
   const filledRooms = Object.entries(rooms).filter(([, v]) => Number(v.hargaKamar) > 0)
   const canSave = !!vendorId && filledRooms.length > 0
 
   async function handleSaveAll() {
     setSaving(true)
-    await fetch(`/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}/prices`, {
+    setSaveError(null)
+    const r = await fetch(`/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}/prices`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -583,6 +555,12 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
         })),
       }),
     })
+    if (!r.ok) {
+      const j = await r.json().catch(() => null)
+      setSaveError(j?.error ?? 'Harga gagal disimpan.')
+      setSaving(false)
+      return
+    }
     await onSaved()
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -611,28 +589,10 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
       {expanded && (
         <div className="border-t border-admin-line p-4 space-y-3 bg-admin-spot/20">
           <p className="text-xs font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Vendor &amp; Mata Uang (berlaku untuk semua tipe kamar di periode ini)</p>
-          {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
-          <div className="flex items-center gap-2">
-            {!showQuickAddVendor ? (
-              <>
-                <select className="admin-inp flex-1" value={vendorId} onChange={e => setVendorId(e.target.value)}>
-                  <option value="">Pilih vendor…</option>
-                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
-                <button type="button" onClick={() => setShowQuickAddVendor(true)} className="admin-btn-ghost text-xs shrink-0 flex items-center gap-1">
-                  <Plus className="h-3 w-3" /> Vendor Baru
-                </button>
-              </>
-            ) : (
-              <>
-                <input autoFocus className="admin-inp flex-1" placeholder="Nama vendor" value={newVendorName} onChange={e => setNewVendorName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddVendor() } }} />
-                <button type="button" onClick={handleQuickAddVendor} disabled={savingVendor || !newVendorName.trim()} className="admin-btn-sm text-xs shrink-0 disabled:opacity-50">
-                  {savingVendor ? '...' : 'Simpan'}
-                </button>
-                <button type="button" onClick={() => { setShowQuickAddVendor(false); setNewVendorName('') }} className="admin-btn-ghost text-xs shrink-0">Batal</button>
-              </>
-            )}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <VendorPicker value={vendorId} onChange={setVendorId} context="hotel" label="Vendor hotel" />
+            </div>
             <select className="admin-inp w-20 shrink-0" value={currency} onChange={e => setCurrency(e.target.value)}>
               {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -678,6 +638,7 @@ function PeriodRow({ period, hotelId, roomTypes, vendors, expanded, onToggle, on
             <Save className="h-3.5 w-3.5" />
             {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Semua Harga'}
           </button>
+          {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
         </div>
       )}
     </div>

@@ -4,11 +4,10 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Trash2, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
-import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
+import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
-type Vendor = { id: string; name: string; country: string; isActive: boolean }
 type VehicleInfo = { id: string; name: string; vehicleType: string; capacity: number }
 type Pricing = { id: string; vehicleId: string; price: number; isActive: boolean; vehicle: VehicleInfo }
 type Trip = {
@@ -21,10 +20,8 @@ type Props = { params: Promise<{ locale: string; id: string }> }
 
 const CATEGORIES = ['airport', 'intercity', 'city_tour', 'shuttle', 'other']
 
-function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
+function PricingRow({ pricing, onChanged }: {
   pricing: Pricing
-  vendors: Vendor[]
-  onVendorAdded: (v: Vendor) => void
   onChanged: () => void
 }) {
   const [vendorId, setVendorId]   = useState('')
@@ -35,11 +32,7 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
   const [saving, setSaving]       = useState(false)
   const [saved, setSaved]         = useState(false)
   const [deleting, setDeleting]   = useState(false)
-
-  const [showQuickAdd, setShowQuickAdd] = useState(false)
-  const [newVendorName, setNewVendorName] = useState('')
-  const [savingVendor, setSavingVendor] = useState(false)
-  const [vendorError, setVendorError] = useState<string | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   useEffect(() => {
     fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}/cost`)
@@ -68,33 +61,22 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
     return () => clearTimeout(timer)
   }, [hargaKendaraan, currency, loaded])
 
-  async function handleQuickAddVendor() {
-    if (!newVendorName.trim()) return
-    setSavingVendor(true)
-    setVendorError(null)
-    const r = await fetch('/api/v1/admin/system/settings/vendors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newVendorName.trim(), category: 'transport' }),
-    })
-    const j = await r.json().catch(() => null)
-    setSavingVendor(false)
-    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
-    onVendorAdded(j.data)
-    setVendorId(j.data.id)
-    setNewVendorName('')
-    setShowQuickAdd(false)
-  }
-
   const canSave = !!vendorId && Number(hargaKendaraan) > 0
 
   async function handleSave() {
     setSaving(true)
-    await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}/cost`, {
+    setSaveError(null)
+    const r = await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}/cost`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vendorId, currency, hargaKendaraan: Number(hargaKendaraan) }),
     })
+    if (!r.ok) {
+      const j = await r.json().catch(() => null)
+      setSaveError(j?.error ?? 'Harga kendaraan gagal disimpan.')
+      setSaving(false)
+      return
+    }
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2000)
     onChanged()
@@ -126,39 +108,10 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
       </div>
 
       <div className="border border-admin-line rounded-lg p-3 space-y-2">
-        {vendors.length === 0 && !showQuickAdd && (
-          <p className="text-[11px] text-admin-warning">Belum ada vendor transport — tambah dulu.</p>
-        )}
-        {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
-        <div className="flex items-center gap-2">
-          {!showQuickAdd ? (
-            <>
-              <select className="admin-inp flex-1 text-sm" value={vendorId} onChange={e => setVendorId(e.target.value)}>
-                <option value="">Pilih vendor…</option>
-                {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-              <button type="button" onClick={() => setShowQuickAdd(true)}
-                className="admin-btn-ghost text-xs shrink-0 flex items-center gap-1">
-                <Plus className="h-3 w-3" /> Vendor Baru
-              </button>
-            </>
-          ) : (
-            <>
-              <input
-                autoFocus className="admin-inp flex-1 text-sm" placeholder="Nama vendor/syarikah transport"
-                value={newVendorName} onChange={e => setNewVendorName(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddVendor() } }}
-              />
-              <button type="button" onClick={handleQuickAddVendor} disabled={savingVendor || !newVendorName.trim()}
-                className="admin-btn-sm text-xs shrink-0 disabled:opacity-50">
-                {savingVendor ? '...' : 'Simpan'}
-              </button>
-              <button type="button" onClick={() => { setShowQuickAdd(false); setNewVendorName('') }}
-                className="admin-btn-ghost text-xs shrink-0">
-                Batal
-              </button>
-            </>
-          )}
+        <div className="flex items-start gap-2">
+          <div className="min-w-0 flex-1">
+            <VendorPicker value={vendorId} onChange={setVendorId} context="transport" label="Vendor transport" />
+          </div>
           <select className="admin-inp w-20 shrink-0 text-sm" value={currency} onChange={e => setCurrency(e.target.value)}>
             {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -186,6 +139,7 @@ function PricingRow({ pricing, vendors, onVendorAdded, onChanged }: {
         <Save className="h-3.5 w-3.5" />
         {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Harga'}
       </button>
+      {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
     </div>
   )
 }
@@ -196,7 +150,6 @@ export default function TripEditPage({ params }: Props) {
   const [locale, setLocale] = useState('id')
   const [trip, setTrip]     = useState<Trip | null>(null)
   const [allVehicles, setAllVehicles] = useState<VehicleInfo[]>([])
-  const [vendors, setVendors] = useState<Vendor[]>([])
   const [form, setForm] = useState({
     name: '', category: '', description: '', origin: '', destination: '', isActive: true,
   })
@@ -225,9 +178,6 @@ export default function TripEditPage({ params }: Props) {
       const r = await fetch('/api/v1/admin/products/transport/vehicles')
       const j = await r.json()
       setAllVehicles(j.data ?? [])
-      const vr = await fetch('/api/v1/admin/system/settings/vendors?category=transport')
-      const vj = await vr.json()
-      setVendors(vj.data ?? [])
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params])
@@ -373,8 +323,6 @@ export default function TripEditPage({ params }: Props) {
             <PricingRow
               key={pricing.id}
               pricing={pricing}
-              vendors={vendors}
-              onVendorAdded={(v) => setVendors(vs => [...vs, v].sort((a, b) => a.name.localeCompare(b.name)))}
               onChanged={() => load(id)}
             />
           ))}
