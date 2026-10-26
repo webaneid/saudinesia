@@ -622,3 +622,42 @@ Step 8 — Build + dokumentasi [x] SELESAI 2026-07-25
 **KONSEKUENSI PENTING, dicatat eksplisit supaya tidak dikira bug**: wizard ini SEBELUMNYA satu-satunya cara booking paket kombinasi (hotel+transport+muthowif+catering+visa jadi satu) DAN satu-satunya cara booking Hotel-only/Muthowif-only/Catering-only/TourPackage-only. Setelah dihapus, **HANYA Visa-only dan Transport-only** (checkout pendek Step 6) yang masih punya jalur booking lewat browser sama sekali. Kelima kapabilitas lain (kombinasi + 4 produk single) **TIDAK BISA dilakukan lewat UI apa pun** sampai checkout pengganti per-produk dibangun — ini keputusan sadar, bukan regresi yang terlewat.
 
 **Verifikasi**: `bun run build` 0 error. Grep ulang seluruh repo untuk `bookings/new`, `lib/booking/draft`, `DraftProvider`, `PriceSidebar`, `WizardShell` setelah penghapusan — nol referensi tersisa (1 komentar di `VisaCheckoutForm.tsx` yang menyebut file lama diupdate supaya tidak menyesatkan). Browser: dashboard nav dan CTA dikonfirmasi mengarah ke homepage (bukan 404), homepage render normal dengan link ke semua kategori katalog. Regresi check: checkout Visa-only (Step 6) dikonfirmasi tetap berfungsi normal setelah penghapusan.
+
+---
+
+## 11. Recheck 2026-10-26 (pra-fase "Checkout Universal") — dokumen vs kode aktual
+
+> Dilakukan sesuai SOP langkah 1 sebelum merencanakan checkout browser untuk semua produk. Dibaca langsung: `lib/validators/booking.ts`, `app/api/v1/bookings/route.ts` (+ `[id]` GET/DELETE, `[id]/payment/bukti`), `admin/payments/[id]/confirm`, `lib/booking/cancel.ts`, `lib/quota/{index,adapters/*}`, `lib/utils/cancellationPolicy.ts`, skema `Booking*`/`Payment`/`Refund`, halaman checkout & katalog publik, halaman detail booking. **Kesimpulan: §0–§10 akurat soal apa yang DIBANGUN, tetapi beberapa klaim "ditutup/tidak pernah dari client" ternyata tidak berlaku penuh, dan "mesin universal" belum universal.** Dikelompokkan: (A) celah integritas/keamanan harga & uang, (B) arsitektur mesin, (C) cakupan produk/UI.
+
+**Catatan konteks (arahan pemilik 2026-10-26):** data dev boleh dihapus; yang dikejar adalah arsitektur mesin dan arsitektur migrasi yang benar — jadi rencana berikutnya tidak dibatasi menjaga skema/data lama.
+
+### A. Celah integritas (klaim di §7.1 "Gap #4 ditutup" tidak sepenuhnya benar)
+
+| # | Sev | Temuan (file:baris) | Dampak |
+|---|-----|--------------------|--------|
+| A1 | **High** | **Harga Katering dipercaya dari klien**: `bookingItemSchema` catering memuat `totalPrice: z.number().positive()` dan route memakainya apa adanya (`bookings/route.ts` case `catering`) — `CateringOption.pricePerPerson{Regular,Ramadan,Hajj}` tidak pernah dipakai | Pembeli menulis harga berapa pun (Rp1) |
+| A2 | **High** | **Hotel: `nights`, `checkIn`, `checkOut` dari klien, tak saling terkait dan tak dicek terhadap periode** — harga = `schedule.price × nights × numRooms` dengan `nights` dari klien; tanggal tak harus dalam `HotelPricePeriod` | Menginap 10 malam, bayar 1 malam; booking di luar periode berharga |
+| A3 | **High** | **Kebijakan refund memakai `departureDate` yang dikirim klien** (`cancel.ts:26` → `cancellationPolicy.ts`): >60 hari ⇒ 100%. Untuk keranjang non-trip tanggal itu sembarang (form checkout mengarang `return=departure`, `season='regular'`). **Dan** refund dihitung dari `totalAmount` padahal self-cancel hanya boleh sebelum `confirmed` (belum ada uang diterima) → baris `Refund(pending)` untuk uang yang tak pernah masuk | Refund palsu tercatat; tak ada jalur refund untuk booking yang SUDAH dibayar (tak ada pembatalan oleh admin) |
+| A4 | Med | **Hanya Haji yang memeriksa `isActive` saat reserve** (`adapters/haji.ts:16`). Hotel (schedule/periode/hotel), Transport (kuota/harga/trip/kendaraan), Katering (opsi), Paket Ziarah (hanya `pricing` aktif di breakdown, bukan paketnya) bisa dipesan walau dinonaktifkan admin | Produk yang ditarik tetap terjual (sama kelas SEC-66, hanya Haji yang ditutup) |
+| A5 | Med | **Konflik transaksi `Serializable` jadi 500**: tidak ada penanganan `P2034`/retry (`grep` nihil); konvensi API menjanjikan 409 untuk "quota race" | Pemesanan bersamaan pada kuota sama gagal dengan "Internal server error" |
+| A6 | Med | **Pembayaran tak terhubung ke total**: `bukti` membuat `Payment.amount = 0` ("admin will verify"); konfirmasi admin tidak membandingkan nominal dengan `totalAmount`; satu bukti = booking langsung `payment_review` | Booking `confirmed` tanpa bukti nominal sesuai; tak ada pembayaran sebagian/ganda |
+| A7 | Med | **Kuantitas tak koheren**: `totalPilgrims` (klien) ≠ `pilgrims.length`; `numPeople`/`numPassengers`/`numPersons`/`numRooms` per item independen; `BookingHotel.numGuests = data.totalPilgrims` (klien). Haji `numPersons` tak terhubung ke manifest. Muthowif `numDays` tak dicocokkan dengan `startDate..endDate` | Data manifest vs kuota vs harga bisa saling bertentangan |
+| A8 | Low | `bookingType`/`groupName` diterima tetapi **tidak disimpan** (tak ada kolom); `season` klien disimpan tetapi **tak dibaca siapa pun** (harga sudah flat) | Field palsu di kontrak API |
+| A9 | Low | Tak ada idempotensi (klik ganda = dua booking; hanya `bookingCreateUser` rate limit) | Booking & penahanan kuota ganda |
+
+### B. Arsitektur mesin — "universal" baru sebagian
+
+- **B1 (struktural, terpenting).** Registry `quotaAdapters` hanya mencakup *kuota*. Orkestrasi lain mengenumerasi relasi sendiri-sendiri: union validator, `switch` reserve, `switch` harga/persist (`route.ts`), loop confirm (`payments/[id]/confirm`), loop release + tipe `CancellableBooking` (`cancel.ts`), `include` di GET/DELETE/cron/detail pilgrim/detail admin, normalisasi `invoiceData`. Menambah satu tipe produk = menyentuh ≥ 9 tempat dan kompilator tidak memaksa semuanya. **Bukti kelas bug itu hidup:** Haji ada di reserve/confirm/cancel tetapi **tidak ada** di `include` GET API, halaman detail pilgrim, dan detail admin (`grep haji` = 0) — pembeli Haji tidak melihat itemnya.
+- **B2.** Skema per-tipe (`BookingHotel`, `BookingTransport`, …) memaksa setiap konsumen (invoice, detail, admin, laporan, refund per item, status per item) menulis 8 cabang. Tak ada status/harga/jumlah per item yang seragam; `BookingVisa` dan `BookingService` model mati; `BookingFlight` ada tetapi tak pernah diisi.
+- **B3.** Atribut tingkat-booking (`departureDate`, `returnDate`, `season`) diperlakukan wajib dan dikirim klien, padahal bagi keranjang campur tanggal layanan adalah milik **item**; kebijakan refund/pengingat/lifecycle seharusnya diturunkan server dari item.
+- **B4.** Tidak ada konsep keranjang di klien; setiap checkout membangun payload sendiri (`VisaCheckoutForm`, `TransportCheckoutForm`; `season:'regular'`, `return=departure` dikarang di klien).
+
+### C. Cakupan produk dan UI
+
+- Checkout browser hanya Visa dan Transport. CTA Hotel, Muthowif, Paket Ziarah (`tours`), Paket Umroh (`packages`), Haji menuju `/register`; Katering tak punya CTA.
+- **Paket Umroh (`Package`) dan Tiket Pesawat tidak punya jalur booking sama sekali** (bukan anggota union; `BookingFlight` kosong) — keduanya sengaja ditunda di dokumen lama (§0).
+- Stub mati: `components/booking/{DocumentUploader,PilgrimForm}.tsx` (`return null`).
+
+### D. Yang DIKONFIRMASI benar (tidak berubah)
+Registry kuota lengkap 7 tipe; reserve→persist→confirm→release konsisten untuk Hotel/Transport/Muthowif/Paket Ziarah/Haji; `cancelBooking()` satu fungsi untuk self-cancel dan cron; harga Hotel(per malam)/Transport/Muthowif/Paket Ziarah/Haji/Visa dihitung server dari referensi; manifest `fieldValues` + `visaProductId` opsional; invoice PDF dari 7 tipe; `Serializable` dipakai; kontak wajib sebelum booking; rate limit pembuatan booking.
+
