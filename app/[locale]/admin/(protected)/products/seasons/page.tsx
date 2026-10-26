@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
@@ -35,9 +35,12 @@ export default function SeasonsPage() {
     {
       key: 'actions', header: '', align: 'right',
       cell: s => (
-        <button onClick={() => handleDelete(s.id)} aria-label="Hapus musim" className="text-admin-muted/70 transition-colors hover:text-admin-danger">
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+        <div className="flex items-center justify-end gap-3">
+          <Link href={`/${locale}/admin/products/seasons/${s.id}`} className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink"><Pencil className="h-3.5 w-3.5" /> Edit</Link>
+          <button onClick={() => handleDelete(s.id)} aria-label="Hapus musim" className="text-admin-muted/70 transition-colors hover:text-admin-danger">
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
       ),
     },
   ]

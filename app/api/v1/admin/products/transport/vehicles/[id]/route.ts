@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
+import { deleteOrDeactivate } from '@/lib/admin/safeDelete'
 import { z } from 'zod'
 
 const updateSchema = z.object({
@@ -46,6 +47,32 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Kendaraan tidak ditemukan'), { status: 404 })
     console.error('[admin/products/transport/vehicles/[id]/PUT]', e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
+}
+
+// Hapus sungguhan hanya bila kendaraan belum dipakai harga/trip mana pun; selain itu nonaktif.
+export async function DELETE(_req: Request, { params }: Ctx) {
+  try {
+    await requireManager()
+    const { id } = await params
+    const result = await deleteOrDeactivate({
+      references: async () => {
+        const row = await prisma.transportVehicle.findUnique({ where: { id }, select: { _count: { select: { pricing: true } } } })
+        if (!row) throw Object.assign(new Error('not found'), { code: 'P2025' })
+        return row._count.pricing
+      },
+      remove: () => prisma.transportVehicle.delete({ where: { id } }),
+      deactivate: () => prisma.transportVehicle.update({ where: { id }, data: { isActive: false } }),
+      usedBy: n => `Kendaraan dipakai di ${n} harga trip`,
+    })
+    return NextResponse.json(ok(result))
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
+      return NextResponse.json(err('Forbidden'), { status: 403 })
+    }
+    if (isRecordNotFound(e)) return NextResponse.json(err('Kendaraan tidak ditemukan'), { status: 404 })
+    console.error('[admin/products/transport/vehicles/[id]/DELETE]', e instanceof Error ? e.name : e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

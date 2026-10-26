@@ -1,6 +1,6 @@
 # Arsitektur — Alur "Buat Baru" di Admin (halaman khusus, bukan panel sebaris)
 
-> **Status: F1 + F2 SELESAI (semua alur "Buat baru" admin sudah halaman khusus) — 2026-10-26.** Sisa pekerjaan: gap CRUD §5. Pemicu: pemilik melaporkan bahwa "Tambah" di Produk Haji/Visa/Paket membuka panel sebaris di atas daftar — membingungkan, terasa menjebak (harus kembali lewat browser), dan tak seperti membuat produk pada umumnya.
+> **Status: F1 + F2 + F3 SELESAI (alur "Buat baru" halaman khusus; gap CRUD §5 ditutup) — 2026-10-27.** Pemicu: pemilik melaporkan bahwa "Tambah" di Produk Haji/Visa/Paket membuka panel sebaris di atas daftar — membingungkan, terasa menjebak (harus kembali lewat browser), dan tak seperti membuat produk pada umumnya.
 
 ## 1. Recheck (kode aktual)
 
@@ -45,4 +45,21 @@ Semua halaman daftar admin membuat entitas lewat **panel sebaris**: tombol "Tamb
 | Rute penerbangan | API punya PUT/DELETE tetapi **tak ada UI** edit/hapus (hanya lencana di daftar) |
 | Kendaraan transport | Ada edit; tak ada hapus |
 | Admin (pengguna) | Tak ada edit nama/hapus (peran + aktif dari daftar; penghapusan akun mengikuti `docs/arsitektur-hapus-akun.md`) |
+
+## 6. Rencana F3 — menutup gap CRUD (2026-10-27)
+
+**Recheck kode (sebelum rencana):** Katering: API hanya `GET/POST`, tanpa `[id]`/halaman edit/hapus. Musim: hanya `DELETE`, tanpa `GET/PUT`. Rute penerbangan: `PUT/DELETE` ada tetapi **`DELETE` hanya menghitung jadwal AKTIF** — rute yang masih dirujuk jadwal nonaktif atau Paket Umroh gagal dengan galat FK → 500 (bug); tak ada UI edit/hapus. Kendaraan: `GET/PUT` ada, **tak ada `DELETE`**. Admin (pengguna): `PUT` hanya peran/aktif — nama tak bisa diubah, tak ada `GET` per-pengguna.
+
+**Keputusan:**
+- **Satu helper hapus-aman** `lib/admin/safeDelete.ts` (`deleteOrDeactivate`): hapus sungguhan bila tak ada rujukan, selain itu nonaktif + pesan; tabrakan FK saat hapus (`P2003`, rujukan baru masuk di antara cek dan hapus) jatuh ke nonaktif. Dipakai Katering, Rute, Kendaraan (Haji dan Vendor sudah punya versi sendiri dengan semantik sama). Respons: `{ deleted: true }` atau `{ deleted: false, deactivated: true, message }`.
+- **Cangkang `EditPage`** (`components/admin/shell/`) sepadan `CreatePage`: kembali, banner galat/pesan, bilah simpan sticky, dan "Zona hapus" dengan konfirmasi inline — dipakai halaman edit baru supaya tak ada lagi salinan ad-hoc.
+- **Halaman/route baru:** `catering/[id]` (GET/PUT/DELETE), `seasons/[id]` (GET/PUT), `flight/routes/[id]` (GET + perbaikan DELETE), hapus pada `transport/vehicles/[id]`, `system/users/[id]` (GET + `fullName` di PUT). Semua skema ubah `.strict()`; daftar menaut "Kelola/Edit".
+- **Bukti**: tes DB untuk helper (termasuk kasus bug rute dengan jadwal nonaktif), uji skema, penjaga sumber (otorisasi di awal, skema strict, hapus lewat helper), Chrome untuk tiap entitas (ubah, hapus tak dirujuk, hapus dirujuk → nonaktif, aktifkan kembali).
+
+## 7. As-built F3 (2026-10-27)
+
+**Dibuat:** `lib/admin/safeDelete.ts` (`deleteOrDeactivate`); `components/admin/shell/{EditPage,useEditEntity}.ts(x)` (cangkang ubah + hook: muat/simpan/hapus dengan respons selalu diperiksa; PUT yang mengembalikan subset baris digabung, bukan menimpa); route baru/diperluas: `catering/[id]` (GET/PUT/DELETE), `seasons/[id]` (+GET/PUT), `flight/routes/[id]` (+GET, **DELETE diperbaiki**), `transport/vehicles/[id]` (+DELETE), `system/users/[id]` (+GET; `fullName` di PUT — nama tak memengaruhi sesi); skema `cateringOptionUpdateSchema`, `seasonUpdateSchema` (urutan tanggal dicek terhadap nilai tersimpan), `fullName` di `userAdminUpdateSchema` (semua `.strict()`); halaman ubah Katering, Musim, Rute penerbangan, Pengguna; daftar menaut ke halaman ubah; halaman Kendaraan: hapus-aman + galat simpan tak lagi ditelan.
+**Bug yang ditutup:** `DELETE` rute penerbangan hanya menghitung jadwal AKTIF — rute yang dirujuk jadwal nonaktif atau Paket Umroh gagal dengan galat FK (500); kini semua rujukan dihitung, dirujuk → nonaktif + pesan. Halaman Kendaraan menampilkan "Tersimpan ✓" walau PUT ditolak.
+**Bukti (Chrome, dev server + DB uji, route NYATA):** Katering: ubah harga → tersimpan → muat ulang tetap; nonaktif/hapus: tak dirujuk → terhapus dan hilang dari daftar, dirujuk Paket Umroh → **dinonaktifkan** + pesan (DB: `isActive=false`, baris utuh). Musim: tanggal akhir sebelum mulai → ditolak dengan pesan; valid → tersimpan; hapus → daftar. Rute: dengan jadwal nonaktif → dinonaktifkan (sebelumnya 500); tanpa rujukan → ubah lalu hapus. Kendaraan: dipakai harga trip → dinonaktifkan; bebas → terhapus. Pengguna: nama diubah dan tersimpan; tombol simpan nonaktif untuk nama <2 karakter / tak berubah. **Tes:** `scripts/test-admin-crud.ts` (8 uji: helper + DB sungguhan + skema + penjaga sumber) — **3 mutasi tertangkap** (otorisasi PUT dicabut, `.delete()` telanjang, respons hapus tak diperiksa); `bun run test`, `bun run build` (salinan terpisah), `bun audit` hijau.
+**Tidak dilakukan (sengaja):** hapus pengguna (mengikuti `docs/arsitektur-hapus-akun.md`, UU PDP); ubah peran/aktif tetap dari daftar (aturan SEC-13). Gap yang tersisa di §5 hanya yang di luar tabel itu: tidak ada.
 

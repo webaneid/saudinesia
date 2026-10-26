@@ -2761,3 +2761,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `components/admin/shell/useCreateEntity.ts`, halaman `new` baru (13 berkas), 12 halaman daftar, `app/api/v1/admin/products/transport/trips/route.ts`, `scripts/test-admin-create.ts`, `docs/arsitektur-admin-create.md`, `docs/progress.md`.
 
+## 2026-10-27 — Admin: gap CRUD ditutup (F3) — hapus-aman bersama + EditPage
+
+**Decision:** Hapus entitas admin yang bisa dirujuk memakai satu helper `deleteOrDeactivate` (hapus bila tak dirujuk; selain itu nonaktif + pesan; tabrakan FK jatuh ke nonaktif; P2025 → 404) — dipakai Katering, Rute penerbangan, Kendaraan. Halaman ubah memakai `EditPage` + `useEditEntity` (satu pemeriksa respons). Katering mendapat `[id]` GET/PUT/DELETE + halaman edit; Musim PUT/GET + halaman; Rute: halaman edit/hapus dan DELETE diperbaiki; Kendaraan: DELETE; Pengguna: ubah nama (`fullName`). Penghapusan akun pengguna sengaja tidak ditambahkan (alur UU PDP).
+
+**Rationale:** Arahan pemilik "CRUD lengkap selalu". Katering tak bisa dikoreksi sama sekali; `DELETE` rute hanya menghitung jadwal aktif sehingga rute yang dirujuk jadwal nonaktif/paket menghasilkan 500. Satu helper mencegah semantik hapus menyimpang antar-modul (sudah ada versi sendiri di Haji/Vendor dengan aturan sama).
+
+**Alternatives considered:** Menulis hapus per-route (ditolak: tepat bug rute); hapus keras dengan cascade (ditolak: riwayat booking/harga yatim); menghapus pengguna dari tombol admin (ditolak: UU PDP, anonimisasi terkunci).
+
+**Security check (SOP langkah 5):** 0 Critical/High/Medium/Low baru. Route baru semuanya `requireManager`/`requireSuperAdmin` di awal tiap verb (dijaga uji sumber, dimutasi), skema ubah `.strict()` tanpa `data: body`, galat dibedakan (`authFailureResponse`/404/500 generik), `fullName` tak menyentuh `sessionVersion`/peran, email tetap tak bisa diubah lewat PUT; tanpa dependensi baru.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; Chrome pada route nyata untuk 5 entitas (ubah, hapus tak dirujuk, hapus dirujuk → nonaktif dengan DB dicek); 3 mutasi tertangkap.
+
+**Affects:** `lib/admin/safeDelete.ts`, `components/admin/shell/{EditPage,useEditEntity}`, `app/api/v1/admin/products/{catering,seasons,flight/routes,transport/vehicles}/[id]/route.ts`, `app/api/v1/admin/system/users/[id]/route.ts`, `lib/validators/adminUpdates.ts`, `lib/auth/adminUsers.ts`, halaman ubah baru (4) + daftar (4) + halaman Kendaraan, `scripts/test-admin-crud.ts`, `package.json`, docs.
+

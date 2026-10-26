@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react'
 import { ProductMediaGallery } from '@/components/admin/media/ProductMediaGallery'
 
 const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
@@ -24,6 +24,10 @@ export default function VehicleEditPage({ params }: Props) {
   })
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     params.then(async (p) => {
@@ -47,14 +51,40 @@ export default function VehicleEditPage({ params }: Props) {
   }
 
   async function handleSave() {
-    setSaving(true)
-    await fetch(`/api/v1/admin/products/transport/vehicles/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, capacity: +form.capacity, fleetCount: +form.fleetCount }),
-    })
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaving(true); setError(null); setNotice(null)
+    try {
+      const res = await fetch(`/api/v1/admin/products/transport/vehicles/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...form, capacity: +form.capacity, fleetCount: +form.fleetCount }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) { setError(json?.error ?? 'Perubahan gagal disimpan.'); return }
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      setError('Tidak dapat menghubungi server.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // Hapus-aman: server menghapus bila belum dipakai harga trip mana pun, selain itu menonaktifkan dan memberi pesan (lib/admin/safeDelete.ts).
+  async function handleDelete() {
+    setDeleting(true); setError(null); setNotice(null)
+    try {
+      const res = await fetch(`/api/v1/admin/products/transport/vehicles/${id}`, { method: 'DELETE' })
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.data) { setError(json?.error ?? 'Gagal menghapus kendaraan.'); return }
+      if (json.data.deleted) { router.push(`/${locale}/admin/products/transport`); return }
+      setNotice(json.data.message)
+      setForm(p => ({ ...p, isActive: false }))
+      setConfirming(false)
+    } catch {
+      setError('Tidak dapat menghubungi server.')
+    } finally {
+      setDeleting(false)
+    }
   }
 
   if (!vehicle) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
@@ -68,6 +98,9 @@ export default function VehicleEditPage({ params }: Props) {
         </button>
         <h1 className="admin-h1">Edit Kendaraan</h1>
       </div>
+
+      {error && <p role="alert" className="text-[13px] font-medium text-admin-danger">{error}</p>}
+      {notice && <p role="status" className="text-[13px] font-medium text-admin-ink">{notice}</p>}
 
       <ProductMediaGallery
         hotelId={id}
@@ -123,6 +156,21 @@ export default function VehicleEditPage({ params }: Props) {
           </button>
         </div>
       </div>
+
+      <section aria-label="Hapus" className="space-y-2 rounded-2xl border border-admin-danger/30 p-4">
+        <h2 className="m-0 text-sm font-bold text-admin-danger">Hapus</h2>
+        {confirming ? (
+          <div className="space-y-2">
+            <p className="m-0 text-sm text-admin-ink">Hapus kendaraan ini? Bila sudah dipakai harga trip, ia hanya dinonaktifkan (bisa diaktifkan kembali).</p>
+            <div className="flex gap-2">
+              <button type="button" disabled={deleting} onClick={handleDelete} className="admin-btn bg-admin-danger hover:opacity-90 disabled:opacity-50">{deleting && <Loader2 className="size-4 animate-spin" />} Ya, hapus</button>
+              <button type="button" disabled={deleting} onClick={() => setConfirming(false)} className="admin-btn-ghost text-sm">Batal</button>
+            </div>
+          </div>
+        ) : (
+          <button type="button" onClick={() => setConfirming(true)} className="admin-btn-sm flex items-center gap-1.5 border border-admin-danger/40 bg-white text-admin-danger hover:bg-admin-danger/10"><Trash2 className="size-3.5" /> Hapus</button>
+        )}
+      </section>
     </div>
   )
 }
