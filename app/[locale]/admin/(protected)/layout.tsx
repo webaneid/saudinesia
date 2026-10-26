@@ -4,6 +4,7 @@ import { getSession, ADMIN_ROLES, MANAGER_ROLES } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { Sidebar } from '@/components/admin/shell/Sidebar'
 import { Topbar } from '@/components/admin/shell/Topbar'
+import { AdminRoleProvider } from '@/components/admin/shell/AdminRole'
 
 type Props = { children: React.ReactNode; params: Promise<{ locale: string }> }
 
@@ -41,7 +42,9 @@ export default async function AdminLayout({ children, params }: Props) {
           roleLabel={roleLabel}
         />
         <main className="flex-1">
-          <div className="mx-auto w-full max-w-[1480px] px-4 py-6 md:px-8">{children}</div>
+          <div className="mx-auto w-full max-w-[1480px] px-4 py-6 md:px-8">
+            <AdminRoleProvider isSuperAdmin={isSuperAdmin}>{children}</AdminRoleProvider>
+          </div>
         </main>
       </div>
     </div>

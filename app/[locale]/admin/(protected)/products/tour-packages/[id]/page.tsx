@@ -487,7 +487,6 @@ export default function TourPackageBuilderPage({ params }: Props) {
       {/* Komponen biaya */}
       <CostComponentsPanel
         apiBase={`/api/v1/admin/products/tour-packages/${id}/costs`}
-        vendorCategory="tour_package"
         hint="Tiap komponen (Guide, Makan, Minum, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-ziarah.md §8.3"
         namePlaceholder="Guide, Makan Siang, Air Mineral, dst"
         onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]) }}

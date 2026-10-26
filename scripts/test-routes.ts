@@ -112,10 +112,6 @@ await t('SEC-61(b) (kini di layanan vendor baru + jembatan): GET terbuka bagi ma
   const svc = read('lib/vendors/service.ts')
   const slim = svc.slice(svc.indexOf('export function toVendorSlim'), svc.indexOf('// ───────────────────────── vendor'))
   assert.doesNotMatch(slim, /email|phone|whatsapp|notes|address|contactName|website/, 'bentuk ramping tak boleh memuat kontak/alamat')
-  // Jembatan lama (dihapus di F4): GET manager ramping; tulis superadmin.
-  const bridge = read('lib/vendors/legacyBridge.ts')
-  assert.match(bridge.slice(bridge.indexOf('export async function legacyVendorsGET'), bridge.indexOf('export async function legacyVendorsPOST')), /requireManager\(\)[\s\S]*\(\{ id, name, category, country, isActive \}\)/)
-  for (const fn of ['legacyVendorsPOST', 'legacyVendorPUT', 'legacyVendorDELETE']) assert.match(bridge.slice(bridge.indexOf(`export async function ${fn}`)).slice(0, 300), /requireSuperAdmin\(\)/, fn)
 })
 
 await t('SEC-50: health — sehat di-cache 5 dtk dan permintaan bersamaan berbagi satu query; gagal TIDAK di-cache (503 lalu pulih)', async () => {
@@ -168,22 +164,6 @@ await t('SEC-62: DELETE images (hotel/kendaraan) hanya menghapus key yang tercat
   // Satu-satunya pemanggil deleteObject dengan key dari klien adalah dua route ini; sisanya memakai key dari DB.
   const fromClient = routes.filter(f => /deleteObject\(\s*key\s*\)/.test(read(f))).map(rel).sort()
   assert.deepEqual(fromClient, ['v1/admin/products/hotels/[id]/images/route.ts', 'v1/admin/products/transport/vehicles/[id]/images/route.ts'])
-})
-
-await t('SEC-61(b)/UI: setiap tombol "tambah vendor cepat" menampilkan galat lewat vendorQuickAddError (tak boleh senyap saat 403 bagi manager)', () => {
-  const dir = 'app/[locale]/admin/(protected)/products'
-  const pageFiles = ['transport/trips/[id]/page.tsx', 'hotels/[id]/page.tsx', 'flight/[id]/page.tsx', 'visa/[id]/CostTiersTab.tsx'].map(f => join(dir, f))
-  // Paket Umroh/Ziarah memakai panel bersama (docs/arsitektur-komponen-biaya.md): tambah-vendor-cepat mereka ada di VendorCurrencyField.
-  const files = [...pageFiles, 'components/admin/pricing/VendorCurrencyField.tsx']
-  for (const f of files) {
-    const src = read(f)
-    assert.match(src, /vendorQuickAddError\(r\.status, j\?\.error\)/, `${f}: galat tambah-vendor tidak ditampilkan`)
-    assert.ok(src.includes("settings/vendors', {"), `${f}: pemanggil POST vendor tidak ditemukan — daftar berkas uji perlu diperbarui`)
-  }
-  const scan = (root: string) => (readdirSync(root, { recursive: true }) as string[]).filter(f => /\.tsx$/.test(f)).map(f => join(root, f))
-    .filter(f => read(f).includes("fetch('/api/v1/admin/system/settings/vendors', {"))
-  const callers = [...scan(dir), ...scan('components')].sort()
-  assert.deepEqual(callers, [...files].sort(), 'ada pemanggil POST vendor baru yang belum memakai vendorQuickAddError')
 })
 
 await t('SEC-14: reset-limits hanya superadmin, tanpa body, dan kunci login memakai accountKey yang sama dengan fungsi reset', () => {

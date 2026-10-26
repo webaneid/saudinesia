@@ -24,6 +24,8 @@ type Props = {
   /** Pra-isi untuk pembuatan cepat dari modal (F4): nama yang diketik, kategori konteks. */
   initialName?: string
   initialCategoryIds?: string[]
+  /** Fokus langsung ke kolom nama (dipakai saat formulir dibuka di modal). */
+  autoFocusName?: boolean
   onSaved: (vendor: VendorRecord) => void
   onCancel?: () => void
   submitLabel?: string
@@ -33,7 +35,7 @@ type Props = {
  * SATU-SATUNYA formulir vendor (ADR-0003 keputusan 5): dipakai halaman Sistem → Vendor dan modal "Vendor baru" di setiap editor biaya.
  * Formulir menyimpan sendiri lewat API vendor, lalu memanggil `onSaved` dengan vendor tersimpan.
  */
-export function VendorForm({ vendor, categories, initialName, initialCategoryIds, onSaved, onCancel, submitLabel }: Props) {
+export function VendorForm({ vendor, categories, initialName, initialCategoryIds, autoFocusName, onSaved, onCancel, submitLabel }: Props) {
   const [form, setForm] = useState<VendorFormState>(() => {
     if (vendor) return vendorToFormState(vendor)
     return { ...EMPTY_VENDOR_FORM, name: initialName ?? '', categoryIds: initialCategoryIds ?? [] }
@@ -88,7 +90,7 @@ export function VendorForm({ vendor, categories, initialName, initialCategoryIds
 
       <div className="grid items-start gap-4 sm:grid-cols-2">
         <FormField label="Nama vendor" htmlFor="vendor-name" required>
-          <input id="vendor-name" className="admin-inp" value={form.name} maxLength={160} onChange={e => set('name', e.target.value)} />
+          <input id="vendor-name" autoFocus={autoFocusName} className="admin-inp" value={form.name} maxLength={160} onChange={e => set('name', e.target.value)} />
         </FormField>
         <FormField label="Negara" htmlFor="vendor-country" required hint="Nama yang sama di negara berbeda dianggap vendor berbeda.">
           <AutocompleteSelect options={COUNTRY_OPTIONS} value={form.countryCode} onChange={v => set('countryCode', v)} placeholder="Cari negara…" />

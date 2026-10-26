@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Pencil, Plus, Save, Trash2, Wallet } from 'lucide-react'
-import { VendorCurrencyField, type VendorOption } from './VendorCurrencyField'
+import { VendorCurrencyField } from './VendorCurrencyField'
 
 type CostRow = { id: string; costComponent: string; vendorId: string; vendorName: string; currency: string; cost: number; hppRupiah: number | null; sellPrice: number | null }
 type Preview = { hppRupiah: number; sellPrice: number }
@@ -17,8 +17,6 @@ function rupiah(n: number) {
 type Props = {
   /** Awalan route komponen biaya, mis. `/api/v1/admin/products/packages/<id>/costs` (GET/POST; `/<costId>` PUT/DELETE; `/simulate`). */
   apiBase: string
-  /** Kategori vendor untuk dropdown dan "Vendor Baru". */
-  vendorCategory: string
   /** Kalimat penjelas di bawah judul. */
   hint: ReactNode
   /** Contoh nama komponen pada input. */
@@ -32,9 +30,8 @@ type Props = {
  * form tambah/ubah (vendor + mata uang + nominal) dengan pratinjau HPP → Harga Jual langsung, hapus, dan total. CRUD lengkap; margin per
  * komponen dihitung server. Memuat data sendiri dari `apiBase`.
  */
-export function CostComponentsPanel({ apiBase, vendorCategory, hint, namePlaceholder, onChanged }: Props) {
+export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged }: Props) {
   const [costs, setCosts] = useState<CostRow[]>([])
-  const [vendors, setVendors] = useState<VendorOption[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -53,13 +50,6 @@ export function CostComponentsPanel({ apiBase, vendorCategory, hint, namePlaceho
   }, [apiBase])
 
   useEffect(() => { loadCosts() }, [loadCosts])
-
-  useEffect(() => {
-    fetch(`/api/v1/admin/system/settings/vendors?category=${encodeURIComponent(vendorCategory)}`)
-      .then(r => r.json())
-      .then(j => setVendors(j?.data ?? []))
-      .catch(() => setVendors([]))
-  }, [vendorCategory])
 
   // Pratinjau HPP/Harga Jual langsung — debounce 500 ms, memakai margin tipe PEMILIK panel ini (docs/arsitektur-tiket-pesawat.md §4).
   useEffect(() => {
@@ -151,10 +141,9 @@ export function CostComponentsPanel({ apiBase, vendorCategory, hint, namePlaceho
           </div>
 
           <VendorCurrencyField
-            vendors={vendors} vendorId={form.vendorId} currency={form.currency} currencies={CURRENCIES} category={vendorCategory}
+            vendorId={form.vendorId} currency={form.currency} currencies={CURRENCIES}
             onVendorChange={vendorId => setForm(f => ({ ...f, vendorId }))}
             onCurrencyChange={currency => setForm(f => ({ ...f, currency }))}
-            onVendorCreated={v => { setVendors(vs => [...vs, v].sort((a, b) => a.name.localeCompare(b.name))); setForm(f => ({ ...f, vendorId: v.id })) }}
           />
 
           <div className="grid md:grid-cols-3 gap-3 items-end">

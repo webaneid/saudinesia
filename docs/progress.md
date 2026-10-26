@@ -800,5 +800,5 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] F1 skema + migrasi ekspansi fail-closed + kategori/vendor sistem + validator + `assertVendorUsable` — selesai 2026-10-26 (rekam-bandingkan salinan DB lokal; 7 skenario migrasi; 17 suite lulus)
 - [x] F2 API vendor + kategori (hapus aman, keunikan, pemakaian); route lama → jembatan tipis (dihapus di F4); semua route biaya memakai `assertVendorUsable` — selesai 2026-10-26 (HTTP nyata; 10 mutasi; 18 suite lulus)
 - [x] F3 menu Sistem → Vendor (daftar, detail/edit, kategori) + `VendorForm`; bagian vendor di Pengaturan dihapus — selesai 2026-10-26 (Chrome asli: CRUD vendor + kategori superadmin, manager hanya baca; 4 mutasi; 357 PASS)
-- [ ] F4 `VendorPicker` + modal; migrasi 6 situs; hapus quick-add lama; penjaga CI
+- [x] F4 `VendorPicker` + modal `VendorForm`; migrasi 6 situs; jembatan + quick-add lama dihapus; penjaga CI; galat simpan biaya kini tampil — selesai 2026-10-26 (Chrome asli + salinan DB lokal; 5 mutasi)
 - [ ] F5 penutup: dokumen as-built, `arsitektur-harga.md` §3.1/§18 digantikan, `CLAUDE.md`, register

@@ -7,11 +7,10 @@ import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
 import { Switch } from '@/components/admin/ui/Switch'
 import { formatRupiah } from '@/lib/utils'
-import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
+import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
-type Vendor = { id: string; name: string; country: string; isActive: boolean }
 type TierRow = { id: string; minDays: number; maxDays: number; hargaVisa: number; hargaBrn: number | null; sellPriceOverride: number | null }
 type RowPreview = { hppRupiah: number; sellPrice: number }
 type NumericField = 'minDays' | 'maxDays' | 'hargaVisa' | 'hargaBrn' | 'sellPriceOverride'
@@ -29,7 +28,6 @@ type Props = {
  * diketik lewat /simulate (bukan /preview yang membaca DB), debounce 500 ms.
  */
 export function CostTiersTab({ productId, onSaved }: Props) {
-  const [vendors, setVendors] = useState<Vendor[]>([])
   const [visaVendorId, setVisaVendorId] = useState('')
   const [visaCurrency, setVisaCurrency] = useState('USD')
   const [brnEnabled, setBrnEnabled] = useState(false)
@@ -77,12 +75,10 @@ export function CostTiersTab({ productId, onSaved }: Props) {
   }
 
   useEffect(() => {
-    fetch('/api/v1/admin/system/settings/vendors?category=syarikah').then(r => r.json()).then(j => setVendors(j.data ?? []))
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [productId])
 
-  const addVendor = (v: Vendor) => setVendors(list => [...list, v].sort((a, b) => a.name.localeCompare(b.name)))
   const addRow = () => setRows(r => [...r, emptyRow()])
   const removeRow = (rowId: string) => setRows(r => r.filter(row => row.id !== rowId))
   function updateRow(rowId: string, field: NumericField, value: string) {
@@ -138,15 +134,14 @@ export function CostTiersTab({ productId, onSaved }: Props) {
         <div className="grid gap-3 md:grid-cols-2">
           <div className="ubin space-y-2.5">
             <p className="m-0 text-xs font-bold text-admin-ink">Harga Visa: vendor dan mata uang</p>
-            {vendors.length === 0 && <p className="m-0 text-xs text-admin-warning">Belum ada vendor. Tambahkan dulu.</p>}
-            <VendorField vendors={vendors} vendorId={visaVendorId} onSelect={setVisaVendorId} currency={visaCurrency} onCurrency={setVisaCurrency} onVendorCreated={addVendor} label="Vendor harga visa" />
+            <VendorField vendorId={visaVendorId} onSelect={setVisaVendorId} currency={visaCurrency} onCurrency={setVisaCurrency} label="Vendor harga visa" />
           </div>
           <div className="ubin space-y-2.5">
             <div className="flex items-center gap-2.5">
               <Switch id="brn-enabled" checked={brnEnabled} onChange={setBrnEnabled} label="Pakai komponen BRN" />
               <label htmlFor="brn-enabled" className="cursor-pointer text-xs font-bold text-admin-ink">Produk ini memakai komponen BRN <span className="font-medium text-admin-muted">(opsional)</span></label>
             </div>
-            {brnEnabled && <VendorField vendors={vendors} vendorId={brnVendorId} onSelect={setBrnVendorId} currency={brnCurrency} onCurrency={setBrnCurrency} onVendorCreated={addVendor} label="Vendor BRN" />}
+            {brnEnabled && <VendorField vendorId={brnVendorId} onSelect={setBrnVendorId} currency={brnCurrency} onCurrency={setBrnCurrency} label="Vendor BRN" />}
           </div>
         </div>
       </Card>
@@ -242,69 +237,23 @@ function Cell({ label, span, children }: { label: string; span: string; children
 }
 
 type VendorFieldProps = {
-  vendors: Vendor[]
   vendorId: string
   onSelect: (id: string) => void
   currency: string
   onCurrency: (c: string) => void
-  onVendorCreated: (v: Vendor) => void
   label: string
 }
 
-// Komponen tingkat atas (bukan didefinisikan di dalam CostTiersTab) supaya tidak di-mount ulang tiap render,
-// yang membuat kolom "nama vendor" kehilangan fokus di setiap ketikan.
-function VendorField({ vendors, vendorId, onSelect, currency, onCurrency, onVendorCreated, label }: VendorFieldProps) {
-  const [adding, setAdding] = useState(false)
-  const [name, setName] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  async function create() {
-    if (!name.trim()) return
-    setSaving(true)
-    setError(null)
-    const r = await fetch('/api/v1/admin/system/settings/vendors', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: name.trim(), category: 'syarikah' }),
-    })
-    const j = await r.json().catch(() => null)
-    setSaving(false)
-    if (!j?.data?.id) { setError(vendorQuickAddError(r.status, j?.error)); return }
-    onVendorCreated(j.data)
-    onSelect(j.data.id)
-    setName('')
-    setAdding(false)
-  }
-
+// Komponen tingkat atas (bukan didefinisikan di dalam CostTiersTab) supaya tidak di-mount ulang tiap render.
+function VendorField({ vendorId, onSelect, currency, onCurrency, label }: VendorFieldProps) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        {!adding ? (
-          <select aria-label={label} className="admin-select min-w-0 flex-1" value={vendorId} onChange={e => onSelect(e.target.value)}>
-            <option value="">Pilih vendor…</option>
-            {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-          </select>
-        ) : (
-          <input
-            autoFocus aria-label="Nama vendor baru" className="admin-inp min-w-0 flex-1" placeholder="Nama vendor, mis. BRN" value={name}
-            onChange={e => setName(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); create() } }}
-          />
-        )}
-        <select aria-label="Mata uang" className="admin-select w-24 shrink-0" value={currency} onChange={e => onCurrency(e.target.value)}>
-          {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
+    <div className="flex items-start gap-2">
+      <div className="min-w-0 flex-1">
+        <VendorPicker value={vendorId} onChange={onSelect} context="visa" label={label} />
       </div>
-      {!adding ? (
-        <button type="button" onClick={() => setAdding(true)} className="inline-flex items-center gap-1 text-xs font-semibold text-admin-accent-strong hover:underline">
-          <Plus className="size-3.5" /> Vendor baru
-        </button>
-      ) : (
-        <div className="flex gap-2">
-          <Button size="sm" loading={saving} disabled={!name.trim()} onClick={create}>Simpan vendor</Button>
-          <Button variant="ghost" size="sm" onClick={() => { setAdding(false); setName(''); setError(null) }}>Batal</Button>
-        </div>
-      )}
-      {error && <p className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
+      <select aria-label="Mata uang" className="admin-select w-24 shrink-0" value={currency} onChange={e => onCurrency(e.target.value)}>
+        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
     </div>
   )
 }

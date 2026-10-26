@@ -2,13 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Plus, Wallet } from 'lucide-react'
+import { ArrowLeft, Save, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
-import { vendorQuickAddError } from '@/lib/admin/vendorQuickAdd'
+import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
-type Vendor = { id: string; name: string; country: string; isActive: boolean }
 type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
 type Schedule = {
   id: string; routeId: string; departureFrom: string; departureTo: string
@@ -33,18 +32,13 @@ export default function FlightEditPage({ params }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [vendors, setVendors] = useState<Vendor[]>([])
   const [vendorId, setVendorId] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [hargaTiket, setHargaTiket] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [savingCost, setSavingCost] = useState(false)
   const [costSaved, setCostSaved] = useState(false)
-
-  const [showQuickAddVendor, setShowQuickAddVendor] = useState(false)
-  const [newVendorName, setNewVendorName] = useState('')
-  const [savingVendor, setSavingVendor] = useState(false)
-  const [vendorError, setVendorError] = useState<string | null>(null)
+  const [costError, setCostError] = useState<string | null>(null)
 
   // Live preview harga jual — debounce 500ms, sama pola docs/arsitektur-visa.md tapi hanya
   // 1 komponen HPP ("tiket") karena flight tidak punya BRN-equivalent (arsitektur-tiket-pesawat.md §4).
@@ -93,31 +87,10 @@ export default function FlightEditPage({ params }: Props) {
       const rr = await fetch('/api/v1/admin/products/flight/routes')
       const rj = await rr.json()
       setRoutes(rj.data ?? [])
-      const vr = await fetch('/api/v1/admin/system/settings/vendors?category=maskapai')
-      const vj = await vr.json()
-      setVendors(vj.data ?? [])
       await loadCost(p.id)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params])
-
-  async function handleQuickAddVendor() {
-    if (!newVendorName.trim()) return
-    setSavingVendor(true)
-    setVendorError(null)
-    const r = await fetch('/api/v1/admin/system/settings/vendors', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: newVendorName.trim(), category: 'maskapai' }),
-    })
-    const j = await r.json().catch(() => null)
-    setSavingVendor(false)
-    if (!j?.data?.id) { setVendorError(vendorQuickAddError(r.status, j?.error)); return }
-    setVendors(v => [...v, j.data].sort((a, b) => a.name.localeCompare(b.name)))
-    setVendorId(j.data.id)
-    setNewVendorName('')
-    setShowQuickAddVendor(false)
-  }
 
   async function handleSaveBasic() {
     setSaving(true)
@@ -137,11 +110,18 @@ export default function FlightEditPage({ params }: Props) {
 
   async function handleSaveCost() {
     setSavingCost(true)
-    await fetch(`/api/v1/admin/products/flight/schedules/${id}/cost`, {
+    setCostError(null)
+    const r = await fetch(`/api/v1/admin/products/flight/schedules/${id}/cost`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ vendorId, currency, hargaTiket: Number(hargaTiket) }),
     })
+    if (!r.ok) {
+      const j = await r.json().catch(() => null)
+      setCostError(j?.error ?? 'Harga tiket gagal disimpan.')
+      setSavingCost(false)
+      return
+    }
     await loadCost(id)
     setSavingCost(false); setCostSaved(true)
     setTimeout(() => setCostSaved(false), 2000)
@@ -236,46 +216,10 @@ export default function FlightEditPage({ params }: Props) {
 
         <div className="border border-admin-line rounded-xl p-3 space-y-2">
           <p className="text-xs font-semibold text-admin-ink">Maskapai &amp; Mata Uang</p>
-          {vendors.length === 0 && !showQuickAddVendor && (
-            <p className="text-[11px] text-admin-warning">Belum ada vendor/maskapai — tambah dulu.</p>
-          )}
-          {vendorError && <p role="alert" className="text-[11px] font-medium text-admin-danger">{vendorError}</p>}
-          <div className="flex items-center gap-2">
-            {!showQuickAddVendor ? (
-              <>
-                <select className="admin-inp flex-1" value={vendorId} onChange={e => setVendorId(e.target.value)}>
-                  <option value="">Pilih maskapai…</option>
-                  {vendors.map(v => <option key={v.id} value={v.id}>{v.name}</option>)}
-                </select>
-                <button
-                  type="button" onClick={() => setShowQuickAddVendor(true)}
-                  className="admin-btn-ghost text-xs shrink-0 flex items-center gap-1"
-                >
-                  <Plus className="h-3 w-3" /> Maskapai Baru
-                </button>
-              </>
-            ) : (
-              <>
-                <input
-                  autoFocus className="admin-inp flex-1" placeholder="Nama maskapai, mis. Saudia"
-                  value={newVendorName} onChange={e => setNewVendorName(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleQuickAddVendor() } }}
-                />
-                <button
-                  type="button" onClick={handleQuickAddVendor}
-                  disabled={savingVendor || !newVendorName.trim()}
-                  className="admin-btn-sm text-xs shrink-0 disabled:opacity-50"
-                >
-                  {savingVendor ? '...' : 'Simpan'}
-                </button>
-                <button
-                  type="button" onClick={() => { setShowQuickAddVendor(false); setNewVendorName('') }}
-                  className="admin-btn-ghost text-xs shrink-0"
-                >
-                  Batal
-                </button>
-              </>
-            )}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <VendorPicker value={vendorId} onChange={setVendorId} context="flight" label="Maskapai" />
+            </div>
             <select className="admin-inp w-20 shrink-0" value={currency} onChange={e => setCurrency(e.target.value)}>
               {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -306,6 +250,7 @@ export default function FlightEditPage({ params }: Props) {
             <Save className="h-3.5 w-3.5" />
             {savingCost ? 'Menyimpan...' : costSaved ? 'Tersimpan ✓' : 'Simpan Harga Tiket'}
           </button>
+        {costError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{costError}</p>}
         </div>
       </div>
 

@@ -225,7 +225,7 @@ await t('UI: halaman admin memakai panel bersama (tanpa salinan inline) dan rout
   for (const [file, base, cat] of [['packages/[id]/page.tsx', 'packages', 'package'], ['tour-packages/[id]/page.tsx', 'tour-packages', 'tour_package']] as const) {
     const src = readFileSync(`${dir}/${file}`, 'utf8')
     assert.match(src, /<CostComponentsPanel[\s\S]*?apiBase=\{`\/api\/v1\/admin\/products\/(packages|tour-packages)\/\$\{id\}\/costs`\}/, file)
-    assert.ok(src.includes(`apiBase={\`/api/v1/admin/products/${base}/`) && src.includes(`vendorCategory="${cat}"`), `${file}: apiBase/vendorCategory salah modul`)
+    assert.ok(src.includes(`apiBase={\`/api/v1/admin/products/${base}/`) && !src.includes('vendorCategory='), `${file}: apiBase salah modul atau masih memakai prop vendorCategory (dihapus di vendor F4)`)
     assert.doesNotMatch(src, /handleSaveCost|costForm|setCostPreview|handleQuickAddVendor|settings\/vendors/, `${file}: tak boleh ada logika biaya/vendor inline`)
   }
   assert.ok(!readdirSync('app/api/v1/admin/products/tour-packages').includes('simulate'), 'route simulate lama harus hilang')
