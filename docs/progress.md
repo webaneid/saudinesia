@@ -802,3 +802,7 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] F3 menu Sistem → Vendor (daftar, detail/edit, kategori) + `VendorForm`; bagian vendor di Pengaturan dihapus — selesai 2026-10-26 (Chrome asli: CRUD vendor + kategori superadmin, manager hanya baca; 4 mutasi; 357 PASS)
 - [x] F4 `VendorPicker` + modal `VendorForm`; migrasi 6 situs; jembatan + quick-add lama dihapus; penjaga CI; galat simpan biaya kini tampil — selesai 2026-10-26 (Chrome asli + salinan DB lokal; 5 mutasi)
 - [x] F5 migrasi kontraksi (pengisian ulang fail-closed, NOT NULL, drop kolom lama), `arsitektur-harga.md` §3.1/§18 digantikan, `CLAUDE.md`, dokumen as-built — selesai 2026-10-26 (rehearsal salinan DB identik; 5 mutasi SQL; tanpa drift). **Proyek Vendor SELESAI.**
+
+**Admin — alur "Buat baru" (2026-10-26, `docs/arsitektur-admin-create.md`):**
+- [x] F1 `CreatePage` + halaman `/new` untuk Haji, Visa, Paket Umroh (galat tak lagi ditelan)
+- [ ] F2 sisanya: Hotel, Muthowif, Paket Ziarah, Situs Wisata, Pesawat, Transport (trip/kendaraan), Katering, Musim, Admin

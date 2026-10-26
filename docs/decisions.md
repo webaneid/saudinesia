@@ -2732,3 +2732,18 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; rehearsal pada salinan DB lokal: 10 vendor/18 biaya/14 vendor pilihan/10 tautan kategori + 4 checksum identik; diterapkan ke DB lokal pengguna (cadangan `/tmp/vendor_backup/saudinesia_pre_vendor_F5.sql`) dan DB uji; 5 mutasi SQL + 1 mutasi penjaga sumber tertangkap. **Catatan proses:** `scripts/_vendor-snap.ts` (alat sementara F1) ternyata ter-commit dan membaca kolom lama — dihapus; pelajaran: alat sementara tidak boleh ikut `git add -A` (taruh di scratchpad).
 
 **Affects:** `prisma/schema.prisma`, `prisma/migrations/20261026180000_vendor_single_flow_contract/`, `components/admin/vendor/{types,VendorForm,VendorPicker}.tsx`, halaman daftar vendor, `lib/vendors/service.ts`, `scripts/test-vendor-{contraction,migration,model,ui}.ts`, `scripts/test-{haji-pricing,cost-components}.ts`, `package.json`, `docs/arsitektur-vendor.md`, `docs/arsitektur-harga.md`, `docs/progress.md`, `CLAUDE.md`.
+
+## 2026-10-26 — Admin: "Buat baru" = halaman khusus (F1: Haji, Visa, Paket Umroh)
+
+**Decision:** Membuat entitas di admin memakai halaman khusus `/admin/<area>/<modul>/new` dengan komponen bersama `CreatePage` (kembali, banner galat, bilah aksi `sticky`), bukan panel sebaris di atas daftar; sukses → halaman edit `[id]`; galat server selalu tampil dan tidak menutup formulir. Dijaga `scripts/test-admin-create.ts` (daftar modul termigrasi bertambah per fase).
+
+**Rationale:** Laporan pemilik: panel sebaris membingungkan dan terasa menjebak. Recheck menemukan juga bug nyata — Haji dan Paket menelan respons POST (panel menutup walau gagal). Halaman khusus konsisten dengan halaman edit dan lazim untuk produk.
+
+**Alternatives considered:** Modal (ditolak: formulir panjang dengan editor teks kaya, dan modal itulah yang dirasa menjebak); mempertahankan panel sebaris dengan perbaikan galat (ditolak: tak menjawab keluhan UX); satu formulir generik untuk semua modul (ditolak: kolom tiap modul berbeda — hanya cangkangnya yang dibagi).
+
+**Security check (SOP langkah 5):** 0 temuan. Tidak ada route/dependensi baru; halaman klien memanggil API yang sudah dijaga (`requireManager`, Zod `.strict()`); pesan galat berasal dari respons API generik.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; Chrome: alur sukses/gagal/batal untuk tiga modul; 3 mutasi penjaga tertangkap. **Catatan proses:** `bun run test` gagal sekali karena akun uji (`f3-*`) dari pemeriksaan browser tertinggal di DB uji dan menggagalkan tes seed-guard — pembersihan data uji wajib sebelum menjalankan rantai tes.
+
+**Affects:** `components/admin/shell/CreatePage.tsx`, `products/{haji,visa,packages}/{page,new/page}.tsx`, `products/haji/[id]/page.tsx`, `lib/constants/haji.ts`, `scripts/test-admin-create.ts`, `package.json`, `docs/arsitektur-admin-create.md`, `docs/progress.md`.
+
