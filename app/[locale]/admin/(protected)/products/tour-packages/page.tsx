@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { Plus, Pencil, Landmark } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
-import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type TourPackage = {
   id: string; name: string; price: string | number; isActive: boolean
@@ -21,10 +21,7 @@ export default function TourPackagesPage() {
   const { locale } = useParams() as { locale: string }
 
   const [list, setList] = useState<TourPackage[]>([])
-  const [show, setShow] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', description: '' })
 
   async function load() {
     const r = await fetch('/api/v1/admin/products/tour-packages')
@@ -33,21 +30,6 @@ export default function TourPackagesPage() {
     setLoading(false)
   }
   useEffect(() => { load() }, [])
-
-  function set(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
-      setForm(p => ({ ...p, [k]: e.target.value }))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    await fetch('/api/v1/admin/products/tour-packages', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    await load(); setShow(false); setSaving(false)
-    setForm({ name: '', description: '' })
-  }
 
   function formatPrice(p: string | number) {
     const n = Number(p)
@@ -83,29 +65,8 @@ export default function TourPackagesPage() {
         icon={Landmark}
         title="Paket Ziarah"
         description="Paket wisata ziarah — kendaraan & hotel dikonfigurasi di halaman Kelola setelah paket dibuat."
-        actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>}
+        actions={<Link href={`/${locale}/admin/products/tour-packages/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</Link>}
       />
-
-      {show && (
-        <div className="admin-form-panel space-y-3">
-          <p className="text-sm font-semibold text-admin-ink">Paket Baru</p>
-          <p className="text-[11px] text-admin-muted/70">Isi info dasar dulu — kendaraan, hotel, situs, dan komponen biaya dikonfigurasi setelah paket dibuat (klik &quot;Kelola&quot;).</p>
-          <div className="grid md:grid-cols-2 gap-3">
-            <div className="md:col-span-2">
-              <p className="text-xs text-admin-muted mb-1">Nama Paket</p>
-              <input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Ziarah Makkah — Sejarah Islam" />
-            </div>
-            <div className="md:col-span-2 min-w-0">
-              <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-              <RichTextEditor id="tourpackage-new-description" title="Deskripsi paket ziarah" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Program ziarah, situs yang dikunjungi, dan catatan untuk jamaah…" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50">{saving ? '...' : 'Simpan'}</button>
-            <button onClick={() => setShow(false)} className="admin-btn-ghost text-sm">Batal</button>
-          </div>
-        </div>
-      )}
 
       <DataTable columns={columns} rows={list} getRowId={p => p.id} loading={loading} empty="Belum ada paket ziarah." rowClassName={p => (p.isActive ? undefined : 'opacity-50')} />
     </div>

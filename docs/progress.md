@@ -805,4 +805,5 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 
 **Admin — alur "Buat baru" (2026-10-26, `docs/arsitektur-admin-create.md`):**
 - [x] F1 `CreatePage` + halaman `/new` untuk Haji, Visa, Paket Umroh (galat tak lagi ditelan)
-- [ ] F2 sisanya: Hotel, Muthowif, Paket Ziarah, Situs Wisata, Pesawat, Transport (trip/kendaraan), Katering, Musim, Admin
+- [x] F2 sisanya: Hotel, Muthowif, Paket Ziarah, Situs Wisata, Pesawat (rute+jadwal), Transport (kendaraan+trip), Katering, Musim, Admin — selesai 2026-10-26; bug Trip tanpa kategori (selalu 400) ditutup
+- [ ] F3 (usul) gap CRUD: Katering edit+hapus, Musim edit, UI edit/hapus Rute, hapus Kendaraan (`docs/arsitektur-admin-create.md` §5)

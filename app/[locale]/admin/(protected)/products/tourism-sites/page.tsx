@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { Plus, Pencil, MapPin } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
-import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type TourismSite = { id: string; name: string; city: string | null; isActive: boolean }
 
@@ -15,10 +15,7 @@ export default function TourismSitesPage() {
   const { locale } = useParams() as { locale: string }
 
   const [list, setList] = useState<TourismSite[]>([])
-  const [show, setShow] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', city: 'makkah', description: '', gmapsUrl: '' })
 
   async function load() {
     const r = await fetch('/api/v1/admin/products/tourism-sites')
@@ -27,20 +24,6 @@ export default function TourismSitesPage() {
     setLoading(false)
   }
   useEffect(() => { load() }, [])
-
-  function set(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
-      setForm(p => ({ ...p, [k]: e.target.value }))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    await fetch('/api/v1/admin/products/tourism-sites', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    await load(); setShow(false); setSaving(false)
-  }
 
   const columns: Column<TourismSite>[] = [
     { key: 'name', header: 'Nama', mobile: 'title', cell: s => <span className="text-[13px] font-medium">{s.name}</span> },
@@ -63,40 +46,8 @@ export default function TourismSitesPage() {
         icon={MapPin}
         title="Situs Wisata"
         description="Master data tempat wisata — dipakai berulang di berbagai Paket Ziarah."
-        actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>}
+        actions={<Link href={`/${locale}/admin/products/tourism-sites/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</Link>}
       />
-
-      {show && (
-        <div className="admin-form-panel space-y-3">
-          <p className="text-sm font-semibold text-admin-ink">Situs Baru</p>
-          <div className="grid md:grid-cols-2 gap-3">
-            <div className="md:col-span-2">
-              <p className="text-xs text-admin-muted mb-1">Nama</p>
-              <input className="admin-inp" value={form.name} onChange={set('name')} placeholder="Jabal Nur (Gua Hira)" />
-            </div>
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Kota</p>
-              <select className="admin-select" value={form.city} onChange={set('city')}>
-                <option value="makkah">Makkah</option>
-                <option value="madinah">Madinah</option>
-                <option value="jeddah">Jeddah</option>
-              </select>
-            </div>
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Link Google Maps (opsional)</p>
-              <input className="admin-inp" value={form.gmapsUrl} onChange={set('gmapsUrl')} placeholder="https://maps.google.com/..." />
-            </div>
-            <div className="md:col-span-2 min-w-0">
-              <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-              <RichTextEditor id="tourismsite-new-description" title="Deskripsi situs wisata" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Sejarah singkat, makna, dan hal yang perlu diketahui jamaah…" />
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50">{saving ? '...' : 'Simpan'}</button>
-            <button onClick={() => setShow(false)} className="admin-btn-ghost text-sm">Batal</button>
-          </div>
-        </div>
-      )}
 
       <DataTable columns={columns} rows={list} getRowId={s => s.id} loading={loading} empty="Belum ada situs wisata." rowClassName={s => (s.isActive ? undefined : 'opacity-50')} />
     </div>

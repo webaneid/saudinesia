@@ -2747,3 +2747,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `components/admin/shell/CreatePage.tsx`, `products/{haji,visa,packages}/{page,new/page}.tsx`, `products/haji/[id]/page.tsx`, `lib/constants/haji.ts`, `scripts/test-admin-create.ts`, `package.json`, `docs/arsitektur-admin-create.md`, `docs/progress.md`.
 
+## 2026-10-26 — Admin: "Buat baru" halaman khusus untuk SEMUA modul (F2) + hook penyimpan tunggal
+
+**Decision:** Seluruh alur buat di admin (12 modul, 14 entitas) memakai halaman `/new` + `CreatePage`; logika simpan dipusatkan di `useCreateEntity` (periksa respons, tampilkan galat server, pindah ke halaman edit hanya bila ada id). Penjaga CI mewajibkan setiap modul terdaftar dan melarang panel buat sebaris di halaman admin mana pun. Gap CRUD yang ditemukan dicatat (Katering tanpa edit/hapus, dst.), tidak dikerjakan di sini.
+
+**Rationale:** Konsistensi dan satu titik pemeriksa respons mencegah kelas bug "tombol tampak mati" (galat ditelan). Terbukti nyata: Trip tanpa kategori selalu 400 dan tak pernah terlihat karena UI diam — pelajaran `.optional()` vs `.nullish()` yang sama dengan catatan memori.
+
+**Alternatives considered:** Mempertahankan formulir kecil (Musim/Rute) sebaris (ditolak: inkonsisten dan penjaga tak bisa tegas); memperbaiki gap CRUD sekaligus (ditolak: scope berbeda — diusulkan F3).
+
+**Security check (SOP langkah 5):** 0 temuan. Tidak ada route baru, hanya satu skema yang dilonggarkan aman (`category` nullable, kolom DB memang nullable); halaman klien memakai API yang sudah dijaga (`requireManager`/`requireSuperAdmin`, Zod). Formulir Admin memakai `autoComplete="new-password"`/`off`; kata sandi hanya dikirim ke API yang sudah ada.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; Chrome: 14 alur sukses + 2 gagal; 5 mutasi penjaga tertangkap.
+
+**Affects:** `components/admin/shell/useCreateEntity.ts`, halaman `new` baru (13 berkas), 12 halaman daftar, `app/api/v1/admin/products/transport/trips/route.ts`, `scripts/test-admin-create.ts`, `docs/arsitektur-admin-create.md`, `docs/progress.md`.
+
