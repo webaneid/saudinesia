@@ -2624,3 +2624,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 15 suite lulus; HTTP nyata end-to-end termasuk booking Haji sungguhan; 7 mutasi tertangkap.
 
 **Affects:** `lib/pricing/computeHajiPrice.ts`, `costComponentOwners.ts`, `lib/haji/{delete,catalog}.ts`, `lib/booking/errors.ts`, `lib/quota/adapters/haji.ts`, `lib/validators/adminUpdates.ts`, `lib/cron/exchangeRateJob.ts`, `app/api/v1/admin/products/haji/**`, `app/api/v1/bookings/route.ts`, `app/api/v1/catalog/haji/route.ts`, halaman publik `/haji`, halaman daftar admin Haji, `scripts/test-haji-pricing.ts`, `scripts/test-rich-text.ts`, `package.json`.
+
+## 2026-10-26 — Komponen Biaya universal, Fase 4: UI Haji dengan CRUD lengkap
+
+**Decision:** Halaman edit Haji memakai idiom halaman edit yang sudah ada (header + panel Info + `CostComponentsPanel` + kartu harga + Zona Berbahaya). Tombol bahaya memilih label dari jumlah booking ("Hapus Produk" / "Nonaktifkan Produk") dan server yang memutuskan hapus-atau-nonaktif; aktifkan kembali lewat saklar Aktif. Harga ditampilkan, tidak pernah diisi. Pesan validasi Haji berbahasa Indonesia; galat basi dibuang saat pengguna melanjutkan.
+
+**Rationale:** Arahan pemilik: kesalahan manusia harus bisa dikoreksi (edit dan hapus), tanpa membuat booking yatim. Memakai idiom yang sama menjaga konsistensi UI dan mengurangi kejutan. Verifikasi UI di browser nyata menemukan dua cacat (pesan Inggris, banner basi) yang lolos dari tipe dan tes unit.
+
+**Alternatives considered:** Tombol hapus terpisah di daftar (ditolak: halaman edit sudah cukup, mengurangi hapus tak sengaja); menyembunyikan produk berharga 0 dari daftar admin (ditolak: admin harus melihatnya untuk mengisi komponen); galeri gambar di fase ini (di luar scope).
+
+**Security check (SOP langkah 5):** 0 Critical/High, 0 temuan baru. Tidak ada route baru; halaman klien memanggil route admin yang sudah diuji (manager/superadmin sesuai peran), tanpa `dangerouslySetInnerHTML`, pesan server ditampilkan sebagai teks. Manager tetap tidak dapat membaca/ubah HPP (panel menampilkan pemberitahuan). `bun audit` tidak berubah.
+
+**Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 15 suite lulus; skenario CRUD lengkap di Chrome headless asli; penjaga UI dimutasi.
+
+**Affects:** `products/haji/[id]/page.tsx` (baru), `products/haji/page.tsx`, `lib/validators/adminUpdates.ts`, `scripts/test-haji-pricing.ts`, `docs/arsitektur-komponen-biaya.md`.
