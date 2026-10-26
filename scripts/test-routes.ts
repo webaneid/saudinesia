@@ -153,17 +153,16 @@ await t('SEC-49: setiap `req.json()` diberi `.catch` — body rusak/kosong harus
   assert.deepEqual(bad, [], 'req.json() tanpa .catch(() => null) — SyntaxError dari body rusak jatuh ke catch umum → 500:')
 })
 
-await t('SEC-62: DELETE images (hotel/kendaraan) hanya menghapus key yang tercatat pada entitas itu — cek keanggotaan SEBELUM deleteObject', () => {
-  for (const suffix of ['hotels/[id]/images/route.ts', 'transport/vehicles/[id]/images/route.ts']) {
-    const src = read(routes.find(f => rel(f).endsWith(suffix)) ?? '')
-    const del = src.slice(src.indexOf('export async function DELETE'))
-    const member = del.indexOf('current.includes(key)'), remove = del.indexOf('deleteObject(key)')
-    assert.ok(member > 0 && remove > 0, `${suffix}: cek keanggotaan / deleteObject tidak ditemukan`)
-    assert.ok(member < remove, `${suffix}: cek keanggotaan harus mendahului deleteObject`)
-  }
-  // Satu-satunya pemanggil deleteObject dengan key dari klien adalah dua route ini; sisanya memakai key dari DB.
+await t('SEC-62: hapus foto produk hanya menyentuh objek yang TERCATAT pada produk itu — layanan media memeriksa kepemilikan SEBELUM menghapus objek; tak ada route yang memanggil deleteObject dengan key dari klien', () => {
+  const svc = read('lib/media/service.ts')
+  const remove = svc.slice(svc.indexOf('async function remove('), svc.indexOf('async function removeAll('))
+  const owned = remove.indexOf('findFirst({ where: { id: imageId, productType: type, productId } })'), cleanup = remove.indexOf('await cleanup(')
+  assert.ok(owned > 0 && cleanup > 0 && owned < cleanup, 'cek kepemilikan harus mendahului penghapusan objek')
+  const legacy = read('lib/media/legacyRoutes.ts')
+  const del = legacy.slice(legacy.indexOf('async DELETE(req: NextRequest'))
+  assert.match(del, /\.find\(i => i\.key === key\)/); assert.ok(del.indexOf('.find(') < del.indexOf('mediaService.remove('), 'jembatan: cari foto milik entitas dulu')
   const fromClient = routes.filter(f => /deleteObject\(\s*key\s*\)/.test(read(f))).map(rel).sort()
-  assert.deepEqual(fromClient, ['v1/admin/products/hotels/[id]/images/route.ts', 'v1/admin/products/transport/vehicles/[id]/images/route.ts'])
+  assert.deepEqual(fromClient, [], 'tak boleh ada route yang menghapus objek dengan key dari body')
 })
 
 await t('SEC-14: reset-limits hanya superadmin, tanpa body, dan kunci login memakai accountKey yang sama dengan fungsi reset', () => {

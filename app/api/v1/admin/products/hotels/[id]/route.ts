@@ -6,6 +6,7 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { addressSchema } from '@/lib/validators/address'
 import { upsertAddress } from '@/lib/address/prepare'
 import { z } from 'zod'
+import { featuredKeyOf, setFeaturedByKey } from '@/lib/media/legacyRoutes'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 
 const updateSchema = z.object({
@@ -32,7 +33,8 @@ export async function GET(_req: Request, { params }: Ctx) {
       include: { address: { include: { province: true, regency: true, district: true, village: true } } },
     })
     if (!hotel) return NextResponse.json(err('Hotel tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok(hotel))
+    // Sampul kini milik layanan media (jembatan F1→F2): `featuredImageKey` dipertahankan di bentuk respons untuk UI lama.
+    return NextResponse.json(ok({ ...hotel, featuredImageKey: await featuredKeyOf('hotel', id) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -49,7 +51,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const { address, description, ...rest } = parsed.data
+    const { address, description, featuredImageKey, ...rest } = parsed.data
 
     const data: Record<string, unknown> = { ...rest }
     if (description !== undefined) data.description = emptyToNull(description)
@@ -61,7 +63,11 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
 
     const hotel = await prisma.hotel.update({ where: { id }, data })
-    return NextResponse.json(ok(hotel))
+    if (featuredImageKey !== undefined) {
+      const problem = await setFeaturedByKey('hotel', id, featuredImageKey)
+      if (problem) return NextResponse.json(err(problem), { status: 400 })
+    }
+    return NextResponse.json(ok({ ...hotel, featuredImageKey: await featuredKeyOf('hotel', id) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

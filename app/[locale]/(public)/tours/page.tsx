@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { MapPin } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import Link from 'next/link'
@@ -18,6 +18,8 @@ export default async function ToursPage({ params }: Props) {
     orderBy: { price: 'asc' },
   })
 
+  const sitePhotos = await getFeaturedCardUrls('tourism_site', [...new Set(packages.flatMap(p => p.sites.map(s => s.tourismSite.id)))])
+
   const cityLabel: Record<string, string> = { makkah: 'Makkah', madinah: 'Madinah', jeddah: 'Jeddah' }
 
   return (
@@ -28,11 +30,8 @@ export default async function ToursPage({ params }: Props) {
       </div>
 
       <div className="grid md:grid-cols-2 gap-5">
-        {await Promise.all(packages.map(async (p) => {
-          const sitesWithPhoto = await Promise.all(p.sites.map(async (s) => ({
-            ...s.tourismSite,
-            photoUrl: s.tourismSite.photoKey ? await getPresignedUrl(s.tourismSite.photoKey, 3600).catch(() => null) : null,
-          })))
+        {packages.map((p) => {
+          const sitesWithPhoto = p.sites.map(s => ({ ...s.tourismSite, photoUrl: sitePhotos.get(s.tourismSite.id) ?? null }))
 
           return (
             <div key={p.id} className="rounded-xl border p-5 space-y-4">
@@ -80,7 +79,7 @@ export default async function ToursPage({ params }: Props) {
               </div>
             </div>
           )
-        }))}
+        })}
       </div>
     </div>
   )

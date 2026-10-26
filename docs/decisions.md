@@ -2775,3 +2775,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `lib/admin/safeDelete.ts`, `components/admin/shell/{EditPage,useEditEntity}`, `app/api/v1/admin/products/{catering,seasons,flight/routes,transport/vehicles}/[id]/route.ts`, `app/api/v1/admin/system/users/[id]/route.ts`, `lib/validators/adminUpdates.ts`, `lib/auth/adminUsers.ts`, halaman ubah baru (4) + daftar (4) + halaman Kendaraan, `scripts/test-admin-crud.ts`, `package.json`, docs.
 
+## 2026-10-27 — Media F1: tabel foto produk universal + layanan tunggal (keputusan pemilik: Kendaraan tetap galeri)
+
+**Decision:** Foto semua produk disimpan di satu tabel polimorfik `ProductImage` dan hanya `lib/media/service.ts` yang menulisnya; mode per tipe lewat registry (`featured` mengganti, `gallery` ber-max + satu sampul). Isi berkas divalidasi (magic bytes + dekode sharp) dan dienkode ulang ke webp tampilan (≤1600) + kartu (≤640) tanpa EXIF; berkas asli TIDAK disimpan (merevisi rencana awal). Migrasi ekspansi mengisi dari kolom lama; route lama menjadi jembatan tipis sampai F2; pembaca publik dipindah ke `getProductImages` sekarang agar tak ada dualisme. Keputusan pemilik: **Kendaraan tetap galeri**; unggah dilakukan di halaman edit setelah simpan.
+
+**Rationale:** Empat implementasi salinan (tiga bentuk kolom) dengan validasi MIME yang mempercayai klien dan tanpa pembersihan objek; polimorfik sejajar komponen universal lain. Enkode ulang menutup EXIF/GPS bocor dan muatan tersisip, dan memberi kartu ringan. Invarian ditegakkan layanan (bukan indeks parsial) karena Prisma tak mengekspresikannya dan indeks tak dikenal memicu drift pada `migrate diff`.
+
+**Alternatives considered:** Kolom `featuredImageKey` + `images` per model (ditolak: duplikasi); menyimpan asli + turunan (ditolak: privasi EXIF, biaya penyimpanan, tak ada kebutuhan); indeks unik parsial untuk satu-sampul (ditolak: drift skema); menunda pemindahan pembaca ke F3 (ditolak: dualisme data antar-PR).
+
+**Security check (SOP langkah 5):** 0 Critical/High; temuan pre-existing diperbaiki: **validasi unggahan hanya mempercayai `file.type`** (kini isi diperiksa) — sebelumnya Medium-Low, tak tercatat di register → dicatat **SEC-69 (Low, Selesai F1)**. Route baru: `requireManager` di awal tiap verb (dijaga uji sumber), `uuid`/registry memvalidasi parameter (selain itu 404 tanpa membocorkan registry), skema PATCH `.strict()`, hapus hanya objek tercatat pada produk itu (SEC-62), kunci objek dibuat server, tak ada `data: body`; API katalog publik tak lagi mengirim kunci objek mentah. Dependensi: `sharp` sudah ada (tak ada penambahan).
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; MinIO nyata + route nyata di Chrome; 6 mutasi layanan + 3 mutasi SQL tertangkap.
+
+**Affects:** `prisma/schema.prisma`, `prisma/migrations/20261027120000_product_images_expand/`, `lib/media/**`, `app/api/v1/admin/media/**`, 4 route foto lama (jembatan), route hotel/muthowif/situs, halaman publik (home, hotels, transport, muthowif, tours), 3 API katalog, `scripts/test-media{,-migration}.ts`, `package.json`, docs.
+

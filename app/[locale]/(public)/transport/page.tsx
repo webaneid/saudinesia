@@ -1,14 +1,9 @@
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { Bus } from 'lucide-react'
 import TransportSearch, { type TripData } from '@/components/shared/TransportSearch'
 
 type Props = { params: Promise<{ locale: string }> }
-
-function parseImageKeys(val: unknown): string[] {
-  if (!Array.isArray(val)) return []
-  return val.filter((v): v is string => typeof v === 'string')
-}
 
 export default async function TransportCatalogPage({ params }: Props) {
   const { locale } = await params
@@ -26,16 +21,10 @@ export default async function TransportCatalogPage({ params }: Props) {
     },
   })
 
-  // Presigned URLs untuk foto sampul tiap kendaraan (parallel)
+  // Foto sampul tiap kendaraan — layanan media universal (satu query batch).
   const vehicleIds = [...new Set(trips.flatMap(t => t.pricing.map(p => p.vehicle.id)))]
-  const coverUrls: Record<string, string | null> = {}
-  await Promise.all(
-    vehicleIds.map(async (vid) => {
-      const vehicle = trips.flatMap(t => t.pricing.map(p => p.vehicle)).find(v => v.id === vid)
-      const keys = parseImageKeys(vehicle?.images)
-      coverUrls[vid] = keys[0] ? await getPresignedUrl(keys[0], 3600).catch(() => null) : null
-    })
-  )
+  const coverMap = await getFeaturedCardUrls('vehicle', vehicleIds)
+  const coverUrls: Record<string, string | null> = Object.fromEntries(coverMap)
 
   // Redesain rute-dulu (docs/decisions.md 2026-07-20): user mikirnya "butuh kendaraan dari A ke B"
   // dulu, baru pilih kendaraan — jadi kartu utama adalah RUTE, bukan kendaraan. Interaksi

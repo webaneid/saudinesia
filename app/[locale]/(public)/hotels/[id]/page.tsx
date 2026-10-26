@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getProductImages } from '@/lib/media/urls'
 import { MapPin, Star, ArrowLeft, BedDouble, CheckCircle, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -11,11 +11,6 @@ import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
-
-function parseImageKeys(val: unknown): string[] {
-  if (!Array.isArray(val)) return []
-  return val.filter((v): v is string => typeof v === 'string')
-}
 
 function formatShortDate(d: Date) {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
@@ -51,15 +46,8 @@ export default async function HotelDetailPage({ params }: Props) {
   const facilityLabels = (Array.isArray(hotel.facilities) ? hotel.facilities as string[] : [])
     .map(code => HOTEL_FACILITIES.find(f => f.code === code)?.label ?? code)
 
-  // Generate presigned URLs for all hotel photos (1h TTL) — foto sampul (kalau di-set) ditaruh
-  // paling depan supaya jadi foto besar pertama di galeri.
-  const galleryKeys = parseImageKeys(hotel.images)
-  const imageKeys = hotel.featuredImageKey
-    ? [hotel.featuredImageKey, ...galleryKeys.filter(k => k !== hotel.featuredImageKey)]
-    : galleryKeys
-  const imageUrls = await Promise.all(
-    imageKeys.map(k => getPresignedUrl(k, 3600).catch(() => null))
-  ).then(urls => urls.filter((u): u is string => u !== null))
+  // Foto hotel dari layanan media universal: sampul dulu, lalu galeri berurutan (URL presigned 1 jam).
+  const imageUrls = ((await getProductImages('hotel', [hotel.id])).get(hotel.id)?.images ?? []).map(i => i.url)
 
   return (
     <div className="space-y-8 max-w-4xl">

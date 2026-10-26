@@ -1,60 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { prisma } from '@/lib/db'
-import { requireManager } from '@/lib/auth/session'
-import { buildObjectKey, uploadBuffer, deleteObject, getPresignedUrl } from '@/lib/storage/minio'
-import { ok, err } from '@/lib/validators'
-import { authFailureResponse } from '@/lib/admin/errors'
+import { legacySingleRoutes } from '@/lib/media/legacyRoutes'
 
-type Params = { params: Promise<{ id: string }> }
-
-const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp'])
-const MAX_BYTES = 5 * 1024 * 1024
-
-// Satu foto per situs (bukan galeri) — pola sama photo Muthowif.
-export async function POST(req: NextRequest, { params }: Params) {
-  try { await requireManager() }
-  catch (e) { return authFailureResponse(e, 'v1/admin/products/tourism-sites/[id]/photo/POST') }
-
-  const { id } = await params
-  const site = await prisma.tourismSite.findUnique({ where: { id }, select: { photoKey: true } })
-  if (!site) return NextResponse.json(err('Situs tidak ditemukan'), { status: 404 })
-
-  let formData: FormData
-  try { formData = await req.formData() }
-  catch { return NextResponse.json(err('Invalid form data'), { status: 400 }) }
-
-  const file = formData.get('file') as File | null
-  if (!file) return NextResponse.json(err('file wajib diisi'), { status: 400 })
-  if (!IMAGE_MIMES.has(file.type)) {
-    return NextResponse.json(err('Gunakan format JPG, PNG, atau WebP.'), { status: 400 })
-  }
-  if (file.size > MAX_BYTES) {
-    return NextResponse.json(err('Ukuran file maksimal 5 MB.'), { status: 400 })
-  }
-
-  const buffer = Buffer.from(await file.arrayBuffer())
-  const objectKey = buildObjectKey('tourism-sites', id, 'photo', file.name)
-
-  try { await uploadBuffer(objectKey, buffer, file.type) }
-  catch { return NextResponse.json(err('Storage error. Please try again.'), { status: 500 }) }
-
-  if (site.photoKey) await deleteObject(site.photoKey).catch(() => {})
-  await prisma.tourismSite.update({ where: { id }, data: { photoKey: objectKey } })
-
-  const url = await getPresignedUrl(objectKey, 3600).catch(() => null)
-  return NextResponse.json(ok({ key: objectKey, url }), { status: 201 })
-}
-
-export async function DELETE(_req: NextRequest, { params }: Params) {
-  try { await requireManager() }
-  catch (e) { return authFailureResponse(e, 'v1/admin/products/tourism-sites/[id]/photo/DELETE') }
-
-  const { id } = await params
-  const site = await prisma.tourismSite.findUnique({ where: { id }, select: { photoKey: true } })
-  if (!site) return NextResponse.json(err('Situs tidak ditemukan'), { status: 404 })
-
-  if (site.photoKey) await deleteObject(site.photoKey).catch(() => {})
-  await prisma.tourismSite.update({ where: { id }, data: { photoKey: null } })
-
-  return NextResponse.json(ok(null))
-}
+// JEMBATAN SEMENTARA ke layanan media universal (lib/media/legacyRoutes.ts) — dihapus di F2 (docs/arsitektur-media.md).
+const r = legacySingleRoutes('tourism_site', 'v1/admin/products/tourism-sites/[id]/photo')
+export const POST = r.POST
+export const DELETE = r.DELETE

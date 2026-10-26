@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { UserRound, Star, Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
@@ -16,9 +16,8 @@ export default async function MuthowifPage({ params }: Props) {
     prisma.muthowif.findMany({ where: { isActive: true }, orderBy: { rating: 'desc' } }),
     prisma.muthowifServicePrice.findFirst(),
   ])
-  const guides = await Promise.all(guidesRaw.map(async (g) => ({
-    ...g, photoUrl: g.photoKey ? await getPresignedUrl(g.photoKey, 3600).catch(() => null) : null,
-  })))
+  const guidePhotos = await getFeaturedCardUrls('muthowif', guidesRaw.map(g => g.id))
+  const guides = guidesRaw.map(g => ({ ...g, photoUrl: guidePhotos.get(g.id) ?? null }))
 
   return (
     <div className="space-y-8">

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { getProductImages } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 
@@ -35,6 +36,8 @@ export async function GET(request: Request) {
       orderBy: { distanceToHaramM: 'asc' },
     })
 
+    // Foto dari layanan media universal (URL presigned; kunci objek mentah tak lagi keluar dari API publik).
+    const photos = await getProductImages('hotel', hotels.map(h => h.id))
     const data = hotels.map((h) => {
       const schedules = h.pricePeriods.flatMap(p => p.schedules).map((s) => {
         const available = s.totalQuota - s.pendingQuota - s.bookedQuota
@@ -51,7 +54,7 @@ export async function GET(request: Request) {
       return {
         id: h.id, name: h.name, city: h.city, stars: h.stars,
         distanceToHaramM: h.distanceToHaramM, description: h.description,
-        images: h.images, featuredImageKey: h.featuredImageKey, facilities: h.facilities,
+        coverUrl: photos.get(h.id)?.featured?.cardUrl ?? null, imageUrls: (photos.get(h.id)?.images ?? []).map(i => i.url), facilities: h.facilities,
         schedules, minPricePerNight: minPrice, availability,
       }
     })

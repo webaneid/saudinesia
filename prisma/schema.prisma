@@ -1365,3 +1365,27 @@ enum AddressType {
 
   @@map("address_type")
 }
+
+// ─── MEDIA PRODUK UNIVERSAL (docs/arsitektur-media.md) ─────────────
+// Satu tabel polimorfik untuk foto semua produk (pola ProductCost/ManifestFieldRequirement). `productType` = kunci registry
+// lib/media/owners.ts. Mode (featured = tepat satu foto / gallery = banyak) ditegakkan LAYANAN, bukan indeks: Prisma tak mengekspresikan
+// indeks unik parsial, dan indeks tak dikenal skema membuat `migrate diff` menandai drift. Kolom foto lama per-model (Hotel.images,
+// Hotel.featuredImageKey, TransportVehicle.images, Muthowif.photoKey, TourismSite.photoKey, HajiProduct.images, Package.images) dibuang
+// di fase kontraksi.
+model ProductImage {
+  id          String   @id @default(uuid())
+  productType String
+  productId   String
+  key         String   @unique // objek tampilan (≤1600 px, webp, EXIF dibuang); baris hasil migrasi lama: objek asli apa adanya
+  cardKey     String? // turunan kartu (~640 px); null = pakai `key`
+  alt         String?
+  sortOrder   Int      @default(0)
+  isFeatured  Boolean  @default(false)
+  width       Int?
+  height      Int?
+  createdAt   DateTime @default(now())
+
+  @@index([productType, productId, sortOrder])
+  @@map("product_images")
+}
+
