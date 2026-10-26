@@ -2650,3 +2650,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Security check (SOP langkah 5):** perubahan dokumen dan satu komentar kode — 0 temuan; `bun audit` tidak berubah. Seluruh temuan rangkaian sudah Selesai di register (SEC-63..67).
 
 **Affects:** `docs/arsitektur-haji.md` (baru), `docs/arsitektur-komponen-biaya.md`, `docs/arsitektur-{paket-umroh,ziarah,harga}.md`, `CLAUDE.md`, `lib/quota/adapters/index.ts` (komentar), `docs/progress.md`, `docs/decisions.md`.
+
+## 2026-10-26 — Vendor: satu alur, satu sumber data (ADR-0003 diterima; rencana fase)
+
+**Decision:** Keputusan arsitektur vendor dikunci di `docs/decisions/adr-0003-satu-alur-vendor-kategori-terkelola.md` (Accepted): satu entitas `Vendor` dengan FK di mana-mana, kategori dikelola admin (many-to-many), kontak + negara ISO terstruktur, `VendorForm` + `VendorPicker` universal, menu Sistem → Vendor, hapus bersemantik aman, vendor sistem lewat migrasi, migrasi data fail-closed. Rancangan rinci dan fase F1-F5: `docs/arsitektur-vendor.md`.
+
+**Rationale:** Audit 2026-10-26 menemukan kategori teks bebas per modul, vendor dibuat di 6 tempat berformulir berbeda (hampir semua tanpa kontak/alamat), referensi tanpa FK/validasi, vendor internal dibuat diam-diam, dan hapus yang hanya menonaktifkan. Pemilik meminta satu alur tanpa dualisme.
+
+**Alternatives considered:** Lihat ADR-0003 (enum kode, satu kategori, tetap teks bebas, hanya-lewat-menu, kosongkan data, paksa kategori di server).
+
+**Security check (SOP langkah 5):** fase perencanaan — hanya dokumen, 0 temuan. Review keamanan dilakukan per fase kode (route vendor baru superadmin-only, bacaan ramping untuk manager, migrasi fail-closed).
+
+**Affects:** `docs/arsitektur-vendor.md` (baru), `docs/decisions/adr-0003-…md` (baru).
