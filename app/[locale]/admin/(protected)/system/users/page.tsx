@@ -65,7 +65,7 @@ export default function UsersPage() {
   const changeRole = (id: string, role: string) => updateUser(id, { role })
 
   const columns: Column<User>[] = [
-    { key: 'name', header: 'Nama', mobile: 'title', cell: u => <span className="text-[13px] font-medium">{u.fullName ?? '-'}</span> },
+    { key: 'name', header: 'Nama', mobile: 'title', cell: u => <Link href={`/${locale}/admin/system/users/${u.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{u.fullName ?? '-'}</Link> },
     { key: 'email', header: 'Email', cell: u => <span className="text-[12px] text-admin-muted">{u.email}</span> },
     {
       key: 'role', header: 'Role',

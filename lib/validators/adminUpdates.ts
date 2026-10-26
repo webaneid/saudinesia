@@ -16,14 +16,15 @@ export const staffCreateSchema = z
   })
   .strict()
 
-/** PUT /api/v1/admin/system/users/[id] — hanya role & status aktif. passwordHash, resetToken, email, dst TIDAK boleh lewat sini. */
+/** PUT /api/v1/admin/system/users/[id] — hanya role, status aktif, dan nama. passwordHash, resetToken, email, dst TIDAK boleh lewat sini. */
 export const userAdminUpdateSchema = z
   .object({
     role: z.nativeEnum(UserRole).optional(),
     isActive: z.boolean().optional(),
+    fullName: z.string().trim().min(2, 'Nama minimal 2 karakter').max(100, 'Nama maksimal 100 karakter').optional(),
   })
   .strict()
-  .refine((v) => v.role !== undefined || v.isActive !== undefined, { message: 'Tidak ada perubahan' })
+  .refine((v) => v.role !== undefined || v.isActive !== undefined || v.fullName !== undefined, { message: 'Tidak ada perubahan' })
 
 const nullableDate = z
   .string()
@@ -57,6 +58,13 @@ export const seasonCreateSchema = z
   .strict()
   .refine(v => v.endDate >= v.startDate, { message: 'Tanggal akhir tidak boleh sebelum tanggal mulai', path: ['endDate'] })
 
+/** PUT /api/v1/admin/products/seasons/[id] — sebagian bidang boleh; urutan tanggal diperiksa terhadap nilai tersimpan di route bila hanya satu dikirim. */
+export const seasonUpdateSchema = z
+  .object({ name: z.enum(['regular', 'ramadan', 'hajj']).optional(), startDate: isoDate.optional(), endDate: isoDate.optional() })
+  .strict()
+  .refine(v => Object.keys(v).length > 0, { message: 'Tidak ada perubahan' })
+  .refine(v => !v.startDate || !v.endDate || v.endDate >= v.startDate, { message: 'Tanggal akhir tidak boleh sebelum tanggal mulai', path: ['endDate'] })
+
 /**
  * POST /api/v1/admin/products/catering. Sebelumnya route membaca body mentah tanpa Zod (harga NaN, tipe liar ke Prisma).
  * Nilai boardType/menuStyle = opsi yang ditawarkan form admin dan dipetakan label-nya di halaman publik.
@@ -72,6 +80,12 @@ export const cateringOptionCreateSchema = z
     pricePerPersonHajj: z.number().min(0),
   })
   .strict()
+
+/** PUT /api/v1/admin/products/catering/[id] — sebagian bidang + status aktif (nonaktif = tak muncul di katalog/pilihan baru). */
+export const cateringOptionUpdateSchema = cateringOptionCreateSchema
+  .partial()
+  .extend({ isActive: z.boolean().optional() })
+  .refine(v => Object.keys(v).length > 0, { message: 'Tidak ada perubahan' })
 
 /**
  * POST /api/v1/admin/products/haji. Sebelumnya route membaca body mentah tanpa Zod (angka NaN, tipe liar masuk ke Prisma).

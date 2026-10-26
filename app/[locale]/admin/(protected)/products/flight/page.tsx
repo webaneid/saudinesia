@@ -88,9 +88,9 @@ export default function FlightPage() {
         {activeRoutes.length > 0 && (
           <div className="flex flex-wrap gap-2">
             {activeRoutes.map(r => (
-              <span key={r.id} className="admin-badge-blue flex items-center gap-1">
+              <Link key={r.id} href={`/${locale}/admin/products/flight/routes/${r.id}`} className="admin-badge-blue flex items-center gap-1 hover:opacity-80" title="Ubah atau hapus rute">
                 <Globe className="h-3 w-3" /> {r.origin} → {r.destination}
-              </span>
+              </Link>
             ))}
           </div>
         )}

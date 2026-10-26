@@ -1,14 +1,14 @@
 import type { Prisma, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/db'
 
-export type AdminUserChange = { role?: UserRole; isActive?: boolean }
+export type AdminUserChange = { role?: UserRole; isActive?: boolean; fullName?: string }
 
 export type AdminUserUpdate =
-  | { ok: true; user: { id: string; role: UserRole; isActive: boolean } }
+  | { ok: true; user: { id: string; role: UserRole; isActive: boolean; fullName: string } }
   | { ok: false; reason: 'not_found' | 'self' | 'last_superadmin' }
 
 /**
- * Ubah peran / status aktif akun oleh superadmin (`actorId` = superadmin yang bertindak; null hanya untuk skrip/uji).
+ * Ubah peran / status aktif / nama akun oleh superadmin (nama tidak mempengaruhi sesi) (`actorId` = superadmin yang bertindak; null hanya untuk skrip/uji).
  *
  * Perubahan NYATA pada peran atau status menaikkan `sessionVersion` → semua sesi lama dicabut (SEC-18). Ini juga berlaku saat akun
  * DIAKTIFKAN KEMBALI: tanpa kenaikan, token lama (mis. dari perangkat yang dicuri) hidup lagi begitu isActive kembali true.
@@ -47,7 +47,7 @@ export async function updateUserByAdmin(id: string, change: AdminUserChange, act
     if (changed) data.sessionVersion = { increment: 1 }
     if (change.isActive === false) { data.whatsappVerifiedAt = null; data.verifiedWhatsapp = null }
 
-    const user = await tx.user.update({ where: { id }, data, select: { id: true, role: true, isActive: true } })
+    const user = await tx.user.update({ where: { id }, data, select: { id: true, role: true, isActive: true, fullName: true } })
     return { ok: true, user } as const
   })
 }
