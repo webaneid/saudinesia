@@ -797,7 +797,7 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 **Komponen Biaya universal + Haji — SELURUH 5 FASE SELESAI (2026-10-26)** (`docs/arsitektur-komponen-biaya.md` §9.5; as-built Haji: `docs/arsitektur-haji.md`): komponen universal ke-6 dipakai Paket Umroh, Paket Ziarah, dan Haji; Haji berharga turunan dengan CRUD lengkap (API + UI); SEC-63/64/65/66/67 Selesai. `CLAUDE.md` diperbarui (komponen ke-6, status Haji, aturan CRUD lengkap). Masih terbuka untuk Haji (disengaja): checkout Haji di browser, "Visa Haji" sendiri, dokumen/manifest Haji, galeri gambar, halaman detail publik, UI margin per tipe.
 
 **Vendor — satu alur, satu sumber data (rencana 2026-10-26; ADR-0003; `docs/arsitektur-vendor.md`):**
-- [ ] F1 skema + migrasi data fail-closed + kategori/vendor sistem + validator + `assertVendorUsable`
+- [x] F1 skema + migrasi ekspansi fail-closed + kategori/vendor sistem + validator + `assertVendorUsable` — selesai 2026-10-26 (rekam-bandingkan salinan DB lokal; 7 skenario migrasi; 17 suite lulus)
 - [ ] F2 API vendor + kategori (hapus aman, keunikan, pemakaian); route lama dihapus; semua route biaya memakai `assertVendorUsable`
 - [ ] F3 menu Sistem → Vendor (daftar, detail/edit, kategori) + `VendorForm`; tab Pengaturan dihapus
 - [ ] F4 `VendorPicker` + modal; migrasi 6 situs; hapus quick-add lama; penjaga CI

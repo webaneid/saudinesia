@@ -2662,3 +2662,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Security check (SOP langkah 5):** fase perencanaan — hanya dokumen, 0 temuan. Review keamanan dilakukan per fase kode (route vendor baru superadmin-only, bacaan ramping untuk manager, migrasi fail-closed).
 
 **Affects:** `docs/arsitektur-vendor.md` (baru), `docs/decisions/adr-0003-…md` (baru).
+
+## 2026-10-26 — Vendor F1: skema + migrasi ekspansi (ekspansi–kontraksi dua tahap)
+
+**Decision:** Migrasi vendor dibagi **ekspansi (F1)** dan **kontraksi (F5)**: F1 menambah `VendorCategory`, kolom kontak/negara terstruktur, `nameKey`/`countryCode`/`systemKey`, FK `PreferredVendor`, memigrasikan data (fail-closed, atomik) dan membiarkan kolom lama sebagai legacy read-only; F5 menghapus kolom lama dan menjadikan `nameKey`/`countryCode` NOT NULL. `nameKey`/`countryCode` nullable selama masa antara.
+
+**Rationale:** Menghapus kolom lama di F1 memaksa mengubah seluruh route/halaman vendor sekaligus (pekerjaan F2-F4) sehingga PR menjadi tak terkendali dan branch antara tak berjalan. Dua tahap menjaga tiap PR menghasilkan aplikasi yang berfungsi (dibuktikan HTTP nyata) tanpa mengorbankan target akhir ADR-0003; keadaan antara (vendor dari alur lama belum berkolom baru) berakhir di F2.
+
+**Alternatives considered:** Satu migrasi besar dengan drop kolom (ditolak: PR F1 mencakup F2-F4); kolom baru NOT NULL dengan default (ditolak: default `countryCode` akan menyamarkan data salah); pemetaan negara dengan tebakan (ditolak: fail-closed).
+
+**Security check (SOP langkah 5):** 0 Critical/High. Tidak ada route baru; migrasi SQL tanpa input pengguna, fail-closed dan atomik (dibuktikan 4 skenario gagal); FK `Restrict` menutup bagian V5 (SEC-68 Sebagian). `bun audit` tidak berubah (5).
+
+**Verifikasi:** tsc; `bun run build` 0 error; `bun run test` 17 suite; rekam-bandingkan pada salinan DB lokal (48 `computeSellPrice` identik); 7 mutasi tertangkap; HTTP nyata alur lama pada skema baru.
+
+**Affects:** `prisma/schema.prisma`, `prisma/migrations/20261026120000_vendor_single_flow_expand/`, `lib/constants/vendor.ts`, `lib/validators/vendor.ts`, `lib/vendors/integrity.ts`, `scripts/test-vendor-{model,migration}.ts`, `scripts/test-haji-pricing.ts`, `package.json`, `docs/arsitektur-vendor.md`.

@@ -10,13 +10,13 @@ datasource db {
 // ─── USERS & AUTH ────────────────────────────────────────────
 
 model User {
-  id              String    @id @default(uuid())
-  email           String    @unique
-  passwordHash    String
-  fullName        String
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  fullName           String
   // Kontak (docs/arsitektur-auth.md §3.1): digit E.164 tanpa "+", TIDAK diverifikasi dan TIDAK unik — bukan identitas.
-  phone           String?
-  whatsapp        String?
+  phone              String?
+  whatsapp           String?
   // Verifikasi WhatsApp lewat pesan MASUK (ADR-0002, docs/arsitektur-whatsapp-verifikasi.md). WhatsApp hanya dikirim ke nomor terverifikasi.
   // `verifiedWhatsapp` = salinan nomor yang terbukti, kolom UNIK: satu nomor hanya untuk satu akun TERVERIFIKASI (nomor belum terverifikasi boleh sama).
   // Prisma tak bisa mengekspresikan indeks unik parsial, jadi keunikan dicapai lewat kolom terpisah yang hanya terisi saat terverifikasi.
@@ -24,18 +24,18 @@ model User {
   whatsappVerifiedAt DateTime?
   verifiedWhatsapp   String?   @unique
   // Bukti email milik pemilik akun (tautan verifikasi / reset password / Google). Login mensyaratkan ini DAN isActive.
-  emailVerifiedAt DateTime?
+  emailVerifiedAt    DateTime?
   // Identitas Google (klaim `sub` ID token — stabil, TIDAK berubah walau emailnya berubah). Hanya jamaah; staf tak pernah tersambung.
-  googleSub       String?   @unique
-  role            UserRole  @default(pilgrim)
+  googleSub          String?   @unique
+  role               UserRole  @default(pilgrim)
   // Hanya "boleh login (tidak dinonaktifkan admin)" — BUKAN lagi penanda "belum verifikasi" (itu emailVerifiedAt).
-  isActive        Boolean   @default(true)
+  isActive           Boolean   @default(true)
   // Pencabutan sesi (SEC-18, docs/arsitektur-auth.md §11): JWT membawa `ver`; getSession() menolak token yang `ver`-nya ≠ kolom ini.
   // Dinaikkan saat password diganti/direset, akun dinonaktifkan, peran diubah, atau akun Google disambung ke akun lama.
-  sessionVersion  Int       @default(0)
-  addressId       String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  sessionVersion     Int       @default(0)
+  addressId          String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   address                   Address?                 @relation(fields: [addressId], references: [id])
   bookings                  Booking[]
@@ -75,13 +75,13 @@ enum ConsentType {
 // Sengaja bukan hard-delete otomatis — booking/payment punya kebutuhan retensi
 // legal/pajak terpisah, jadi permintaan masuk antrean, diproses manual superadmin.
 model AccountDeletionRequest {
-  id            String                @id @default(uuid())
-  userId        String
-  status        DeletionRequestStatus @default(pending)
-  note          String?
-  requestedAt   DateTime              @default(now())
-  processedAt   DateTime?
-  processedById String?
+  id             String                @id @default(uuid())
+  userId         String
+  status         DeletionRequestStatus @default(pending)
+  note           String?
+  requestedAt    DateTime              @default(now())
+  processedAt    DateTime?
+  processedById  String?
   // Bukti akuntabilitas UU PDP (docs/arsitektur-hapus-akun.md): jumlah baris yang dihapus/dianonimkan per jenis — TANPA PII.
   erasureSummary Json?
 
@@ -1154,20 +1154,55 @@ model NotificationLog {
 // Infrastruktur harga & HPP universal — lihat docs/arsitektur-harga.md untuk desain lengkap.
 // Scope awal: Visa saja (docs/arsitektur-visa.md §9). Skema generik untuk modul lain nanti.
 
+// Entitas vendor TUNGGAL (ADR-0003, docs/arsitektur-vendor.md). Semua referensi vendor = FK ke sini.
+// FASE EKSPANSI (F1-F4): kolom LEGACY (`category`, `country`, `contactInfo`) masih ada, sudah dimigrasikan ke kolom/relasi baru,
+// dan TIDAK ditulis kode baru; dihapus di F5 (migrasi kontraksi, sekaligus `nameKey`/`countryCode` jadi NOT NULL).
 model Vendor {
-  id          String   @id @default(uuid())
-  name        String // "Syarikah BRN", dll — bebas, tidak hardcode
-  category    String? // "syarikah" | "maskapai" | dll — bebas teks, filter UI saja, lihat docs/arsitektur-harga.md §18
-  country     String   @default("Saudi Arabia")
-  contactInfo String?
-  addressId   String?  @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat bisnis vendor
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id                  String   @id @default(uuid())
+  name                String
+  // ── LEGACY (dihapus di F5) ──
+  category            String? // teks bebas per modul — digantikan `categories`
+  country             String   @default("Saudi Arabia") // teks bebas — digantikan `countryCode`
+  contactInfo         String? // teks bebas — digantikan kolom kontak terstruktur + `notes`
+  // ── BARU ──
+  nameKey             String? // lower(trim(name)) spasi ganda dilipat — untuk keunikan (nameKey, countryCode)
+  countryCode         String? // ISO 3166-1 alpha-2 (lib/constants/countries.ts)
+  contactName         String? // PIC
+  phoneCountryCode    String? // ISO negara kode telepon (pola ContactPicker)
+  phone               String?
+  whatsappCountryCode String?
+  whatsapp            String?
+  email               String?
+  website             String?
+  notes               String?
+  systemKey           String?  @unique // vendor sistem (mis. 'saudinesia'): tak dapat dihapus/dinonaktifkan
+  addressId           String?  @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat bisnis vendor
+  isActive            Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @default(now()) @updatedAt
 
-  address Address?      @relation(fields: [addressId], references: [id])
-  costs   ProductCost[]
+  address    Address?          @relation(fields: [addressId], references: [id])
+  categories VendorCategory[] // many-to-many implisit; minimal 1 (divalidasi API)
+  costs      ProductCost[]
+  preferred  PreferredVendor[]
 
+  @@unique([nameKey, countryCode])
   @@map("vendors")
+}
+
+// Kategori vendor dikelola admin (ADR-0003). Kategori sistem (`isSystem`) dipakai kode sebagai konteks picker lewat slug yang stabil.
+model VendorCategory {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  sortOrder Int      @default(0)
+  isSystem  Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  vendors Vendor[]
+
+  @@map("vendor_categories")
 }
 
 model ExchangeRate {
@@ -1234,6 +1269,8 @@ model PreferredVendor {
   productId     String
   costComponent String
   vendorId      String
+
+  vendor Vendor @relation(fields: [vendorId], references: [id], onDelete: Restrict) // FK BARU (ADR-0003) — dulu string tanpa jaminan
 
   @@unique([productType, productId, costComponent])
   @@map("preferred_vendors")
