@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { Building2, Bus, UserRound, UtensilsCrossed, MapPin, ArrowRight, Star } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,9 +34,8 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
   const featuredMuthowifRaw = await prisma.muthowif.findMany({
     where: { isActive: true }, orderBy: { rating: 'desc' }, take: 3,
   })
-  const featuredMuthowif = await Promise.all(featuredMuthowifRaw.map(async (m) => ({
-    ...m, photoUrl: m.photoKey ? await getPresignedUrl(m.photoKey, 3600).catch(() => null) : null,
-  })))
+  const muthowifPhotos = await getFeaturedCardUrls('muthowif', featuredMuthowifRaw.map(m => m.id))
+  const featuredMuthowif = featuredMuthowifRaw.map(m => ({ ...m, photoUrl: muthowifPhotos.get(m.id) ?? null }))
   const muthowifServicePrice = await prisma.muthowifServicePrice.findFirst()
 
   const services = [

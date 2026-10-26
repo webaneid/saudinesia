@@ -148,13 +148,7 @@ await t('FAIL-CLOSED + ATOMIK: vendor ganda setelah pengisian ulang (lama vs bar
   assert.equal(ok.code, 0, ok.out.slice(-400))
 })
 
-await t('skema hasil SEMUA migrasi == schema.prisma (tidak ada drift): prisma migrate diff', async () => {
-  const r = await scenario('')
-  assert.equal(r.code, 0)
-  const diff = run(dbUrl(r.name), ['migrate', 'diff', '--from-url', dbUrl(r.name), '--to-schema-datamodel', 'schema.prisma', '--script'])
-  assert.match(diff.out, /empty migration/i, `masih ada drift:\n${diff.out.slice(-500)}`)
-})
-
+// (Uji drift skema pindah ke scripts/test-media-migration.ts — migrasi TERBARU membangun DB dari SEMUA migrasi, jadi hanya di sana skema penuh sama dengan schema.prisma.)
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedUrls } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
@@ -23,7 +23,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const { id } = await params
     const m = await prisma.muthowif.findUnique({ where: { id } })
     if (!m) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    const photoUrl = m.photoKey ? await getPresignedUrl(m.photoKey, 3600).catch(() => null) : null
+    const photoUrl = (await getFeaturedUrls('muthowif', [id])).get(id) ?? null
     return NextResponse.json(ok({ ...m, photoUrl }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 
@@ -29,7 +29,8 @@ export async function GET(request: Request) {
       orderBy: { price: 'asc' },
     })
 
-    const data = await Promise.all(packages.map(async (p) => ({
+    const sitePhotos = await getFeaturedCardUrls('tourism_site', [...new Set(packages.flatMap(p => p.sites.map(s => s.tourismSite.id)))])
+    const data = packages.map((p) => ({
       id: p.id, name: p.name, description: p.description,
       // transportTripId/origin/destination null kalau mode BUKAN user_choice (docs/arsitektur-ziarah.md §12) —
       // mode included tidak butuh tripId ditampilkan (kendaraan sudah baku, tidak ada pilihan).
@@ -43,12 +44,12 @@ export async function GET(request: Request) {
       priceFrom: Number(p.price),
       hasTransportChoice: p.transportMode === 'user_choice',
       hasHotelChoice: p.hotelMode === 'user_choice',
-      sites: await Promise.all(p.sites.map(async (s) => ({
+      sites: p.sites.map((s) => ({
         id: s.tourismSite.id, name: s.tourismSite.name, city: s.tourismSite.city,
         description: s.tourismSite.description, gmapsUrl: s.tourismSite.gmapsUrl,
-        photoUrl: s.tourismSite.photoKey ? await getPresignedUrl(s.tourismSite.photoKey, 3600).catch(() => null) : null,
-      }))),
-    })))
+        photoUrl: sitePhotos.get(s.tourismSite.id) ?? null,
+      })),
+    }))
 
     return NextResponse.json(ok(data, { total: data.length }))
   } catch (error) {

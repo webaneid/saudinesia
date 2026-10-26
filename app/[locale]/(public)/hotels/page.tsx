@@ -1,17 +1,12 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { Building2, Star, MapPin } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah, formatDistance } from '@/lib/utils'
 
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<{ city?: string; stars?: string }> }
-
-function parseImageKeys(val: unknown): string[] {
-  if (!Array.isArray(val)) return []
-  return val.filter((v): v is string => typeof v === 'string')
-}
 
 export default async function HotelsPage({ params, searchParams }: Props) {
   const { locale } = await params
@@ -37,15 +32,9 @@ export default async function HotelsPage({ params, searchParams }: Props) {
   // Flatten ke bentuk `schedules` yang sama seperti sebelumnya supaya sisa halaman ini tidak perlu berubah.
   const hotels = hotelsRaw.map(h => ({ ...h, schedules: h.pricePeriods.flatMap(p => p.schedules).sort((a, b) => Number(a.price) - Number(b.price)) }))
 
-  // Foto sampul: featuredImageKey kalau di-set admin, fallback ke foto pertama di galeri.
-  const hotelsWithCovers = await Promise.all(
-    hotels.map(async (hotel) => {
-      const keys = parseImageKeys(hotel.images)
-      const coverKey = hotel.featuredImageKey ?? keys[0]
-      const coverUrl = coverKey ? await getPresignedUrl(coverKey, 3600).catch(() => null) : null
-      return { ...hotel, coverUrl }
-    })
-  )
+  // Foto sampul — layanan media universal (satu query batch; sampul eksplisit, fallback foto pertama sudah ditangani layanan).
+  const covers = await getFeaturedCardUrls('hotel', hotels.map(h => h.id))
+  const hotelsWithCovers = hotels.map(h => ({ ...h, coverUrl: covers.get(h.id) ?? null }))
 
   const filterLink = (p: Record<string, string>) => {
     const qs = new URLSearchParams({ ...(city && { city }), ...(stars && { stars }), ...p })

@@ -807,3 +807,9 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] F1 `CreatePage` + halaman `/new` untuk Haji, Visa, Paket Umroh (galat tak lagi ditelan)
 - [x] F2 sisanya: Hotel, Muthowif, Paket Ziarah, Situs Wisata, Pesawat (rute+jadwal), Transport (kendaraan+trip), Katering, Musim, Admin — selesai 2026-10-26; bug Trip tanpa kategori (selalu 400) ditutup
 - [x] F3 gap CRUD: Katering edit+hapus-aman, Musim edit, halaman edit/hapus Rute (+ perbaikan DELETE yang 500), hapus-aman Kendaraan, ubah nama Pengguna — selesai 2026-10-27 (`docs/arsitektur-admin-create.md` §7)
+
+**Media produk universal (2026-10-27, `docs/arsitektur-media.md`):**
+- [x] F1 `ProductImage` + migrasi ekspansi + `lib/media` + route generik + jembatan route lama + pembaca publik dipindah — selesai 2026-10-27 (MinIO nyata; 6 mutasi + 3 mutasi SQL)
+- [ ] F2 `MediaField` (featured/gallery) di semua halaman edit; hapus jembatan
+- [ ] F3 `ProductImage` + placeholder di semua katalog publik
+- [ ] F4 kontraksi (drop kolom foto lama), `removeAll` saat produk dihapus, penjaga CI

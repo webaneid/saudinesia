@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedUrls } from '@/lib/media/urls'
 import { UserRound, Star, Globe, Users, ArrowLeft } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -21,7 +21,7 @@ export default async function MuthowifDetailPage({ params }: Props) {
   if (!guide) notFound()
 
   const langs = guide.languages as string[]
-  const photoUrl = guide.photoKey ? await getPresignedUrl(guide.photoKey, 3600).catch(() => null) : null
+  const photoUrl = (await getFeaturedUrls('muthowif', [guide.id])).get(guide.id) ?? null
 
   return (
     <div className="max-w-2xl space-y-8">

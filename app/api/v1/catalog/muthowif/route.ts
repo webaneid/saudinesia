@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getPresignedUrl } from '@/lib/storage/minio'
+import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 
@@ -26,11 +26,12 @@ export async function GET(request: Request) {
       orderBy: { rating: 'desc' },
     })
 
-    const data = await Promise.all(guides.map(async (g) => ({
+    const photos = await getFeaturedCardUrls('muthowif', guides.map(g => g.id))
+    const data = guides.map((g) => ({
       id: g.id, name: g.name, bio: g.bio,
-      photoUrl: g.photoKey ? await getPresignedUrl(g.photoKey, 3600).catch(() => null) : null,
+      photoUrl: photos.get(g.id) ?? null,
       languages: g.languages, rating: Number(g.rating), dailyCapacity: g.dailyCapacity,
-    })))
+    }))
 
     const servicePrice = await prisma.muthowifServicePrice.findFirst()
     const pricePerDay = servicePrice ? Number(servicePrice.price) : 0
