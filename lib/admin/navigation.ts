@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, Settings, ShieldAlert,
+  Users, Settings, ShieldAlert, Handshake,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -34,6 +34,7 @@ const PRODUK: NavItem[] = [
 
 const SISTEM: NavItem[] = [
   { path: '/admin/system/users',             icon: Users,       label: 'Pengguna' },
+  { path: '/admin/system/vendors',           icon: Handshake,   label: 'Vendor' },
   { path: '/admin/system/deletion-requests', icon: ShieldAlert, label: 'Hapus Akun' },
   { path: '/admin/system/settings',          icon: Settings,    label: 'Pengaturan' },
 ]
@@ -71,6 +72,9 @@ export const LABEL_SEGMEN: Record<string, string> = {
   system: 'Sistem',
   users: 'Pengguna',
   'deletion-requests': 'Hapus Akun',
+  vendors: 'Vendor',
+  categories: 'Kategori',
+  new: 'Baru',
   settings: 'Pengaturan',
 }
 

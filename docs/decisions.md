@@ -2690,3 +2690,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error; `bun run test` 18 suite; HTTP nyata (kategori, vendor, route biaya, vendor sistem, hapus aman, jembatan); 10 mutasi tertangkap.
 
 **Affects:** `lib/vendors/{service,handlers,http,legacyBridge}.ts`, `app/api/v1/admin/system/{vendors,vendor-categories}/**`, `app/api/v1/admin/system/settings/vendors/**` (jembatan), 4 route biaya + `lib/pricing/costComponentHandlers.ts`, route Muthowif, `scripts/test-vendor-api.ts`, `scripts/test-routes.ts`, `package.json`, `docs/arsitektur-vendor.md`.
+
+## 2026-10-26 — Vendor F3: menu Sistem → Vendor dan satu `VendorForm`
+
+**Decision:** Vendor dikelola di satu tempat — menu **Sistem → Vendor** (daftar, detail/edit dengan panel pemakaian, kategori) — dan hanya **satu** komponen formulir (`components/admin/vendor/VendorForm.tsx`) yang membuat/mengubah vendor; formulir menyimpan sendiri lewat API F2 dan menerima `initialName`/`initialCategoryIds`/`onSaved`/`onCancel` supaya F4 memakainya apa adanya di modal "Vendor baru". Bagian vendor di halaman Pengaturan dihapus total. Halaman vendor superadmin-only (alihkan non-superadmin setelah `requireAdminPage`); API tetap penjaga sebenarnya. Vendor hasil alur lama diberi tanda **Perlu ditinjau** dan banner di detail supaya admin melengkapinya.
+
+**Rationale:** ADR-0003 keputusan 5-6 (satu pintu tulis, menu khusus). Membiarkan formulir lama di Pengaturan sampai F4 akan menyisakan dualisme UI yang menulis lewat jembatan; menghapusnya sekarang aman karena menu baru sudah menggantikan fungsinya dan picker di 6 editor tidak bergantung padanya. Hapus aman (hapus sungguhan vs nonaktif + konfirmasi + panel pemakaian) mengikuti arahan pemilik "CRUD lengkap selalu".
+
+**Alternatives considered:** Mempertahankan tab di Pengaturan sampai F4 (ditolak: dua formulir vendor hidup bersamaan); menjadikan halaman daftar Client Component (ditolak: pola server + `paginate` sudah baku dan lolos penjaga SEC-52); memberi manager akses halaman (ditolak: menu Sistem superadmin; manager cukup dropdown ramping).
+
+**Security check (SOP langkah 5):** 0 Critical/High/Medium/Low baru. Tidak ada route atau dependensi baru; 4 halaman server baru membaca Prisma dan semuanya memanggil `requireAdminPage` + menolak non-superadmin (dijaga `scripts/test-vendor-ui.ts`, 4 mutasi tertangkap; pemindai SEC-52 di `test-session` lulus); `id` rute divalidasi UUID sebelum query; parameter filter divalidasi terhadap daftar sah; website vendor hanya tampil di `<input>` (tanpa tautan → tanpa vektor `javascript:`); semua tulis lewat API F2 (Zod `.strict()`, superadmin). `bun audit --audit-level=critical` bersih.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` 357 PASS / 0 FAIL; Chrome asli (CDP) CRUD vendor + kategori sebagai superadmin dan akses manager; build produksi dijalankan untuk memastikan peringatan hydration dev-only tidak muncul di produksi (0/12). **Insiden proses:** `pkill -f "bun run dev"` saat membersihkan server uji ikut mematikan server dev pemilik di port 6260 — dinyalakan kembali lewat `preview_start`; pelajaran: matikan server uji berdasarkan PID/port sendiri, bukan pola nama.
+
+**Affects:** `components/admin/vendor/**`, `app/[locale]/admin/(protected)/system/vendors/**`, `app/[locale]/admin/(protected)/system/settings/page.tsx`, `lib/admin/navigation.ts`, `scripts/test-vendor-ui.ts`, `package.json`, `docs/arsitektur-vendor.md`, `docs/progress.md`.
