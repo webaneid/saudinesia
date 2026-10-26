@@ -4,6 +4,7 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { refreshMuthowifServicePriceCache } from '@/lib/pricing/refreshMuthowifServicePriceCache'
 import { z } from 'zod'
+import { SYSTEM_VENDOR_KEYS } from '@/lib/constants/vendor'
 
 // Muthowif punya persis 1 komponen HPP tetap, tidak day-based — pola identik Flight
 // (docs/arsitektur-muthowif.md §10).
@@ -22,20 +23,15 @@ const putSchema = z.object({
 // (dikonfirmasi user 2026-07-20). `ProductCost.vendorId` tetap wajib diisi (skema generik dipakai
 // 4 modul lain, tidak diubah) — jadi dipakai satu vendor tetap "Saudinesia" di baliknya, tapi
 // vendor ini TIDAK dipilih admin, cuma ditampilkan read-only di UI.
-const SAUDINESIA_VENDOR_NAME = 'Saudinesia'
-
 async function getOrCreateServicePrice() {
   const existing = await prisma.muthowifServicePrice.findFirst()
   if (existing) return existing
   return prisma.muthowifServicePrice.create({ data: { price: 0 } })
 }
 
-async function getOrCreateSaudinesiaVendor() {
-  const existing = await prisma.vendor.findFirst({ where: { name: SAUDINESIA_VENDOR_NAME, category: 'internal' } })
-  if (existing) return existing
-  return prisma.vendor.create({
-    data: { name: SAUDINESIA_VENDOR_NAME, category: 'internal', country: 'Indonesia' },
-  })
+// Vendor sistem 'saudinesia' dibuat oleh MIGRASI (ADR-0003) — di sini hanya dibaca (tak ada lagi pembuatan diam-diam di dalam route).
+async function getSaudinesiaVendor() {
+  return prisma.vendor.findUniqueOrThrow({ where: { systemKey: SYSTEM_VENDOR_KEYS.saudinesia } })
 }
 
 export async function GET() {
@@ -48,9 +44,10 @@ export async function GET() {
     })
     const tiers = (cost?.costTiers as unknown as CostTier[]) ?? []
     const hargaLayanan = tiers[0]?.cost ?? null
+    const vendor = await getSaudinesiaVendor()
 
     return NextResponse.json(ok({
-      vendorName: SAUDINESIA_VENDOR_NAME,
+      vendorName: vendor.name,
       currency: cost?.currency ?? null,
       hargaLayanan,
     }))
@@ -70,7 +67,7 @@ export async function PUT(req: Request) {
     const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { currency, hargaLayanan } = parsed.data
-    const vendor = await getOrCreateSaudinesiaVendor()
+    const vendor = await getSaudinesiaVendor()
 
     const costTiers: CostTier[] = [{ ...FLAT_TIER, cost: hargaLayanan }]
 
@@ -97,7 +94,7 @@ export async function PUT(req: Request) {
 
     await refreshMuthowifServicePriceCache()
 
-    return NextResponse.json(ok({ vendorName: SAUDINESIA_VENDOR_NAME, currency, hargaLayanan }))
+    return NextResponse.json(ok({ vendorName: vendor.name, currency, hargaLayanan }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

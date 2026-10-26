@@ -4,6 +4,8 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { refreshVisaProductCache } from '@/lib/pricing/refreshVisaProductCache'
 import { z } from 'zod'
+import { assertVendorUsable } from '@/lib/vendors/integrity'
+import { vendorNotUsableResponse } from '@/lib/vendors/http'
 
 // Visa punya persis 2 komponen HPP tetap (dikonfirmasi user 2026-07-18) — lihat docs/arsitektur-harga.md §14.
 const COMPONENT_VISA = 'individu'
@@ -74,6 +76,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { visa, brn, rows } = parsed.data
+    await assertVendorUsable(visa.vendorId)
+    if (brn) await assertVendorUsable(brn.vendorId)
 
     const individuTiers: IndividuTierWithId[] = rows.map(r => ({
       id: r.id, minDays: r.minDays, maxDays: r.maxDays, cost: r.hargaVisa,
@@ -144,6 +148,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
+    const vendorError = vendorNotUsableResponse(e)
+    if (vendorError) return vendorError
     console.error('[admin/products/visa/[id]/cost-tiers/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }

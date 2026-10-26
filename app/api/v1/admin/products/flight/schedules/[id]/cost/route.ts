@@ -4,6 +4,8 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { refreshFlightScheduleCache } from '@/lib/pricing/refreshFlightScheduleCache'
 import { z } from 'zod'
+import { assertVendorUsable } from '@/lib/vendors/integrity'
+import { vendorNotUsableResponse } from '@/lib/vendors/http'
 
 // Flight punya persis 1 komponen HPP tetap (dikonfirmasi user 2026-07-19) — beda dari Visa
 // yang butuh 2 (Harga Visa + Harga BRN). Lihat docs/arsitektur-tiket-pesawat.md §4.
@@ -52,6 +54,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { vendorId, currency, hargaTiket } = parsed.data
+    await assertVendorUsable(vendorId)
 
     const costTiers: CostTier[] = [{ ...FLAT_TIER, cost: hargaTiket }]
 
@@ -83,6 +86,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
+    const vendorError = vendorNotUsableResponse(e)
+    if (vendorError) return vendorError
     console.error('[admin/products/flight/schedules/[id]/cost/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }

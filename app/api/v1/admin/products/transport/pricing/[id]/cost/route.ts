@@ -4,6 +4,8 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { refreshTransportPricingCache } from '@/lib/pricing/refreshTransportPricingCache'
 import { z } from 'zod'
+import { assertVendorUsable } from '@/lib/vendors/integrity'
+import { vendorNotUsableResponse } from '@/lib/vendors/http'
 
 // Transport punya persis 1 komponen HPP tetap, tidak day-based — pola identik Flight
 // (docs/arsitektur-transportasi.md §9.4).
@@ -52,6 +54,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { vendorId, currency, hargaKendaraan } = parsed.data
+    await assertVendorUsable(vendorId)
 
     const costTiers: CostTier[] = [{ ...FLAT_TIER, cost: hargaKendaraan }]
 
@@ -83,6 +86,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
+    const vendorError = vendorNotUsableResponse(e)
+    if (vendorError) return vendorError
     console.error('[admin/products/transport/pricing/[id]/cost/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
