@@ -6,7 +6,7 @@
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
@@ -39,7 +39,13 @@ const query = async (name: string, sql: string) => {
   const c = new PrismaClient({ datasourceUrl: dbUrl(name) })
   try { return (await c.$queryRawUnsafe(sql)) as Array<Record<string, unknown>> } finally { await c.$disconnect() }
 }
-const exec = (name: string, sql: string) => run(dbUrl(name), ['db', 'execute', '--stdin', '--schema', 'schema.prisma'], sql)
+// SQL lewat BERKAS (`--file`), bukan `--stdin`: di CI stdin tidak sampai ke prisma dan setup diam-diam kosong (jalur "harus gagal" malah sukses).
+let sqlFileN = 0
+const exec = (name: string, sql: string) => {
+  const file = join(tmp, `setup-${++sqlFileN}.sql`)
+  writeFileSync(file, sql)
+  return run(dbUrl(name), ['db', 'execute', '--file', file, '--schema', 'schema.prisma'])
+}
 
 // Schema + migrasi sementara TANPA migrasi yang diuji.
 const tmp = mkdtempSync(join(tmpdir(), 'vendor-mig-'))
@@ -68,7 +74,14 @@ let n = 0
 async function scenario(setup: string) {
   const name = `${mainName}${suffix}_s${++n}`
   await newDb(name, baseName)
-  if (setup) { const r = exec(name, setup); assert.equal(r.code, 0, `setup skenario gagal:\n${r.out.slice(-500)}`) }
+  if (setup) {
+    const r = exec(name, setup)
+    assert.equal(r.code, 0, `setup skenario gagal:\n${r.out.slice(-500)}`)
+    // Bukti bahwa data setup BENAR-BENAR masuk (jangan percaya kode keluar saja).
+    const expected = (setup.match(/INSERT INTO vendors/g) ?? []).length
+    const got = Number((await query(name, 'select count(*)::int as n from vendors'))[0]!.n)
+    assert.equal(got, expected, `setup tidak masuk ke DB (vendors: ${got}, seharusnya ${expected}):\n${r.out.slice(-300)}`)
+  }
   const res = run(dbUrl(name), ['migrate', 'deploy', '--schema', 'schema.prisma'])
   return { name, ...res }
 }
@@ -124,6 +137,7 @@ await t('DB kosong (kasus CI): kategori sistem + vendor sistem "Saudinesia" (int
   assert.deepEqual(sys, [{ name: 'Saudinesia', countryCode: 'ID', systemKey: 'saudinesia', category: 'internal', cat: 'internal' }])
   const dup = exec(r.name, `INSERT INTO vendors (id, name, "nameKey", "countryCode", country) VALUES ('${id(1)}', 'Saudinesia', 'saudinesia', 'ID', 'Indonesia');`)
   assert.notEqual(dup.code, 0, 'duplikat (nameKey, countryCode) harus ditolak oleh indeks unik')
+  assert.match(dup.out, /vendors_nameKey_countryCode_key|duplicate key|unique/i, `penolakan harus oleh indeks unik, bukan hal lain:\n${dup.out.slice(-300)}`)
 })
 
 await t('FAIL-CLOSED + ATOMIK: nama negara tak dikenal membatalkan migrasi dan struktur baru TIDAK ada sama sekali', async () => {
