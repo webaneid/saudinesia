@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Star, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { Badge } from '@/components/admin/ui/Badge'
+import { HAJI_TYPES } from '@/lib/constants/haji'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
 
@@ -15,13 +16,6 @@ type HajiDetail = {
   isActive: boolean; bookingCount: number
 }
 type Form = { name: string; description: string; hajiType: string; year: string; departureDate: string; returnDate: string; durationDays: string; includes: string; totalQuota: string; isActive: boolean }
-
-const HAJI_TYPES = [
-  { value: 'furoda',   label: 'Haji Furoda (Musyarifah)' },
-  { value: 'khusus',  label: 'Haji Khusus (ONH Plus)' },
-  { value: 'reguler', label: 'Haji Reguler' },
-  { value: 'plus',    label: 'Haji Plus' },
-]
 
 const toForm = (h: HajiDetail): Form => ({
   name: h.name, description: h.description ?? '', hajiType: h.hajiType, year: String(h.year),
