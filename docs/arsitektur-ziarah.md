@@ -2,6 +2,8 @@
 
 > **Status: §1-§7 arsip audit as-built per 2026-07-20 (kondisi SEBELUM refactor — `HeritageTour`/`Package` lama, lihat catatan di §5/§6). §8-§9 — SELESAI & TERVERIFIKASI (2026-07-21):** modul Ziarah di-refactor total — `HeritageTour`+`BookingTour` dihapus, diganti `TourismSite` (master data situs) + `TourPackage` (referensi `TransportTrip` yang sudah ada, reuse penuh kendaraan+kuota+harga) + `TourPackageSite` + `BookingTourPackage`. Terintegrasi ke arsitektur harga universal dengan **deviasi sengaja**: margin dihitung PER-KOMPONEN lalu dijumlahkan (bukan sum-HPP-lalu-satu-margin seperti modul lain) — lihat §8.3. §6 Gap #1 (harga tour client-trusted), Gap #2 (tidak ada kuota), Gap #3 (admin create-only), Gap #5 (`Package` non-fungsional — **catatan: `Package`/`PackageItem` generik TIDAK diperbaiki, sengaja di luar scope, lihat §9**), Gap #7 (belum terintegrasi harga universal) — semua **DITUTUP** oleh redesain §8. Gap #4 dan #6 tidak relevan lagi (model lama sudah dihapus). Lihat `docs/decisions.md` untuk bukti verifikasi end-to-end.
 
+> **Pembaruan 2026-10-26 — Komponen Biaya kini komponen universal.** Route CRUD biaya, hitung per komponen (`computeCostComponents`), registry pemilik, dan panel UI (`components/admin/pricing/CostComponentsPanel.tsx`) dipakai bersama Paket Umroh, Paket Ziarah, dan Haji — rujukan berkas/route inline pada bagian "Komponen Biaya" di bawah adalah riwayat; sumber kebenaran: `docs/arsitektur-komponen-biaya.md`.
+
 ---
 
 ## 1. Konteks Bisnis

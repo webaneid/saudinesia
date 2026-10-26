@@ -8,6 +8,8 @@
 >
 > **Redesain UI input HPP selesai (2026-07-18)** — lihat §14: panel admin "HPP & Komponen Biaya" (§12) diganti dari form komponen bebas jadi tabel tier gabungan (Harga Visa + Harga BRN dalam satu baris per rentang hari), setelah ditemukan mismatch bentuk input saat dipakai user langsung. Skema & `computeSellPrice()` tidak berubah — murni redesain endpoint+UI. Semua 4 fase dieksekusi & diverifikasi (build + browser + query DB langsung).
 
+> **Pembaruan 2026-10-26 — Komponen Biaya kini komponen universal.** Route CRUD biaya, hitung per komponen (`computeCostComponents`), registry pemilik, dan panel UI (`components/admin/pricing/CostComponentsPanel.tsx`) dipakai bersama Paket Umroh, Paket Ziarah, dan Haji — rujukan berkas/route inline pada bagian "Komponen Biaya" di bawah adalah riwayat; sumber kebenaran: `docs/arsitektur-komponen-biaya.md`.
+
 ---
 
 ## 1. Konteks Bisnis
