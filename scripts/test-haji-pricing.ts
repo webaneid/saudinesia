@@ -222,6 +222,7 @@ await t('UI Haji (Fase 4): halaman edit memakai panel Komponen Biaya Haji, punya
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await prisma.productCost.deleteMany({ where: { productType: 'haji', productId: { in: created } } })
+await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } }) // FK Restrict (ADR-0003): vendor pilihan harus hilang sebelum vendor
 await prisma.hajiProduct.deleteMany({ where: { id: { in: created } } })
 await prisma.vendor.deleteMany({ where: { id: vendor.id } })
 await prisma.exchangeRate.deleteMany({ where: { source: SRC } })

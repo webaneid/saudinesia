@@ -1,6 +1,6 @@
 # Arsitektur — Vendor (satu alur, satu sumber data)
 
-> **Status: RENCANA (2026-10-26) — belum ada kode yang diubah.** Memuat audit as-built hasil recheck langsung ke kode dan data lokal (SOP langkah 1), rancangan target, dan fase eksekusi. Keputusan arsitekturnya dikunci di **ADR-0003** (`docs/decisions/adr-0003-satu-alur-vendor-kategori-terkelola.md`). Setelah fase-fasenya dieksekusi, §8 menjadi as-built dan dokumen ini menjadi source of truth vendor; **menggantikan** `docs/arsitektur-harga.md` §3.1 dan §18 (kategori vendor teks bebas per modul).
+> **Status: F1 SELESAI & TERVERIFIKASI (2026-10-26); F2-F5 masih rencana.** Memuat audit as-built hasil recheck langsung ke kode dan data lokal (SOP langkah 1), rancangan target, dan fase eksekusi. Keputusan arsitekturnya dikunci di **ADR-0003** (`docs/decisions/adr-0003-satu-alur-vendor-kategori-terkelola.md`). Setelah fase-fasenya dieksekusi, §8 menjadi as-built dan dokumen ini menjadi source of truth vendor; **menggantikan** `docs/arsitektur-harga.md` §3.1 dan §18 (kategori vendor teks bebas per modul).
 
 ## 1. Instruksi dan keputusan pemilik (2026-10-26)
 
@@ -99,7 +99,10 @@ Vendor sistem: satu baris `systemKey='saudinesia'` (kategori `internal`, negara 
 | `/api/v1/admin/system/vendor-categories` | GET/POST | manager+ / superadmin | daftar / tambah kategori (duplikat → 409) |
 | `/api/v1/admin/system/vendor-categories/[id]` | PUT/DELETE | superadmin | ubah nama/urutan/aktif; hapus atau nonaktif |
 
-### 3.4 Migrasi data (satu migrasi Prisma, fail-closed)
+### 3.4 Migrasi data (dua migrasi Prisma: ekspansi F1 + kontraksi F5; keduanya fail-closed)
+
+> **Dipertegas saat eksekusi F1 (2026-10-26):** agar setiap PR yang di-merge tetap menghasilkan aplikasi yang berjalan, migrasi dibagi **ekspansi** (F1: struktur baru + migrasi data; kolom lama `category`/`country`/`contactInfo` masih ada dan hanya dibaca) dan **kontraksi** (F5: setelah tidak ada kode yang menyentuh kolom lama — hapus kolom lama dan `nameKey`/`countryCode` jadi NOT NULL, didahului pengisian ulang untuk vendor yang dibuat alur lama pada masa antara F1-F4 dan gagal-tertutup bila ada nilai tak dikenal). Langkah 1-7 di bawah = ekspansi; langkah 8 = kontraksi. Pada masa antara, vendor yang dibuat lewat alur lama belum memiliki kolom baru (null) — masa antara berakhir di F2 (route lama dihapus).
+
 
 1. Buat `vendor_categories` + seed kategori sistem; buat kolom baru di `vendors`; tabel pivot m2m.
 2. Pemetaan kategori lama → baru: `syarikah→visa`, `maskapai→airline`, `hotel→hotel`, `transport→transport`, `internal→internal`; `package`/`tour_package`/`haji`/`null`/lain → `other` (admin meninjau; UI menandai vendor yang hanya `other`). Kategori lama bernilai teks lain yang tidak dikenal juga → `other` (nilai aslinya disimpan di `notes` agar tidak hilang).
@@ -108,7 +111,7 @@ Vendor sistem: satu baris `systemKey='saudinesia'` (kategori `internal`, negara 
 5. `nameKey` diisi; bila dua vendor bertabrakan `(nameKey, countryCode)` migrasi **gagal** dengan daftar tabrakan (tidak menggabung diam-diam).
 6. Tambah FK `PreferredVendor.vendorId` → `Vendor` (Restrict); pastikan tak ada yatim sebelum FK (migrasi gagal bila ada).
 7. Buat vendor sistem `saudinesia`: bila baris `internal` lama bernama "Saudinesia" ada, **ditandai** `systemKey` (bukan dibuat ganda).
-8. Hapus kolom lama. **Bukti**: jumlah vendor/biaya/vendor pilihan sebelum = sesudah, id tak berubah, hasil `computeSellPrice` identik pada data lokal (rekam-bandingkan).
+8. (F5, migrasi kontraksi) Hapus kolom lama dan jadikan `nameKey`/`countryCode` NOT NULL. **Bukti (F1)**: jumlah vendor/biaya/vendor pilihan sebelum = sesudah, id tak berubah, hasil `computeSellPrice` identik pada data lokal (rekam-bandingkan).
 
 ### 3.5 Frontend
 
@@ -120,11 +123,11 @@ Vendor sistem: satu baris `systemKey='saudinesia'` (kategori `internal`, negara 
 
 | Fase | Isi | Bukti utama |
 |---|---|---|
-| **F1** | Skema + migrasi data (§3.4) + kategori/vendor sistem + konstanta + validator Zod `.strict()` + fungsi `assertVendorUsable`/pemakaian | Rekam-bandingkan pada **salinan** DB lokal (jumlah, id, hasil harga identik); uji migrasi gagal-tertutup (negara tak dikenal, tabrakan nama); tes DB |
+| **F1** | Skema + **migrasi ekspansi** (§3.4) + kategori/vendor sistem + konstanta + validator Zod `.strict()` + fungsi `assertVendorUsable`/pemakaian | Rekam-bandingkan pada **salinan** DB lokal (jumlah, id, hasil harga identik); uji migrasi gagal-tertutup (negara tak dikenal, tabrakan nama); tes DB |
 | **F2** | API vendor + kategori (§3.3), semantik hapus, keunikan, pemakaian; route lama `…/settings/vendors` dihapus; kelima route biaya + handler bersama memakai `assertVendorUsable`; Muthowif membaca vendor sistem | HTTP nyata semua kasus (403/400/404/409, hapus vs nonaktif, vendor ngawur → 400 bukan 500); mutasi pengaman |
 | **F3** | Menu Sistem → Vendor (daftar, detail/edit, kategori), `VendorForm`; tab Pengaturan dihapus | Chrome asli (CDP): CRUD lengkap vendor dan kategori sebagai superadmin; manager hanya baca |
 | **F4** | `VendorPicker` + modal; migrasi 6 situs (Pesawat, Hotel, Trip Transport, Visa, `VendorCurrencyField`/panel biaya, + Muthowif read-only); hapus kode quick-add lama | Chrome asli di tiap editor: filter konteks, buat via modal, simpan; penjaga CI "tidak ada pembuatan vendor di luar `VendorForm`" (dimutasi) |
-| **F5** | Penutup: hapus sisa jalur lama, dokumen ini → as-built, `docs/arsitektur-harga.md` §3.1/§18 ditandai digantikan, `CLAUDE.md`, register, memori | `grep` bukti tak ada lagi `Vendor.category`/`contactInfo`/`country`; semua suite |
+| **F5** | Penutup: **migrasi kontraksi** (hapus kolom lama, NOT NULL), hapus sisa jalur lama, dokumen ini → as-built, `docs/arsitektur-harga.md` §3.1/§18 ditandai digantikan, `CLAUDE.md`, register, memori | `grep` bukti tak ada lagi `Vendor.category`/`contactInfo`/`country`; semua suite |
 
 ## 5. Risiko dan mitigasi
 
@@ -143,4 +146,13 @@ ADR-0003; `docs/arsitektur-alamat.md` §9 (alamat vendor); `docs/arsitektur-komp
 
 ## 8. As-built
 
-_Belum ada — diisi per fase._
+### 8.1 Fase 1 — skema, migrasi ekspansi, fondasi (2026-10-26)
+
+**Dibuat:** migrasi `prisma/migrations/20261026120000_vendor_single_flow_expand` (struktur baru, 9 kategori sistem, migrasi data fail-closed, vendor sistem `saudinesia`, indeks unik `(nameKey, countryCode)` dan `systemKey`, **FK `PreferredVendor.vendorId` → `Vendor` (Restrict)**); `VendorCategory` + many-to-many implisit ke `Vendor`; `lib/constants/vendor.ts` (slug kategori sistem, konteks picker, `vendorNameKey`, `slugifyCategoryName`); `lib/validators/vendor.ts` (skema `.strict()`: vendor buat/ubah, kategori buat/ubah); `lib/vendors/integrity.ts` (`assertVendorUsable`, `getVendorUsage` termasuk snapshot visa via `array_contains`); `scripts/test-vendor-model.ts` (11 uji) dan `scripts/test-vendor-migration.ts` (7 skenario; masuk `bun run test`/CI).
+**Tidak diubah (sengaja, ekspansi):** semua route/halaman vendor lama dan kolom legacy — alur lama tetap berfungsi (dibuktikan HTTP nyata) sampai F2-F4 menggantikannya.
+**Bukti migrasi — rekam-bandingkan pada SALINAN DB lokal (`pg_dump`, DB asli tidak disentuh):** sebelum vs sesudah — hitungan 11 tabel, 10 vendor (id/nama/kategori lama/negara/kontak lama/alamat/aktif), 18 `ProductCost`, 14 `PreferredVendor`, dan **48 kombinasi `computeSellPrice` (produk × hari 1/9/30) identik**; hasil pemetaan: `syarikah→visa` (3), `maskapai→airline`, `hotel→hotel`, `transport→transport`, `internal→internal` (vendor "Saudinesia" ditandai `systemKey`, tidak dibuat ganda), `package`/`tour_package`/`haji → other` dengan catatan "Kategori lama: …" di `notes` (Ahmad Guide, wasugi, Vendor Haji — perlu ditinjau admin), semua negara → `SA`/`ID`. Skema hasil migrasi == `schema.prisma` (tanpa drift).
+**Bukti gagal-tertutup + atomik (`scripts/test-vendor-migration.ts`, `prisma migrate deploy` sungguhan pada DB sementara):** negara tak dikenal, vendor ganda (nama sama setelah dinormalisasi di negara sama; negara berbeda diizinkan), vendor pilihan yatim, dan "Saudinesia" bukan-internal → migrasi **dibatalkan** dengan pesan jelas dan struktur baru **tidak ada sama sekali** (atomik). DB kosong (kasus CI) → kategori sistem + vendor sistem dibuat.
+**Temuan nyata saat eksekusi:** DB uji berisi **21 `PreferredVendor` yatim** (sisa tes; tanpa FK tidak ada yang mencegah) → migrasi menolaknya persis sesuai desain; dibersihkan, `migrate resolve --rolled-back`, lalu diterapkan ulang. DB lokal pengguna: 0 yatim. FK baru juga mengungkap tes yang menghapus vendor sebelum vendor pilihannya (diperbaiki di `test-haji-pricing.ts`).
+**Tes:** 7 mutasi pengaman tertangkap (hapus cek yatim/negara/tabrakan di migrasi, cek nonaktif, snapshot visa, `.strict()`, slug konstanta). `bun run test` 17 suite lulus; build produksi terisolasi 0 error; `bun audit` tidak berubah (5).
+**Cadangan:** `pg_dump` DB lokal sebelum migrasi asli disimpan di `/tmp/vendor_backup/saudinesia_pre_vendor_F1.sql`.
+**Catatan proses (CI):** run CI pertama gagal karena `scripts/test-vendor-migration.ts` menyuplai SQL setup lewat `prisma db execute --stdin` — di CI stdin tidak sampai (setup diam-diam kosong sehingga jalur "harus gagal" malah sukses), padahal lokal lolos (juga dengan URL berkata sandi). Diperbaiki: SQL lewat `--file` + pemeriksaan bahwa baris setup benar-benar masuk (jumlah vendor) sehingga kegagalan seperti itu keras, bukan senyap. Run CI berikutnya hijau (7 skenario lulus).
