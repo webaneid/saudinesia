@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Bus, Route, Pencil } from 'lucide-react'
@@ -18,14 +19,6 @@ export default function TransportPage() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([])
   const [trips,    setTrips]    = useState<Trip[]>([])
 
-  const [showVehicle, setShowVehicle] = useState(false)
-  const [savingV,     setSavingV]     = useState(false)
-  const [vForm, setVForm] = useState({ name: '', vehicleType: 'bus', capacity: 49, fleetCount: 1 })
-
-  const [showTrip, setShowTrip] = useState(false)
-  const [savingT,  setSavingT]  = useState(false)
-  const [tForm, setTForm] = useState({ name: '', category: '', origin: '', destination: '' })
-
   async function loadVehicles() {
     const r = await fetch('/api/v1/admin/products/transport/vehicles')
     const j = await r.json()
@@ -43,43 +36,6 @@ export default function TransportPage() {
     loadVehicles()
     loadTrips()
   }, [])
-
-  function setV(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setVForm(p => ({ ...p, [k]: e.target.value }))
-  }
-  function setT(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setTForm(p => ({ ...p, [k]: e.target.value }))
-  }
-
-  async function handleSaveVehicle() {
-    setSavingV(true)
-    const r = await fetch('/api/v1/admin/products/transport/vehicles', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...vForm, capacity: +vForm.capacity, fleetCount: +vForm.fleetCount }),
-    })
-    const j = await r.json()
-    setSavingV(false)
-    if (j.data?.id) router.push(`/${locale}/admin/products/transport/vehicles/${j.data.id}`)
-  }
-
-  async function handleSaveTrip() {
-    setSavingT(true)
-    const r = await fetch('/api/v1/admin/products/transport/trips', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...tForm,
-        category: tForm.category || null,
-      }),
-    })
-    const j = await r.json()
-    setSavingT(false)
-    if (j.data?.id) router.push(`/${locale}/admin/products/transport/trips/${j.data.id}`)
-  }
-
-  const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
-  const CATS  = ['airport', 'intercity', 'city_tour', 'shuttle', 'other']
 
   const vehicleColumns: Column<Vehicle>[] = [
     { key: 'name', header: 'Kendaraan', mobile: 'title', cell: v => <span className="text-[13px] font-medium">{v.name}</span> },
@@ -125,10 +81,10 @@ export default function TransportPage() {
       <PageHeader
         title="Transport"
         actions={
-          <button onClick={() => tab === 'vehicles' ? setShowVehicle(s => !s) : setShowTrip(s => !s)} className="admin-btn">
+          <Link href={`/${locale}/admin/products/transport/${tab === 'vehicles' ? 'vehicles' : 'trips'}/new`} className="admin-btn">
             <Plus className="h-4 w-4" />
             {tab === 'vehicles' ? 'Tambah Kendaraan' : 'Tambah Trip'}
-          </button>
+          </Link>
         }
       />
 
@@ -148,41 +104,6 @@ export default function TransportPage() {
       {/* ── Tab Kendaraan ── */}
       {tab === 'vehicles' && (
         <>
-          {showVehicle && (
-            <div className="admin-form-panel space-y-3">
-              <p className="text-sm font-semibold text-admin-ink">Kendaraan Baru</p>
-              <p className="text-[11px] text-admin-muted/70">
-                Harga tidak diset di sini — diatur di halaman Trip per kombinasi trip+kendaraan.
-              </p>
-              <div className="grid md:grid-cols-2 gap-3">
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Nama</p>
-                  <input className="admin-inp" value={vForm.name} onChange={setV('name')} placeholder="Bus Pariwisata 49" />
-                </div>
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Tipe</p>
-                  <select className="admin-select" value={vForm.vehicleType} onChange={setV('vehicleType')}>
-                    {TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Kapasitas (orang)</p>
-                  <input type="number" min={1} className="admin-inp" value={vForm.capacity} onChange={setV('capacity')} />
-                </div>
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Jumlah Armada (unit)</p>
-                  <input type="number" min={1} className="admin-inp" value={vForm.fleetCount} onChange={setV('fleetCount')} />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handleSaveVehicle} disabled={savingV || !vForm.name} className="admin-btn-sm disabled:opacity-50">
-                  {savingV ? 'Menyimpan...' : 'Simpan & Edit →'}
-                </button>
-                <button onClick={() => setShowVehicle(false)} className="admin-btn-ghost text-sm">Batal</button>
-              </div>
-            </div>
-          )}
-
           <DataTable columns={vehicleColumns} rows={vehicles} getRowId={v => v.id} empty="Belum ada kendaraan." rowClassName={v => (v.isActive ? undefined : 'opacity-50')} />
         </>
       )}
@@ -190,41 +111,6 @@ export default function TransportPage() {
       {/* ── Tab Trip & Harga ── */}
       {tab === 'trips' && (
         <>
-          {showTrip && (
-            <div className="admin-form-panel space-y-3">
-              <p className="text-sm font-semibold text-admin-ink">Trip Baru</p>
-              <p className="text-[11px] text-admin-muted/70">
-                Setelah disimpan, kamu akan diarahkan ke halaman edit untuk mengatur harga per kendaraan.
-              </p>
-              <div className="grid md:grid-cols-2 gap-3">
-                <div className="md:col-span-2">
-                  <p className="text-xs text-admin-muted mb-1">Nama Trip</p>
-                  <input className="admin-inp" value={tForm.name} onChange={setT('name')} placeholder="Airport Transfer — Bandara ke Hotel" />
-                </div>
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Kategori (opsional)</p>
-                  <input className="admin-inp" value={tForm.category} onChange={setT('category')}
-                    list="cat-list" placeholder="airport / intercity / city_tour" />
-                  <datalist id="cat-list">{CATS.map(c => <option key={c} value={c} />)}</datalist>
-                </div>
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Origin (titik jemput)</p>
-                  <input className="admin-inp" value={tForm.origin} onChange={setT('origin')} placeholder="Bandara King Abdulaziz Jeddah" />
-                </div>
-                <div>
-                  <p className="text-xs text-admin-muted mb-1">Destination (titik tujuan)</p>
-                  <input className="admin-inp" value={tForm.destination} onChange={setT('destination')} placeholder="Hotel Makkah/Madinah" />
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <button onClick={handleSaveTrip} disabled={savingT || !tForm.name || !tForm.origin || !tForm.destination} className="admin-btn-sm disabled:opacity-50">
-                  {savingT ? 'Menyimpan...' : 'Simpan & Atur Harga →'}
-                </button>
-                <button onClick={() => setShowTrip(false)} className="admin-btn-ghost text-sm">Batal</button>
-              </div>
-            </div>
-          )}
-
           <DataTable columns={tripColumns} rows={trips} getRowId={t => t.id} empty="Belum ada trip." rowClassName={t => (t.isActive ? undefined : 'opacity-50')} />
         </>
       )}

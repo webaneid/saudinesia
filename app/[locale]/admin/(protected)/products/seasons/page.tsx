@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect } from 'react'
+import { useParams } from 'next/navigation'
 import { Plus, Trash2 } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
@@ -11,21 +13,11 @@ const LABELS: Record<string, string> = { regular: 'Regular', ramadan: 'Ramadan',
 
 export default function SeasonsPage() {
   const [seasons, setSeasons] = useState<Season[]>([])
-  const [show,    setShow]    = useState(false)
-  const [saving,  setSaving]  = useState(false)
+  const { locale } = useParams() as { locale: string }
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: 'ramadan', startDate: '', endDate: '' })
 
   async function load() { const r = await fetch('/api/v1/admin/products/seasons'); const j = await r.json(); setSeasons(j.data ?? []); setLoading(false) }
   useEffect(() => { load() }, [])
-
-  function set(k: string) { return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm(p => ({ ...p, [k]: e.target.value })) }
-
-  async function handleSave() {
-    setSaving(true)
-    await fetch('/api/v1/admin/products/seasons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form) })
-    await load(); setShow(false); setSaving(false)
-  }
 
   async function handleDelete(id: string) {
     if (!confirm('Hapus musim ini?')) return
@@ -55,26 +47,8 @@ export default function SeasonsPage() {
       <PageHeader
         title="Manajemen Musim"
         description="Musim menentukan tier harga yang berlaku. Tanggal di luar range Ramadan/Haji otomatis dianggap Regular."
-        actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Musim</button>}
+        actions={<Link href={`/${locale}/admin/products/seasons/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Musim</Link>}
       />
-
-      {show && (
-        <div className="admin-form-panel">
-          <div className="grid md:grid-cols-3 gap-3">
-            <div><p className="text-xs text-admin-muted mb-1">Musim</p>
-              <select className="admin-select" value={form.name} onChange={set('name')}>
-                <option value="ramadan">Ramadan</option><option value="hajj">Haji</option><option value="regular">Regular</option>
-              </select>
-            </div>
-            <div><p className="text-xs text-admin-muted mb-1">Mulai</p><input type="date" className="admin-inp" value={form.startDate} onChange={set('startDate')} /></div>
-            <div><p className="text-xs text-admin-muted mb-1">Selesai</p><input type="date" className="admin-inp" value={form.endDate} onChange={set('endDate')} /></div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={saving || !form.startDate || !form.endDate} className="admin-btn-sm disabled:opacity-50">{saving ? '...' : 'Simpan'}</button>
-            <button onClick={() => setShow(false)} className="admin-btn-ghost text-sm">Batal</button>
-          </div>
-        </div>
-      )}
 
       <DataTable columns={columns} rows={seasons} getRowId={s => s.id} loading={loading} empty="Belum ada musim." />
     </div>

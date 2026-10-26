@@ -1,41 +1,23 @@
 'use client'
 
 import { useState } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from 'next/navigation'
 import { KeyRound } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
+import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 
 export default function NewVisaPage() {
-  const router = useRouter()
   const { locale } = useParams() as { locale: string }
-  const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/visa', id => `/${locale}/admin/products/visa/${id}`, 'Produk visa gagal dibuat.')
   const [form, setForm] = useState({ name: '', country: 'Saudi Arabia', visaType: '', processDays: 14, description: '' })
 
-  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { setError(null); setForm(p => ({ ...p, [k]: e.target.value })) }
-
-  async function save() {
-    setSaving(true); setError(null)
-    try {
-      const res = await fetch('/api/v1/admin/products/visa', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...form, processDays: +form.processDays, requirements: [] }),
-      })
-      const json = await res.json().catch(() => null)
-      if (!res.ok || !json?.data?.id) { setError(json?.error ?? 'Produk visa gagal dibuat.'); return }
-      router.push(`/${locale}/admin/products/visa/${json.data.id}`)
-    } catch {
-      setError('Tidak dapat menghubungi server.')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
       icon={KeyRound} title="Produk Visa Baru" backHref={`/${locale}/admin/products/visa`} backLabel="Daftar Produk Visa"
       description="Harga dan persyaratan dokumen diatur di halaman produk setelah dibuat — harga terhitung otomatis begitu komponen HPP diisi."
-      onSubmit={save} saving={saving} canSubmit={!!form.name.trim() && !!form.visaType.trim()} error={error} submitLabel="Simpan & Lanjut"
+      onSubmit={() => submit({ ...form, processDays: +form.processDays, requirements: [] })} saving={saving} canSubmit={!!form.name.trim() && !!form.visaType.trim()} error={error} submitLabel="Simpan & Lanjut"
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div>

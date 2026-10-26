@@ -1,13 +1,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { useRouter, useParams } from 'next/navigation'
 import { Plus, Save, Pencil, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
-import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -19,10 +19,7 @@ export default function MuthowifPage() {
   const { locale } = useParams() as { locale: string }
 
   const [list, setList] = useState<Muthowif[]>([])
-  const [show, setShow] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [form, setForm] = useState({ name: '', bio: '', dailyCapacity: 40, languages: 'Bahasa Indonesia' })
 
   // HPP layanan muthowif — satu komponen flat, tidak per-orang, cache di MuthowifServicePrice.price
   // (docs/arsitektur-muthowif.md §10). Tidak ada vendor pihak ketiga sungguhan di sini (beda dari
@@ -70,22 +67,6 @@ export default function MuthowifPage() {
     return () => clearTimeout(timer)
   }, [hargaLayanan, currency])
 
-  function set(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setForm(p => ({ ...p, [k]: e.target.value }))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    await fetch('/api/v1/admin/products/muthowif', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form, dailyCapacity: +form.dailyCapacity,
-        languages: form.languages.split(',').map(s => s.trim()).filter(Boolean),
-      }),
-    })
-    await load(); setShow(false); setSaving(false)
-  }
-
   const canSavePrice = Number(hargaLayanan) > 0
 
   async function handleSavePrice() {
@@ -117,7 +98,7 @@ export default function MuthowifPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Muthowif" actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</button>} />
+      <PageHeader title="Muthowif" actions={<Link href={`/${locale}/admin/products/muthowif/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</Link>} />
 
       {/* HPP layanan — satu harga flat, bukan per-orang (docs/arsitektur-muthowif.md §9/§10) */}
       <div className="admin-form-panel space-y-4">
@@ -167,22 +148,6 @@ export default function MuthowifPage() {
           {savingPrice ? 'Menyimpan...' : priceSaved ? 'Tersimpan ✓' : 'Simpan Harga Layanan'}
         </button>
       </div>
-
-      {show && (
-        <div className="admin-form-panel">
-          <p className="text-sm font-semibold text-admin-ink mb-1">Muthowif Baru</p>
-          <div className="grid md:grid-cols-2 gap-3">
-            <div><p className="text-xs text-admin-muted mb-1">Nama</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
-            <div><p className="text-xs text-admin-muted mb-1">Bahasa (pisah koma)</p><input className="admin-inp" value={form.languages} onChange={set('languages')} placeholder="Bahasa Indonesia, Arab" /></div>
-            <div className="md:col-span-2 min-w-0"><p className="text-xs text-admin-muted mb-1">Bio</p><RichTextEditor id="muthowif-new-bio" title="Bio muthowif" value={form.bio} onChange={bio => setForm(p => ({ ...p, bio }))} placeholder="Latar belakang, pengalaman membimbing, bahasa…" /></div>
-            <div><p className="text-xs text-admin-muted mb-1">Kapasitas/hari</p><input type="number" className="admin-inp" value={form.dailyCapacity} onChange={set('dailyCapacity')} /></div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50">{saving ? '...' : 'Simpan'}</button>
-            <button onClick={() => setShow(false)} className="admin-btn-ghost text-sm">Batal</button>
-          </div>
-        </div>
-      )}
 
       <DataTable columns={columns} rows={list} getRowId={m => m.id} loading={loading} empty="Belum ada muthowif." rowClassName={m => (m.isActive ? undefined : 'opacity-50')} />
     </div>

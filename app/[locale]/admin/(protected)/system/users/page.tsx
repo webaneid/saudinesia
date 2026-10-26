@@ -1,6 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useState, useEffect, useCallback } from 'react'
+import { useParams } from 'next/navigation'
 import { Plus } from 'lucide-react'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
@@ -16,10 +18,8 @@ export default function UsersPage() {
   const [users,  setUsers]  = useState<User[]>([])
   const [meta,   setMeta]   = useState<PageMeta | null>(null)
   const [loading, setLoading] = useState(true)
-  const [show,   setShow]   = useState(false)
-  const [saving, setSaving] = useState(false)
+  const { locale } = useParams() as { locale: string }
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null)
-  const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'admin' })
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -34,23 +34,6 @@ export default function UsersPage() {
   }, [page, limit])
   useEffect(() => { load() }, [load])
 
-  function set(k: string) {
-    return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
-      setForm(p => ({ ...p, [k]: e.target.value }))
-  }
-
-  async function handleSave() {
-    setSaving(true)
-    await fetch('/api/v1/admin/system/users', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form),
-    })
-    await load(); setShow(false); setSaving(false)
-  }
-
-  // Server menolak (422) mengubah akun sendiri atau menyisakan nol superadmin aktif (SEC-13) — tampilkan alasannya, lalu muat ulang
-  // supaya dropdown peran kembali ke nilai sebenarnya.
   async function updateUser(id: string, change: { isActive?: boolean; role?: string }) {
     setNotice(null)
     const r = await fetch(`/api/v1/admin/system/users/${id}`, {
@@ -120,44 +103,10 @@ export default function UsersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Manajemen Pengguna"
-        actions={<button onClick={() => setShow(!show)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</button>}
+        actions={<Link href={`/${locale}/admin/system/users/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</Link>}
       />
 
       {notice && <p role={notice.error ? 'alert' : 'status'} className={`m-0 text-[13px] font-medium ${notice.error ? 'text-admin-danger' : 'text-admin-ink'}`}>{notice.text}</p>}
-
-      {show && (
-        <div className="admin-form-panel">
-          <p className="text-[12px] text-admin-accent-strong font-medium">Buat akun admin baru (tidak memerlukan registrasi)</p>
-          <div className="grid md:grid-cols-2 gap-3">
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Nama</p>
-              <input className="admin-inp" value={form.fullName} onChange={set('fullName')} />
-            </div>
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Email</p>
-              <input type="email" className="admin-inp" value={form.email} onChange={set('email')} />
-            </div>
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Password</p>
-              <input type="password" className="admin-inp" value={form.password} onChange={set('password')} placeholder="Min 8 kar, huruf+angka+spesial" />
-            </div>
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Role</p>
-              <select className="admin-select" value={form.role} onChange={set('role')}>
-                <option value="admin">Admin (Ops)</option>
-                <option value="manager">Manager</option>
-                <option value="superadmin">Super Admin</option>
-              </select>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleSave} disabled={saving || !form.email || !form.password} className="admin-btn-sm disabled:opacity-50">
-              {saving ? 'Menyimpan...' : 'Buat Akun'}
-            </button>
-            <button onClick={() => setShow(false)} className="admin-btn-ghost text-sm">Batal</button>
-          </div>
-        </div>
-      )}
 
       <DataTable
         columns={columns}

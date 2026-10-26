@@ -7,7 +7,7 @@ import { z } from 'zod'
 // origin/destination wajib — struktur rute meniru FlightRoute (docs/arsitektur-transportasi.md §9.1)
 const createSchema = z.object({
   name:        z.string().min(1),
-  category:    z.string().optional(),
+  category:    z.string().nullish(), // formulir terkontrol mengirim null untuk kolom kosong (pelajaran .optional() vs .nullish())
   description: z.string().optional(),
   origin:      z.string().min(1),
   destination: z.string().min(1),
