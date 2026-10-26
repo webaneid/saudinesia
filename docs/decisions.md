@@ -2638,3 +2638,15 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error (dist terpisah); `bun run test` 15 suite lulus; skenario CRUD lengkap di Chrome headless asli; penjaga UI dimutasi.
 
 **Affects:** `products/haji/[id]/page.tsx` (baru), `products/haji/page.tsx`, `lib/validators/adminUpdates.ts`, `scripts/test-haji-pricing.ts`, `docs/arsitektur-komponen-biaya.md`.
+
+## 2026-10-26 — Komponen Biaya universal, Fase 5: dokumentasi akhir + aturan CRUD lengkap
+
+**Decision:** `docs/arsitektur-haji.md` ditulis sebagai source of truth as-built; `CLAUDE.md` mencatat komponen universal ke-6, status Haji, dan menambahkan aturan **CRUD lengkap selalu** (create, read, edit, delete bersemantik aman + aktifkan kembali, di API dan UI) di bagian Admin UI Kit. Rujukan silang ditambahkan ke dokumen modul yang memakai komponen ini; komentar basi di registry adapter kuota dikoreksi.
+
+**Rationale:** Arahan pemilik menjadikan CRUD lengkap prinsip proyek, bukan keputusan satu modul — harus ada di tempat yang dibaca setiap sesi (`CLAUDE.md`). Dokumen as-built mencegah rencana basi menjadi acuan (SOP langkah 1): angka dan rujukan baris dokumen diverifikasi terhadap kode, dan dua kesalahan hitung (jumlah uji) yang saya tulis sendiri ditemukan dan dikoreksi sebelum merge.
+
+**Alternatives considered:** Menaruh aturan CRUD hanya di memori sesi (ditolak: tidak terlihat orang/sesi lain); menulis ulang dokumen modul lama (ditolak: cukup rujukan silang, isi lama menjadi riwayat); menunda `arsitektur-haji.md` sampai checkout Haji ada (ditolak: modul sudah berubah besar dan butuh sumber kebenaran sekarang, gap dicatat eksplisit).
+
+**Security check (SOP langkah 5):** perubahan dokumen dan satu komentar kode — 0 temuan; `bun audit` tidak berubah. Seluruh temuan rangkaian sudah Selesai di register (SEC-63..67).
+
+**Affects:** `docs/arsitektur-haji.md` (baru), `docs/arsitektur-komponen-biaya.md`, `docs/arsitektur-{paket-umroh,ziarah,harga}.md`, `CLAUDE.md`, `lib/quota/adapters/index.ts` (komentar), `docs/progress.md`, `docs/decisions.md`.

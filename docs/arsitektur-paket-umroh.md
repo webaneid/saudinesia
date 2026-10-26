@@ -4,6 +4,8 @@
 >
 > Cakupan sesi ini **hanya modul PRODUCT** (schema, fungsi harga, admin builder, katalog publik) — **booking engine (wizard, `BookingPackage`, kuota) sengaja TIDAK disentuh**, akan direfactor total terpisah (lihat `docs/arsitektur-booking.md`, rencana pending). Ini instruksi eksplisit user 2026-07-22: "abaikan dulu booking engine ... intinya sekarang focus di product masing2 terlebih dahulu biar cepat."
 
+> **Pembaruan 2026-10-26 — Komponen Biaya kini komponen universal.** Route CRUD biaya, hitung per komponen (`computeCostComponents`), registry pemilik, dan panel UI (`components/admin/pricing/CostComponentsPanel.tsx`) dipakai bersama Paket Umroh, Paket Ziarah, dan Haji — rujukan berkas/route inline pada bagian "Komponen Biaya" di bawah adalah riwayat; sumber kebenaran: `docs/arsitektur-komponen-biaya.md`.
+
 ---
 
 ## 1. Konteks Bisnis
