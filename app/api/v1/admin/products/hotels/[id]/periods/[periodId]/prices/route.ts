@@ -4,6 +4,8 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { refreshHotelRoomScheduleCache } from '@/lib/pricing/refreshHotelRoomScheduleCache'
 import { z } from 'zod'
+import { assertVendorUsable } from '@/lib/vendors/integrity'
+import { vendorNotUsableResponse } from '@/lib/vendors/http'
 
 // Hotel punya persis 1 komponen HPP tetap "kamar" (docs/arsitektur-hotel.md §10.4) — pola sama Flight.
 const COMPONENT_KAMAR = 'kamar'
@@ -77,6 +79,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const parsed = putSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { vendorId, currency, rooms } = parsed.data
+    await assertVendorUsable(vendorId)
 
     const period = await prisma.hotelPricePeriod.findUnique({ where: { id: periodId } })
     if (!period) return NextResponse.json(err('Periode tidak ditemukan'), { status: 404 })
@@ -126,6 +129,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
+    const vendorError = vendorNotUsableResponse(e)
+    if (vendorError) return vendorError
     console.error('[admin/products/hotels/[id]/periods/[periodId]/prices/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }

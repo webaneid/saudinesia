@@ -5,6 +5,8 @@ import { ok, err } from '@/lib/validators'
 import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
 import { costComponentCreateSchema, costComponentSimulateSchema, costComponentUpdateSchema } from '@/lib/validators/costComponent'
 import { simulateSellPrice } from './simulateSellPrice'
+import { assertVendorUsable } from '@/lib/vendors/integrity'
+import { vendorNotUsableResponse } from '@/lib/vendors/http'
 import { COST_OWNERS, type CostOwnerKey } from './costComponentOwners'
 
 // Handler CRUD Komponen Biaya yang dipakai semua pemilik (docs/arsitektur-komponen-biaya.md §3.1). Berkas route per modul hanya mengekspor
@@ -23,7 +25,6 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
   const owner = COST_OWNERS[key]
   const authorize = options.authorize ?? requireSuperAdmin
   const tag = (verb: string, item = false) => `admin/products/${owner.routeBase}/[id]/costs${item ? '/[costId]' : ''}/${verb}`
-  const vendorExists = async (vendorId: string) => (await prisma.vendor.findUnique({ where: { id: vendorId }, select: { id: true } })) !== null
 
   async function collectionGET(_req: Request, { params }: Ctx) {
     try {
@@ -60,7 +61,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
 
       // Induk dan vendor diperiksa SEBELUM menulis: tanpa ini komponen yatim tertulis lalu refresh gagal 500 (G2/G3).
       if (!(await owner.exists(id))) return notFound('Produk tidak ditemukan')
-      if (!(await vendorExists(vendorId))) return badRequest('Vendor tidak ditemukan')
+      await assertVendorUsable(vendorId) // ada DAN aktif (ADR-0003) — pesan jelas, bukan galat FK 500
 
       const costTiers: CostTier[] = [{ ...FLAT_TIER, cost }]
       const created = await prisma.productCost.create({
@@ -69,7 +70,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
       await owner.refresh(id)
       return NextResponse.json(ok(created), { status: 201 })
     } catch (e) {
-      return authFailureResponse(e, tag('POST'))
+      return vendorNotUsableResponse(e) ?? authFailureResponse(e, tag('POST'))
     }
   }
 
@@ -80,7 +81,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
       const parsed = costComponentUpdateSchema.safeParse(await req.json().catch(() => null))
       if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? 'Data tidak valid')
       const { cost, ...rest } = parsed.data
-      if (rest.vendorId && !(await vendorExists(rest.vendorId))) return badRequest('Vendor tidak ditemukan')
+      if (rest.vendorId) await assertVendorUsable(rest.vendorId)
 
       // Dicakup ke (productType, productId): komponen milik produk/modul lain tidak boleh tersentuh lewat URL ini (G1).
       const updated = await prisma.productCost.updateMany({
@@ -92,7 +93,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
       return NextResponse.json(ok(null))
     } catch (e) {
       if (isRecordNotFound(e)) return notFound('Komponen biaya tidak ditemukan')
-      return authFailureResponse(e, tag('PUT', true))
+      return vendorNotUsableResponse(e) ?? authFailureResponse(e, tag('PUT', true))
     }
   }
 

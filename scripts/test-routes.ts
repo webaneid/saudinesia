@@ -101,16 +101,21 @@ await t('SEC-08: tidak ada route yang membangun data dari body mentah (`const b 
   assert.deepEqual(bad, [])
 })
 
-await t('SEC-61(b): GET vendor terbuka bagi manager TAPI hanya kolom pemilih; kontak/alamat & seluruh penulisan tetap superadmin', () => {
-  const src = read(routes.find(f => rel(f).endsWith('admin/system/settings/vendors/route.ts')) ?? '')
-  const get = src.slice(src.indexOf('export async function GET'), src.indexOf('export async function POST'))
-  assert.match(get, /requireManager\(\)/)
-  assert.doesNotMatch(get, /requireSuperAdmin\(\)/)
-  assert.match(get, /select: \{ id: true, name: true, category: true, country: true, isActive: true \}/, 'cabang manager harus memakai select ramping')
-  assert.doesNotMatch(get.slice(get.indexOf('const full')), /contactInfo|addressId/, 'kolom sensitif tak boleh ada di cabang non-superadmin')
-  assert.match(src.slice(src.indexOf('export async function POST')), /requireSuperAdmin\(\)/)
-  const byId = read(routes.find(f => rel(f).endsWith('admin/system/settings/vendors/[id]/route.ts')) ?? '')
-  assert.ok(!/requireManager\(\)/.test(byId) && /requireSuperAdmin\(\)/.test(byId), 'PUT/DELETE vendor tetap superadmin')
+await t('SEC-61(b) (kini di layanan vendor baru + jembatan): GET terbuka bagi manager TAPI hanya bentuk ramping; detail/kontak/alamat & seluruh penulisan tetap superadmin', () => {
+  const h = read('lib/vendors/handlers.ts')
+  const list = h.slice(h.indexOf('async function vendorsGET'), h.indexOf('async function vendorsPOST'))
+  assert.match(h, /options\.requireRead \?\? requireManager/); assert.match(h, /options\.requireWrite \?\? requireSuperAdmin/)
+  assert.match(list, /toVendorSlim/); assert.match(list, /SUPERADMIN_ROLES\.includes\(session\.role\)/)
+  for (const fn of ['vendorsPOST', 'vendorGET', 'vendorPUT', 'vendorDELETE', 'categoriesPOST', 'categoryPUT', 'categoryDELETE']) {
+    const body = h.slice(h.indexOf(`async function ${fn}`)); assert.match(body.slice(0, 400), /await requireWrite\(\)/, `${fn} harus superadmin`)
+  }
+  const svc = read('lib/vendors/service.ts')
+  const slim = svc.slice(svc.indexOf('export function toVendorSlim'), svc.indexOf('// ───────────────────────── vendor'))
+  assert.doesNotMatch(slim, /email|phone|whatsapp|notes|address|contactName|website/, 'bentuk ramping tak boleh memuat kontak/alamat')
+  // Jembatan lama (dihapus di F4): GET manager ramping; tulis superadmin.
+  const bridge = read('lib/vendors/legacyBridge.ts')
+  assert.match(bridge.slice(bridge.indexOf('export async function legacyVendorsGET'), bridge.indexOf('export async function legacyVendorsPOST')), /requireManager\(\)[\s\S]*\(\{ id, name, category, country, isActive \}\)/)
+  for (const fn of ['legacyVendorsPOST', 'legacyVendorPUT', 'legacyVendorDELETE']) assert.match(bridge.slice(bridge.indexOf(`export async function ${fn}`)).slice(0, 300), /requireSuperAdmin\(\)/, fn)
 })
 
 await t('SEC-50: health — sehat di-cache 5 dtk dan permintaan bersamaan berbagi satu query; gagal TIDAK di-cache (503 lalu pulih)', async () => {

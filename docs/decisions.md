@@ -2676,3 +2676,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Verifikasi:** tsc; `bun run build` 0 error; `bun run test` 17 suite; rekam-bandingkan pada salinan DB lokal (48 `computeSellPrice` identik); 7 mutasi tertangkap; HTTP nyata alur lama pada skema baru.
 
 **Affects:** `prisma/schema.prisma`, `prisma/migrations/20261026120000_vendor_single_flow_expand/`, `lib/constants/vendor.ts`, `lib/validators/vendor.ts`, `lib/vendors/integrity.ts`, `scripts/test-vendor-{model,migration}.ts`, `scripts/test-haji-pricing.ts`, `package.json`, `docs/arsitektur-vendor.md`.
+
+## 2026-10-26 — Vendor F2: API vendor + kategori, integritas rujukan, jembatan sementara
+
+**Decision:** Satu layanan (`lib/vendors/service.ts`) menjadi satu-satunya penulis tabel vendor/kategori; route baru `/admin/system/vendors*` dan `/vendor-categories*` hanya memanggil handler bersama. Semua route yang menyimpan `vendorId` memakai `assertVendorUsable` (ada **dan aktif** → 400). Muthowif membaca vendor sistem lewat `systemKey`. Route lama `/admin/system/settings/vendors*` **tidak dihapus di F2** tetapi diubah menjadi jembatan tipis yang hanya menerjemahkan ke layanan baru; dihapus di F4 bersama UI yang memakainya (revisi rencana: sebelumnya "dihapus di F2").
+
+**Rationale:** Menghapus route lama di F2 mematikan tab Pengaturan dan picker di 6 editor sampai F3/F4. Membiarkannya menulis kolom legacy akan melahirkan vendor setengah jadi dan dualisme data — yang justru dilarang ADR-0003. Jembatan menjaga data baru otoritatif dan aplikasi tetap berjalan tanpa logika vendor kedua. Menolak vendor nonaktif di route biaya menutup celah referensi ke vendor yang sudah "dimatikan".
+
+**Alternatives considered:** Menghapus route lama sekarang (ditolak: aplikasi rusak antar-PR); membiarkan route lama menulis kolom lama (ditolak: dualisme); menggabungkan F2-F4 dalam satu PR (ditolak: terlalu besar, bukti per fase hilang).
+
+**Security check (SOP langkah 5):** 0 Critical/High pada kode yang diubah; menutup SEC-68 (Low). Checklist route handler: otorisasi di awal handler (diuji + `grep`), Zod `.strict()`, galat dibedakan (400/403/404/409/500 generik), tanpa SQL mentah, DTO eksplisit (tanpa kolom internal), manager hanya bentuk ramping (SEC-61b dijaga ulang), filter pencarian lewat parameter Prisma, batas halaman. `bun audit` tidak berubah (5).
+
+**Verifikasi:** tsc; `bun run build` 0 error; `bun run test` 18 suite; HTTP nyata (kategori, vendor, route biaya, vendor sistem, hapus aman, jembatan); 10 mutasi tertangkap.
+
+**Affects:** `lib/vendors/{service,handlers,http,legacyBridge}.ts`, `app/api/v1/admin/system/{vendors,vendor-categories}/**`, `app/api/v1/admin/system/settings/vendors/**` (jembatan), 4 route biaya + `lib/pricing/costComponentHandlers.ts`, route Muthowif, `scripts/test-vendor-api.ts`, `scripts/test-routes.ts`, `package.json`, `docs/arsitektur-vendor.md`.

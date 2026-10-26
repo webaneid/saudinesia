@@ -798,7 +798,7 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 
 **Vendor — satu alur, satu sumber data (rencana 2026-10-26; ADR-0003; `docs/arsitektur-vendor.md`):**
 - [x] F1 skema + migrasi ekspansi fail-closed + kategori/vendor sistem + validator + `assertVendorUsable` — selesai 2026-10-26 (rekam-bandingkan salinan DB lokal; 7 skenario migrasi; 17 suite lulus)
-- [ ] F2 API vendor + kategori (hapus aman, keunikan, pemakaian); route lama dihapus; semua route biaya memakai `assertVendorUsable`
+- [x] F2 API vendor + kategori (hapus aman, keunikan, pemakaian); route lama → jembatan tipis (dihapus di F4); semua route biaya memakai `assertVendorUsable` — selesai 2026-10-26 (HTTP nyata; 10 mutasi; 18 suite lulus)
 - [ ] F3 menu Sistem → Vendor (daftar, detail/edit, kategori) + `VendorForm`; tab Pengaturan dihapus
 - [ ] F4 `VendorPicker` + modal; migrasi 6 situs; hapus quick-add lama; penjaga CI
 - [ ] F5 penutup: dokumen as-built, `arsitektur-harga.md` §3.1/§18 digantikan, `CLAUDE.md`, register
