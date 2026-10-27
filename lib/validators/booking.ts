@@ -98,6 +98,21 @@ export const createBookingSchema = z.object({
   // dipercaya dari client sama sekali (sebelumnya field individual sudah dihitung ulang, cuma
   // angka agregat ini yang masih lolos dari client).
 }).superRefine(async (data, ctx) => {
+  // Kuantitas yang menentukan harga TIDAK boleh bebas dari klien: malam/hari harus sama dengan selisih tanggalnya (audit keamanan Fase 4, H1) —
+  // tanpa ini `nights: 1` untuk 14 malam hanya dibayar satu malam, dan rentang muthowif terbalik melewati pemeriksaan kapasitas.
+  const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+  data.items.forEach((item, i) => {
+    if (item.itemType === 'hotel') {
+      const nights = dayDiff(item.checkIn, item.checkOut)
+      if (nights < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal check-out harus setelah check-in', path: ['items', i, 'checkOut'] })
+      else if (item.nights !== nights) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jumlah malam tidak sesuai dengan tanggal check-in/check-out', path: ['items', i, 'nights'] })
+    } else if (item.itemType === 'muthowif' || item.itemType === 'catering') {
+      const days = dayDiff(item.startDate, item.endDate) + 1
+      if (days < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal selesai tidak boleh sebelum tanggal mulai', path: ['items', i, 'endDate'] })
+      else if (item.numDays !== days) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jumlah hari tidak sesuai dengan rentang tanggal', path: ['items', i, 'numDays'] })
+    }
+  })
+
   // docs/arsitektur-booking.md §6 Step 6a — visaProductId opsional per pilgrim. Query VisaProduct/
   // ManifestFieldRequirement HANYA untuk pilgrim yang benar-benar pilih visa; pilgrim tanpa visa
   // divalidasi terhadap field manifest "core" di bawah. PENTING: early-return lama

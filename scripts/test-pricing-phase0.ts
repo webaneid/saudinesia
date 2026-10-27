@@ -43,7 +43,10 @@ const seasonPoints = async (o: { id: string; pricePerPersonRegular: unknown; pri
   }
 }
 for (const o of [opt, inactive, noHajjPrice]) await seasonPoints(o)
-const price = (id: string, start: string, numDays = 3, numPeople = 4) => computeCateringBookingPrice({ cateringOptionId: id, startDate: new Date(start), numDays, numPeople })
+const price = async (id: string, start: string, numDays = 3, numPeople = 4) => {
+  const { season, pricePerPersonPerDay, totalPrice } = await computeCateringBookingPrice({ cateringOptionId: id, startDate: new Date(start), numDays, numPeople })
+  return { season, pricePerPersonPerDay, totalPrice } // `point` (jejak titik harga untuk snapshot) diuji di test-booking-snapshot
+}
 
 await t('katering: harga = harga musim PADA TANGGAL MULAI × hari × orang (reguler / Ramadan / Haji)', async () => {
   assert.deepEqual(await price(opt.id, '2090-01-10'), { season: 'regular', pricePerPersonPerDay: 100000, totalPrice: 1_200_000 })
@@ -64,8 +67,10 @@ await t('katering: skema booking TIDAK punya totalPrice (klien tak bisa menentuk
   assert.ok(block.includes('cateringOptionId') && block.includes('numPeople'), 'blok katering tidak ditemukan')
   assert.doesNotMatch(block.replace(/\/\/.*$/gm, ''), /totalPrice/, 'skema katering tak boleh menerima totalPrice')
   const route = readFileSync('app/api/v1/bookings/route.ts', 'utf8')
+  const items = readFileSync('lib/booking/lineItems.ts', 'utf8')
   assert.doesNotMatch(route, /item\.totalPrice/, 'route tak boleh memakai totalPrice dari klien')
-  assert.match(route, /computeCateringBookingPrice\(/, 'katering harus dihitung lewat computeCateringBookingPrice')
+  assert.doesNotMatch(items, /item\.totalPrice/, 'lineItems tak boleh memakai totalPrice dari klien')
+  assert.match(items, /computeCateringBookingPrice\(/, 'katering harus dihitung lewat computeCateringBookingPrice (lib/booking/lineItems.ts)')
 })
 await t('katering: katalog publik dan booking memilih kolom musim lewat SATU fungsi', () => {
   assert.equal(cateringPricePerPersonPerDay({ regular: 100000, ramadan: 150000, hajj: 200000 }, 'ramadan'), 150000)

@@ -27,6 +27,11 @@ try {
     },
   })
 
+  // Invoice dibangun dari snapshot harga (docs/arsitektur-harga-terpadu.md §17): satu baris yang jumlahnya = total booking.
+  await prisma.priceSnapshot.create({
+    data: { bookingId: booking.id, itemType: 'hotel', itemId: 'ci-item', itemLabel: 'Hotel CI', itemDetail: '3 malam', itemQty: 1, description: 'Hotel CI', qty: 1, unit: 'item', unitSellIdr: '5000000', totalSellIdr: '5000000', mode: 'auto' },
+  })
+
   const login = await fetch(`${BASE}/api/v1/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }) })
   if (login.status !== 200) fail(`login admin ${login.status}`)
   const cookie = (login.headers.getSetCookie()[0] ?? '').split(';')[0] ?? ''

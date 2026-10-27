@@ -27,14 +27,20 @@ export async function GET(_req: Request, { params }: Params) {
     return NextResponse.json(err('Unauthorized'), { status: 401 })
   }
 
-  const data = await buildInvoiceData(booking)
-  const pdfBuffer = await generateInvoicePdf(data)
+  try {
+    const data = await buildInvoiceData(booking)
+    const pdfBuffer = await generateInvoicePdf(data)
 
-  return new NextResponse(new Blob([Uint8Array.from(pdfBuffer)]), {
-    status: 200,
-    headers: {
-      'Content-Type':        'application/pdf',
-      'Content-Disposition': `inline; filename="${data.invoiceNumber}.pdf"`,
-    },
-  })
+    return new NextResponse(new Blob([Uint8Array.from(pdfBuffer)]), {
+      status: 200,
+      headers: {
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `inline; filename="${data.invoiceNumber}.pdf"`,
+      },
+    })
+  } catch (error) {
+    // Invoice tidak boleh terbit bila Σ snapshot ≠ total (invarian I4) — dicatat, klien hanya menerima 500 generik.
+    console.error('[bookings/invoice]', error instanceof Error ? error.message : error)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
 }

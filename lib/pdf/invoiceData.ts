@@ -1,19 +1,13 @@
 import type { Prisma } from '@prisma/client'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 
-// docs/arsitektur-booking.md §6 Step 7 — normalisasi SATU TEMPAT dari 7 relasi per-tipe existing
-// (Opsi B) jadi bentuk seragam siap-render, dipakai lib/pdf/invoice.tsx. Visa diambil dari
-// pilgrims[].visaApplication — BUKAN relasi booking.visa (model BookingVisa TIDAK PERNAH dipakai
-// kode manapun, selalu kosong, lihat docs/decisions.md 2026-07-25).
+// Invoice dibangun HANYA dari `price_snapshots` (docs/arsitektur-harga-terpadu.md §17, invarian I3/I4/I5): harga yang tertera adalah harga yang DIBEKUKAN saat dipesan —
+// bukan dihitung ulang dan bukan dibaca dari kolom harga item. Hanya JUAL yang masuk ke sini; modal/untung tak pernah keluar ke dokumen pilgrim.
+// Nama jamaah pada baris Visa ditempel saat render dari manifest (snapshot sengaja tanpa data pribadi, UU PDP).
 export const invoiceBookingInclude = {
   user: { include: { address: { include: { province: true, regency: true, district: true, village: true } } } },
-  hotels: { include: { hotelRoomSchedule: { include: { period: { include: { hotel: true } }, roomType: true } } } },
-  transports: { include: { transportQuota: { include: { pricing: { include: { trip: true, vehicle: true } } } } } },
-  muthowif: true,
-  catering: { include: { cateringOption: true } },
-  tourPackages: { include: { tourPackage: true } },
-  haji: { include: { hajiProduct: true } },
-  pilgrims: { include: { visaApplication: { include: { visaProduct: true } } } },
+  priceSnapshots: { orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] },
+  pilgrims: { include: { visaApplication: { select: { id: true, visaProductId: true } } } },
   payments: true,
 } satisfies Prisma.BookingInclude
 
@@ -69,88 +63,40 @@ function buildBuyerAddress(user: InvoiceBooking['user']): string {
   return [addr.fullAddress, addr.city, addr.stateRegion, addr.countryCode].filter(Boolean).join(', ')
 }
 
+// Urutan baris di invoice: sama seperti sebelum snapshot (hotel, transport, muthowif, katering, paket ziarah, haji, visa), penyesuaian tingkat-booking paling akhir.
+const ITEM_ORDER = ['hotel', 'transport', 'muthowif', 'catering', 'tourPackage', 'haji', 'visa', 'booking']
+
 export async function buildInvoiceData(booking: InvoiceBooking): Promise<InvoiceData> {
+  // Satu baris invoice per ITEM (paket berbaris-banyak — komponen, hotel, penyesuaian — tampil sebagai satu baris bagi pilgrim).
+  const groups = new Map<string, { type: string; itemId: string; label: string; detail: string; qty: number; amountCents: number }>()
+  for (const l of booking.priceSnapshots) {
+    const key = `${l.itemType}|${l.itemId}`
+    const g = groups.get(key) ?? { type: l.itemType, itemId: l.itemId, label: l.itemLabel, detail: l.itemDetail, qty: l.itemQty, amountCents: 0 }
+    g.amountCents += Math.round(Number(l.totalSellIdr) * 100)
+    groups.set(key, g)
+  }
+
+  const pilgrimByVisa = new Map(booking.pilgrims.flatMap(p => (p.visaApplication ? [[p.visaApplication.id, p] as const] : [])))
   const lineItems: InvoiceLineItem[] = []
-
-  for (const h of booking.hotels) {
-    lineItems.push({
-      label: `${h.hotelRoomSchedule.period.hotel.name} — ${h.hotelRoomSchedule.roomType.name}`,
-      description: `${formatDate(h.checkIn)} – ${formatDate(h.checkOut)} · ${h.nights} malam · ${h.numRooms} kamar`,
-      qty: h.numRooms,
-      unitPrice: Number(h.pricePerNight) * h.nights,
-      amount: Number(h.totalPrice),
-    })
-  }
-
-  for (const t of booking.transports) {
-    lineItems.push({
-      label: `${t.transportQuota.pricing.trip.name} (${t.transportQuota.pricing.vehicle.name})`,
-      description: `${formatDate(t.travelDate)} · ${t.numPassengers} penumpang`,
-      qty: t.numPassengers,
-      unitPrice: Number(t.unitPrice),
-      amount: Number(t.totalPrice),
-    })
-  }
-
-  for (const m of booking.muthowif) {
-    lineItems.push({
-      label: 'Layanan Muthowif',
-      description: `${formatDate(m.startDate)} – ${formatDate(m.endDate)} · ${m.numDays} hari · ${m.numPeople} orang`,
-      qty: m.numPeople,
-      unitPrice: Number(m.totalPrice) / m.numPeople,
-      amount: Number(m.totalPrice),
-    })
-  }
-
-  for (const c of booking.catering) {
-    lineItems.push({
-      label: c.cateringOption.name,
-      description: `${formatDate(c.startDate)} – ${formatDate(c.endDate)} · ${c.numDays} hari · ${c.numPeople} orang`,
-      qty: c.numPeople,
-      unitPrice: Number(c.totalPrice) / c.numPeople,
-      amount: Number(c.totalPrice),
-    })
-  }
-
-  for (const tp of booking.tourPackages) {
-    lineItems.push({
-      label: tp.tourPackage.name,
-      description: `${formatDate(tp.tourDate)} · ${tp.numPeople} orang`,
-      qty: tp.numPeople,
-      unitPrice: Number(tp.totalPrice) / tp.numPeople,
-      amount: Number(tp.totalPrice),
-    })
-  }
-
-  for (const h of booking.haji) {
-    lineItems.push({
-      label: h.hajiProduct.name,
-      description: `${h.numPersons} orang`,
-      qty: h.numPersons,
-      unitPrice: Number(h.totalPrice) / h.numPersons,
-      amount: Number(h.totalPrice),
-    })
-  }
-
-  for (const p of booking.pilgrims) {
-    const va = p.visaApplication
-    if (!va || va.sellPriceSnapshot == null) continue
-    const fields = va.visaProductId ? await getManifestFieldRequirements('visa', va.visaProductId) : []
-    const rawName = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
-    const displayName = typeof rawName === 'string' && rawName ? rawName : 'Jamaah'
-    const productName = va.visaProduct?.name ?? va.visaType
-    const label = /visa/i.test(productName) ? productName : `Visa ${productName}`
-    lineItems.push({
-      label: `${label} — ${displayName}`,
-      description: va.selectedDurationDays ? `${va.selectedDurationDays} hari` : '',
-      qty: 1,
-      unitPrice: Number(va.sellPriceSnapshot),
-      amount: Number(va.sellPriceSnapshot),
-    })
+  const ordered = [...groups.values()].sort((a, b) => ITEM_ORDER.indexOf(a.type) - ITEM_ORDER.indexOf(b.type))
+  for (const g of ordered) {
+    let label = g.label
+    if (g.type === 'visa') {
+      const p = pilgrimByVisa.get(g.itemId)
+      const fields = p?.visaApplication?.visaProductId ? await getManifestFieldRequirements('visa', p.visaApplication.visaProductId) : []
+      const rawName = p ? getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name') : null
+      label = `${g.label} — ${typeof rawName === 'string' && rawName ? rawName : 'Jamaah'}`
+    }
+    const amount = g.amountCents / 100
+    lineItems.push({ label, description: g.detail, qty: g.qty, unitPrice: amount / g.qty, amount })
   }
 
   const subtotal = lineItems.reduce((sum, li) => sum + li.amount, 0)
   const totalAmount = Number(booking.totalAmount)
+  // Invarian I4 (total = Σ snapshot): dokumen keuangan yang tidak menjumlah tidak boleh terbit diam-diam.
+  if (Math.round(subtotal * 100) !== Math.round(totalAmount * 100)) {
+    throw new Error(`Invoice ${booking.bookingCode}: Σ snapshot harga (${subtotal}) ≠ total booking (${totalAmount})`)
+  }
   const confirmedPayment = booking.payments.find(p => p.status === 'confirmed')
   const balanceDue = confirmedPayment ? 0 : totalAmount
 

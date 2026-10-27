@@ -18,6 +18,7 @@ export type VehicleOption = {
 // tersimpan ini, bukan live dari HotelRoomSchedule (docs/arsitektur-ziarah.md §10.10).
 export type HotelBreakdown = {
   id: string
+  hotelRoomScheduleId: string
   hotelName: string
   roomTypeName: string
   nights: number
@@ -107,6 +108,7 @@ export async function computeTourPackageBreakdown(tourPackageId: string): Promis
   // bukan 'included' (nilai historis) — tapi HANYA dijumlah ke base total kalau hotelMode='included'.
   const hotels: HotelBreakdown[] = tourPackage.hotels.map(h => ({
     id: h.id,
+    hotelRoomScheduleId: h.hotelRoomScheduleId,
     hotelName: h.hotelRoomSchedule.period.hotel.name,
     roomTypeName: h.hotelRoomSchedule.roomType.name,
     nights: h.nights,
