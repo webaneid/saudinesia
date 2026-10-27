@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const hotel = await prisma.hotel.create({
-      data: { ...parsed.data, description: emptyToNull(parsed.data.description), images: [] },
+      data: { ...parsed.data, description: emptyToNull(parsed.data.description) },
     })
     return NextResponse.json(ok(hotel), { status: 201 })
   } catch (e) {

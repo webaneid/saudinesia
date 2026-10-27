@@ -2817,3 +2817,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `components/shared/ProductImage.tsx`, `lib/media/urls.ts`, 5 halaman publik, 5 API katalog, `lib/haji/catalog.ts`, `scripts/test-media.ts`, docs.
 
+## 2026-10-27 — Media F4: kontraksi kolom foto lama + pembersihan objek saat produk dihapus
+
+**Decision:** Migrasi kontraksi membuang tujuh kolom foto per-model tanpa pengisian ulang (kolom beku sejak ekspansi; kunci yang tak ada di `product_images` = foto sudah dihapus), fail-closed bila `product_images` belum ada. Penghapusan sungguhan produk bergambar (Kendaraan, Katering, Haji, Visa) memanggil `purgeProductMedia` setelah penghapusan berhasil; kegagalan pembersihan dicatat tanpa menggagalkan penghapusan. Penjaga CI mewajibkan setiap jalur hapus produk bergambar memanggilnya dan melarang kolom foto per-model baru.
+
+**Rationale:** Tanpa pembersihan, bucket menumpuk objek yatim (privasi + biaya). Pengisian ulang sebelum DROP berbahaya: ia akan menghidupkan kembali kunci objek yang sudah sengaja dihapus lewat layanan. Penjaga sumber mencegah kelas bug "satu jalur hapus lupa membersihkan".
+
+**Alternatives considered:** Pengisian ulang lalu DROP (ditolak: kunci yatim hidup lagi); pembersihan di dalam transaksi hapus (ditolak: objek MinIO tak bisa di-rollback — setelah commit lebih aman); ekstensi Prisma otomatis pada delete (ditolak: sihir tersembunyi; penjaga sumber eksplisit lebih mudah diaudit).
+
+**Security check (SOP langkah 5):** 0 temuan. Tidak ada route atau dependensi baru; migrasi SQL tanpa input pengguna, atomik, fail-closed (dibuktikan); permukaan data berkurang (kolom kunci objek dibuang); `purgeProductMedia` hanya menerima tipe terdaftar dan id produk yang baru dihapus, log tanpa data pribadi.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; MinIO + route nyata (4 jalur hapus → objek 404); 3 mutasi SQL + 2 mutasi penjaga tertangkap.
+
+**Affects:** `prisma/schema.prisma`, `prisma/migrations/20261027180000_product_images_contract/`, `lib/media/service.ts`, `lib/haji/delete.ts`, route hapus Kendaraan/Katering/Visa, pembuat Haji/Hotel/Paket Umroh, `prisma/seed.ts`, `scripts/test-media{,-migration,-contraction}.ts`, `package.json`, docs.
+

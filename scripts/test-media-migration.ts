@@ -142,12 +142,7 @@ await t('FAIL-CLOSED + ATOMIK: kunci objek ganda (dua baris menunjuk objek yang 
   assert.equal(Number(t1[0]!.n), 0)
 })
 
-await t('skema hasil SEMUA migrasi == schema.prisma (tidak ada drift): prisma migrate diff', async () => {
-  const r = await scenario('')
-  assert.equal(r.code, 0)
-  const diff = run(dbUrl(r.name), ['migrate', 'diff', '--from-url', dbUrl(r.name), '--to-schema-datamodel', 'schema.prisma', '--script'])
-  assert.match(diff.out, /empty migration/i, `masih ada drift:\n${diff.out.slice(-500)}`)
-})
+// (Uji drift skema penuh ada di scripts/test-media-contraction.ts — migrasi TERBARU membangun DB dari SEMUA migrasi.)
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

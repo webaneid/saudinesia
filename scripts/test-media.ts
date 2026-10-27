@@ -9,6 +9,7 @@ import sharp from 'sharp'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { ProductImage } from '@/components/shared/ProductImage'
+import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
 import { prisma } from '@/lib/db'
 import { processImage, ImageRejectedError, MAX_UPLOAD_BYTES } from '@/lib/media/image'
 import { createMediaService } from '@/lib/media/service'
@@ -261,6 +262,33 @@ await t('F3: setiap katalog publik produk bergambar memakai getFeaturedCards + <
     assert.match(src, new RegExp(`getFeaturedCards\\('${type}'`), `API ${file}: tanpa sampul`); assert.match(src, /coverUrl/, `API ${file}: tanpa coverUrl`)
   }
   assert.doesNotMatch(readFileSync('lib/haji/catalog.ts', 'utf8'), /images:/, 'katalog Haji tak boleh lagi memetakan kolom foto lama')
+})
+
+await t('F4: tak ada kolom foto per-model di skema (images/photoKey/featuredImageKey); pembuat produk tak menulisnya; tipe baru wajib lewat registry', () => {
+  const schema = readFileSync('prisma/schema.prisma', 'utf8')
+  const stripped = schema.replace(/^\s*\/\/.*$/gm, '').replace(/\/\/.*$/gm, '')
+  assert.doesNotMatch(stripped, /^\s+(images|photoKey|featuredImageKey)\s/m, 'kolom foto per-model masih ada di skema — pakai ProductImage')
+  for (const f of ['app/api/v1/admin/products/haji/route.ts', 'app/api/v1/admin/products/hotels/route.ts', 'app/api/v1/admin/products/packages/route.ts', 'prisma/seed.ts']) assert.doesNotMatch(readFileSync(f, 'utf8'), /\bimages:\s*\[\]/, `${f}: masih menulis images`)
+})
+
+await t('F4: SETIAP penghapusan sungguhan produk bergambar (prisma.<model>.delete) memanggil purgeProductMedia di berkas yang sama — tak ada objek yatim', () => {
+  const walk = (d: string): string[] => (require('node:fs').readdirSync(d, { withFileTypes: true }) as Array<{ name: string; isDirectory: () => boolean }>).flatMap(e => e.isDirectory() ? walk(`${d}/${e.name}`) : /\.(ts|tsx)$/.test(e.name) ? [`${d}/${e.name}`] : [])
+  const models = '(hotel|tourPackage|transportVehicle|hajiProduct|package|cateringOption|visaProduct|muthowif|tourismSite)'
+  const deleters = [...walk('app'), ...walk('lib')].filter(f => f !== 'lib/media/service.ts' && new RegExp(`(prisma|tx)\\.${models}\\.(delete|deleteMany)\\(`).test(readFileSync(f, 'utf8')))
+  assert.ok(deleters.length >= 4, 'pemindai tak menemukan jalur hapus yang dikenal (4 diharapkan) — penjaga ini mungkin rusak')
+  const unclean = deleters.filter(f => !readFileSync(f, 'utf8').includes('purgeProductMedia('))
+  assert.deepEqual(unclean, [], 'penghapusan produk tanpa pembersihan foto')
+})
+
+await t('F4: hapus Haji sungguhan membersihkan baris product_images produk itu (dan hanya itu)', async () => {
+  const keep = await mkHaji(), gone = await mkHaji()
+  const mkRow = (productId: string, key: string) => prisma.productImage.create({ data: { productType: 'haji', productId, key: `${tag}/${key}`, isFeatured: true } })
+  await mkRow(gone.id, 'a.webp'); await mkRow(keep.id, 'b.webp')
+  const res = await deleteOrDeactivateHaji(gone.id)
+  assert.deepEqual(res, { found: true, deleted: true })
+  assert.equal(await prisma.productImage.count({ where: { productType: 'haji', productId: gone.id } }), 0, 'foto produk terhapus harus bersih')
+  assert.equal(await prisma.productImage.count({ where: { productType: 'haji', productId: keep.id } }), 1, 'foto produk lain tak boleh tersentuh')
+  await prisma.productImage.deleteMany({ where: { productId: keep.id } })
 })
 
 // ── pembersihan ──

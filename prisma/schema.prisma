@@ -158,8 +158,6 @@ model Hotel {
   stars            Int?
   distanceToHaramM Int?
   description      String?
-  images           Json    @default("[]")
-  featuredImageKey String? // foto sampul eksplisit — docs/arsitektur-hotel.md §10.2
   facilities       Json    @default("[]") // array kode fasilitas (checkbox), lihat lib/constants/hotelFacilities.ts
   addressId        String? @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat fisik hotel
   isActive         Boolean @default(true)
@@ -254,7 +252,6 @@ model TransportVehicle {
   capacity    Int
   fleetCount  Int      @default(1)
   description String?
-  images      Json     @default("[]")
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
@@ -370,7 +367,6 @@ model Muthowif {
   id            String  @id @default(uuid())
   name          String
   bio           String?
-  photoKey      String? // object key MinIO, bukan URL — presigned URL digenerate saat baca (docs/arsitektur-muthowif.md §9, menutup Gap #2)
   languages     Json    @default("[]")
   rating        Decimal @default(5.00) @db.Decimal(3, 2)
   dailyCapacity Int     @default(50)
@@ -438,7 +434,6 @@ model HajiProduct {
   totalQuota    Int       @default(0)
   pendingQuota  Int       @default(0) // docs/arsitektur-booking.md §6 Step 2 — menutup Gap #1 (docs/arsitektur-umroh.md §7)
   bookedQuota   Int       @default(0)
-  images        Json      @default("[]")
   isActive      Boolean   @default(true)
   createdAt     DateTime  @default(now())
 
@@ -529,7 +524,6 @@ model Package {
   price       Decimal  @db.Decimal(14, 2) // cache hasil computePackageBreakdown().baseTotal() — TIDAK diisi manual lagi
   priceLabel  String? // "per orang"
   highlights  Json     @default("[]") // bullet points
-  images      Json     @default("[]")
   isActive    Boolean  @default(true)
   isFeatured  Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -664,7 +658,6 @@ model TourismSite {
   name        String
   city        String?
   description String?
-  photoKey    String? // object key MinIO, presigned URL saat baca
   gmapsUrl    String?
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
@@ -1369,9 +1362,8 @@ enum AddressType {
 // ─── MEDIA PRODUK UNIVERSAL (docs/arsitektur-media.md) ─────────────
 // Satu tabel polimorfik untuk foto semua produk (pola ProductCost/ManifestFieldRequirement). `productType` = kunci registry
 // lib/media/owners.ts. Mode (featured = tepat satu foto / gallery = banyak) ditegakkan LAYANAN, bukan indeks: Prisma tak mengekspresikan
-// indeks unik parsial, dan indeks tak dikenal skema membuat `migrate diff` menandai drift. Kolom foto lama per-model (Hotel.images,
-// Hotel.featuredImageKey, TransportVehicle.images, Muthowif.photoKey, TourismSite.photoKey, HajiProduct.images, Package.images) dibuang
-// di fase kontraksi.
+// indeks unik parsial, dan indeks tak dikenal skema membuat `migrate diff` menandai drift. Kolom foto lama per-model sudah dibuang
+// (migrasi kontraksi media F4) — JANGAN menambah kolom foto per-model baru; produk bergambar didaftarkan di lib/media/owners.ts.
 model ProductImage {
   id          String   @id @default(uuid())
   productType String
