@@ -1,3 +1,5 @@
+import { ProductImage } from '@/components/shared/ProductImage'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { KeyRound, Clock, FileText, ArrowRight, Globe, ShieldCheck, Info } from 'lucide-react'
@@ -21,6 +23,8 @@ export default async function VisaCatalogPage({ params }: Props) {
   for (const p of products) {
     requirementsByProduct.set(p.id, await getDocumentRequirements('visa', p.id))
   }
+
+  const covers = await getFeaturedCards('visa', products.map(p => p.id))
 
   // Group by country
   const grouped = products.reduce<Record<string, typeof products>>((acc, p) => {
@@ -71,8 +75,10 @@ export default async function VisaCatalogPage({ params }: Props) {
               return (
                 <div
                   key={v.id}
-                  className="rounded-xl border bg-card p-5 space-y-4 hover:border-teal-400 hover:shadow-sm transition-all"
+                  className="overflow-hidden rounded-xl border bg-card hover:border-teal-400 hover:shadow-sm transition-all"
                 >
+                  <ProductImage src={covers.get(v.id)?.src} alt={covers.get(v.id)?.alt} fallbackAlt={v.name} type="visa" />
+                  <div className="p-5 space-y-4">
                   {/* Title + type badge + price */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="space-y-1.5">
@@ -165,6 +171,7 @@ export default async function VisaCatalogPage({ params }: Props) {
                         Ajukan Sekarang <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
                       </Link>
                     </Button>
+                  </div>
                   </div>
                 </div>
               )

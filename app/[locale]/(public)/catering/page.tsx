@@ -1,3 +1,5 @@
+import { ProductImage } from '@/components/shared/ProductImage'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import { detectSeason } from '@/lib/utils/season'
 import { UtensilsCrossed, CheckCircle } from 'lucide-react'
@@ -12,6 +14,7 @@ export default async function CateringPage({ params }: Props) {
   const season = await detectSeason(new Date())
   const options = await prisma.cateringOption.findMany({ where: { isActive: true } })
 
+  const covers = await getFeaturedCards('catering', options.map(o => o.id))
   const priceKey = `pricePerPerson${season.charAt(0).toUpperCase() + season.slice(1)}` as
     'pricePerPersonRegular' | 'pricePerPersonRamadan' | 'pricePerPersonHajj'
 
@@ -29,7 +32,9 @@ export default async function CateringPage({ params }: Props) {
 
       <div className="grid md:grid-cols-2 gap-4">
         {options.map((o) => (
-          <div key={o.id} className="rounded-xl border p-5 space-y-4">
+          <div key={o.id} className="overflow-hidden rounded-xl border">
+            <ProductImage src={covers.get(o.id)?.src} alt={covers.get(o.id)?.alt} fallbackAlt={o.name} type="catering" />
+            <div className="p-5 space-y-4">
             <div className="space-y-2">
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold">{o.name}</p>
@@ -41,6 +46,7 @@ export default async function CateringPage({ params }: Props) {
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground">Per orang / hari</p>
               <p className="text-xl font-bold text-primary">{formatRupiah(Number(o[priceKey]))}</p>
+            </div>
             </div>
           </div>
         ))}

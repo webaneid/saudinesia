@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { getFeaturedCardUrls } from '@/lib/media/urls'
+import { getFeaturedCardUrls, getFeaturedCards } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 
@@ -29,9 +29,11 @@ export async function GET(request: Request) {
       orderBy: { price: 'asc' },
     })
 
+    const covers = await getFeaturedCards('tour_package', packages.map(p => p.id))
     const sitePhotos = await getFeaturedCardUrls('tourism_site', [...new Set(packages.flatMap(p => p.sites.map(s => s.tourismSite.id)))])
     const data = packages.map((p) => ({
       id: p.id, name: p.name, description: p.description,
+      coverUrl: covers.get(p.id)?.src ?? null, coverAlt: covers.get(p.id)?.alt ?? null,
       // transportTripId/origin/destination null kalau mode BUKAN user_choice (docs/arsitektur-ziarah.md §12) —
       // mode included tidak butuh tripId ditampilkan (kendaraan sudah baku, tidak ada pilihan).
       transportMode: p.transportMode,

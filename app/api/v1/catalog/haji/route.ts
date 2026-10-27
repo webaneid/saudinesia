@@ -1,3 +1,4 @@
+import { getFeaturedCards } from '@/lib/media/urls'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
@@ -17,7 +18,8 @@ export async function GET(request: Request) {
       orderBy: [{ year: 'asc' }, { price: 'asc' }],
     })
     // Peta eksplisit (tanpa kolom kuota mentah) dan produk yang belum berharga ditaruh paling akhir.
-    const items = products.map(toCatalogHaji)
+    const covers = await getFeaturedCards('haji', products.map(p => p.id))
+    const items = products.map(p => ({ ...toCatalogHaji(p), coverUrl: covers.get(p.id)?.src ?? null, coverAlt: covers.get(p.id)?.alt ?? null }))
     items.sort((a, b) => Number(!a.priced) - Number(!b.priced)) // sort stabil: urutan tahun/harga dipertahankan di dalam tiap kelompok
     return NextResponse.json(ok(items, { total: items.length }))
   } catch (e) { console.error('[catalog/haji]', e); return NextResponse.json(err('Internal server error'), { status: 500 }) }

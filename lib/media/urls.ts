@@ -41,3 +41,11 @@ export async function getFeaturedUrls(type: MediaProductType, productIds: string
   const all = await getProductImages(type, productIds, storage)
   return new Map([...all].map(([id, v]) => [id, v.featured?.url ?? null]))
 }
+
+/** Untuk kartu katalog: id → { url kartu sampul, alt } (atau tanpa entri bila belum ada foto). Satu query untuk semua id. */
+export async function getFeaturedCards(type: MediaProductType, productIds: string[], storage: MediaStorage = minioMediaStorage): Promise<Map<string, { src: string; alt: string | null }>> {
+  const all = await getProductImages(type, productIds, storage)
+  const out = new Map<string, { src: string; alt: string | null }>()
+  for (const [id, v] of all) if (v.featured) out.set(id, { src: v.featured.cardUrl, alt: v.featured.alt })
+  return out
+}

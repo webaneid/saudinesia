@@ -2803,3 +2803,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `components/admin/media/{MediaField,ImageUploadModal}.tsx`, `components/admin/shell/EditPage.tsx`, 9 halaman edit, route hotel/muthowif/situs, 4 route foto lama + `lib/media/legacyRoutes.ts` (dihapus), `scripts/test-media.ts`, `scripts/test-routes.ts`, docs.
 
+## 2026-10-27 — Media F3: foto sampul di katalog publik lewat `ProductImage`
+
+**Decision:** Katalog publik produk bergambar memakai satu komponen `ProductImage` (foto kartu dari `getFeaturedCards`, placeholder berikon per tipe bila kosong) dan API katalog mengirim `coverUrl`/`coverAlt` (URL presigned kartu ≤640 px). Hotel/Transport/Muthowif tetap dengan markup lama yang sudah berfungsi; kolom mati `images` dilepas dari peta katalog Haji.
+
+**Rationale:** Tujuan pemilik — UI katalog lebih menarik. Placeholder membuat kartu seragam sebelum semua produk punya foto dan tata letak tak bergeser saat foto diunggah; memakai turunan kartu menjaga halaman ringan.
+
+**Alternatives considered:** `next/image` dengan optimizer (ditolak: bucket private + URL presigned berubah tiap render merusak cache optimizer; turunan sudah dikecilkan saat unggah); memigrasikan markup Hotel/Transport/Muthowif ke `ProductImage` sekarang (ditunda: berfungsi, risiko visual tanpa manfaat fungsional).
+
+**Security check (SOP langkah 5):** 0 temuan. Tidak ada route baru, hanya field `coverUrl`/`coverAlt` tambahan di API katalog publik (URL presigned berumur 1 jam, bukan kunci objek); `alt` dirender sebagai atribut teks oleh React; tanpa dependensi baru.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; Chrome + MinIO nyata pada 5 halaman publik + 5 API; 3 mutasi tertangkap (satu lolos pada percobaan pertama → regex penjaga diperketat).
+
+**Affects:** `components/shared/ProductImage.tsx`, `lib/media/urls.ts`, 5 halaman publik, 5 API katalog, `lib/haji/catalog.ts`, `scripts/test-media.ts`, docs.
+

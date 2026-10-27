@@ -6,6 +6,9 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import sharp from 'sharp'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { ProductImage } from '@/components/shared/ProductImage'
 import { prisma } from '@/lib/db'
 import { processImage, ImageRejectedError, MAX_UPLOAD_BYTES } from '@/lib/media/image'
 import { createMediaService } from '@/lib/media/service'
@@ -233,6 +236,31 @@ await t('F2: SETIAP tipe di registry punya <MediaField productType="…"> di hal
   assert.deepEqual(adhoc, [], 'unggah foto ad-hoc di halaman admin (pakai MediaField)')
   const field = readFileSync('components/admin/media/MediaField.tsx', 'utf8')
   assert.equal((field.match(/<button\b(?![^>]*type=)/g) ?? []).length, 0, 'semua <button> di MediaField harus bertipe (aman di dalam form)')
+})
+
+await t('F3: ProductImage — ada foto → <img> (alt admin diutamakan, jika kosong nama produk); tanpa foto → placeholder berikon (aria-hidden, tanpa <img>); setiap tipe punya ikon', () => {
+  const withPhoto = renderToStaticMarkup(createElement(ProductImage, { src: 'https://x/y.webp', alt: 'Lobi', fallbackAlt: 'Hotel A', type: 'hotel' }))
+  assert.match(withPhoto, /<img[^>]+src="https:\/\/x\/y\.webp"/); assert.match(withPhoto, /alt="Lobi"/); assert.match(withPhoto, /loading="lazy"/)
+  assert.match(renderToStaticMarkup(createElement(ProductImage, { src: 'https://x/y.webp', alt: null, fallbackAlt: 'Hotel A', type: 'hotel' })), /alt="Hotel A"/)
+  for (const type of Object.keys(MEDIA_OWNERS) as Array<keyof typeof MEDIA_OWNERS>) {
+    const empty = renderToStaticMarkup(createElement(ProductImage, { src: null, fallbackAlt: 'x', type }))
+    assert.ok(!empty.includes('<img'), `${type}: placeholder tak boleh memuat <img>`); assert.match(empty, /aria-hidden="true"/); assert.match(empty, /<svg/)
+  }
+  assert.match(renderToStaticMarkup(createElement(ProductImage, { src: null, fallbackAlt: 'x', type: 'haji', ratio: 'square' })), /aspect-square/)
+})
+
+await t('F3: setiap katalog publik produk bergambar memakai getFeaturedCards + <ProductImage> bertipe benar; API katalog menyertakan coverUrl; tak ada kolom foto lama yang dibaca', () => {
+  const pub = 'app/[locale]/(public)/'
+  for (const [file, type] of [['haji/page.tsx', 'haji'], ['packages/page.tsx', 'package'], ['catering/page.tsx', 'catering'], ['visa/page.tsx', 'visa'], ['tours/page.tsx', 'tour_package']] as const) {
+    const src = readFileSync(pub + file, 'utf8')
+    assert.match(src, new RegExp(`getFeaturedCards\\('${type}'`), `${file}: tidak memuat sampul ${type}`)
+    assert.match(src, new RegExp(`<ProductImage\\s[^>]*type="${type}"`), `${file}: tak ada ProductImage ${type}`)
+  }
+  for (const [file, type] of [['haji', 'haji'], ['packages', 'package'], ['catering', 'catering'], ['visa', 'visa'], ['tour-packages', 'tour_package']] as const) {
+    const src = readFileSync(`app/api/v1/catalog/${file}/route.ts`, 'utf8')
+    assert.match(src, new RegExp(`getFeaturedCards\\('${type}'`), `API ${file}: tanpa sampul`); assert.match(src, /coverUrl/, `API ${file}: tanpa coverUrl`)
+  }
+  assert.doesNotMatch(readFileSync('lib/haji/catalog.ts', 'utf8'), /images:/, 'katalog Haji tak boleh lagi memetakan kolom foto lama')
 })
 
 // ── pembersihan ──

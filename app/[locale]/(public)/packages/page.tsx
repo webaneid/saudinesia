@@ -1,3 +1,5 @@
+import { ProductImage } from '@/components/shared/ProductImage'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { Package, ArrowRight } from 'lucide-react'
@@ -14,6 +16,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
     where: { isActive: true },
     orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
   })
+  const covers = await getFeaturedCards('package', packages.map(p => p.id))
   const hasAddOns = (p: (typeof packages)[number]) =>
     [p.hotelMakkahMode, p.hotelMadinahMode, p.transportMode, p.muthowifMode, p.visaMode, p.flightMode, p.cateringMode]
       .includes('user_choice')
@@ -42,7 +45,9 @@ export default async function PackagesCatalogPage({ params }: Props) {
         {packages.map(pkg => {
           const highlights = pkg.highlights as string[]
           return (
-            <div key={pkg.id} className={`rounded-xl border bg-card p-5 space-y-4 hover:shadow-sm transition-all ${pkg.isFeatured ? 'border-primary ring-1 ring-primary' : 'hover:border-primary'}`}>
+            <div key={pkg.id} className={`overflow-hidden rounded-xl border bg-card hover:shadow-sm transition-all ${pkg.isFeatured ? 'border-primary ring-1 ring-primary' : 'hover:border-primary'}`}>
+              <ProductImage src={covers.get(pkg.id)?.src} alt={covers.get(pkg.id)?.alt} fallbackAlt={pkg.name} type="package" />
+              <div className="p-5 space-y-4">
               {pkg.isFeatured && (
                 <Badge variant="default" className="text-xs">Pilihan Terbaik</Badge>
               )}
@@ -78,6 +83,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
                     Pesan Paket Ini <ArrowRight className="ml-2 h-4 w-4" />
                   </Link>
                 </Button>
+              </div>
               </div>
             </div>
           )

@@ -1,3 +1,5 @@
+import { ProductImage } from '@/components/shared/ProductImage'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { MapPin } from 'lucide-react'
@@ -18,6 +20,7 @@ export default async function ToursPage({ params }: Props) {
     orderBy: { price: 'asc' },
   })
 
+  const covers = await getFeaturedCards('tour_package', packages.map(p => p.id))
   const sitePhotos = await getFeaturedCardUrls('tourism_site', [...new Set(packages.flatMap(p => p.sites.map(s => s.tourismSite.id)))])
 
   const cityLabel: Record<string, string> = { makkah: 'Makkah', madinah: 'Madinah', jeddah: 'Jeddah' }
@@ -34,7 +37,9 @@ export default async function ToursPage({ params }: Props) {
           const sitesWithPhoto = p.sites.map(s => ({ ...s.tourismSite, photoUrl: sitePhotos.get(s.tourismSite.id) ?? null }))
 
           return (
-            <div key={p.id} className="rounded-xl border p-5 space-y-4">
+            <div key={p.id} className="overflow-hidden rounded-xl border">
+              <ProductImage src={covers.get(p.id)?.src} alt={covers.get(p.id)?.alt} fallbackAlt={p.name} type="tour_package" />
+              <div className="p-5 space-y-4">
               <h3 className="font-semibold">{p.name}</h3>
               <RichTextView value={p.description} className="text-muted-foreground" />
 
@@ -76,6 +81,7 @@ export default async function ToursPage({ params }: Props) {
                   className="text-sm font-medium text-primary hover:underline">
                   Tambah ke paket →
                 </Link>
+              </div>
               </div>
             </div>
           )
