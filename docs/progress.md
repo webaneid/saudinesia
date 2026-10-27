@@ -813,3 +813,9 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] F2 `MediaField` (featured/gallery) di semua 9 halaman edit; jembatan + komponen lama dihapus — selesai 2026-10-27 (MinIO nyata, unggah lewat UI; 3 mutasi)
 - [x] F3 `ProductImage` + placeholder di katalog publik (Haji, Paket, Katering, Visa, Ziarah) + `coverUrl` di API katalog — selesai 2026-10-27 (MinIO nyata; gambar 640×427 termuat)
 - [x] F4 kontraksi (7 kolom foto dibuang, fail-closed), `purgeProductMedia` di 4 jalur hapus (MinIO nyata: objek 404), penjaga CI — selesai 2026-10-27. **Proyek Media SELESAI.**
+
+**Admin — tata letak editor ala WordPress (2026-10-27, `docs/arsitektur-admin-editor.md`):**
+- [x] F1 komponen `components/admin/editor/*` + halaman edit Paket Umroh dua kolom (Terbitkan, Foto Unggulan, Atribut, Ringkasan Harga di kanan), penanda perubahan belum disimpan, galat simpan tampil, penjaga CI — selesai 2026-10-27 (Chrome asli desktop + HP)
+- [ ] F2 halaman edit lain: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan
+- [ ] F3 taksonomi/kategori produk (kotak Kategori di sidebar) — menunggu keputusan model
+
