@@ -15,6 +15,8 @@ export type ComponentBreakdown = {
   currency: string
   hppRupiah: number
   sellPrice: number
+  /** ExchangeRate.id yang membentuk HPP (kosong untuk IDR) — jejak untuk mesin harga. */
+  rateId?: string
 }
 
 export type CostComponentsResult = { components: ComponentBreakdown[]; totalSellPrice: number }
@@ -34,16 +36,18 @@ export async function computeCostComponents(productType: string, productId: stri
     if (!tier) continue
 
     let hppRupiah: number
+    let rateId: string | undefined
     if (c.currency === 'IDR') {
       hppRupiah = tier.cost
     } else {
       const rate = await getLatestRate(c.currency, 'IDR')
       if (!rate) continue // kurs tidak ditemukan — skip komponen ini, bukan error total
       hppRupiah = tier.cost * Number(rate.sellRate)
+      rateId = rate.id
     }
 
     const sellPrice = roundToNearest(hppRupiah * (1 + minMarginPercent / 100), roundingIncrement)
-    components.push({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice })
+    components.push({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice, rateId })
   }
 
   return { components, totalSellPrice: components.reduce((sum, c) => sum + c.sellPrice, 0) }

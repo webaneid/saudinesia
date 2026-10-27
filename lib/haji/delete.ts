@@ -34,6 +34,7 @@ export async function deleteOrDeactivateHaji(id: string): Promise<HajiDeleteResu
       await tx.preferredVendor.deleteMany({ where: scope })
       await tx.documentRequirement.deleteMany({ where: scope })
       await tx.manifestFieldRequirement.deleteMany({ where: scope })
+      await tx.pricePoint.deleteMany({ where: { ownerType: 'haji', ownerId: id } })
       await tx.hajiProduct.delete({ where: { id } })
       return { found: true, deleted: true }
     })

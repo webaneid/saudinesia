@@ -1,30 +1,13 @@
-import { prisma } from '@/lib/db'
-import { computePackageBreakdown, baseTotal } from './computePackagePrice'
+import { repriceOwner, repriceOwnerType } from './engine'
 
-/**
- * Refresh cache Package.price ("mulai dari") — dipanggil setiap kali field yang mempengaruhi
- * harga berubah (semua *Mode/included*Id, Komponen Biaya custom CRUD), dan dari cron kurs.
- */
+// Pembungkus tipis (Fase 1 harga terpadu): harga "mulai dari" Paket Umroh dihitung & disimpan mesin `lib/pricing/engine` (titik harga `package`, termasuk
+// modal bagian yang diketahui) dengan penulisan ganda ke `Package.price`. Nama lama dipertahankan; dihapus di Fase 5.
+
+/** Dipanggil setiap field yang memengaruhi harga berubah (mode/included*, Komponen Biaya) dan dari cron kurs. */
 export async function refreshPackagePriceCache(packageId: string): Promise<void> {
-  const breakdown = await computePackageBreakdown(packageId)
-  const price = baseTotal(breakdown)
-  await prisma.package.update({ where: { id: packageId }, data: { price } })
+  await repriceOwner('package', packageId)
 }
 
 export async function refreshAllPackagePriceCaches(currencies?: string[]): Promise<void> {
-  const packages = await prisma.package.findMany({ where: { isActive: true }, select: { id: true } })
-
-  for (const p of packages) {
-    if (currencies && currencies.length > 0) {
-      const relevant = await prisma.productCost.findFirst({
-        where: { productType: 'package', productId: p.id, isActive: true, currency: { in: currencies } },
-      })
-      if (!relevant) continue
-    }
-    try {
-      await refreshPackagePriceCache(p.id)
-    } catch (err) {
-      console.error(`[refreshAllPackagePriceCaches] gagal untuk paket ${p.id}:`, err)
-    }
-  }
+  await repriceOwnerType('package', currencies)
 }

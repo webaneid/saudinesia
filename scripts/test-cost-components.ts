@@ -239,7 +239,9 @@ await t('registry: setiap pemilik terdaftar punya route tipis dan fungsi refresh
   for (const key of ['package', 'tour_package']) assert.match(reg, new RegExp(`${key}: \\{`))
   const dirs = readdirSync('app/api/v1/admin/products')
   assert.ok(dirs.includes('packages') && dirs.includes('tour-packages'))
-  assert.ok(readFileSync(join('lib/pricing/refreshPackagePriceCache.ts'), 'utf8').includes('computePackageBreakdown'))
+  // Sejak Fase 1 harga terpadu: fungsi refresh hanya pembungkus mesin; mesinlah yang memakai breakdown paket.
+  assert.ok(readFileSync(join('lib/pricing/refreshPackagePriceCache.ts'), 'utf8').includes("repriceOwner('package'"))
+  assert.ok(readFileSync(join('lib/pricing/engine/owners/composite.ts'), 'utf8').includes('computePackageBreakdown'))
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────

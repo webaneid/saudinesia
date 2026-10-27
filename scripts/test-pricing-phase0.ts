@@ -117,6 +117,7 @@ await t('mengubah margin global + refreshAllPricingCaches() → harga Hotel (non
   } finally {
     await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } })
     await prisma.productCost.deleteMany({ where: { vendorId: vendor.id } })
+    await prisma.pricePoint.deleteMany({ where: { ownerId: schedule.id } })
     await prisma.hotel.deleteMany({ where: { id: hotel.id } })
     await prisma.roomType.deleteMany({ where: { id: roomType.id } })
     await prisma.vendor.deleteMany({ where: { id: vendor.id } })
@@ -124,7 +125,7 @@ await t('mengubah margin global + refreshAllPricingCaches() → harga Hotel (non
   }
 })
 await t('penjaga sumber: semua cache dalam SATU daftar (urutan: dasar dulu, komposit terakhir); cron dan perubahan margin memakainya', () => {
-  assert.deepEqual(PRICE_CACHE_STEP_NAMES, ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'paket ziarah', 'paket umroh', 'haji'])
+  assert.deepEqual(PRICE_CACHE_STEP_NAMES, ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'tour_package', 'package', 'haji'])
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
   assert.match(cron, /refreshAllPricingCaches\(updatedCurrencies\)/); assert.doesNotMatch(cron, /refreshAll(Visa|Flight|Hotel|Transport|Muthowif|TourPackage|Package|Haji)/, 'cron tak boleh punya daftar refresh sendiri')
   const route = readFileSync('app/api/v1/admin/system/settings/pricing-rule/route.ts', 'utf8')
