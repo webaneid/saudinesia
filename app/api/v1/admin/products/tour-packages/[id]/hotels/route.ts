@@ -4,6 +4,7 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
 import { z } from 'zod'
+import { sellPrice } from '@/lib/pricing/engine/read'
 
 const createSchema = z.object({
   hotelRoomScheduleId: z.string().min(1),
@@ -22,13 +23,11 @@ export async function POST(req: Request, { params }: Ctx) {
 
     // pricePerNight di-snapshot dari HotelRoomSchedule.price SERVER-SIDE saat dibuat — bukan
     // dari client. Setelah ini cuma referensi/default, admin bisa PUT untuk edit (§10.10).
-    const schedule = await prisma.hotelRoomSchedule.findUniqueOrThrow({
-      where: { id: parsed.data.hotelRoomScheduleId },
-      select: { price: true },
-    })
+    await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id: parsed.data.hotelRoomScheduleId }, select: { id: true } })
+    const pricePerNight = await sellPrice('hotel', parsed.data.hotelRoomScheduleId)
 
     const created = await prisma.tourPackageHotel.create({
-      data: { tourPackageId, ...parsed.data, pricePerNight: schedule.price },
+      data: { tourPackageId, ...parsed.data, pricePerNight },
     })
 
     await refreshTourPackagePriceCache(tourPackageId)

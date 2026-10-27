@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { visaPriceSummary } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -25,6 +26,7 @@ export default async function VisaCatalogPage({ params }: Props) {
   }
 
   const covers = await getFeaturedCards('visa', products.map(p => p.id))
+  const priceSummary = await visaPriceSummary(products.map(p => p.id))
 
   // Group by country
   const grouped = products.reduce<Record<string, typeof products>>((acc, p) => {
@@ -69,8 +71,7 @@ export default async function VisaCatalogPage({ params }: Props) {
               const required  = requirements.filter(r => r.required)
               const optional  = requirements.filter(r => !r.required)
               // "Mulai dari" kalau ada >=2 harga berbeda di antara tier durasi — docs/arsitektur-harga.md §17.5
-              const fees = (v.durationFeeRules as unknown as { fee: number }[]).map(r => r.fee)
-              const priceIsRange = new Set(fees).size >= 2
+              const { from: fromPrice, isRange: priceIsRange } = priceSummary.get(v.id) ?? { from: 0, isRange: false }
 
               return (
                 <div
@@ -90,7 +91,7 @@ export default async function VisaCatalogPage({ params }: Props) {
                     <div className="text-right shrink-0">
                       <p className="text-xl font-bold text-teal-700">
                         {priceIsRange && <span className="text-sm font-medium text-muted-foreground">Mulai dari </span>}
-                        {formatRupiah(Number(v.price))}
+                        {formatRupiah(fromPrice)}
                       </p>
                       <p className="text-xs text-muted-foreground">{v.priceLabel ?? 'per orang'}</p>
                     </div>

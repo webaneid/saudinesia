@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 // List HotelRoomSchedule aktif, flattened — dipakai dropdown "Hotel (opsional)" di package
 // builder Paket Ziarah (docs/arsitektur-ziarah.md §10.4).
@@ -17,12 +18,13 @@ export async function GET() {
       include: { period: { include: { hotel: true } }, roomType: true },
       orderBy: [{ period: { hotel: { name: 'asc' } } }, { roomType: { name: 'asc' } }],
     })
+    const prices = await sellPrices('hotel', schedules.map(s => s.id))
     const data = schedules.map(s => ({
       id: s.id,
       hotelName: s.period.hotel.name,
       city: s.period.hotel.city,
       roomTypeName: s.roomType.name,
-      price: Number(s.price),
+      price: prices.get(s.id) ?? 0,
       periodStart: s.period.periodStart,
       periodEnd: s.period.periodEnd,
     }))

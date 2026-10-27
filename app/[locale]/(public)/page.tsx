@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah, formatDistance } from '@/lib/utils'
 import { plainText } from '@/lib/rich-text/doc'
+import { getMuthowifServicePrice, sellPrices } from '@/lib/pricing/engine/read'
 
 export default async function LandingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
@@ -23,20 +24,25 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
     include: {
       pricePeriods: {
         where: { isActive: true, periodStart: { lte: today }, periodEnd: { gte: today } },
-        include: { schedules: { where: { isActive: true }, take: 1, orderBy: { price: 'asc' } } },
+        include: { schedules: { where: { isActive: true } } },
       },
     },
     orderBy: [{ stars: 'desc' }, { distanceToHaramM: 'asc' }],
     take: 3,
   })
-  const featuredHotels = featuredHotelsRaw.map(h => ({ ...h, schedules: h.pricePeriods.flatMap(p => p.schedules) }))
+  // Jadwal termurah per hotel — harga dari titik harga (docs/arsitektur-harga-terpadu.md §15).
+  const featuredPrices = await sellPrices('hotel', featuredHotelsRaw.flatMap(h => h.pricePeriods.flatMap(p => p.schedules.map(s => s.id))))
+  const featuredHotels = featuredHotelsRaw.map(h => ({
+    ...h,
+    schedules: h.pricePeriods.flatMap(p => p.schedules).map(s => ({ ...s, price: featuredPrices.get(s.id) ?? 0 })).sort((a, b) => a.price - b.price).slice(0, 1),
+  }))
 
   const featuredMuthowifRaw = await prisma.muthowif.findMany({
     where: { isActive: true }, orderBy: { rating: 'desc' }, take: 3,
   })
   const muthowifPhotos = await getFeaturedCardUrls('muthowif', featuredMuthowifRaw.map(m => m.id))
   const featuredMuthowif = featuredMuthowifRaw.map(m => ({ ...m, photoUrl: muthowifPhotos.get(m.id) ?? null }))
-  const muthowifServicePrice = await prisma.muthowifServicePrice.findFirst()
+  const muthowifServicePrice = await getMuthowifServicePrice()
 
   const services = [
     { icon: Building2, label: 'Hotel', count: `${hotelCount} hotel pilihan`, href: `/${locale}/hotels`, color: 'text-blue-600 bg-blue-50' },
@@ -133,7 +139,7 @@ export default async function LandingPage({ params }: { params: Promise<{ locale
             <h2 className="text-2xl font-bold">Muthowif Terpercaya</h2>
             {muthowifServicePrice && (
               <p className="text-sm text-muted-foreground mt-0.5">
-                Harga layanan mulai {formatRupiah(Number(muthowifServicePrice.price))}/hari
+                Harga layanan mulai {formatRupiah(muthowifServicePrice.price)}/hari
               </p>
             )}
           </div>

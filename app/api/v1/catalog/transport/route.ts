@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 const querySchema = z.object({
   category: z.string().optional(),
@@ -48,6 +49,7 @@ export async function GET(request: Request) {
       ],
     })
 
+    const transportPrices = await sellPrices('transport', quotas.map(q => q.pricingId))
     const data = quotas.map((q) => {
       const { pricing } = q
       const { trip, vehicle } = pricing
@@ -68,7 +70,7 @@ export async function GET(request: Request) {
         capacity:    vehicle.capacity,
         fleetCount:  vehicle.fleetCount,
         // Pricing
-        price: Number(pricing.price),
+        price: transportPrices.get(pricing.id) ?? 0,
         // Availability
         travelDate:     q.travelDate,
         availableSeats: q.totalSeats - q.pendingSeats - q.bookedSeats,

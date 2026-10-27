@@ -11,6 +11,7 @@ import { formatDeadline } from '@/lib/notifications/events'
 import { ok, err } from '@/lib/validators'
 import { computeSellPrice } from '@/lib/pricing/computeSellPrice'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
+import { requireSellPrice } from '@/lib/pricing/engine/read'
 import { computeTourPackageBreakdown, baseTotal, totalForVehicle, hotelChoicePrice } from '@/lib/pricing/computeTourPackagePrice'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
 import { ItemNotBookableError } from '@/lib/booking/errors'
@@ -148,25 +149,24 @@ export async function POST(request: Request) {
       for (const item of data.items) {
         switch (item.itemType) {
           case 'hotel': {
-            const schedule = await tx.hotelRoomSchedule.findUniqueOrThrow({ where: { id: item.hotelRoomScheduleId } })
-            const totalPrice = Number(schedule.price) * item.nights * item.numRooms
+            await tx.hotelRoomSchedule.findUniqueOrThrow({ where: { id: item.hotelRoomScheduleId }, select: { id: true } }) // 404 bila jadwal tak ada
+            // Harga dari titik harga (docs/arsitektur-harga-terpadu.md §15); belum berharga → 422, tak pernah gratis.
+            const pricePerNight = await requireSellPrice('hotel', item.hotelRoomScheduleId, 'kamar hotel', tx)
+            const totalPrice = pricePerNight * item.nights * item.numRooms
             await tx.bookingHotel.create({
               data: {
                 bookingId: bk.id, hotelRoomScheduleId: item.hotelRoomScheduleId,
                 checkIn: new Date(item.checkIn), checkOut: new Date(item.checkOut),
                 nights: item.nights, numRooms: item.numRooms, numGuests: data.totalPilgrims,
-                pricePerNight: schedule.price, totalPrice,
+                pricePerNight, totalPrice,
               },
             })
             totalAmount += totalPrice
             break
           }
           case 'transport': {
-            const quota = await tx.transportQuota.findUniqueOrThrow({
-              where: { id: item.transportQuotaId },
-              include: { pricing: true },
-            })
-            const unitPrice = quota.pricing.price
+            const quota = await tx.transportQuota.findUniqueOrThrow({ where: { id: item.transportQuotaId }, select: { pricingId: true } })
+            const unitPrice = await requireSellPrice('transport', quota.pricingId, 'transport', tx)
             await tx.bookingTransport.create({
               data: {
                 bookingId: bk.id, transportQuotaId: item.transportQuotaId,
@@ -177,13 +177,13 @@ export async function POST(request: Request) {
                 dropoffDetail: item.dropoffDetail ?? null,
               },
             })
-            totalAmount += Number(unitPrice)
+            totalAmount += unitPrice
             break
           }
           case 'muthowif': {
             // muthowifId TIDAK diisi — admin assign belakangan (docs/arsitektur-muthowif.md §9).
-            const servicePrice = await tx.muthowifServicePrice.findFirstOrThrow()
-            const pricePerDay = Number(servicePrice.price)
+            const servicePrice = await tx.muthowifServicePrice.findFirstOrThrow({ select: { id: true } })
+            const pricePerDay = await requireSellPrice('muthowif', servicePrice.id, 'layanan muthowif', tx)
             const totalPrice = pricePerDay * item.numDays * item.numPeople
             await tx.bookingMuthowif.create({
               data: {
@@ -242,8 +242,8 @@ export async function POST(request: Request) {
             break
           }
           case 'haji': {
-            const product = await tx.hajiProduct.findUniqueOrThrow({ where: { id: item.hajiProductId } })
-            const totalPrice = Number(product.price) * item.numPersons
+            const unitPrice = await requireSellPrice('haji', item.hajiProductId, 'produk haji', tx)
+            const totalPrice = unitPrice * item.numPersons
             await tx.bookingHaji.create({
               data: { bookingId: bk.id, hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
             })

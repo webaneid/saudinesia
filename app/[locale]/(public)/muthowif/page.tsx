@@ -6,6 +6,7 @@ import { UserRound, Star, Globe } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
 import { plainText } from '@/lib/rich-text/doc'
+import { getMuthowifServicePrice } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -14,7 +15,7 @@ export default async function MuthowifPage({ params }: Props) {
 
   const [guidesRaw, servicePrice] = await Promise.all([
     prisma.muthowif.findMany({ where: { isActive: true }, orderBy: { rating: 'desc' } }),
-    prisma.muthowifServicePrice.findFirst(),
+    getMuthowifServicePrice(),
   ])
   const guidePhotos = await getFeaturedCardUrls('muthowif', guidesRaw.map(g => g.id))
   const guides = guidesRaw.map(g => ({ ...g, photoUrl: guidePhotos.get(g.id) ?? null }))
@@ -26,7 +27,7 @@ export default async function MuthowifPage({ params }: Props) {
         <p className="text-muted-foreground">{guides.length} pembimbing berpengalaman — Saudinesia yang menentukan siapa yang bertugas untuk setiap jamaah.</p>
         {servicePrice && (
           <p className="text-sm font-medium text-primary">
-            Harga layanan mulai {formatRupiah(Number(servicePrice.price))}<span className="text-xs font-normal text-muted-foreground">/hari</span>
+            Harga layanan mulai {formatRupiah(servicePrice.price)}<span className="text-xs font-normal text-muted-foreground">/hari</span>
           </p>
         )}
       </div>

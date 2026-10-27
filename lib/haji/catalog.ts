@@ -6,10 +6,11 @@ import type { HajiProduct } from '@prisma/client'
 export const hajiAvailable = (p: Pick<HajiProduct, 'totalQuota' | 'pendingQuota' | 'bookedQuota'>) =>
   Math.max(0, p.totalQuota - p.pendingQuota - p.bookedQuota)
 
-/** Harga sudah ditetapkan (cache > 0). Belum berharga → "Harga belum ditetapkan" dan tidak bisa dipesan (SEC-66). */
-export const hajiPriced = (p: Pick<HajiProduct, 'price'>) => Number(p.price) > 0
+/** Harga sudah ditetapkan (titik harga `haji` > 0). Belum berharga → "Harga belum ditetapkan" dan tidak bisa dipesan (SEC-66). */
+export const hajiPriced = (price: number) => price > 0
 
-export function toCatalogHaji(p: HajiProduct) {
+/** `price` = harga jual dari titik harga (`sellPrices('haji', …)`), bukan kolom cache lama. */
+export function toCatalogHaji(p: HajiProduct, price: number) {
   return {
     id: p.id,
     name: p.name,
@@ -21,8 +22,8 @@ export function toCatalogHaji(p: HajiProduct) {
     durationDays: p.durationDays,
     includes: p.includes,
     priceLabel: p.priceLabel,
-    price: Number(p.price),
-    priced: hajiPriced(p),
+    price,
+    priced: hajiPriced(price),
     available: hajiAvailable(p),
   }
 }

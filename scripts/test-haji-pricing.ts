@@ -51,6 +51,8 @@ const priceOf = async (id: string) => Number((await prisma.hajiProduct.findUniqu
 const flat = (cost: number) => [{ minDays: 0, maxDays: 9999, cost }]
 const created: string[] = []
 const haji = async (extra: Record<string, unknown> = {}) => { const p = await mkHaji(extra); created.push(p.id); return p }
+// Sejak Fase 2 harga dibaca dari titik harga (bukan kolom `price`): produk "berharga" = punya titik harga `haji` bernilai itu.
+const pricePoint = (ownerId: string, price: number) => prisma.pricePoint.create({ data: { ownerType: 'haji', ownerId, unit: 'package', autoSellIdr: price, sellIdr: price } })
 
 console.log('== harga dari Komponen Biaya ==')
 
@@ -118,6 +120,7 @@ const tryReserve = (id: string, n: number) => prisma.$transaction((tx) => reserv
 
 await t('produk NONAKTIF atau BELUM BERHARGA ditolak (ItemNotBookableError) dan kuota TIDAK ditahan; produk berharga & aktif lolos dan kuota pending naik', async () => {
   const unpriced = await haji({ price: 0 }), inactive = await haji({ price: 1000000, isActive: false }), good = await haji({ price: 5000000 })
+  await pricePoint(inactive.id, 1000000); await pricePoint(good.id, 5000000) // `unpriced` sengaja tanpa titik harga
   await assert.rejects(tryReserve(unpriced.id, 1), (e) => e instanceof ItemNotBookableError && /belum ditetapkan/.test(e.message))
   await assert.rejects(tryReserve(inactive.id, 1), (e) => e instanceof ItemNotBookableError && /tidak tersedia/.test(e.message))
   for (const id of [unpriced.id, inactive.id]) assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id } })).pendingQuota, 0)
@@ -127,6 +130,7 @@ await t('produk NONAKTIF atau BELUM BERHARGA ditolak (ItemNotBookableError) dan 
 
 await t('kuota habis tetap error "insufficient" (→ 409, bukan 422) dan transaksi rollback', async () => {
   const p = await haji({ price: 5000000, totalQuota: 2 })
+  await pricePoint(p.id, 5000000)
   await assert.rejects(tryReserve(p.id, 3), (e) => !(e instanceof ItemNotBookableError) && /insufficient/.test((e as Error).message))
   assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: p.id } })).pendingQuota, 0)
 })
@@ -180,8 +184,8 @@ await t('harga BUKAN masukan: skema buat/ubah menolak `price`; mengaktifkan kemb
 await t('katalog publik: peta eksplisit tanpa kolom kuota mentah; available = total − pending − booked (tak negatif); priced mengikuti cache', async () => {
   const p = await prisma.hajiProduct.create({ data: { name: `${tag} kat`, hajiType: 'reguler', year: 2028, price: 0, totalQuota: 10, pendingQuota: 3, bookedQuota: 4 } })
   created.push(p.id)
-  const c = toCatalogHaji(p)
-  assert.equal(c.available, 3); assert.equal(c.priced, false); assert.equal(hajiPriced({ price: 1 as never }), true)
+  const c = toCatalogHaji(p, 0)
+  assert.equal(c.available, 3); assert.equal(c.priced, false); assert.equal(hajiPriced(1), true); assert.equal(toCatalogHaji(p, 5_000_000).price, 5_000_000)
   for (const k of ['totalQuota', 'pendingQuota', 'bookedQuota', 'isActive', 'createdAt']) assert.ok(!(k in c), `${k} tak boleh ada di respons publik`)
   assert.equal(hajiAvailable({ totalQuota: 2, pendingQuota: 2, bookedQuota: 2 }), 0)
 })
@@ -225,6 +229,7 @@ await t('UI Haji (Fase 4): halaman edit memakai panel Komponen Biaya Haji, punya
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
+await prisma.pricePoint.deleteMany({ where: { ownerType: 'haji', ownerId: { in: created } } })
 await prisma.productCost.deleteMany({ where: { productType: 'haji', productId: { in: created } } })
 await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } }) // FK Restrict (ADR-0003): vendor pilihan harus hilang sebelum vendor
 await prisma.hajiProduct.deleteMany({ where: { id: { in: created } } })

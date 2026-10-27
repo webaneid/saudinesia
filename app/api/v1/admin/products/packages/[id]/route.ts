@@ -7,6 +7,7 @@ import { refreshPackagePriceCache } from '@/lib/pricing/refreshPackagePriceCache
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deletePackage } from '@/lib/admin/productDelete'
+import { sellPrice } from '@/lib/pricing/engine/read'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -110,8 +111,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       if (parsed.data.includedHotelMakkahScheduleId === null) {
         data.includedHotelMakkahPrice = null
       } else {
-        const sched = await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id: parsed.data.includedHotelMakkahScheduleId }, select: { price: true } })
-        data.includedHotelMakkahPrice = sched.price
+        await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id: parsed.data.includedHotelMakkahScheduleId }, select: { id: true } })
+        data.includedHotelMakkahPrice = await sellPrice('hotel', parsed.data.includedHotelMakkahScheduleId)
       }
     }
     // Hotel Madinah — sama pola
@@ -119,8 +120,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       if (parsed.data.includedHotelMadinahScheduleId === null) {
         data.includedHotelMadinahPrice = null
       } else {
-        const sched = await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id: parsed.data.includedHotelMadinahScheduleId }, select: { price: true } })
-        data.includedHotelMadinahPrice = sched.price
+        await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id: parsed.data.includedHotelMadinahScheduleId }, select: { id: true } })
+        data.includedHotelMadinahPrice = await sellPrice('hotel', parsed.data.includedHotelMadinahScheduleId)
       }
     }
     // Transport
@@ -128,8 +129,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       if (parsed.data.includedTransportPricingId === null) {
         data.includedTransportPrice = null
       } else {
-        const pricing = await prisma.transportPricing.findUniqueOrThrow({ where: { id: parsed.data.includedTransportPricingId }, select: { price: true } })
-        data.includedTransportPrice = pricing.price
+        await prisma.transportPricing.findUniqueOrThrow({ where: { id: parsed.data.includedTransportPricingId }, select: { id: true } })
+        data.includedTransportPrice = await sellPrice('transport', parsed.data.includedTransportPricingId)
       }
     }
     // Visa
@@ -137,8 +138,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       if (parsed.data.includedVisaProductId === null) {
         data.includedVisaPrice = null
       } else {
-        const visa = await prisma.visaProduct.findUniqueOrThrow({ where: { id: parsed.data.includedVisaProductId }, select: { price: true } })
-        data.includedVisaPrice = visa.price
+        await prisma.visaProduct.findUniqueOrThrow({ where: { id: parsed.data.includedVisaProductId }, select: { id: true } })
+        data.includedVisaPrice = await sellPrice('visa', parsed.data.includedVisaProductId) // termurah di antara tier ("mulai dari")
       }
     }
     // Tiket Pesawat
@@ -146,8 +147,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       if (parsed.data.includedFlightScheduleId === null) {
         data.includedFlightPrice = null
       } else {
-        const sched = await prisma.flightSchedule.findUniqueOrThrow({ where: { id: parsed.data.includedFlightScheduleId }, select: { price: true } })
-        data.includedFlightPrice = sched.price
+        await prisma.flightSchedule.findUniqueOrThrow({ where: { id: parsed.data.includedFlightScheduleId }, select: { id: true } })
+        data.includedFlightPrice = await sellPrice('flight', parsed.data.includedFlightScheduleId)
       }
     }
 
@@ -157,8 +158,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (parsed.data.muthowifMode === 'included') {
       const before = await prisma.package.findUniqueOrThrow({ where: { id }, select: { includedMuthowifPrice: true } })
       if (before.includedMuthowifPrice == null) {
-        const singleton = await prisma.muthowifServicePrice.findFirst()
-        data.includedMuthowifPrice = singleton ? singleton.price : 0
+        const singleton = await prisma.muthowifServicePrice.findFirst({ select: { id: true } })
+        data.includedMuthowifPrice = singleton ? await sellPrice('muthowif', singleton.id) : 0
       }
     }
 

@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import { Plane, CalendarRange } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { withSellPrice } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -11,11 +12,11 @@ function formatDate(d: Date) {
 export default async function FlightCatalogPage({ params }: Props) {
   await params
 
-  const schedules = await prisma.flightSchedule.findMany({
+  const schedules = await withSellPrice('flight', await prisma.flightSchedule.findMany({
     where: { isActive: true, route: { isActive: true } },
     orderBy: { departureFrom: 'asc' },
     include: { route: true },
-  })
+  }))
 
   // Satu query batch untuk semua maskapai (Vendor lewat ProductCost) — bukan N+1 per jadwal.
   const costs = await prisma.productCost.findMany({

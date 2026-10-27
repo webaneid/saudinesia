@@ -20,6 +20,19 @@ export async function registerNode() {
   startExchangeRateJob()
 
   void ensureMinioBucket()
+  void repriceOnBoot()
+}
+
+// Titik harga (`price_points`) dilengkapi/diperbarui saat server naik: migrasi hanya menyalin harga jual dari kolom lama (modal kosong); ini mengisi modal dan
+// memperbaiki cache basi (docs/arsitektur-harga-terpadu.md §15). Idempoten, fire-and-forget — kegagalan hanya dicatat dan TIDAK menjatuhkan boot.
+async function repriceOnBoot() {
+  try {
+    const { repriceAll } = await import('@/lib/pricing/engine')
+    const failed = await repriceAll()
+    if (failed.length > 0) console.error('[pricing] hitung ulang saat boot gagal untuk:', failed.join(', '))
+  } catch (e) {
+    console.error('[pricing] hitung ulang saat boot gagal:', e instanceof Error ? e.message : e)
+  }
 }
 
 // Bucket dibuat otomatis bila belum ada (idempotent) — tanpa ini deploy pertama gagal saat unggah pertama

@@ -7,6 +7,7 @@ import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePr
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteTourPackage } from '@/lib/admin/productDelete'
+import { sellPrice } from '@/lib/pricing/engine/read'
 
 // transportTripId/includedTransportPricingId nullable eksplisit — admin bisa MELEPAS (kirim
 // null), bukan cuma "tidak diubah". transportMode/hotelMode adalah pemilih 3-mode (included/
@@ -70,11 +71,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       if (parsed.data.includedTransportPricingId === null) {
         data.includedTransportPrice = null
       } else {
-        const pricing = await prisma.transportPricing.findUniqueOrThrow({
-          where: { id: parsed.data.includedTransportPricingId },
-          select: { price: true },
-        })
-        data.includedTransportPrice = pricing.price
+        await prisma.transportPricing.findUniqueOrThrow({ where: { id: parsed.data.includedTransportPricingId }, select: { id: true } })
+        data.includedTransportPrice = await sellPrice('transport', parsed.data.includedTransportPricingId)
       }
     }
 

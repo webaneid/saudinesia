@@ -6,6 +6,7 @@ import { hajiProductUpdateSchema } from '@/lib/validators/adminUpdates'
 import { emptyToNull } from '@/lib/validators/richText'
 import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
 import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
+import { sellPrice } from '@/lib/pricing/engine/read'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -19,7 +20,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const product = await prisma.hajiProduct.findUnique({ where: { id } })
     if (!product) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
     const bookingCount = await prisma.bookingHaji.count({ where: { hajiProductId: id } })
-    return NextResponse.json(ok({ ...product, price: Number(product.price), bookingCount }))
+    return NextResponse.json(ok({ ...product, price: await sellPrice('haji', id), bookingCount }))
   } catch (e) {
     return authFailureResponse(e, 'admin/products/haji/[id]/GET')
   }
@@ -46,7 +47,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       where: { id },
       data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
     })
-    return NextResponse.json(ok({ ...updated, price: Number(updated.price) }))
+    return NextResponse.json(ok({ ...updated, price: await sellPrice('haji', id) }))
   } catch (e) {
     if (isRecordNotFound(e)) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
     return authFailureResponse(e, 'admin/products/haji/[id]/PUT')
