@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { getLatestRate, getMarginRule, roundToNearest } from './pricingHelpers'
+import { getLatestRate, resolveMarginRule, roundToNearest } from './pricingHelpers'
 
 type CostTier = { minDays: number; maxDays: number; cost: number }
 type OverridableTier = CostTier & { sellPriceOverride?: number | null }
@@ -78,9 +78,7 @@ export async function computeSellPrice(
     vendorUsed.push(component.vendorId)
   }
 
-  const marginRule = await getMarginRule(productType)
-  const minMarginPercent = marginRule ? Number(marginRule.minMarginPercent) : 20
-  const roundingIncrement = marginRule ? marginRule.roundingIncrement : 50000
+  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
   // hppRupiah TIDAK ikut di-override — tetap angka asli untuk transparansi.
   const minSellPrice = hppRupiah * (1 + minMarginPercent / 100)

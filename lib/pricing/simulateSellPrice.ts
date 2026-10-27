@@ -1,4 +1,4 @@
-import { getLatestRate, getMarginRule, roundToNearest } from './pricingHelpers'
+import { getLatestRate, resolveMarginRule, roundToNearest } from './pricingHelpers'
 
 export type SimulateComponent = { currency: string; cost: number }
 export type SimulateResult = { hppRupiah: number; minSellPrice: number; sellPrice: number }
@@ -34,9 +34,7 @@ export async function simulateSellPrice(
     hppRupiah += component.cost * Number(rate.sellRate)
   }
 
-  const marginRule = await getMarginRule(productType)
-  const minMarginPercent = marginRule ? Number(marginRule.minMarginPercent) : 20
-  const roundingIncrement = marginRule ? marginRule.roundingIncrement : 50000
+  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
   const minSellPrice = hppRupiah * (1 + minMarginPercent / 100)
   const sellPrice = roundToNearest(minSellPrice, roundingIncrement)

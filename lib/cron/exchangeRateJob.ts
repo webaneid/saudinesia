@@ -1,13 +1,6 @@
 import cron from 'node-cron'
 import { prisma } from '@/lib/db'
-import { refreshAllVisaProductCaches } from '@/lib/pricing/refreshVisaProductCache'
-import { refreshAllFlightScheduleCaches } from '@/lib/pricing/refreshFlightScheduleCache'
-import { refreshAllHotelRoomScheduleCaches } from '@/lib/pricing/refreshHotelRoomScheduleCache'
-import { refreshAllTransportPricingCaches } from '@/lib/pricing/refreshTransportPricingCache'
-import { refreshAllMuthowifServicePriceCaches } from '@/lib/pricing/refreshMuthowifServicePriceCache'
-import { refreshAllTourPackagePriceCaches } from '@/lib/pricing/refreshTourPackagePriceCache'
-import { refreshAllPackagePriceCaches } from '@/lib/pricing/refreshPackagePriceCache'
-import { refreshAllHajiPriceCaches } from '@/lib/pricing/computeHajiPrice'
+import { refreshAllPricingCaches } from '@/lib/pricing/refreshAll'
 
 const API_BASE = 'https://open.er-api.com/v6/latest'
 const PAIRS: Array<{ from: string; to: string }> = [
@@ -79,54 +72,8 @@ export async function refreshExchangeRates(): Promise<void> {
   }
 
   if (updatedCurrencies.length > 0) {
-    try {
-      await refreshAllVisaProductCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga visa di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllVisaProductCaches gagal:', err)
-    }
-    try {
-      await refreshAllFlightScheduleCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga flight di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllFlightScheduleCaches gagal:', err)
-    }
-    try {
-      await refreshAllHotelRoomScheduleCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga hotel di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllHotelRoomScheduleCaches gagal:', err)
-    }
-    try {
-      await refreshAllTransportPricingCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga transport di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllTransportPricingCaches gagal:', err)
-    }
-    try {
-      await refreshAllMuthowifServicePriceCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga muthowif di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllMuthowifServicePriceCaches gagal:', err)
-    }
-    try {
-      await refreshAllTourPackagePriceCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga paket ziarah di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllTourPackagePriceCaches gagal:', err)
-    }
-    try {
-      await refreshAllPackagePriceCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga paket umroh di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllPackagePriceCaches gagal:', err)
-    }
-    try {
-      await refreshAllHajiPriceCaches(updatedCurrencies)
-      console.log(`[cron] Cache harga haji di-refresh untuk currency: ${updatedCurrencies.join(', ')}`)
-    } catch (err) {
-      console.error('[cron] refreshAllHajiPriceCaches gagal:', err)
-    }
+    const failed = await refreshAllPricingCaches(updatedCurrencies)
+    console.log(`[cron] Cache harga di-refresh untuk currency: ${updatedCurrencies.join(', ')}${failed.length ? ` — GAGAL: ${failed.join(', ')}` : ''}`)
   }
 }
 

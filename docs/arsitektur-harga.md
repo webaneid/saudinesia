@@ -130,7 +130,10 @@ model PreferredVendor {
 
 **Kenapa `costTiers` polanya sama persis dengan `durationFeeRules` di §9.3 `docs/arsitektur-visa.md`:** karena secara struktural memang masalah yang sama (harga/biaya yang bervariasi per rentang hari) — satu pola dipakai dua sisi (sisi HPP dan sisi harga jual), bukan dua struktur berbeda yang harus dipelihara terpisah.
 
-### 3.4 `PricingRule` (margin minimum, global + override per tipe)
+### 3.4 `PricingRule`
+
+> **Diperbarui 2026-10-27 (Fase 0 harga terpadu):** baris global kini berkunci `productType = 'global'` (non-NULL, unik), bukan `NULL` — lihat `docs/arsitektur-harga-terpadu.md` §13. Nilai bawaan 20 % / 50.000 hanya di `lib/pricing/pricingHelpers.ts`.
+ (margin minimum, global + override per tipe)
 
 ```prisma
 model PricingRule {

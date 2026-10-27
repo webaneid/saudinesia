@@ -76,7 +76,7 @@ await t('tanpa aturan margin `haji` jatuh ke aturan global/default (20 %, bulat 
   await prisma.pricingRule.deleteMany({ where: { productType: 'haji' } })
   const h = await haji()
   await prisma.productCost.create({ data: { productType: 'haji', productId: h.id, vendorId: vendor.id, costComponent: 'X', currency: 'IDR', costTiers: flat(1000000) } })
-  const global = await prisma.pricingRule.findFirst({ where: { productType: null } })
+  const global = await prisma.pricingRule.findFirst({ where: { productType: 'global' } })
   const pct = global ? Number(global.minMarginPercent) : 20, inc = global ? global.roundingIncrement : 50000
   assert.equal((await computeHajiBreakdown(h.id)).componentsTotalSellPrice, Math.round(1000000 * (1 + pct / 100) / inc) * inc)
   await prisma.pricingRule.create({ data: { productType: 'haji', minMarginPercent: 40, roundingIncrement: 100000 } })
@@ -188,7 +188,7 @@ await t('katalog publik: peta eksplisit tanpa kolom kuota mentah; available = to
 
 console.log('== penjaga sumber ==')
 
-await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivateHaji), route biaya Haji tipis, POST membuat price 0, booking memetakan ItemNotBookableError → 422, cron memanggil refreshAllHajiPriceCaches', () => {
+await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivateHaji), route biaya Haji tipis, POST membuat price 0, booking memetakan ItemNotBookableError → 422, cron memanggil agregator yang memuat refreshAllHajiPriceCaches', () => {
   const byId = readFileSync('app/api/v1/admin/products/haji/[id]/route.ts', 'utf8')
   for (const v of ['GET', 'PUT', 'DELETE']) assert.match(byId, new RegExp(`export async function ${v}\\(`))
   assert.match(byId, /deleteOrDeactivateHaji\(id\)/); assert.match(byId, /requireManager\(\)/)
@@ -201,7 +201,9 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
   assert.match(bk, /error instanceof ItemNotBookableError\) return NextResponse\.json\(err\(error\.message\), \{ status: 422 \}\)/)
   assert.ok(bk.indexOf('ItemNotBookableError)') < bk.indexOf("includes('insufficient')"), '422 dicek sebelum pemetaan 409')
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
-  assert.match(cron, /await refreshAllHajiPriceCaches\(updatedCurrencies\)/)
+  // Daftar refresh kini satu (lib/pricing/refreshAll.ts, Fase 0 harga terpadu): cron memakai agregator, Haji ada di dalamnya.
+  assert.match(cron, /refreshAllPricingCaches\(updatedCurrencies\)/)
+  assert.match(readFileSync('lib/pricing/refreshAll.ts', 'utf8'), /name: 'haji', run: refreshAllHajiPriceCaches/)
   assert.match(readFileSync('lib/pricing/costComponentOwners.ts', 'utf8'), /haji: \{\s*productType: 'haji'/)
   const cat = readFileSync('app/api/v1/catalog/haji/route.ts', 'utf8')
   assert.match(cat, /toCatalogHaji/); assert.doesNotMatch(cat, /\.\.\.p\b/, 'katalog tak boleh menyebar baris DB mentah')

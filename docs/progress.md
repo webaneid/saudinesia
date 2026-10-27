@@ -819,3 +819,10 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] F2 halaman edit lain: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan (+ Musim/Rute/Pengguna lewat `EditPage`); bug penanda belum-disimpan palsu (editor teks kaya) + 3 galat tertelan ditutup — selesai 2026-10-27 (Chrome asli desktop + HP; 410 PASS)
 - [ ] F3 taksonomi/kategori produk (kotak Kategori di sidebar) — menunggu keputusan model
 - [x] Perapian hapus: hapus-aman Muthowif, Situs Wisata, Hotel, Paket Umroh, Paket Ziarah + Visa (dirujuk → nonaktif, tak lagi 500/yatim) lewat `lib/admin/productDelete.ts`; rujukan SET NULL dihitung, polimorfik dibersihkan, kunci anti-race, penyidik FK — selesai 2026-10-27 (424 PASS; 6 mutasi; Chrome asli 8 entitas)
+
+**Harga terpadu — Modal · Jual · Untung (2026-10-27, `docs/arsitektur-harga-terpadu.md`):**
+- [x] Rencana disetujui pemilik (role terbuka dulu, pengeluaran aktual + catatan selisih HPP, diskon di total dengan catatan bila di bawah HPP)
+- [x] Fase 0 — katering dihitung server (SEC-71 High ditutup), aturan margin global satu-satunya (migrasi + upsert), nilai bawaan satu tempat, margin berubah menyegarkan SEMUA cache — selesai 2026-10-27 (436 PASS; 9 mutasi; curl ke server berjalan)
+- [ ] Fase 1 fondasi `PricePoint`/`PriceSnapshot`/`PriceChange` + mesin + backfill
+- [ ] Fase 2 pembaca pindah · Fase 3 UI `PriceCard` + manual + kesehatan margin · Fase 4 snapshot booking/invoice · Fase 5 kontraksi · Fase 6 laporan · Fase 7 pengeluaran aktual
+

@@ -35,7 +35,9 @@
 8. **Cache bisa basi diam-diam:** `refresh*` berhenti bila HPP ≤ 0 ("jangan reset ke 0") sehingga menghapus semua biaya membiarkan harga lama tampil di katalog.
 9. **Tidak ada laporan keuangan apa pun** (tak ada kode `laporan/revenue/profit`); `Booking.totalAmount`, `Payment`, `Refund` ada tetapi tidak ada modal/utang vendor.
 10. **Mengubah margin global hanya menyegarkan harga Visa** (`pricing-rule` PUT memanggil `refreshAllVisaProductCaches()` saja). Hotel, Pesawat, Transport, Muthowif, Haji, Paket Umroh/Ziarah tetap memakai harga lama sampai biayanya diedit — padahal cron kurs hanya menyegarkan produk ber-biaya mata uang asing, jadi produk berbiaya IDR tak pernah ikut. Harga di katalog bisa berbeda dari aturan yang berlaku. (Ditutup di Fase 0; mesin Fase 1 menggantikan seluruhnya.)
-11. Hak akses: Komponen Biaya/HPP superadmin-only (`requireSuperAdmin`); harga jual tampil ke semua peran admin.
+11. **Temuan data dev (diverifikasi 2026-10-27):** satu harga Transport (Rp 6.000.000) **tanpa satu pun baris biaya** (harga yang tak punya modal — jenis "jual tanpa modal" yang harus bisa dinyatakan eksplisit, §3 `costIdr = null`), dan **8 baris `product_costs` Hotel yatim** (menunjuk jadwal kamar yang sudah tidak ada). Migrasi/backfill Fase 1 wajib menangani keduanya.
+12. Katering pada Paket Umroh selalu memakai harga **Reguler** (`computePackagePrice`: `pricePerPersonRegular`), padahal katering lain memakai musim pada tanggal — tidak konsisten; Fase 1 menyatukan lewat varian musim.
+13. Hak akses: Komponen Biaya/HPP superadmin-only (`requireSuperAdmin`); harga jual tampil ke semua peran admin.
 
 ### 1.3 Yang sudah baik dan dipertahankan
 `ProductCost` (modal = vendor + mata uang + nominal, polimorfik), `Vendor` terpadu (ADR-0003), `ExchangeRate` append-only + cron, `PreferredVendor`, registry pemilik `costComponentOwners`, pola 3-mode "Variable Harga" (included/user_choice/none), harga dihitung ulang server-side saat booking. Rencana ini **tidak mengganti pencatatan modal**; ia menambahkan satu lapisan harga di atasnya dan membekukan hasilnya saat transaksi.
@@ -183,7 +185,7 @@ model CostActual {
 
 | Fase | Isi | Catatan |
 |---|---|---|
-| **0** ✅ dieksekusi 2026-10-27 | Tutup harga katering dari klien (hitung server-side dari `CateringOption` × hari × orang, musim dari tanggal mulai); satukan baris `PricingRule` global ganda + cegah duplikat di DB (kunci `'global'`); satu konstanta fallback margin; ubah margin global menyegarkan **semua** cache harga (satu agregator, dipakai juga cron) | menutup temuan §1.2-6 (High), 7, dan 10 |
+| **0** ✅ SELESAI & TERVERIFIKASI 2026-10-27 (§13) | Tutup harga katering dari klien (hitung server-side dari `CateringOption` × hari × orang, musim dari tanggal mulai); satukan baris `PricingRule` global ganda + cegah duplikat di DB (kunci `'global'`); satu konstanta fallback margin; ubah margin global menyegarkan **semua** cache harga (satu agregator, dipakai juga cron) | menutup temuan §1.2-6 (High), 7, dan 10 |
 | **1 Fondasi** | Skema `PricePoint`/`PriceSnapshot`/`PriceChange` (+ migrasi ekspansi); `lib/pricing/engine` + registry; **backfill** dari cache & override Visa; penulisan ganda ke kolom lama agar pembaca lama tetap jalan; tes ekuivalensi rekam-bandingkan (harga per produk sebelum = sesudah) | pola Komponen Biaya yang terbukti |
 | **2 Pembaca** | Katalog publik, quota adapter, route booking, PDF invoice membaca `PricePoint`; penjaga CI: tidak ada pembaca kolom lama | 61 file diinventaris per modul |
 | **3 UI** | `PriceCard` + mode manual + peran + `PriceChange`; kolom Modal/Jual/Untung; Kesehatan Margin; Katering & Layanan Hotel masuk sistem | |
@@ -215,3 +217,12 @@ Keputusan lama yang tetap: jual manual di bawah modal **boleh** dengan peringata
 
 ## 12. Di luar scope
 Perombakan bentuk data item booking (milik perombakan engine), pajak/PPN & biaya gateway, multi-mata-uang untuk harga jual (jual tetap IDR), integrasi akuntansi eksternal, dan utang vendor aktual (§11-3) sampai diputuskan.
+
+## 13. As-built Fase 0 (2026-10-27)
+
+- **Katering server-side** — `lib/pricing/computeCateringPrice.ts` (`computeCateringBookingPrice`, `cateringPricePerPersonPerDay`): musim ditentukan dari **tanggal mulai** (`detectSeason`), total = harga musim × hari × orang, opsi tak ada/nonaktif/harga musim ≤ 0 → `ItemNotBookableError` (422). `totalPrice` dihapus dari skema; katalog publik (API + halaman) memilih kolom musim lewat fungsi yang sama. Dibuktikan ke server berjalan: `totalPrice:1` dari klien diabaikan (tersimpan 1.200.000 = 100.000×3×4); nonaktif → 422; harga Haji 0 pada tanggal Haji → 422. (SEC-71.)
+- **Aturan margin global satu-satunya** — kunci `'global'` (non-NULL, `@@unique`) menggantikan `NULL`; migrasi `20261028090000_pricing_rule_global_key` (dedupe → simpan yang terbaru, sentinel, NOT NULL; atomik, fail-closed bila `'global'` sudah ada di samping NULL). Terbukti pada DB dev yang memang punya dua baris global ganda (menjadi satu). Route memakai `upsert` atas kunci unik (atomik; 12 upsert paralel → satu baris).
+- **Nilai bawaan satu tempat** — `DEFAULT_MARGIN_PERCENT = 20`, `DEFAULT_ROUNDING_INCREMENT = 50000`, `GLOBAL_RULE_KEY`, `resolveMarginRule()` di `lib/pricing/pricingHelpers.ts` (dulu ditulis keras di tiga file). Dikunci tes (mengubah bawaan = keputusan sadar).
+- **Margin berubah → SEMUA cache disegarkan** — `lib/pricing/refreshAll.ts` (`refreshAllPricingCaches`, satu daftar: dasar dulu, komposit terakhir) dipakai cron kurs (menggantikan delapan blok try/catch) **dan** route perubahan margin (dulu hanya Visa). Dibuktikan lewat route: margin 20→40% menggeser harga Pesawat 23 jt→26,8 jt, Haji 4,2→4,9 jt, Paket 6,6→7,7 jt, Visa 2,65→3,1 jt, lalu kembali saat dipulihkan.
+- **Tes:** `scripts/test-pricing-phase0.ts` (8 tes DB sungguhan) dan `scripts/test-pricing-rule-migration.ts` (5 skenario migrasi + uji drift terbaru); 9 mutasi tertangkap (musim diabaikan, harga 0 boleh, nonaktif boleh, refresh tanpa Hotel, margin tanpa refresh, bawaan berubah, migrasi tanpa NOT NULL / simpan yang terlama / tanpa dedupe). Uji drift dipindah dari `test-media-contraction` ke tes migrasi terbaru (pola proyek).
+- **Catatan:** `docs/arsitektur-harga.md` §3.4 ("`productType` null = default global") digantikan: kunci global kini `'global'`.

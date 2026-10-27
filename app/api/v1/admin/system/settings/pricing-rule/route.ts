@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshAllVisaProductCaches } from '@/lib/pricing/refreshVisaProductCache'
+import { refreshAllPricingCaches } from '@/lib/pricing/refreshAll'
+import { DEFAULT_MARGIN_PERCENT, DEFAULT_ROUNDING_INCREMENT, GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { z } from 'zod'
 
 const updateSchema = z.object({
@@ -10,14 +11,13 @@ const updateSchema = z.object({
   roundingIncrement: z.coerce.number().int().positive(),
 })
 
-// Satu baris global (productType: null) — invarian "hanya satu baris global" ditegakkan
-// di sini via upsert-by-known-condition, bukan constraint DB (lihat docs/decisions.md 2026-07-17
-// soal @@unique([productType]) tidak mencegah banyak baris NULL di Postgres).
-async function getOrCreateGlobalRule() {
-  const existing = await prisma.pricingRule.findFirst({ where: { productType: null } })
-  if (existing) return existing
-  return prisma.pricingRule.create({
-    data: { productType: null, minMarginPercent: 20, roundingIncrement: 50000 },
+// Satu baris global dijamin DB: kunci `productType = 'global'` (non-NULL, `@@unique`) — dulu NULL, dan Postgres mengizinkan banyak NULL sehingga dua
+// permintaan paralel membuat dua baris global (kejadian nyata, docs/arsitektur-harga-terpadu.md §1.2-7). `upsert` atas kunci unik itu atomik.
+function getOrCreateGlobalRule() {
+  return prisma.pricingRule.upsert({
+    where: { productType: GLOBAL_RULE_KEY },
+    update: {},
+    create: { productType: GLOBAL_RULE_KEY, minMarginPercent: DEFAULT_MARGIN_PERCENT, roundingIncrement: DEFAULT_ROUNDING_INCREMENT },
   })
 }
 
@@ -46,9 +46,9 @@ export async function PUT(req: Request) {
       where: { id: rule.id },
       data: parsed.data,
     })
-    // Margin/pembulatan global berubah → semua produk visa perlu di-refresh cache-nya
-    // (bukan cuma yang di-override, karena ini fallback untuk semua productType).
-    void refreshAllVisaProductCaches()
+    // Margin/pembulatan global berubah → SEMUA cache harga jual dihitung ulang (bukan cuma Visa; ini fallback semua tipe produk).
+    // Latar belakang: tidak menahan respons; langkah yang gagal dicatat di log.
+    void refreshAllPricingCaches()
     return NextResponse.json(ok(updated))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

@@ -2,6 +2,7 @@ import { ProductImage } from '@/components/shared/ProductImage'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import { detectSeason } from '@/lib/utils/season'
+import { cateringPricePerPersonPerDay } from '@/lib/pricing/computeCateringPrice'
 import { UtensilsCrossed, CheckCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
@@ -15,8 +16,6 @@ export default async function CateringPage({ params }: Props) {
   const options = await prisma.cateringOption.findMany({ where: { isActive: true } })
 
   const covers = await getFeaturedCards('catering', options.map(o => o.id))
-  const priceKey = `pricePerPerson${season.charAt(0).toUpperCase() + season.slice(1)}` as
-    'pricePerPersonRegular' | 'pricePerPersonRamadan' | 'pricePerPersonHajj'
 
   const menuLabel: Record<string, string> = { asian: 'Menu Asia', arabic: 'Menu Arab', western: 'Menu Barat' }
   const boardLabel: Record<string, string> = { full_board: 'Full Board (3x makan)', half_board: 'Half Board (2x makan)' }
@@ -45,7 +44,7 @@ export default async function CateringPage({ params }: Props) {
             </div>
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground">Per orang / hari</p>
-              <p className="text-xl font-bold text-primary">{formatRupiah(Number(o[priceKey]))}</p>
+              <p className="text-xl font-bold text-primary">{formatRupiah(cateringPricePerPersonPerDay(o, season))}</p>
             </div>
             </div>
           </div>
