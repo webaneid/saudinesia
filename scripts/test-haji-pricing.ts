@@ -203,7 +203,8 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
   // Daftar refresh kini satu (lib/pricing/refreshAll.ts, Fase 0 harga terpadu): cron memakai agregator, Haji ada di dalamnya.
   assert.match(cron, /refreshAllPricingCaches\(updatedCurrencies\)/)
-  assert.match(readFileSync('lib/pricing/refreshAll.ts', 'utf8'), /name: 'haji', run: refreshAllHajiPriceCaches/)
+  assert.match(readFileSync('lib/pricing/refreshAll.ts', 'utf8'), /repriceAll\(currencies\)/)
+  assert.match(readFileSync('lib/pricing/engine/owners/index.ts', 'utf8'), /haji: hajiOwner/) // Fase 1: agregator = mesin harga, pemilik Haji terdaftar di registry
   assert.match(readFileSync('lib/pricing/costComponentOwners.ts', 'utf8'), /haji: \{\s*productType: 'haji'/)
   const cat = readFileSync('app/api/v1/catalog/haji/route.ts', 'utf8')
   assert.match(cat, /toCatalogHaji/); assert.doesNotMatch(cat, /\.\.\.p\b/, 'katalog tak boleh menyebar baris DB mentah')

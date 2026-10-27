@@ -8,7 +8,7 @@ import { deleteOrDeactivate, type DeleteOutcome } from '@/lib/admin/safeDelete'
 // tak ada riwayat yang merujuk, selain itu NONAKTIF. Memakai `deleteOrDeactivate` (satu semantik); di sini ditambah tiga hal yang tak bisa diserahkan ke FK:
 //  1. RUJUKAN SET NULL dihitung sebagai rujukan. FK `ON DELETE SET NULL` (penugasan muthowif, pengajuan visa, hotel pilihan di booking) tidak menolak
 //     hapus — ia diam-diam MENGOSONGKAN riwayat. Hanya penghitungan eksplisit yang melindunginya.
-//  2. Baris polimorfik (`productType`+`productId`: komponen biaya, vendor pilihan, syarat dokumen, field manifest) tak punya FK — dihapus bersama
+//  2. Baris polimorfik (`productType`+`productId`: komponen biaya, vendor pilihan, syarat dokumen, field manifest, titik harga) tak punya FK — dihapus bersama
 //     produknya dalam transaksi yang sama agar tak yatim.
 //  3. Pemeriksaan ulang di bawah kunci baris. `SELECT … FOR UPDATE` menunggu rujukan baru yang sedang masuk (FK mengambil KEY SHARE pada baris
 //     induk) dan menahan yang berikutnya, sehingga hitung → hapus tidak bisa disalip. Rujukan yang muncul jatuh ke jalur nonaktif (P2003-setara).
@@ -35,6 +35,7 @@ async function dropPolymorphic(tx: Tx, productType: string, ids: string[]): Prom
   await tx.preferredVendor.deleteMany({ where: scope })
   await tx.documentRequirement.deleteMany({ where: scope })
   await tx.manifestFieldRequirement.deleteMany({ where: scope })
+  await tx.pricePoint.deleteMany({ where: { ownerType: productType, ownerId: { in: ids } } }) // titik harga (mesin harga) milik produk ini
 }
 
 type Spec = {

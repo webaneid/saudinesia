@@ -1,30 +1,13 @@
-import { prisma } from '@/lib/db'
-import { computeTourPackageBreakdown, cheapestTotal } from './computeTourPackagePrice'
+import { repriceOwner, repriceOwnerType } from './engine'
 
-/**
- * Refresh cache TourPackage.price ("mulai dari") — dipanggil setiap kali ProductCost/
- * PreferredVendor/PricingRule untuk paket ini berubah, dan dari cron kurs.
- */
+// Pembungkus tipis (Fase 1 harga terpadu): harga "mulai dari" Paket Ziarah dihitung & disimpan mesin `lib/pricing/engine` (titik harga `tour_package`)
+// dengan penulisan ganda ke `TourPackage.price`. Nama lama dipertahankan; dihapus di Fase 5.
+
+/** Dipanggil saat ProductCost/PreferredVendor/PricingRule paket ini berubah, hotel/kendaraan terpilih berubah, dan dari cron kurs. */
 export async function refreshTourPackagePriceCache(tourPackageId: string): Promise<void> {
-  const breakdown = await computeTourPackageBreakdown(tourPackageId)
-  const price = cheapestTotal(breakdown)
-  await prisma.tourPackage.update({ where: { id: tourPackageId }, data: { price } })
+  await repriceOwner('tour_package', tourPackageId)
 }
 
 export async function refreshAllTourPackagePriceCaches(currencies?: string[]): Promise<void> {
-  const packages = await prisma.tourPackage.findMany({ where: { isActive: true }, select: { id: true } })
-
-  for (const p of packages) {
-    if (currencies && currencies.length > 0) {
-      const relevant = await prisma.productCost.findFirst({
-        where: { productType: 'tour_package', productId: p.id, isActive: true, currency: { in: currencies } },
-      })
-      if (!relevant) continue
-    }
-    try {
-      await refreshTourPackagePriceCache(p.id)
-    } catch (err) {
-      console.error(`[refreshAllTourPackagePriceCaches] gagal untuk paket ${p.id}:`, err)
-    }
-  }
+  await repriceOwnerType('tour_package', currencies)
 }

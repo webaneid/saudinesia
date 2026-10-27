@@ -1,7 +1,7 @@
 // Uji migrasi kunci aturan margin global (prisma/migrations/20261028090000_pricing_rule_global_key; docs/arsitektur-harga-terpadu.md §1.2-7, Fase 0).
 // Membangun database "pra-migrasi" (semua migrasi KECUALI yang diuji) lalu menyalinnya per skenario (CREATE DATABASE … TEMPLATE), mengisi data lama
 // (baris global NULL ganda hasil permintaan paralel) dan menjalankan migrasi lewat `prisma migrate deploy` sungguhan.
-// Dibuktikan: tepat satu baris global tersisa (yang terbaru), kunci 'global' non-NULL + unik, baris per-tipe utuh, fail-closed + ATOMIK, tanpa drift skema.
+// Dibuktikan: tepat satu baris global tersisa (yang terbaru), kunci 'global' non-NULL + unik, baris per-tipe utuh, fail-closed + ATOMIK.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -85,7 +85,6 @@ const id = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')
 const rule = (i: number, type: string | null, margin: number, at: string) =>
   `INSERT INTO pricing_rules (id, "productType", "minMarginPercent", "roundingIncrement", "updatedAt") VALUES ('${id(i)}', ${type === null ? 'NULL' : `'${type}'`}, ${margin}, 50000, '${at}');`
 const rules = (name: string) => query(name, `select id, "productType" as t, "minMarginPercent"::float as m from pricing_rules order by "productType", id`)
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 
 console.log('== skenario ==')
 
@@ -123,12 +122,7 @@ await t('FAIL-CLOSED + ATOMIK: baris \'global\' sudah ada di samping baris NULL 
   assert.equal((await rules(r.name)).length, 2, 'tak ada baris yang terhapus/berubah setelah kegagalan')
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenario([rule(1, null, 20, '2026-07-18 07:03:10'), rule(2, null, 25, '2026-09-01 10:00:00')].join('\n'))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-600)}`)
-})
+// Uji drift skema ada di migrasi TERBARU (scripts/test-price-points-migration.ts) — di sini skema sudah lebih maju dari migrasi yang diuji.
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

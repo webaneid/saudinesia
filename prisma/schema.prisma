@@ -1222,6 +1222,33 @@ model ProductCost {
   @@map("product_costs")
 }
 
+/// Satu titik harga untuk satu hal yang dijual (docs/arsitektur-harga-terpadu.md §3, §14). Ditulis HANYA oleh `lib/pricing/engine`.
+/// Polimorfik (ownerType+ownerId, tanpa FK — pola ProductCost); baris yatim disapu `repriceAll` dan dibersihkan saat pemilik dihapus.
+/// CHECK di migrasi: sellIdr = COALESCE(manualSellIdr, autoSellIdr), minimal salah satunya terisi, semua nominal >= 0.
+/// Untung = sellIdr - costIdr (turunan, tidak disimpan). costIdr null = modal belum diisi / belum lengkap.
+model PricePoint {
+  id            String   @id @default(uuid())
+  ownerType     String   // sama dengan ProductCost.productType: visa|flight|hotel|transport|muthowif|package|tour_package|haji
+  ownerId       String
+  variantKey    String   @default("") // "" | "days:<min>-<max>" (tier hari Visa)
+  unit          String   // person|room_night|vehicle|person_day|package
+  costIdr       Decimal? @db.Decimal(14, 2)
+  autoSellIdr   Decimal? @db.Decimal(14, 2)
+  manualSellIdr Decimal? @db.Decimal(14, 2)
+  sellIdr       Decimal  @db.Decimal(14, 2)
+  marginPctUsed Decimal? @db.Decimal(5, 2)
+  roundingUsed  Int?
+  fxRateIds     Json     @default("[]")
+  vendorIds     Json     @default("[]")
+  manualNote    String?
+  computedAt    DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([ownerType, ownerId, variantKey])
+  @@index([ownerType, ownerId])
+  @@map("price_points")
+}
+
 model PricingRule {
   id                String   @id @default(uuid())
   productType       String   @default("global") // "global" = default semua tipe (kunci sentinel — lib/pricing/pricingHelpers.ts), "visa" = override khusus tipe itu

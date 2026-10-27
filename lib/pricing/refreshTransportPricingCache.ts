@@ -1,44 +1,14 @@
-import { prisma } from '@/lib/db'
-import { computeSellPrice } from './computeSellPrice'
+import { repriceOwner, repriceOwnerType } from './engine'
 
-// Transport tidak day-based (docs/arsitektur-transportasi.md §9.4), tier HPP selalu flat
-// [{minDays:0, maxDays:9999, cost}] jadi cocok di hari berapa pun. Bukan angka bisnis.
-// Pola identik refreshFlightScheduleCache.ts.
-const PROBE_DAY = 1
+// Pembungkus tipis (Fase 1 harga terpadu): harga rute×kendaraan dihitung & disimpan mesin `lib/pricing/engine` (titik harga `transport` + penulisan ganda
+// ke `TransportPricing.price`). Nama lama dipertahankan; dihapus di Fase 5.
 
-/**
- * Refresh cache TransportPricing.price dari ProductCost (komponen "kendaraan") kombinasi
- * rute×kendaraan ini. Dipanggil setiap kali ProductCost/PreferredVendor/PricingRule untuk
- * pricing ini berubah, dan dari refreshAllTransportPricingCaches() setelah cron kurs jalan.
- */
+/** Hitung ulang harga satu kombinasi rute×kendaraan — dipanggil saat ProductCost/PreferredVendor/PricingRule-nya berubah. */
 export async function refreshTransportPricingCache(pricingId: string): Promise<void> {
-  const result = await computeSellPrice('transport', pricingId, PROBE_DAY)
-  if (!result || result.hppRupiah <= 0) return // jangan reset ke 0 kalau belum ada komponen HPP valid
-
-  await prisma.transportPricing.update({
-    where: { id: pricingId },
-    data: { price: result.sellPrice },
-  })
+  await repriceOwner('transport', pricingId)
 }
 
-/**
- * Refresh semua TransportPricing aktif. Kalau `currencies` diberikan (dipanggil dari cron
- * kurs), hanya pricing yang komponen HPP-nya pakai currency itu yang di-refresh.
- */
+/** Semua pricing aktif; `currencies` (cron kurs) = hanya yang biayanya memakai mata uang itu. */
 export async function refreshAllTransportPricingCaches(currencies?: string[]): Promise<void> {
-  const pricings = await prisma.transportPricing.findMany({ where: { isActive: true }, select: { id: true } })
-
-  for (const p of pricings) {
-    if (currencies && currencies.length > 0) {
-      const relevant = await prisma.productCost.findFirst({
-        where: { productType: 'transport', productId: p.id, isActive: true, currency: { in: currencies } },
-      })
-      if (!relevant) continue
-    }
-    try {
-      await refreshTransportPricingCache(p.id)
-    } catch (err) {
-      console.error(`[refreshAllTransportPricingCaches] gagal untuk pricing ${p.id}:`, err)
-    }
-  }
+  await repriceOwnerType('transport', currencies)
 }

@@ -7,6 +7,12 @@ type OverridableTier = CostTier & { sellPriceOverride?: number | null }
 export type SellPriceResult = {
   hppRupiah: number
   minSellPrice: number
+  /** Hasil rumus (HPP × margin, dibulatkan) — TANPA override. `sellPrice` = override ?? ini. Dipakai mesin harga (lib/pricing/engine). */
+  autoSellPrice: number
+  /** Harga jual manual per tier yang tersimpan di JSON biaya (sumber lama; Fase 3 memindahkannya ke PricePoint). */
+  sellPriceOverride: number | null
+  marginPercentUsed: number
+  roundingUsed: number
   sellPrice: number
   rateUsed: string[]   // ExchangeRate.id per komponen yang berkontribusi
   vendorUsed: string[] // Vendor.id per komponen yang berkontribusi
@@ -82,7 +88,11 @@ export async function computeSellPrice(
 
   // hppRupiah TIDAK ikut di-override — tetap angka asli untuk transparansi.
   const minSellPrice = hppRupiah * (1 + minMarginPercent / 100)
-  const sellPrice = sellPriceOverride != null ? sellPriceOverride : roundToNearest(minSellPrice, roundingIncrement)
+  const autoSellPrice = roundToNearest(minSellPrice, roundingIncrement)
+  const sellPrice = sellPriceOverride != null ? sellPriceOverride : autoSellPrice
 
-  return { hppRupiah, minSellPrice, sellPrice, rateUsed, vendorUsed }
+  return {
+    hppRupiah, minSellPrice, autoSellPrice, sellPriceOverride: sellPriceOverride ?? null,
+    marginPercentUsed: minMarginPercent, roundingUsed: roundingIncrement, sellPrice, rateUsed, vendorUsed,
+  }
 }

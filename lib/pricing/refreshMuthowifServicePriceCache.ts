@@ -1,43 +1,15 @@
 import { prisma } from '@/lib/db'
-import { computeSellPrice } from './computeSellPrice'
+import { repriceOwner, repriceOwnerType } from './engine'
 
-// Muthowif tidak day-based (docs/arsitektur-muthowif.md §10), tier HPP selalu flat
-// [{minDays:0, maxDays:9999, cost}] jadi cocok di hari berapa pun. Bukan angka bisnis.
-// Pola identik refreshFlightScheduleCache.ts.
-const PROBE_DAY = 1
+// Pembungkus tipis (Fase 1 harga terpadu): tarif layanan muthowif (singleton) dihitung & disimpan mesin `lib/pricing/engine` (titik harga `muthowif` +
+// penulisan ganda ke `MuthowifServicePrice.price`). Nama lama dipertahankan; dihapus di Fase 5.
 
-/**
- * Refresh cache MuthowifServicePrice.price dari ProductCost (komponen "layanan"). Dipanggil
- * setiap kali ProductCost/PreferredVendor/PricingRule untuk singleton ini berubah, dan dari
- * cron kurs setelah nilai tukar di-refresh.
- */
+/** Hitung ulang tarif layanan muthowif — dipanggil saat ProductCost/PreferredVendor/PricingRule singleton ini berubah. */
 export async function refreshMuthowifServicePriceCache(): Promise<void> {
-  const servicePrice = await prisma.muthowifServicePrice.findFirst()
-  if (!servicePrice) return
-
-  const result = await computeSellPrice('muthowif', servicePrice.id, PROBE_DAY)
-  if (!result || result.hppRupiah <= 0) return // jangan reset ke 0 kalau belum ada komponen HPP valid
-
-  await prisma.muthowifServicePrice.update({
-    where: { id: servicePrice.id },
-    data: { price: result.sellPrice },
-  })
+  const servicePrice = await prisma.muthowifServicePrice.findFirst({ select: { id: true } })
+  if (servicePrice) await repriceOwner('muthowif', servicePrice.id)
 }
 
 export async function refreshAllMuthowifServicePriceCaches(currencies?: string[]): Promise<void> {
-  const servicePrice = await prisma.muthowifServicePrice.findFirst()
-  if (!servicePrice) return
-
-  if (currencies && currencies.length > 0) {
-    const relevant = await prisma.productCost.findFirst({
-      where: { productType: 'muthowif', productId: servicePrice.id, isActive: true, currency: { in: currencies } },
-    })
-    if (!relevant) return
-  }
-
-  try {
-    await refreshMuthowifServicePriceCache()
-  } catch (err) {
-    console.error('[refreshAllMuthowifServicePriceCaches] gagal:', err)
-  }
+  await repriceOwnerType('muthowif', currencies)
 }

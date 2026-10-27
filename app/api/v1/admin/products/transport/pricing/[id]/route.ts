@@ -56,6 +56,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     await prisma.transportPricing.delete({ where: { id } })
+    await prisma.pricePoint.deleteMany({ where: { ownerType: 'transport', ownerId: id } }) // titik harga ikut (tanpa FK)
     return NextResponse.json(ok(null))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

@@ -66,6 +66,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     }
 
     await prisma.flightSchedule.delete({ where: { id } })
+    await prisma.pricePoint.deleteMany({ where: { ownerType: 'flight', ownerId: id } }) // titik harga ikut (tanpa FK)
     return NextResponse.json(ok(null))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

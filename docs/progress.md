@@ -823,6 +823,6 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 **Harga terpadu — Modal · Jual · Untung (2026-10-27, `docs/arsitektur-harga-terpadu.md`):**
 - [x] Rencana disetujui pemilik (role terbuka dulu, pengeluaran aktual + catatan selisih HPP, diskon di total dengan catatan bila di bawah HPP)
 - [x] Fase 0 — katering dihitung server (SEC-71 High ditutup), aturan margin global satu-satunya (migrasi + upsert), nilai bawaan satu tempat, margin berubah menyegarkan SEMUA cache — selesai 2026-10-27 (436 PASS; 9 mutasi; curl ke server berjalan)
-- [ ] Fase 1 fondasi `PricePoint`/`PriceSnapshot`/`PriceChange` + mesin + backfill
+- [x] Fase 1 fondasi — tabel `PricePoint` (CHECK I2 di DB) + `lib/pricing/engine` (satu penulis, registry 8 pemilik, penulisan ganda ke kolom lama, modal hilang tak mereset harga, jual-tanpa-modal dipungut, komposit bermodal null bila tak lengkap) — selesai 2026-10-27 (458 PASS; 13 mutasi tertangkap; rekam-bandingkan data dev identik; `PriceSnapshot`→F4, `PriceChange`+`policy.ts`→F3)
 - [ ] Fase 2 pembaca pindah · Fase 3 UI `PriceCard` + manual + kesehatan margin · Fase 4 snapshot booking/invoice · Fase 5 kontraksi · Fase 6 laporan · Fase 7 pengeluaran aktual
 
