@@ -2,15 +2,12 @@ import { prisma } from '@/lib/db'
 import { getLatestRate, resolveMarginRule, roundToNearest } from './pricingHelpers'
 
 type CostTier = { minDays: number; maxDays: number; cost: number }
-type OverridableTier = CostTier & { sellPriceOverride?: number | null }
 
 export type SellPriceResult = {
   hppRupiah: number
   minSellPrice: number
-  /** Hasil rumus (HPP × margin, dibulatkan) — TANPA override. `sellPrice` = override ?? ini. Dipakai mesin harga (lib/pricing/engine). */
+  /** Hasil rumus (HPP × margin, dibulatkan). Harga jual manual TIDAK dikenal di sini — itu milik titik harga (lib/pricing/engine, Fase 3). */
   autoSellPrice: number
-  /** Harga jual manual per tier yang tersimpan di JSON biaya (sumber lama; Fase 3 memindahkannya ke PricePoint). */
-  sellPriceOverride: number | null
   marginPercentUsed: number
   roundingUsed: number
   sellPrice: number
@@ -45,7 +42,6 @@ export async function computeSellPrice(
   const preferredByComponent = new Map(preferredVendors.map(pv => [pv.costComponent, pv.vendorId]))
 
   let hppRupiah = 0
-  let sellPriceOverride: number | undefined
   const rateUsed: string[] = []
   const vendorUsed: string[] = []
 
@@ -53,17 +49,9 @@ export async function computeSellPrice(
     const preferredVendorId = preferredByComponent.get(component.costComponent)
     if (!preferredVendorId || component.vendorId !== preferredVendorId) continue
 
-    const tiers = component.costTiers as unknown as OverridableTier[]
+    const tiers = component.costTiers as unknown as CostTier[]
     const tier = findTier(tiers, jumlahHari)
     if (!tier) continue
-
-    // Harga jual manual per tier (docs/arsitektur-harga.md §16, §20) — kalau admin isi override di
-    // baris yang cocok dengan jumlahHari, itu jadi harga publish final, menggantikan hasil rounding
-    // otomatis. Dicari di komponen HPP MANAPUN yang preferred untuk produk ini (bukan hardcode nama
-    // komponen tertentu) — komponen pertama yang punya override menang, biasanya cuma ada 1 per produk.
-    if (tier.sellPriceOverride != null && sellPriceOverride === undefined) {
-      sellPriceOverride = tier.sellPriceOverride
-    }
 
     // Biaya sudah dalam Rupiah — tidak butuh konversi kurs, dan ExchangeRate IDR->IDR memang
     // tidak pernah ada (cron kurs cuma fetch USD/IDR & SAR/IDR). Lihat docs/arsitektur-harga.md §19.
@@ -86,13 +74,12 @@ export async function computeSellPrice(
 
   const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
-  // hppRupiah TIDAK ikut di-override — tetap angka asli untuk transparansi.
   const minSellPrice = hppRupiah * (1 + minMarginPercent / 100)
   const autoSellPrice = roundToNearest(minSellPrice, roundingIncrement)
-  const sellPrice = sellPriceOverride != null ? sellPriceOverride : autoSellPrice
+  const sellPrice = autoSellPrice
 
   return {
-    hppRupiah, minSellPrice, autoSellPrice, sellPriceOverride: sellPriceOverride ?? null,
+    hppRupiah, minSellPrice, autoSellPrice,
     marginPercentUsed: minMarginPercent, roundingUsed: roundingIncrement, sellPrice, rateUsed, vendorUsed,
   }
 }

@@ -7,6 +7,7 @@ import { UtensilsCrossed, CheckCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { cateringSeasonPrices } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -16,6 +17,7 @@ export default async function CateringPage({ params }: Props) {
   const options = await prisma.cateringOption.findMany({ where: { isActive: true } })
 
   const covers = await getFeaturedCards('catering', options.map(o => o.id))
+  const prices = await cateringSeasonPrices(options.map(o => o.id))
 
   const menuLabel: Record<string, string> = { asian: 'Menu Asia', arabic: 'Menu Arab', western: 'Menu Barat' }
   const boardLabel: Record<string, string> = { full_board: 'Full Board (3x makan)', half_board: 'Half Board (2x makan)' }
@@ -44,7 +46,7 @@ export default async function CateringPage({ params }: Props) {
             </div>
             <div className="pt-2 border-t">
               <p className="text-xs text-muted-foreground">Per orang / hari</p>
-              <p className="text-xl font-bold text-primary">{formatRupiah(cateringPricePerPersonPerDay(o, season))}</p>
+              <p className="text-xl font-bold text-primary">{formatRupiah(cateringPricePerPersonPerDay(prices.get(o.id)!, season))}</p>
             </div>
             </div>
           </div>

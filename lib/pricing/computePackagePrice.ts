@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/db'
 import { computeCostComponents, type ComponentBreakdown } from './costComponents'
-import { sellPrices } from './engine/read'
+import { cateringSeasonPrices, sellPrices } from './engine/read'
 
 export type { ComponentBreakdown }
 
@@ -99,12 +99,13 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
 
   // Harga jual HIDUP sub-modul dibaca dari titik harga (docs/arsitektur-harga-terpadu.md §15), bukan kolom cache lama.
   const muthowifSingleton = await prisma.muthowifServicePrice.findFirst({ select: { id: true } })
-  const [hotelPrice, transportPrice, visaPrice, flightPrice, muthowifPrice] = await Promise.all([
+  const [hotelPrice, transportPrice, visaPrice, flightPrice, muthowifPrice, cateringPrice] = await Promise.all([
     sellPrices('hotel', pkg.hotelOptions.map(o => o.hotelRoomScheduleId)),
     sellPrices('transport', pkg.transportTrip?.pricing.map(p => p.id) ?? []),
     sellPrices('visa', pkg.visaOptions.map(o => o.visaProductId)),
     sellPrices('flight', pkg.flightRoute?.schedules.map(s => s.id) ?? []),
     sellPrices('muthowif', muthowifSingleton ? [muthowifSingleton.id] : []),
+    cateringSeasonPrices(pkg.cateringOptions.map(o => o.cateringOptionId)),
   ])
 
   // Hotel Makkah
@@ -191,7 +192,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
         name: o.cateringOption.name,
         numPeople: o.numPeople,
         numDays: o.numDays,
-        price: o.numPeople * o.numDays * Number(o.cateringOption.pricePerPersonRegular),
+        price: o.numPeople * o.numDays * (cateringPrice.get(o.cateringOptionId)?.regular ?? 0),
       }))
     : []
 

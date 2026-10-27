@@ -40,10 +40,14 @@ async function build(ownerType: 'package' | 'tour_package' | 'haji', components:
 }
 
 export const hajiOwner: PriceOwner = {
-  ownerType: 'haji', dependsOnOthers: false, prunes: false,
+  ownerType: 'haji', unit: 'package', creatableVariants: [{ key: '', unit: 'package' }], dependsOnOthers: false, prunes: false,
   // Semua produk (termasuk nonaktif): produk yang diaktifkan kembali tidak boleh tampil dengan harga basi (perilaku lama).
   listIds: async () => (await prisma.hajiProduct.findMany({ select: { id: true } })).map(r => r.id),
   existing: async ids => (await prisma.hajiProduct.findMany({ where: { id: { in: ids } }, select: { id: true } })).map(r => r.id),
+  describe: async ids => {
+    const rows = await prisma.hajiProduct.findMany({ where: { id: { in: ids } }, select: { id: true, name: true, year: true } })
+    return new Map(rows.map(r => [r.id, { label: `${r.name} (${r.year})`, href: `/admin/products/haji/${r.id}` }]))
+  },
   resolve: async id => {
     const { components, totalSellPrice } = await computeCostComponents('haji', id)
     return build('haji', components, totalSellPrice, [])
@@ -56,9 +60,13 @@ export const hajiOwner: PriceOwner = {
 }
 
 export const packageOwner: PriceOwner = {
-  ownerType: 'package', dependsOnOthers: true, prunes: false,
+  ownerType: 'package', unit: 'package', creatableVariants: [{ key: '', unit: 'package' }], dependsOnOthers: true, prunes: false,
   listIds: async () => (await prisma.package.findMany({ where: { isActive: true }, select: { id: true } })).map(r => r.id),
   existing: async ids => (await prisma.package.findMany({ where: { id: { in: ids } }, select: { id: true } })).map(r => r.id),
+  describe: async ids => {
+    const rows = await prisma.package.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    return new Map(rows.map(r => [r.id, { label: r.name, href: `/admin/products/packages/${r.id}` }]))
+  },
   resolve: async id => {
     const b = await computePackageBreakdown(id)
     const included = <T,>(mode: string, v: T | null | undefined) => (mode === 'included' ? v ?? null : null)
@@ -95,9 +103,13 @@ export const packageOwner: PriceOwner = {
 }
 
 export const tourPackageOwner: PriceOwner = {
-  ownerType: 'tour_package', dependsOnOthers: true, prunes: false,
+  ownerType: 'tour_package', unit: 'package', creatableVariants: [{ key: '', unit: 'package' }], dependsOnOthers: true, prunes: false,
   listIds: async () => (await prisma.tourPackage.findMany({ where: { isActive: true }, select: { id: true } })).map(r => r.id),
   existing: async ids => (await prisma.tourPackage.findMany({ where: { id: { in: ids } }, select: { id: true } })).map(r => r.id),
+  describe: async ids => {
+    const rows = await prisma.tourPackage.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } })
+    return new Map(rows.map(r => [r.id, { label: r.name, href: `/admin/products/tour-packages/${r.id}` }]))
+  },
   resolve: async id => {
     const b = await computeTourPackageBreakdown(id)
     const tp = await prisma.tourPackage.findUniqueOrThrow({

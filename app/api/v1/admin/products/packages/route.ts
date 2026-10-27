@@ -5,6 +5,8 @@ import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { isAuthError } from '@/lib/admin/errors'
+import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
+import { canViewCost } from '@/lib/pricing/policy'
 
 // price TIDAK ada di sini secara sengaja — cache dari computePackageBreakdown()
 // (docs/arsitektur-paket-umroh.md §5), diisi lewat komponen biaya/mode di package builder,
@@ -22,10 +24,10 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    await requireManager()
-    return NextResponse.json(ok(await prisma.package.findMany({
+    const session = await requireManager()
+    return NextResponse.json(ok(await withAdminPrices('package', await prisma.package.findMany({
       orderBy: { createdAt: 'desc' },
-    })))
+    }), { includeCost: canViewCost(session.role) })))
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
     console.error('[admin/products/packages/GET]', e instanceof Error ? e.name : e)

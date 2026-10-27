@@ -583,6 +583,7 @@ await t('tiap kolom userId pada skema punya perlakuan eksplisit di penghapusan (
     'Group.leaderUserId': 'dipertahankan (struktur grup); groupName belum dibuat oleh kode mana pun (INFO-7)',
     'GroupMember.userId': 'groupMember.updateMany',
     'NotificationLog.userId': 'notificationLog.updateMany',
+    'PriceChange.byUserId': 'dipertahankan (jejak audit harga oleh STAF; jalur UU PDP hanya untuk jamaah — blockersFor menolak akun bukan jamaah)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')

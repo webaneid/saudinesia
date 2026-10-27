@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-transportasi.md §9, pola sama Flight) —
 // kombinasi rute×kendaraan baru dibuat dengan price:0, terisi otomatis setelah admin mengisi
@@ -15,13 +16,13 @@ const createSchema = z.object({
 export async function GET() {
   try {
     await requireManager()
-    const pricing = await prisma.transportPricing.findMany({
+    const pricing = await withSellPrice('transport', await prisma.transportPricing.findMany({
       include: {
         trip:    { select: { id: true, name: true, category: true } },
         vehicle: { select: { id: true, name: true, vehicleType: true, capacity: true } },
       },
       orderBy: [{ trip: { name: 'asc' } }, { vehicle: { vehicleType: 'asc' } }],
-    })
+    }))
     return NextResponse.json(ok(pricing))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

@@ -4,6 +4,8 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
+import { canViewCost } from '@/lib/pricing/policy'
 
 const requirementSchema = z.object({
   docType:     z.string().min(1),
@@ -27,11 +29,11 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    await requireManager()
+    const session = await requireManager()
     const products = await prisma.visaProduct.findMany({
       orderBy: [{ country: 'asc' }, { visaType: 'asc' }],
     })
-    return NextResponse.json(ok(products))
+    return NextResponse.json(ok(await withAdminPrices('visa', products, { includeCost: canViewCost(session.role) })))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

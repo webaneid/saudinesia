@@ -382,6 +382,8 @@ model Muthowif {
 model MuthowifServicePrice {
   id        String   @id @default(uuid())
   price     Decimal  @default(0) @db.Decimal(12, 2) // cache computeSellPrice(), diisi lewat endpoint cost
+  // Penjaga singleton oleh DB: unik + CHECK (singleton) di migrasi ⇒ paling banyak SATU baris (docs/arsitektur-harga-terpadu.md §1.2-14, §16).
+  singleton Boolean  @default(true) @unique
   updatedAt DateTime @updatedAt
 
   @@map("muthowif_service_price")
@@ -1241,6 +1243,8 @@ model PricePoint {
   fxRateIds     Json     @default("[]")
   vendorIds     Json     @default("[]")
   manualNote    String?
+  manualBy      String?   // User.id pengatur harga manual terakhir (tanpa FK — jejak audit; riwayat lengkap di PriceChange)
+  manualAt      DateTime?
   computedAt    DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -1249,11 +1253,33 @@ model PricePoint {
   @@map("price_points")
 }
 
+/// Jejak audit perubahan harga yang dilakukan manusia (docs/arsitektur-harga-terpadu.md §16, invarian I6): harga jual manual diatur/dikembalikan,
+/// modal manual diubah (pemilik manual-only), override Visa lama dipindah. Tidak pernah diubah/dihapus lewat UI. Denormalisasi (tanpa FK ke
+/// price_points) agar riwayat bertahan walau varian dibuang. `byUserId` = staf (jalur UU PDP hanya untuk jamaah → dipertahankan); null = sistem/migrasi.
+model PriceChange {
+  id         String   @id @default(uuid())
+  ownerType  String
+  ownerId    String
+  variantKey String   @default("")
+  kind       String   // manual_set | manual_clear | cost_set | visa_override_migrated
+  oldSellIdr Decimal? @db.Decimal(14, 2)
+  newSellIdr Decimal? @db.Decimal(14, 2)
+  oldCostIdr Decimal? @db.Decimal(14, 2)
+  newCostIdr Decimal? @db.Decimal(14, 2)
+  note       String?
+  byUserId   String?
+  at         DateTime @default(now())
+
+  @@index([ownerType, ownerId, at])
+  @@map("price_changes")
+}
+
 model PricingRule {
   id                String   @id @default(uuid())
   productType       String   @default("global") // "global" = default semua tipe (kunci sentinel — lib/pricing/pricingHelpers.ts), "visa" = override khusus tipe itu
   minMarginPercent  Decimal  @db.Decimal(5, 2)
   roundingIncrement Int      @default(50000)
+  warnBelowPercent  Decimal  @default(0) @db.Decimal(5, 2) // ambang "margin tipis" untuk Kesehatan Margin; 0 = hanya peringatkan yang rugi (jual < modal)
   updatedAt         DateTime @updatedAt
 
   @@unique([productType])

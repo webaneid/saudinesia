@@ -8,8 +8,9 @@ import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
 
-type Pkg = { id: string; name: string; price: number; isFeatured: boolean; isActive: boolean }
+type Pkg = { id: string; name: string; price: number; profitIdr: number | null; marginPct: number | null; isFeatured: boolean; isActive: boolean }
 
 export default function PackagesPage() {
   const router = useRouter()
@@ -32,6 +33,7 @@ export default function PackagesPage() {
       ),
     },
     { key: 'price', header: 'Harga Jual Paket', align: 'right', cell: p => <span className="text-[12px] font-semibold tabular-nums text-admin-ink/80">{formatRupiah(p.price)}</span> },
+    { key: 'profit', header: 'Untung', align: 'right', hideBelowLg: true, cell: p => <ProfitCell profitIdr={p.profitIdr} marginPct={p.marginPct} /> },
     { key: 'status', header: 'Status', cell: p => <Badge tone={p.isActive ? 'ok' : 'neutral'}>{p.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
     {
       key: 'actions', header: '', align: 'right',

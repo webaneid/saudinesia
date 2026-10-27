@@ -83,6 +83,7 @@ export const cateringOptionCreateSchema = z
 
 /** PUT /api/v1/admin/products/catering/[id] — sebagian bidang + status aktif (nonaktif = tak muncul di katalog/pilihan baru). */
 export const cateringOptionUpdateSchema = cateringOptionCreateSchema
+  .omit({ pricePerPersonRegular: true, pricePerPersonRamadan: true, pricePerPersonHajj: true }) // harga: PriceCard (titik harga), bukan masukan formulir — .strict() menolak kirimannya
   .partial()
   .extend({ isActive: z.boolean().optional() })
   .refine(v => Object.keys(v).length > 0, { message: 'Tidak ada perubahan' })

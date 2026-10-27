@@ -1,7 +1,7 @@
 // Uji migrasi backfill titik harga (prisma/migrations/20261028140000_price_points_backfill; docs/arsitektur-harga-terpadu.md §15, Fase 2).
 // Membangun database "pra-migrasi", mengisi data lama lewat ORM (kolom cache lama), lalu menjalankan migrasi lewat `prisma migrate deploy` sungguhan.
 // Dibuktikan: baris berharga → titik harga (modal NULL, jual = harga lama) dengan aturan yang SAMA dengan mesin (dasar hanya > 0, komposit selalu, Visa dari
-// rentang tier), titik yang sudah ada TIDAK ditimpa, idempoten (jalan kedua tanpa efek), tabel kosong aman, dan tanpa drift skema (uji drift terbaru ada di sini).
+// rentang tier), titik yang sudah ada TIDAK ditimpa, idempoten (jalan kedua tanpa efek), dan tabel kosong aman.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -81,7 +81,6 @@ async function scenario(setup: string) {
   const res = run(dbUrl(name), ['migrate', 'deploy', '--schema', 'schema.prisma'])
   return { name, ...res }
 }
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const points = (name: string) => query(name, `select "ownerType" as t, "variantKey" as v, unit, "costIdr"::float as cost, "autoSellIdr"::float as auto, "manualSellIdr"::float as manual, "sellIdr"::float as sell from price_points order by "ownerType", "ownerId", "variantKey"`)
 
 // Skenario: DB dari templat + data lama lewat ORM, lalu migrasi.
@@ -107,7 +106,9 @@ async function legacyWorld(db: PrismaClient): Promise<Record<string, string>> {
   const trip = await db.transportTrip.create({ data: { name: 'T', origin: 'A', destination: 'B' } })
   const vehicle = await db.transportVehicle.create({ data: { name: 'Bus', vehicleType: 'bus', capacity: 40 } })
   const transport = await db.transportPricing.create({ data: { tripId: trip.id, vehicleId: vehicle.id, price: 6_000_000 } })
-  const muthowif = await db.muthowifServicePrice.create({ data: { price: 450_000 } })
+  // Tabel yang berubah di migrasi LEBIH BARU (muthowif_service_price.singleton, price_points.manual*) diisi lewat SQL: client Prisma terbaru mengenal kolom yang DB pra-migrasi belum punya.
+  const muthowif = { id: '00000000-0000-4000-8000-0000000000cc' }
+  await db.$executeRawUnsafe(`insert into muthowif_service_price (id, price, "updatedAt") values ('${muthowif.id}', 450000, now())`)
   const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090, price: 4_200_000 } })
   const haji0 = await db.hajiProduct.create({ data: { name: 'HJ0', hajiType: 'reguler', year: 2091, price: 0 } })
   const pkg = await db.package.create({ data: { name: 'P', price: 6_600_000 } })
@@ -138,7 +139,7 @@ await t('semua pemilik berharga → titik harga (modal NULL, jual = harga lama);
 await t('titik yang SUDAH ada (ditulis mesin) tidak ditimpa; harga baru dari kolom lama tak masuk bila titiknya ada', async () => {
   const r = await scenarioWith(async db => {
     const ids = await legacyWorld(db)
-    await db.pricePoint.create({ data: { ownerType: 'flight', ownerId: ids.flight!, unit: 'person', costIdr: 19_150_000, autoSellIdr: 24_000_000, sellIdr: 24_000_000 } })
+    await db.$executeRawUnsafe(`insert into price_points (id, "ownerType", "ownerId", "variantKey", unit, "costIdr", "autoSellIdr", "sellIdr", "updatedAt") values (gen_random_uuid()::text, 'flight', '${ids.flight}', '', 'person', 19150000, 24000000, 24000000, now())`)
     return ids
   })
   assert.equal(r.code, 0, r.out.slice(-400))
@@ -163,12 +164,7 @@ await t('tabel sumber kosong: berhasil dan tak ada titik harga baru; durationFee
   assert.equal(odd.code, 0, odd.out.slice(-300)); assert.deepEqual((await points(odd.name)).map(x => x.t), ['muthowif'])
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-600)}`)
-})
+// Uji drift skema ada di migrasi TERBARU (scripts/test-price-manual-audit-migration.ts) — di sini skema sudah lebih maju dari migrasi yang diuji.
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

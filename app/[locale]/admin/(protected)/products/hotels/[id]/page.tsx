@@ -16,6 +16,7 @@ import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -442,6 +443,8 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
+  const [schedules, setSchedules] = useState<{ scheduleId: string; roomTypeName: string }[]>([])
+  const [priceTick, setPriceTick] = useState(0)
 
   async function loadPrices() {
     const r = await fetch(`/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}/prices`)
@@ -454,6 +457,7 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
         next[row.roomTypeId] = { hargaKamar: row.cost ? String(row.cost) : '', totalQuota: String(row.totalQuota), preview: null }
       }
       setRooms(next)
+      setSchedules((j.data.rooms as { scheduleId: string; roomTypeName: string }[]).map(r => ({ scheduleId: r.scheduleId, roomTypeName: r.roomTypeName })))
     }
     setLoaded(true)
   }
@@ -513,6 +517,8 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
       return
     }
     await onSaved()
+    await loadPrices()
+    setPriceTick(t => t + 1)
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
@@ -590,6 +596,10 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
             {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Semua Harga'}
           </button>
           {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
+
+          {schedules.map(s => (
+            <PriceCard key={s.scheduleId} ownerType="hotel" ownerId={s.scheduleId} title={`Harga kamar ${s.roomTypeName}: modal, jual, untung`} reloadKey={priceTick} onChanged={() => { void loadPrices(); void onSaved() }} />
+          ))}
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 // Fase 2 harga terpadu (docs/arsitektur-harga-terpadu.md §15): TIDAK ADA lagi pembaca kolom harga cache lama di luar mesin harga.
 //
-// Cara membuktikan (bukan pencarian teks): skema SALINAN tanpa 9 kolom cache (`VisaProduct.price/durationFeeRules`, `FlightSchedule/HotelRoomSchedule/
-// TransportPricing/MuthowifServicePrice/HajiProduct/Package/TourPackage.price`) → client Prisma di direktori sementara → `tsc` atas seluruh proyek.
+// Cara membuktikan (bukan pencarian teks): skema SALINAN tanpa 13 kolom harga lama (`VisaProduct.price/durationFeeRules`, `FlightSchedule/HotelRoomSchedule/
+// TransportPricing/MuthowifServicePrice/HajiProduct/Package/TourPackage.price`, harga katering 3 musim, `HotelService.price`) → client Prisma di direktori sementara → `tsc` atas seluruh proyek.
 // Setiap galat tipe = satu tempat yang masih membaca/menulis kolom itu. Penulis (`create`/`update` dengan `price`) dikecualikan sampai Fase 5
 // (kolom dihapus); PEMBACA (select/orderBy/where/akses properti) hanya boleh ada di daftar putih admin di bawah — yang WAJIB menyusut dan kosong di Fase 3.
 //
@@ -29,6 +29,8 @@ const ADMIN_READER_ALLOWLIST: readonly string[] = []
 const COLUMNS: ReadonlyArray<[string, string]> = [
   ['VisaProduct', 'price'], ['VisaProduct', 'durationFeeRules'], ['FlightSchedule', 'price'], ['HotelRoomSchedule', 'price'], ['TransportPricing', 'price'],
   ['MuthowifServicePrice', 'price'], ['HajiProduct', 'price'], ['Package', 'price'], ['TourPackage', 'price'],
+  // Fase 3: pemilik manual-only (harga diisi admin di PriceCard → titik harga; kolom lama ditulis ganda)
+  ['CateringOption', 'pricePerPersonRegular'], ['CateringOption', 'pricePerPersonRamadan'], ['CateringOption', 'pricePerPersonHajj'], ['HotelService', 'price'],
 ]
 
 function stripColumns(schema: string): string {
@@ -66,7 +68,7 @@ const ENGINE_OR_TEST = /^(lib\/pricing\/engine\/|scripts\/|prisma\/)/
 const readerFiles = new Set<string>()
 const writerFiles = new Set<string>()
 for (const line of errors) {
-  const file = relative(root, line.slice(0, line.indexOf('(')))
+  const file = relative(root, /^(.*?)\(\d+,\d+\): error/.exec(line)?.[1] ?? line) // jalur dapat memuat "(public)" — potong pada "(baris,kolom)"
   if (ENGINE_OR_TEST.test(file)) continue
   ;(WRITER.test(line) ? writerFiles : readerFiles).add(file)
 }

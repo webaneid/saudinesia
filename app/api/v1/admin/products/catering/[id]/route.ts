@@ -7,6 +7,7 @@ import { cateringOptionUpdateSchema } from '@/lib/validators/adminUpdates'
 import { emptyToNull } from '@/lib/validators/richText'
 import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
 import { deleteOrDeactivate } from '@/lib/admin/safeDelete'
+import { cateringSeasonPrices } from '@/lib/pricing/engine/read'
 
 type Ctx = { params: Promise<{ id: string }> }
 const notFound = () => NextResponse.json(err('Paket katering tidak ditemukan'), { status: 404 })
@@ -16,7 +17,9 @@ export async function GET(_req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     const c = await prisma.cateringOption.findUnique({ where: { id } })
-    return c ? NextResponse.json(ok(c)) : notFound()
+    if (!c) return notFound()
+    const prices = (await cateringSeasonPrices([id])).get(id)
+    return NextResponse.json(ok({ ...c, pricePerPersonRegular: prices?.regular ?? 0, pricePerPersonRamadan: prices?.ramadan ?? 0, pricePerPersonHajj: prices?.hajj ?? 0 }))
   } catch (e) {
     return authFailureResponse(e, 'admin/products/catering/[id]/GET')
   }
@@ -51,7 +54,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
         if (!row) throw Object.assign(new Error('not found'), { code: 'P2025' })
         return row._count.bookingCatering + row._count.includedInPackages + row._count.packageOptions
       },
-      remove: async () => { await prisma.cateringOption.delete({ where: { id } }); await purgeProductMedia('catering', id) },
+      remove: async () => { await prisma.$transaction([prisma.pricePoint.deleteMany({ where: { ownerType: 'catering', ownerId: id } }), prisma.cateringOption.delete({ where: { id } })]); await purgeProductMedia('catering', id) },
       deactivate: () => prisma.cateringOption.update({ where: { id }, data: { isActive: false } }),
       usedBy: n => `Paket katering dipakai di ${n} booking/paket`,
     })

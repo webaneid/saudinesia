@@ -44,7 +44,7 @@ export async function GET(_req: Request, { params }: Ctx) {
       },
     })
     if (!pkg) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok(pkg))
+    return NextResponse.json(ok({ ...pkg, price: await sellPrice('tour_package', id) })) // harga paket sendiri dari titik harga
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

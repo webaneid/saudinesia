@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Plus, Trash2, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -140,6 +141,8 @@ function PricingRow({ pricing, onChanged }: {
         {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Harga'}
       </button>
       {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
+
+      <PriceCard ownerType="transport" ownerId={pricing.id} title={`Harga ${pricing.vehicle.name}: modal, jual, untung`} reloadKey={`${pricing.price}-${saved}`} onChanged={onChanged} />
     </div>
   )
 }

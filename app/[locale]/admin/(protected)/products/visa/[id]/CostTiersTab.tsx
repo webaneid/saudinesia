@@ -2,20 +2,20 @@
 
 import { useEffect, useState } from 'react'
 import { Check, Plus, Save, Trash2, Wallet } from 'lucide-react'
-import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
 import { Switch } from '@/components/admin/ui/Switch'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
-type TierRow = { id: string; minDays: number; maxDays: number; hargaVisa: number; hargaBrn: number | null; sellPriceOverride: number | null }
+type TierRow = { id: string; minDays: number; maxDays: number; hargaVisa: number; hargaBrn: number | null }
 type RowPreview = { hppRupiah: number; sellPrice: number }
-type NumericField = 'minDays' | 'maxDays' | 'hargaVisa' | 'hargaBrn' | 'sellPriceOverride'
+type NumericField = 'minDays' | 'maxDays' | 'hargaVisa' | 'hargaBrn'
 
-const emptyRow = (): TierRow => ({ id: crypto.randomUUID(), minDays: 0, maxDays: 0, hargaVisa: 0, hargaBrn: null, sellPriceOverride: null })
+const emptyRow = (): TierRow => ({ id: crypto.randomUUID(), minDays: 0, maxDays: 0, hargaVisa: 0, hargaBrn: null })
 
 type Props = {
   productId: string
@@ -38,6 +38,7 @@ export function CostTiersTab({ productId, onSaved }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [priceTick, setPriceTick] = useState(0) // naik setelah tarif dimuat ulang → PriceCard memuat ulang
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -72,6 +73,7 @@ export function CostTiersTab({ productId, onSaved }: Props) {
     setBrnVendorId(brn?.vendorId ?? '')
     setBrnCurrency(brn?.currency ?? 'USD')
     setRows(loaded ?? [])
+    setPriceTick(t => t + 1)
   }
 
   useEffect(() => {
@@ -84,7 +86,7 @@ export function CostTiersTab({ productId, onSaved }: Props) {
   function updateRow(rowId: string, field: NumericField, value: string) {
     setRows(r => r.map(row => {
       if (row.id !== rowId) return row
-      if (field === 'hargaBrn' || field === 'sellPriceOverride') return { ...row, [field]: value === '' ? null : +value }
+      if (field === 'hargaBrn') return { ...row, [field]: value === '' ? null : +value }
       return { ...row, [field]: +value }
     }))
   }
@@ -102,7 +104,6 @@ export function CostTiersTab({ productId, onSaved }: Props) {
       rows: rows.map(r => ({
         id: r.id, minDays: r.minDays, maxDays: r.maxDays,
         hargaVisa: r.hargaVisa, hargaBrn: brnEnabled ? r.hargaBrn : null,
-        sellPriceOverride: r.sellPriceOverride,
       })),
     }
     const res = await fetch(`/api/v1/admin/products/visa/${productId}/cost-tiers`, {
@@ -152,15 +153,14 @@ export function CostTiersTab({ productId, onSaved }: Props) {
           <ColHead span="col-span-2">Harga Visa · {visaCurrency}</ColHead>
           <ColHead span="col-span-2">Harga BRN · {brnEnabled ? brnCurrency : '—'}</ColHead>
           <ColHead span="col-span-2">HPP (Rp)</ColHead>
-          <ColHead span="col-span-2">Harga jual (Rp)</ColHead>
+          <ColHead span="col-span-2">Harga otomatis (Rp)</ColHead>
           <span className="col-span-1" />
         </div>
 
         {rows.map(row => {
           const preview = rowPreviews[row.id]
-          const overridden = row.sellPriceOverride != null
           return (
-            <div key={row.id} className={`grid grid-cols-2 items-end gap-2 rounded-xl border p-3 sm:grid-cols-4 xl:grid-cols-12 xl:items-center xl:border-0 xl:p-0 ${overridden ? 'border-admin-warning/40 bg-admin-warning/10 xl:ring-1 xl:ring-admin-warning/30' : 'border-admin-line'}`}>
+            <div key={row.id} className={`grid grid-cols-2 items-end gap-2 rounded-xl border p-3 sm:grid-cols-4 xl:grid-cols-12 xl:items-center xl:border-0 xl:p-0 border-admin-line`}>
               <Cell label="Rentang hari (min – maks)" span="col-span-2 xl:col-span-3">
                 <div className="flex items-center gap-1.5">
                   <input type="number" min={1} aria-label="Min hari" className="admin-inp no-spin px-2 text-center" placeholder="1" value={row.minDays || ''} onChange={e => updateRow(row.id, 'minDays', e.target.value)} />
@@ -178,16 +178,10 @@ export function CostTiersTab({ productId, onSaved }: Props) {
               <Cell label="HPP (Rp)" span="xl:col-span-2">
                 <p className="m-0 truncate py-2 text-sm font-semibold tabular-nums text-admin-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
               </Cell>
-              <Cell label="Harga jual (Rp)" span="sm:col-span-2 xl:col-span-2">
-                <input
-                  type="number" aria-label="Harga jual" className="admin-inp font-semibold placeholder:font-semibold placeholder:text-admin-ink/70"
-                  placeholder={preview ? formatRupiah(preview.sellPrice) : 'Otomatis'} value={row.sellPriceOverride ?? ''}
-                  onChange={e => updateRow(row.id, 'sellPriceOverride', e.target.value)}
-                  title={overridden ? 'Harga manual: menggantikan hasil hitung otomatis' : 'Kosongkan untuk memakai hasil hitung otomatis'}
-                />
+              <Cell label="Harga otomatis (Rp)" span="sm:col-span-2 xl:col-span-2">
+                <p className="m-0 truncate py-2 text-sm font-semibold tabular-nums text-admin-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
               </Cell>
               <div className="col-span-2 flex items-center justify-between gap-2 sm:col-span-1 xl:justify-end">
-                {overridden && <Badge tone="warning" className="xl:hidden">Manual</Badge>}
                 <button type="button" onClick={() => removeRow(row.id)} aria-label="Hapus baris" className="grid size-9 place-items-center rounded-lg text-admin-muted transition-colors hover:bg-admin-danger/10 hover:text-admin-danger">
                   <Trash2 className="size-4" />
                 </button>
@@ -206,10 +200,12 @@ export function CostTiersTab({ productId, onSaved }: Props) {
         <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
           <Button variant="outline" size="sm" onClick={addRow}><Plus className="size-4" /> Tambah rentang</Button>
           <p className="m-0 max-w-md text-[11px] text-admin-muted">
-            Kolom Harga jual boleh diisi manual (baris berlatar kuning) untuk menimpa harga per rentang. Kosongkan untuk kembali ke HPP + margin, dibulatkan.
+            Kolom ini hanya pratinjau HPP + margin (dibulatkan). Harga jual per rentang boleh diatur manual di kartu “Harga” di bawah — mengubah rentang hari membuat rentang baru (harga manual rentang lama ikut hilang, riwayatnya tetap).
           </p>
         </div>
       </Card>
+
+      <PriceCard ownerType="visa" ownerId={productId} reloadKey={priceTick} onChanged={onSaved} />
 
       <div className="flex flex-wrap items-center gap-3">
         <Button onClick={handleSave} loading={saving} disabled={!canSave}>

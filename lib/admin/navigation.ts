@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, Settings, ShieldAlert, Handshake,
+  Users, Settings, ShieldAlert, Handshake, HeartPulse,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -15,6 +15,7 @@ const OPERASIONAL: NavItem[] = [
   { path: '/admin/payments',      icon: CreditCard,      label: 'Pembayaran' },
   { path: '/admin/visa',          icon: FileText,        label: 'Visa Status' },
   { path: '/admin/quotas',        icon: BarChart3,       label: 'Quota' },
+  { path: '/admin/margin',        icon: HeartPulse,      label: 'Kesehatan Margin' },
   { path: '/admin/notifications', icon: Bell,            label: 'Notifikasi' },
 ]
 
@@ -55,6 +56,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   payments: 'Pembayaran',
   visa: 'Visa',
   quotas: 'Quota',
+  margin: 'Kesehatan Margin',
   notifications: 'Notifikasi',
   products: 'Produk',
   packages: 'Paket',

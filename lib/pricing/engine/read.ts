@@ -81,3 +81,18 @@ export async function visaPriceSummary(ids: readonly string[]): Promise<Map<stri
   }
   return out
 }
+
+export type CateringSeasonPrices = { regular: number; ramadan: number; hajj: number }
+
+/** Harga katering per orang per hari untuk tiga musim (titik harga `season:*`). Musim tanpa titik = 0 (belum berharga). */
+export async function cateringSeasonPrices(ids: readonly string[]): Promise<Map<string, CateringSeasonPrices>> {
+  const out = new Map<string, CateringSeasonPrices>(ids.map(id => [id, { regular: 0, ramadan: 0, hajj: 0 }]))
+  if (ids.length === 0) return out
+  const rows = await prisma.pricePoint.findMany({ where: { ownerType: 'catering', ownerId: { in: [...ids] } }, select: { ownerId: true, variantKey: true, sellIdr: true } })
+  for (const r of rows) {
+    const season = r.variantKey.replace(/^season:/, '')
+    const entry = out.get(r.ownerId)
+    if (entry && (season === 'regular' || season === 'ramadan' || season === 'hajj')) entry[season] = Number(r.sellIdr)
+  }
+  return out
+}

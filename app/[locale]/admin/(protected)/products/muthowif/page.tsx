@@ -8,6 +8,7 @@ import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -29,6 +30,8 @@ export default function MuthowifPage() {
   const [vendorName, setVendorName] = useState('Saudinesia')
   const [currency, setCurrency] = useState('IDR')
   const [hargaLayanan, setHargaLayanan] = useState('')
+  const [serviceId, setServiceId] = useState<string | null>(null)
+  const [priceTick, setPriceTick] = useState(0)
   const [preview, setPreview] = useState<Preview | null>(null)
   const [savingPrice, setSavingPrice] = useState(false)
   const [priceSaved, setPriceSaved] = useState(false)
@@ -42,7 +45,8 @@ export default function MuthowifPage() {
   async function loadPrice() {
     const sr = await fetch('/api/v1/admin/products/muthowif/service-price')
     const sj = await sr.json()
-    if (sj.data) setCurrentPrice(sj.data.price)
+    if (sj.data) { setCurrentPrice(sj.data.price); setServiceId(sj.data.id ?? null) }
+    setPriceTick(t => t + 1)
 
     const cr = await fetch('/api/v1/admin/products/muthowif/service-price/cost')
     const cj = await cr.json()
@@ -148,6 +152,8 @@ export default function MuthowifPage() {
           {savingPrice ? 'Menyimpan...' : priceSaved ? 'Tersimpan ✓' : 'Simpan Harga Layanan'}
         </button>
       </div>
+
+      {serviceId && <PriceCard ownerType="muthowif" ownerId={serviceId} title="Harga layanan: modal, jual, untung" reloadKey={priceTick} onChanged={() => { void loadPrice() }} />}
 
       <DataTable columns={columns} rows={list} getRowId={m => m.id} loading={loading} empty="Belum ada muthowif." rowClassName={m => (m.isActive ? undefined : 'opacity-50')} />
     </div>

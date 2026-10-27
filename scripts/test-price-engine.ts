@@ -9,7 +9,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { prisma } from '@/lib/db'
-import { getPricePoint, getPricePoints, repriceAll, repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
+import { getPricePoint, getPricePoints, repriceAll, repriceOwner, setManualSell, sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { deleteVisaProduct } from '@/lib/admin/productDelete'
 import { requireSellPrice, sellPrice, sellPrices, visaFeeRules, visaPriceSummary, withSellPrice } from '@/lib/pricing/engine/read'
@@ -125,9 +125,10 @@ await t('paralel: 8 hitung ulang bersamaan → tetap SATU titik harga, nilai ben
 
 // ── VISA: varian per tier ────────────────────────────────────────────────────────────────────────────────────────────
 const visa = await prisma.visaProduct.create({ data: { name: `${tag} visa`, visaType: 'Umroh', price: 0 } })
-await addCost('visa', visa.id, 'individu', 0, 'IDR', [{ minDays: 1, maxDays: 14, cost: 1_000_000 }, { minDays: 15, maxDays: 30, cost: 1_500_000, sellPriceOverride: 1_600_000 }])
-await t('Visa: satu titik harga per tier; override tier = harga manual varian; kolom lama (durationFeeRules + price termurah) ekuivalen', async () => {
+await addCost('visa', visa.id, 'individu', 0, 'IDR', [{ minDays: 1, maxDays: 14, cost: 1_000_000 }, { minDays: 15, maxDays: 30, cost: 1_500_000 }])
+await t('Visa: satu titik harga per tier; harga manual varian (lewat mesin); kolom lama (durationFeeRules + price termurah) ekuivalen', async () => {
   await repriceOwner('visa', visa.id)
+  await setManualSell({ ownerType: 'visa', ownerId: visa.id, variantKey: 'days:15-30', sellIdr: 1_600_000, byUserId: 'u-engine-test' })
   const pts = await getPricePoints('visa', visa.id)
   assert.deepEqual(pts.map(p => [p.variantKey, p.costIdr, p.sellIdr, p.mode]), [['days:1-14', 1_000_000, 1_200_000, 'auto'], ['days:15-30', 1_500_000, 1_600_000, 'manual']])
   const row = await prisma.visaProduct.findUniqueOrThrow({ where: { id: visa.id } })
@@ -308,11 +309,13 @@ await t('penjaga sumber: HANYA lib/pricing/engine yang menulis price_points dan 
   // hapus (pembersihan) hanya di tempat pemilik dihapus / mesin
   const deleters = files.filter(f => /pricePoint\.deleteMany/.test(readFileSync(f, 'utf8'))).sort()
   assert.deepEqual(deleters.filter(f => !f.startsWith('lib/pricing/engine/')), [
-    'app/api/v1/admin/products/flight/schedules/[id]/route.ts', 'app/api/v1/admin/products/transport/pricing/[id]/route.ts', 'lib/admin/productDelete.ts', 'lib/haji/delete.ts',
+    'app/api/v1/admin/products/catering/[id]/route.ts', 'app/api/v1/admin/products/flight/schedules/[id]/route.ts', 'app/api/v1/admin/products/hotels/[id]/services/[serviceId]/route.ts',
+    'app/api/v1/admin/products/transport/pricing/[id]/route.ts', 'lib/admin/productDelete.ts', 'lib/haji/delete.ts',
   ])
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
+await prisma.priceChange.deleteMany({ where: { byUserId: 'u-engine-test' } })
 await prisma.pricePoint.deleteMany({ where: { OR: [{ ownerId: { in: [h1.schedule.id, h2.schedule.id, hp.schedule.id, visa.id, haji.id, pkg.id, tour.id] } }, { vendorIds: { array_contains: [vendor.id] } }] } })
 await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } })
 await prisma.productCost.deleteMany({ where: { vendorId: vendor.id } })

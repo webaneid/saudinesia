@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
 
 // Harga sekarang cache dari HPP (docs/arsitektur-muthowif.md §10) — tidak lagi diisi manual di
 // sini, cuma dibaca. Edit harga lewat .../service-price/cost.
@@ -14,8 +15,8 @@ async function getOrCreateServicePrice() {
 export async function GET() {
   try {
     await requireSuperAdmin()
-    const price = await getOrCreateServicePrice()
-    return NextResponse.json(ok(price))
+    const row = await getOrCreateServicePrice()
+    return NextResponse.json(ok({ ...row, price: await sellPrice('muthowif', row.id) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

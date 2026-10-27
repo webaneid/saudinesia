@@ -4,6 +4,8 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
+import { canViewCost } from '@/lib/pricing/policy'
 
 // price TIDAK ada di sini secara sengaja — cache dari computeTourPackageBreakdown()
 // (docs/arsitektur-ziarah.md §8.3), diisi lewat endpoint costs, bukan manual. Mode
@@ -18,8 +20,8 @@ const createSchema = z.object({
 
 export async function GET() {
   try {
-    await requireManager()
-    const packages = await prisma.tourPackage.findMany({
+    const session = await requireManager()
+    const packages = await withAdminPrices('tour_package', await prisma.tourPackage.findMany({
       include: {
         transportTrip: { select: { id: true, name: true, origin: true, destination: true } },
         includedTransportPricing: { include: { vehicle: true } },
@@ -27,7 +29,7 @@ export async function GET() {
         _count: { select: { sites: true } },
       },
       orderBy: { createdAt: 'desc' },
-    })
+    }), { includeCost: canViewCost(session.role) })
     return NextResponse.json(ok(packages))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

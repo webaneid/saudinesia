@@ -13,8 +13,7 @@ export async function resolveSingle(ownerType: string, id: string, unit: PriceUn
   }
   return [{
     variantKey: '', unit, costIdr: r.hppRupiah, autoSellIdr: r.autoSellPrice,
-    // Override lama di JSON biaya (bila ada) menjadi harga manual; tanpa override nilai manual tersimpan DIBIARKAN (satu-satunya sumber manual modul ini adalah titik harga itu sendiri).
-    manualSellIdr: r.sellPriceOverride ?? undefined,
+    // manualSellIdr SENGAJA tidak diisi: harga manual hanya milik titik harga (setManualSell) dan tak pernah ditimpa hitung-ulang.
     marginPctUsed: r.marginPercentUsed, roundingUsed: r.roundingUsed, fxRateIds: r.rateUsed, vendorIds: r.vendorUsed,
   }]
 }
