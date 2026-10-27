@@ -36,36 +36,42 @@ export function useEditEntity<T>(endpoint: string, listHref: string) {
 
   const clearMessages = () => { setError(null); setNotice(null) }
 
-  async function save(body: unknown) {
+  /** true = tersimpan (pemanggil memperbarui baseline "belum disimpan"); false = galat sudah ditampilkan. */
+  async function save(body: unknown): Promise<boolean> {
     setSaving(true); clearMessages()
     try {
       const res = await fetch(endpoint, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => null)
-      if (!res.ok || !json?.data) { setError(json?.error ?? 'Perubahan gagal disimpan.'); return }
+      if (!res.ok || !json?.data) { setError(json?.error ?? 'Perubahan gagal disimpan.'); return false }
       setItem(prev => ({ ...(prev ?? {}), ...(json.data as object) }) as T) // PUT boleh mengembalikan subset baris — gabungkan, jangan timpa
       setNotice('Perubahan tersimpan.')
+      return true
     } catch {
       setError('Tidak dapat menghubungi server.')
+      return false
     } finally {
       setSaving(false)
     }
   }
 
-  async function remove() {
+  /** 'deleted' = terhapus (menavigasi ke daftar); 'deactivated' = dipakai sehingga dinonaktifkan (entitas dimuat ulang); 'error' = galat tampil. */
+  async function remove(): Promise<'deleted' | 'deactivated' | 'error'> {
     setDeleting(true); clearMessages()
     try {
       const res = await fetch(endpoint, { method: 'DELETE' })
       const json = await res.json().catch(() => null)
-      if (!res.ok || !json?.data) { setError(json?.error ?? 'Gagal menghapus.'); return }
-      if (json.data.deleted) { router.push(listHref); return }
+      if (!res.ok || !json?.data) { setError(json?.error ?? 'Gagal menghapus.'); return 'error' }
+      if (json.data.deleted) { router.push(listHref); return 'deleted' }
       setNotice(json.data.message ?? 'Dipakai sehingga dinonaktifkan.')
       await load()
+      return 'deactivated'
     } catch {
       setError('Tidak dapat menghubungi server.')
+      return 'error'
     } finally {
       setDeleting(false)
     }
   }
 
-  return { item, loading, missing, saving, deleting, error, notice, clearMessages, save, remove }
+  return { item, loading, missing, saving, deleting, error, notice, clearMessages, save, remove, reload: load }
 }

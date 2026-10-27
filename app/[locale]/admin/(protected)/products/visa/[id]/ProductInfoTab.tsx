@@ -2,7 +2,7 @@
 
 import { MediaField } from '@/components/admin/media/MediaField'
 import { useState } from 'react'
-import { ExternalLink, FileText, Info, Trash2, Wallet } from 'lucide-react'
+import { ExternalLink, FileText, ImageIcon, Info, Trash2, Wallet } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
@@ -30,9 +30,6 @@ export function ProductInfoTab({ productId, form, onChange, price, locale, produ
   return (
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
       <div className="min-w-0 space-y-4 lg:col-span-2">
-        <Card className="p-5">
-          <MediaField productType="visa" productId={productId} label="Foto Unggulan Visa" />
-        </Card>
         <Card className="space-y-4 p-5">
           <SectionTitle icon={Info} title="Informasi dasar" />
           <div className="grid items-start gap-4 sm:grid-cols-2">
@@ -90,6 +87,11 @@ export function ProductInfoTab({ productId, form, onChange, price, locale, produ
           >
             Lihat katalog publik <ExternalLink className="size-3.5" />
           </a>
+        </Card>
+
+        <Card className="space-y-3 p-5">
+          <SectionTitle icon={ImageIcon} title="Foto Unggulan" />
+          <MediaField productType="visa" productId={productId} label="Foto Unggulan Visa" />
         </Card>
 
         <Card className="space-y-2 p-5">

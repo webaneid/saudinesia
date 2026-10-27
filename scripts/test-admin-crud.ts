@@ -113,7 +113,7 @@ await t('hapus entitas yang bisa dirujuk lewat deleteOrDeactivate (katering, rut
 })
 
 await t('halaman ubah memakai EditPage + useEditEntity; hook memeriksa respons; daftar menaut ke halaman ubah', () => {
-  const pages = ['app/[locale]/admin/(protected)/products/catering/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/seasons/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/flight/routes/[id]/page.tsx', 'app/[locale]/admin/(protected)/system/users/[id]/page.tsx']
+  const pages = ['app/[locale]/admin/(protected)/products/catering/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/muthowif/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/tourism-sites/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/transport/vehicles/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/haji/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/seasons/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/flight/routes/[id]/page.tsx', 'app/[locale]/admin/(protected)/system/users/[id]/page.tsx']
   for (const p of pages) { const s = read(p); assert.match(s, /<EditPage\b/, p); assert.match(s, /useEditEntity</, p); assert.doesNotMatch(s, /method:\s*['"](PUT|DELETE)['"]/, `${p}: fetch langsung`) }
   const hook = read('components/admin/shell/useEditEntity.ts')
   assert.equal((hook.match(/!res\.ok \|\| !json\?\.data/g) ?? []).length, 3, 'muat, simpan, dan hapus harus memeriksa respons')

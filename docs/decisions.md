@@ -2844,3 +2844,16 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `components/admin/editor/*`, `app/[locale]/admin/(protected)/products/packages/[id]/page.tsx`, `scripts/test-admin-editor.ts`, `package.json`, docs.
 
+## 2026-10-27 — Tata letak editor WordPress untuk semua halaman edit produk (F2)
+**Decision:** `EditPage` dikembangkan menjadi tata letak dua kolom (kiri formulir + `after`; kanan Terbitkan/`media`/`sidebar`/Hapus) memakai `EditorShell`/`PublishBox`/`DeleteBox`; Katering, Muthowif, Situs, Kendaraan, Haji pindah ke `EditPage` + `useEditEntity`; Hotel dan Paket Ziarah memakai `EditorShell` langsung seperti Paket Umroh; Visa hanya memindahkan Foto ke kolom kanan. Pelacakan perubahan lewat `useDirtyForm` dengan baseline eksplisit; formulir `EditPage` diisi sekali dari data muat. `RichTextEditorImpl` tidak lagi meneruskan `update` tanpa perubahan dokumen.
+
+**Rationale:** Memperluas `EditPage` (satu tempat) lebih murah dan lebih konsisten daripada menulis ulang tiap halaman; hanya halaman dengan banyak kotak yang tersimpan sendiri butuh `EditorShell` langsung. Memindahkan halaman bespoke ke `useEditEntity` sekaligus menutup galat tertelan di Muthowif/Situs. Perbaikan di editor bersama diperlukan karena normalisasi saat-muat membuat penanda belum-disimpan palsu di semua halaman dengan teks polos lama.
+
+**Alternatives considered:** Mengubah semua halaman bespoke jadi `EditorShell` langsung (ditolak: duplikasi tanpa nilai untuk formulir tunggal); mendeteksi dirty lewat event DOM (ditolak: rapuh untuk komponen kustom); menormalkan nilai teks kaya di `useDirtyForm` (ditolak: pengetahuan format bocor ke hook generik).
+
+**Security check (SOP langkah 5):** 0 temuan. Hanya sisi tampilan/komponen — tanpa route, auth, upload, skema, atau dependensi baru; payload PUT/DELETE tidak berubah (diuji: simpan, error 400 Haji tampil, konfirmasi hapus inline); `bun audit` tanpa critical.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` 410 PASS; Chrome asli: 10 halaman (dua kolom, sticky, Simpan nonaktif saat bersih), ketik/simpan/bertahan setelah muat ulang di 5 halaman, ketik di editor teks kaya, galat server tampil, konfirmasi hapus, Visa, HP; tanpa galat konsol. Data uji dipulihkan.
+
+**Affects:** `components/admin/shell/{EditPage,useEditEntity}`, `components/admin/editor/*`, `components/shared/rich-text/RichTextEditorImpl.tsx`, 8 halaman edit produk, `scripts/test-{admin-editor,admin-crud,haji-pricing}.ts`, docs.
+

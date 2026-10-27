@@ -1,6 +1,6 @@
 # Arsitektur — Tata Letak Editor Admin ala WordPress (konten di kiri, kotak samping di kanan)
 
-> **Status: F1 SELESAI & TERVERIFIKASI (2026-10-27) — Paket Umroh; F2/F3 menunggu.** Arahan pemilik: pengguna sudah terbiasa dengan UI WordPress — kolom kanan berisi *Terbitkan*, *Gambar Unggulan*, kategori/atribut (bila ada) — itu jauh lebih membantu daripada kotak-kotak terpisah yang tak beraturan seperti sekarang. **Mulai dari Paket Umroh.**
+> **Status: F1 + F2 SELESAI & TERVERIFIKASI (2026-10-27) — Paket Umroh + 8 halaman edit produk lain; F3 (kategori) menunggu keputusan model.** Arahan pemilik: pengguna sudah terbiasa dengan UI WordPress — kolom kanan berisi *Terbitkan*, *Gambar Unggulan*, kategori/atribut (bila ada) — itu jauh lebih membantu daripada kotak-kotak terpisah yang tak beraturan seperti sekarang. **Mulai dari Paket Umroh.**
 
 ## 1. Recheck (kode aktual)
 
@@ -19,7 +19,7 @@ Fakta penting yang tak boleh hilang: kotak komponen **menyimpan langsung** per a
 | Fase | Isi |
 |---|---|
 | **F1** | Komponen `editor/*` + penataan ulang halaman Paket Umroh (tanpa perubahan perilaku); penjaga CI |
-| **F2** | Halaman edit lain memakai `EditorShell`: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan |
+| **F2** ✅ | Halaman edit lain memakai tata letak yang sama: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan (§5) |
 | **F3** | Taksonomi/kategori produk bila diputuskan (model + kotak Kategori di sidebar) |
 
 ## 4. As-built F1 (Paket Umroh)
@@ -29,3 +29,26 @@ Fakta penting yang tak boleh hilang: kotak komponen **menyimpan langsung** per a
 - **Perilaku — tidak ada perubahan API/data**, tetapi tiga perbaikan yang ditemukan saat menata ulang: (1) `patch()` kini memeriksa respons dan menampilkan galat server (dulu ditelan; baseline "tersimpan" tidak maju bila gagal); (2) muat-ulang akibat kotak komponen (`refreshAll`) tidak lagi menimpa ketikan info yang belum disimpan — hanya muat awal yang mereset `form` (`loadPackage(id, true)`); (3) penanda "Ada perubahan belum disimpan" dan peringatan keluar halaman.
 - **Penjaga CI** `scripts/test-admin-editor.ts` (dalam `bun run test`): halaman edit terdaftar wajib memakai `EditorShell/PublishBox/MetaBox/useUnsavedGuard`, tidak kembali ke `admin-form-panel`/kartu manual, respons simpan diperiksa, muat-ulang tak menimpa isian. **Halaman edit yang dimigrasi di F2 wajib ditambahkan ke daftar `EDITORS` di skrip itu.**
 - **Bukti**: Chrome asli — dua kolom + sidebar `position: sticky` di layar lebar, satu kolom + bilah simpan lengket di 390px; Simpan nonaktif saat bersih → aktif + "Ada perubahan belum disimpan" saat diketik; mengubah mode kotak komponen tidak menghapus ketikan nama; simpan tersimpan & bertahan setelah muat ulang; tanpa galat konsol. `bun run test` 408 PASS; build terisolasi 0 error.
+
+## 5. As-built F2 (2026-10-27)
+
+**Dua pola, satu tata letak.** Recheck menemukan hanya Katering (dan halaman non-produk seperti Musim/Rute/Pengguna) yang berbasis `EditPage`; Haji, Muthowif, Situs, Kendaraan, Hotel, Paket Ziarah, Visa bespoke. Maka:
+
+| Pola | Halaman | Cara |
+|---|---|---|
+| **`EditPage` + `useEditEntity`** (formulir tunggal) | Katering, Muthowif, Situs Wisata, Kendaraan, Haji | `EditPage` sendiri kini = `EditorShell` + `PublishBox` + `DeleteBox`: kiri formulir (+ `after` di luar `<form>`, mis. Komponen Biaya Haji), kanan Terbitkan (status via `active`/`onActiveChange`, Simpan, `dirty`), `media` (Foto/Galeri), `sidebar` (ringkasan/catatan), Hapus. Musim/Rute/Pengguna ikut memakai tata letak ini otomatis (tanpa foto; `dirty` tak dilacak → Simpan selalu aktif). Prop `top` dihapus, diganti `media`. |
+| **`EditorShell` langsung** (banyak kotak yang tersimpan sendiri) | Paket Umroh (F1), Hotel, Paket Ziarah | Judul besar + deskripsi, kotak meta (`MetaBox`, ber-badge mode / `aside` tombol tambah), kanan: Terbitkan, Galeri, Atribut/Ringkasan Harga. |
+| **Sudah dua kolom** | Visa | Hanya Foto Unggulan dipindah dari kolom utama ke kolom kanan (setelah Publikasi). Struktur tab + bilah simpan sticky Visa dipertahankan. |
+
+**Komponen baru/diubah:** `useDirtyForm(form)` (baseline eksplisit lewat `markClean(nilai)` setelah muat & simpan berhasil, `patchClean` untuk pergeseran sebagian), `DeleteBox` (konfirmasi inline, bukan `window.confirm`), `PublishBox` (status opsional, `dirty` opsional = tak dilacak), `useEditEntity` (`save` → boolean, `remove` → `'deleted'|'deactivated'|'error'`, `reload`).
+
+**Aturan yang dibuktikan di Chrome:** formulir `EditPage` diisi SEKALI dari data yang dimuat (`!form`), sehingga muat-ulang (mis. harga Haji berubah dari Komponen Biaya, atau item dinonaktifkan server) tidak menimpa ketikan; setelah hapus-yang-menonaktifkan, form dan baseline digeser (`patchClean({ isActive: false })`).
+
+**Bug ditemukan & ditutup lewat verifikasi:**
+1. **Penanda "belum disimpan" palsu** — Tiptap memancarkan satu `update` saat dimuat (0 langkah) yang menormalkan teks polos lama jadi JSON, sehingga Haji/Muthowif/Situs/Hotel/Ziarah tampak berubah sejak dibuka. Diperbaiki di `RichTextEditorImpl` (`if (!transaction.docChanged) return`); ketikan nyata tetap diteruskan (diuji: ketik di bio → tersimpan sebagai JSON).
+2. **Simpan menelan galat** di Muthowif, Situs, Hotel, Paket Ziarah (respons tak diperiksa) — kini galat server tampil.
+3. **Muat-ulang menimpa ketikan** di Paket Ziarah (`loadPackage` mereset info tiap refresh kotak komponen) — `resetInfo` seperti Paket Umroh.
+
+**Penjaga CI:** `scripts/test-admin-editor.ts` (daftar `SHELL_PAGES` + `EDITPAGE_PAGES`; formulir diisi sekali; `media=` bukan `top=`; tak ada kartu manual/`ArrowLeft` ad-hoc; respons simpan diperiksa; Foto Visa di sidebar; `DeleteBox` konfirmasi inline), `test-admin-crud.ts` (4 halaman baru masuk daftar `EditPage`+`useEditEntity`), `test-haji-pricing.ts` (penjaga UI Haji disesuaikan ke struktur baru, perilaku sama).
+
+**Gap yang tetap (dicatat, di luar scope tata letak):** Muthowif, Situs Wisata, Hotel, Paket Umroh, Paket Ziarah belum punya hapus sungguhan (API DELETE tidak ada) — kotak Hapus tidak ditampilkan; `DELETE` Visa mengembalikan `ok(null)` dan belum bersemantik dirujuk→nonaktif (FK → 500), sehingga Visa belum bisa memakai `useEditEntity`. Dijadwalkan sebagai perapian CRUD.

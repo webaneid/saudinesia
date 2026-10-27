@@ -212,8 +212,9 @@ await t('UI Haji (Fase 4): halaman edit memakai panel Komponen Biaya Haji, punya
   const dir = 'app/[locale]/admin/(protected)/products/haji'
   const edit = readFileSync(`${dir}/[id]/page.tsx`, 'utf8')
   assert.match(edit, /<CostComponentsPanel[\s\S]*?apiBase=\{`\/api\/v1\/admin\/products\/haji\/\$\{id\}\/costs`\}/)
-  assert.match(edit, /method: 'PUT'/); assert.match(edit, /method: 'DELETE'/); assert.match(edit, /Zona Berbahaya/); assert.match(edit, /confirm\(/)
-  assert.match(edit, /Nonaktifkan Produk/); assert.match(edit, /Hapus Produk/); assert.match(edit, /Aktif \(tampil di katalog\)/)
+  // Simpan/hapus/aktif kini lewat EditPage + useEditEntity (PUT/DELETE satu pintu yang memeriksa respons; docs/arsitektur-admin-editor.md §5).
+  assert.match(edit, /<EditPage\b/); assert.match(edit, /useEditEntity</); assert.match(edit, /e\.save\(/); assert.match(edit, /e\.remove\(/)
+  assert.match(edit, /Nonaktifkan produk/); assert.match(edit, /Hapus produk/); assert.match(edit, /active=\{form\.isActive\}/)
   assert.doesNotMatch(edit, /name="price"|form\.price|price: Number\(form/, 'harga bukan masukan')
   const list = readFileSync(`${dir}/page.tsx`, 'utf8')
   assert.match(list, /admin\/products\/haji\/\$\{h\.id\}/); assert.match(list, /Kelola/)
