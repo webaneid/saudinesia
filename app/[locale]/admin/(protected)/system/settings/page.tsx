@@ -5,7 +5,7 @@ import { Send } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 
-type PricingRule = { id: string; minMarginPercent: number; roundingIncrement: number; warnBelowPercent: number }
+type PricingRule = { id: string; defaultMarginPercent: number; roundingIncrement: number; warnBelowPercent: number }
 type SiteSetting = {
   id: string
   platformName: string | null
@@ -30,7 +30,7 @@ type TestEmailResult = { status: 'sent' | 'failed' | 'skipped'; detail: string |
 
 export default function SettingsPage() {
   const [rule, setRule] = useState<PricingRule | null>(null)
-  const [ruleForm, setRuleForm] = useState({ minMarginPercent: 20, roundingIncrement: 50000, warnBelowPercent: 0 })
+  const [ruleForm, setRuleForm] = useState({ defaultMarginPercent: 20, roundingIncrement: 50000, warnBelowPercent: 0 })
   const [ruleError, setRuleError] = useState<string | null>(null)
   const [savingRule, setSavingRule] = useState(false)
 
@@ -48,7 +48,7 @@ export default function SettingsPage() {
   async function loadRule() {
     const r = await fetch('/api/v1/admin/system/settings/pricing-rule')
     const j = await r.json()
-    if (j.data) { setRule(j.data); setRuleForm({ minMarginPercent: Number(j.data.minMarginPercent), roundingIncrement: j.data.roundingIncrement, warnBelowPercent: Number(j.data.warnBelowPercent ?? 0) }) }
+    if (j.data) { setRule(j.data); setRuleForm({ defaultMarginPercent: Number(j.data.defaultMarginPercent), roundingIncrement: j.data.roundingIncrement, warnBelowPercent: Number(j.data.warnBelowPercent ?? 0) }) }
   }
   async function loadSiteSetting() {
     const r = await fetch('/api/v1/admin/system/settings/site')
@@ -140,8 +140,8 @@ export default function SettingsPage() {
               <input
                 type="number"
                 className="admin-inp"
-                value={ruleForm.minMarginPercent}
-                onChange={e => setRuleForm(p => ({ ...p, minMarginPercent: +e.target.value }))}
+                value={ruleForm.defaultMarginPercent}
+                onChange={e => setRuleForm(p => ({ ...p, defaultMarginPercent: +e.target.value }))}
               />
             </div>
             <div>
@@ -167,7 +167,7 @@ export default function SettingsPage() {
             {savingRule ? '...' : 'Simpan'}
           </button>
           {ruleError && <p className="text-xs font-medium text-admin-danger">{ruleError}</p>}
-          {rule && <p className="text-[11px] text-admin-muted/70">Tersimpan: margin {Number(rule.minMarginPercent)}%, bulatkan ke kelipatan Rp{rule.roundingIncrement.toLocaleString('id-ID')}</p>}
+          {rule && <p className="text-[11px] text-admin-muted/70">Tersimpan: margin {Number(rule.defaultMarginPercent)}%, bulatkan ke kelipatan Rp{rule.roundingIncrement.toLocaleString('id-ID')}</p>}
         </div>
       </section>
 

@@ -31,7 +31,7 @@ export default async function BookingDetailPage({ params }: Props) {
       muthowif:   { include: { muthowif: true } },
       catering:   { include: { cateringOption: true } },
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
-      pilgrims:   { include: { visaApplication: { omit: { hppSnapshotRupiah: true, exchangeRateIdsUsed: true, vendorIdsUsed: true }, include: { visaProduct: true } }, documents: true } },
+      pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
     },
   })

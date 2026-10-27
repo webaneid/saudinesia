@@ -9,7 +9,7 @@ import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
 async function getOrCreateServicePrice() {
   const existing = await prisma.muthowifServicePrice.findFirst()
   if (existing) return existing
-  return prisma.muthowifServicePrice.create({ data: { price: 0 } })
+  return prisma.muthowifServicePrice.create({ data: {} })
 }
 
 export async function GET() {

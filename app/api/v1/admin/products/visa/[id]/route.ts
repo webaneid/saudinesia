@@ -17,7 +17,7 @@ const requirementSchema = z.object({
 })
 
 // price TIDAK ada di sini secara sengaja — VisaProduct.price cuma boleh diisi oleh
-// refreshVisaProductCache() (docs/arsitektur-harga.md §17), bukan input admin manual.
+// repriceOwner('visa', id) (lib/pricing/engine) (docs/arsitektur-harga.md §17), bukan input admin manual.
 const updateSchema = z.object({
   name:         z.string().min(1).optional(),
   country:      z.string().optional(),

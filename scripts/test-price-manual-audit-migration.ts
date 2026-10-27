@@ -10,6 +10,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
+import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -67,6 +68,7 @@ console.log('== membangun DB pra-migrasi ==')
 await newDb(baseName)
 const pre = run(dbUrl(baseName), ['migrate', 'deploy', '--schema', 'schema.prisma'])
 assert.equal(pre.code, 0, `migrate deploy (pra) gagal:\n${pre.out.slice(-600)}`)
+assert.equal(exec(baseName, LEGACY_DEFAULTS_SQL).code, 0, 'default kolom harga lama gagal dipasang')
 // Sekarang tambahkan migrasi yang diuji — hanya akan diterapkan di salinan skenario.
 cpSync(join(root, 'prisma/migrations', MIGRATION), join(tmp, 'migrations', MIGRATION), { recursive: true })
 
@@ -149,7 +151,7 @@ await t('muthowif: baris berbiaya dipertahankan walau yang tak berbiaya lebih ba
 await t('override jual Visa: dipindah ke harga MANUAL titik harga (+ jejak), kunci dibuang dari JSON, kunci lain & tier tanpa override utuh', async () => {
   const r = await scenarioWith(async db => {
     const vendor = await db.vendor.create({ data: { name: 'V3', nameKey: 'v3', countryCode: 'SA' } })
-    const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh', price: 0, durationFeeRules: [] } })
+    const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh', } })
     await db.productCost.create({ data: { productType: 'visa', productId: visa.id, vendorId: vendor.id, costComponent: 'individu', currency: 'IDR',
       costTiers: [flat(1_000_000, { sellPriceOverride: 1_100_000 }), { minDays: 15, maxDays: 30, cost: 2_000_000 }, { minDays: 31, maxDays: 40, cost: 3_000_000, sellPriceOverride: 3_500_000 }] } })
     // komponen kedua dengan override pada varian yang sama (kasus tak lazim): menang yang id-nya terkecil (deterministik)

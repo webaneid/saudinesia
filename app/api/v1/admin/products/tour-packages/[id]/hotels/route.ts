@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { sellPrice } from '@/lib/pricing/engine/read'
 
@@ -30,7 +30,7 @@ export async function POST(req: Request, { params }: Ctx) {
       data: { tourPackageId, ...parsed.data, pricePerNight },
     })
 
-    await refreshTourPackagePriceCache(tourPackageId)
+    await repriceOwner('tour_package', tourPackageId)
 
     return NextResponse.json(ok(created), { status: 201 })
   } catch (e) {

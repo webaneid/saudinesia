@@ -6,7 +6,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/db'
-import { computeHajiBreakdown, refreshAllHajiPriceCaches, refreshHajiPriceCache } from '@/lib/pricing/computeHajiPrice'
+import { computeHajiBreakdown } from '@/lib/pricing/computeHajiPrice'
+import { getPricePoint, repriceOwner, repriceOwnerType } from '@/lib/pricing/engine'
 import { createCostComponentHandlers } from '@/lib/pricing/costComponentHandlers'
 import { reserveHaji } from '@/lib/quota/adapters'
 import { ItemNotBookableError } from '@/lib/booking/errors'
@@ -40,14 +41,14 @@ await prisma.exchangeRate.createMany({ data: [
 ] })
 const savedRules = await prisma.pricingRule.findMany({ where: { productType: { in: ['haji', 'package'] } } })
 await prisma.pricingRule.deleteMany({ where: { productType: { in: ['haji', 'package'] } } })
-await prisma.pricingRule.create({ data: { productType: 'haji', minMarginPercent: 40, roundingIncrement: 100000 } })
+await prisma.pricingRule.create({ data: { productType: 'haji', defaultMarginPercent: 40, roundingIncrement: 100000 } })
 
 const mkHaji = (extra: Record<string, unknown> = {}) =>
-  prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027, price: 0, totalQuota: 10, ...extra } })
+  prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027, totalQuota: 10, ...extra } })
 const req = (body?: unknown) => new Request('http://test.local/x', { method: 'POST', body: body === undefined ? undefined : JSON.stringify(body) })
 const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
 const ictx = (id: string, costId: string) => ({ params: Promise.resolve({ id, costId }) })
-const priceOf = async (id: string) => Number((await prisma.hajiProduct.findUniqueOrThrow({ where: { id } })).price)
+const priceOf = async (id: string) => (await getPricePoint('haji', id))?.sellIdr ?? 0 // 0 = belum ada titik harga (belum berharga)
 const flat = (cost: number) => [{ minDays: 0, maxDays: 9999, cost }]
 const created: string[] = []
 const haji = async (extra: Record<string, unknown> = {}) => { const p = await mkHaji(extra); created.push(p.id); return p }
@@ -79,9 +80,9 @@ await t('tanpa aturan margin `haji` jatuh ke aturan global/default (20 %, bulat 
   const h = await haji()
   await prisma.productCost.create({ data: { productType: 'haji', productId: h.id, vendorId: vendor.id, costComponent: 'X', currency: 'IDR', costTiers: flat(1000000) } })
   const global = await prisma.pricingRule.findFirst({ where: { productType: 'global' } })
-  const pct = global ? Number(global.minMarginPercent) : 20, inc = global ? global.roundingIncrement : 50000
+  const pct = global ? Number(global.defaultMarginPercent) : 20, inc = global ? global.roundingIncrement : 50000
   assert.equal((await computeHajiBreakdown(h.id)).componentsTotalSellPrice, Math.round(1000000 * (1 + pct / 100) / inc) * inc)
-  await prisma.pricingRule.create({ data: { productType: 'haji', minMarginPercent: 40, roundingIncrement: 100000 } })
+  await prisma.pricingRule.create({ data: { productType: 'haji', defaultMarginPercent: 40, roundingIncrement: 100000 } })
 })
 
 await t('komponen biaya Haji dicakup ke produk dan modulnya: milik paket/produk lain → 404; produk Haji tak ada → 404 tanpa baris yatim; vendor ngawur → 400', async () => {
@@ -100,18 +101,18 @@ await t('komponen biaya Haji dicakup ke produk dan modulnya: milik paket/produk 
   await prisma.productCost.deleteMany({ where: { id: { in: [foreignPkg.id, otherHaji.id] } } })
 })
 
-await t('cron kurs: refreshAllHajiPriceCaches menghitung ulang produk berkomponen mata uang yang berubah (juga yang NONAKTIF); produk tanpa komponen mata uang itu tak disentuh', async () => {
+await t('cron kurs: repriceOwnerType menghitung ulang produk berkomponen mata uang yang berubah (juga yang NONAKTIF); produk tanpa komponen mata uang itu tak disentuh', async () => {
   const usd = await haji(), idr = await haji(), off = await haji({ isActive: false })
   await prisma.productCost.create({ data: { productType: 'haji', productId: usd.id, vendorId: vendor.id, costComponent: 'U', currency: 'USD', costTiers: flat(5000) } })
   await prisma.productCost.create({ data: { productType: 'haji', productId: idr.id, vendorId: vendor.id, costComponent: 'I', currency: 'IDR', costTiers: flat(5000000) } })
   await prisma.productCost.create({ data: { productType: 'haji', productId: off.id, vendorId: vendor.id, costComponent: 'U', currency: 'USD', costTiers: flat(5000) } })
-  for (const id of [usd.id, idr.id, off.id]) await prisma.hajiProduct.update({ where: { id }, data: { price: 1 } }) // cache basi
-  await refreshAllHajiPriceCaches(['USD'])
+  await prisma.pricePoint.create({ data: { ownerType: 'haji', ownerId: idr.id, unit: 'package', autoSellIdr: 1, sellIdr: 1 } }) // titik harga basi — tak boleh disentuh siklus USD
+  await repriceOwnerType('haji', ['USD'])
   assert.equal(await priceOf(usd.id), 114800000); assert.equal(await priceOf(off.id), 114800000, 'produk nonaktif ikut dihitung ulang')
   assert.equal(await priceOf(idr.id), 1, 'tanpa komponen USD tak disentuh')
-  await refreshAllHajiPriceCaches()
+  await repriceOwnerType('haji')
   assert.equal(await priceOf(idr.id), 7000000)
-  await refreshHajiPriceCache(usd.id)
+  await repriceOwner('haji', usd.id)
 })
 
 console.log('== guard booking (SEC-66) ==')
@@ -119,7 +120,7 @@ console.log('== guard booking (SEC-66) ==')
 const tryReserve = (id: string, n: number) => prisma.$transaction((tx) => reserveHaji(tx, id, n))
 
 await t('produk NONAKTIF atau BELUM BERHARGA ditolak (ItemNotBookableError) dan kuota TIDAK ditahan; produk berharga & aktif lolos dan kuota pending naik', async () => {
-  const unpriced = await haji({ price: 0 }), inactive = await haji({ price: 1000000, isActive: false }), good = await haji({ price: 5000000 })
+  const unpriced = await haji(), inactive = await haji({ isActive: false }), good = await haji()
   await pricePoint(inactive.id, 1000000); await pricePoint(good.id, 5000000) // `unpriced` sengaja tanpa titik harga
   await assert.rejects(tryReserve(unpriced.id, 1), (e) => e instanceof ItemNotBookableError && /belum ditetapkan/.test(e.message))
   await assert.rejects(tryReserve(inactive.id, 1), (e) => e instanceof ItemNotBookableError && /tidak tersedia/.test(e.message))
@@ -129,7 +130,7 @@ await t('produk NONAKTIF atau BELUM BERHARGA ditolak (ItemNotBookableError) dan 
 })
 
 await t('kuota habis tetap error "insufficient" (→ 409, bukan 422) dan transaksi rollback', async () => {
-  const p = await haji({ price: 5000000, totalQuota: 2 })
+  const p = await haji({ totalQuota: 2 })
   await pricePoint(p.id, 5000000)
   await assert.rejects(tryReserve(p.id, 3), (e) => !(e instanceof ItemNotBookableError) && /insufficient/.test((e as Error).message))
   assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: p.id } })).pendingQuota, 0)
@@ -156,7 +157,7 @@ await t('belum pernah dipesan → HAPUS SUNGGUHAN beserta komponen/vendor piliha
 })
 
 await t('sudah ada booking → TIDAK dihapus, dinonaktifkan; booking dan komponen biaya utuh; hitungan booking dilaporkan; id tak ada → found:false', async () => {
-  const h = await haji({ price: 5000000 })
+  const h = await haji()
   const user = await prisma.user.create({ data: { email: `${tag}@example.test`, passwordHash: 'x', fullName: 'Uji Haji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
   const bk = await prisma.booking.create({ data: { bookingCode: `HJ${Date.now()}`, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-07-10'), season: 'hajj', totalAmount: 5000000 } })
   await prisma.bookingHaji.create({ data: { bookingId: bk.id, hajiProductId: h.id, numPersons: 1, totalPrice: 5000000 } })
@@ -182,7 +183,7 @@ await t('harga BUKAN masukan: skema buat/ubah menolak `price`; mengaktifkan kemb
 })
 
 await t('katalog publik: peta eksplisit tanpa kolom kuota mentah; available = total − pending − booked (tak negatif); priced mengikuti cache', async () => {
-  const p = await prisma.hajiProduct.create({ data: { name: `${tag} kat`, hajiType: 'reguler', year: 2028, price: 0, totalQuota: 10, pendingQuota: 3, bookedQuota: 4 } })
+  const p = await prisma.hajiProduct.create({ data: { name: `${tag} kat`, hajiType: 'reguler', year: 2028, totalQuota: 10, pendingQuota: 3, bookedQuota: 4 } })
   created.push(p.id)
   const c = toCatalogHaji(p, 0)
   assert.equal(c.available, 3); assert.equal(c.priced, false); assert.equal(hajiPriced(1), true); assert.equal(toCatalogHaji(p, 5_000_000).price, 5_000_000)
@@ -192,7 +193,7 @@ await t('katalog publik: peta eksplisit tanpa kolom kuota mentah; available = to
 
 console.log('== penjaga sumber ==')
 
-await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivateHaji), route biaya Haji tipis, POST membuat price 0, booking memetakan ItemNotBookableError → 422, cron memanggil agregator yang memuat refreshAllHajiPriceCaches', () => {
+await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivateHaji), route biaya Haji tipis, POST membuat produk tanpa titik harga, booking memetakan ItemNotBookableError → 422, cron memanggil agregator (mesin harga) yang memuat Haji', () => {
   const byId = readFileSync('app/api/v1/admin/products/haji/[id]/route.ts', 'utf8')
   for (const v of ['GET', 'PUT', 'DELETE']) assert.match(byId, new RegExp(`export async function ${v}\\(`))
   assert.match(byId, /deleteOrDeactivateHaji\(id\)/); assert.match(byId, /requireManager\(\)/)
@@ -200,7 +201,7 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
     const src = readFileSync(`app/api/v1/admin/products/haji/[id]/${f}`, 'utf8')
     assert.match(src, /createCostComponentHandlers\('haji'\)/, f); assert.ok(src.split('\n').length <= 10, f); assert.doesNotMatch(src, /prisma|productCost/i, f)
   }
-  assert.match(readFileSync('app/api/v1/admin/products/haji/route.ts', 'utf8'), /price: 0,/)
+  assert.doesNotMatch(readFileSync('app/api/v1/admin/products/haji/route.ts', 'utf8'), /price: 0/) // produk baru TANPA titik harga (belum berharga) — kolom harga sudah dihapus
   const bk = readFileSync('app/api/v1/bookings/route.ts', 'utf8')
   assert.match(bk, /error instanceof ItemNotBookableError\) return NextResponse\.json\(err\(error\.message\), \{ status: 422 \}\)/)
   assert.ok(bk.indexOf('ItemNotBookableError)') < bk.indexOf("includes('insufficient')"), '422 dicek sebelum pemetaan 409')
@@ -236,7 +237,7 @@ await prisma.hajiProduct.deleteMany({ where: { id: { in: created } } })
 await prisma.vendor.deleteMany({ where: { id: vendor.id } })
 await prisma.exchangeRate.deleteMany({ where: { source: SRC } })
 await prisma.pricingRule.deleteMany({ where: { productType: { in: ['haji', 'package'] } } })
-if (savedRules.length) await prisma.pricingRule.createMany({ data: savedRules.map(({ productType, minMarginPercent, roundingIncrement }) => ({ productType, minMarginPercent, roundingIncrement })) })
+if (savedRules.length) await prisma.pricingRule.createMany({ data: savedRules.map(({ productType, defaultMarginPercent, roundingIncrement }) => ({ productType, defaultMarginPercent, roundingIncrement })) })
 await prisma.$disconnect()
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 process.exit(failed ? 1 : 0)

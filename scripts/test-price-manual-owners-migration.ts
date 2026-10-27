@@ -9,6 +9,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
+import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -66,6 +67,7 @@ console.log('== membangun DB pra-migrasi ==')
 await newDb(baseName)
 const pre = run(dbUrl(baseName), ['migrate', 'deploy', '--schema', 'schema.prisma'])
 assert.equal(pre.code, 0, `migrate deploy (pra) gagal:\n${pre.out.slice(-600)}`)
+assert.equal(exec(baseName, LEGACY_DEFAULTS_SQL).code, 0, 'default kolom harga lama gagal dipasang')
 // Sekarang tambahkan migrasi yang diuji — hanya akan diterapkan di salinan skenario.
 cpSync(join(root, 'prisma/migrations', MIGRATION), join(tmp, 'migrations', MIGRATION), { recursive: true })
 
@@ -92,10 +94,12 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
   return { name, ids, ...res }
 }
 async function world(db: PrismaClient) {
-  const c = await db.cateringOption.create({ data: { name: 'K', boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 100_000, pricePerPersonRamadan: 150_000, pricePerPersonHajj: 0 } })
+  const c = await db.cateringOption.create({ data: { name: 'K', boardType: 'full_board', menuStyle: 'asian' } })
+  await setLegacy(db, 'catering_options', c.id, { pricePerPersonRegular: 100_000, pricePerPersonRamadan: 150_000, pricePerPersonHajj: 0 })
   const hotel = await db.hotel.create({ data: { name: 'H', city: 'makkah' } })
-  const s1 = await db.hotelService.create({ data: { hotelId: hotel.id, serviceName: 'Laundry', price: 50_000 } })
-  const s0 = await db.hotelService.create({ data: { hotelId: hotel.id, serviceName: 'Gratis', price: 0 } })
+  const s1 = await db.hotelService.create({ data: { hotelId: hotel.id, serviceName: 'Laundry' } })
+  await setLegacy(db, 'hotel_services', s1.id, { price: 50_000 })
+  const s0 = await db.hotelService.create({ data: { hotelId: hotel.id, serviceName: 'Gratis' } })
   return { c: c.id, s1: s1.id, s0: s0.id }
 }
 

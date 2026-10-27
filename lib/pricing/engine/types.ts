@@ -19,9 +19,6 @@ export type ResolvedVariant = {
   vendorIds: string[]
 }
 
-/** Keadaan titik harga setelah disimpan — masukan untuk penulisan ganda ke kolom lama. */
-export type StoredVariant = { variantKey: string; sellIdr: number; costIdr: number | null }
-
 export type PriceOwner = {
   ownerType: PriceOwnerType
   /** Satuan harga bawaan titik tunggal (""); varian lain membawa satuannya sendiri. */
@@ -41,10 +38,6 @@ export type PriceOwner = {
   /** Subset `ids` yang masih ada — untuk menyapu titik harga yatim. */
   existing: (ids: string[]) => Promise<string[]>
   resolve: (id: string) => Promise<ResolvedVariant[]>
-  /** Harga lama di kolom cache, dipungut bila belum ada titik harga dan modal kosong ("jual tanpa modal"). null = tak ada. */
-  adoptLegacy: (id: string) => Promise<number | null>
-  /** Penulisan ganda ke kolom lama agar pembaca lama tetap jalan (dihapus di Fase 5). */
-  writeLegacy: (tx: import('@prisma/client').Prisma.TransactionClient, id: string, stored: StoredVariant[]) => Promise<void>
 }
 
 /** Pembaca: satu titik harga + turunannya. `profitIdr` null bila modal belum lengkap. */

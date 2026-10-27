@@ -25,10 +25,10 @@ export function getMarginRule(productType: string) {
 }
 
 /** Aturan margin yang SIAP PAKAI (angka biasa, nilai bawaan terisi) — pemakai rumus harga cukup memanggil ini. */
-export async function resolveMarginRule(productType: string): Promise<{ minMarginPercent: number; roundingIncrement: number }> {
+export async function resolveMarginRule(productType: string): Promise<{ defaultMarginPercent: number; roundingIncrement: number }> {
   const rule = await getMarginRule(productType)
   return {
-    minMarginPercent: rule ? Number(rule.minMarginPercent) : DEFAULT_MARGIN_PERCENT,
+    defaultMarginPercent: rule ? Number(rule.defaultMarginPercent) : DEFAULT_MARGIN_PERCENT,
     roundingIncrement: rule ? rule.roundingIncrement : DEFAULT_ROUNDING_INCREMENT,
   }
 }

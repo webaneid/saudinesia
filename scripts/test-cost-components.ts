@@ -8,6 +8,7 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/db'
+import { getPricePoint } from '@/lib/pricing/engine'
 import { computeCostComponents } from '@/lib/pricing/costComponents'
 import { computePackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
@@ -38,8 +39,8 @@ const tourH = createCostComponentHandlers('tour_package', { authorize: authOk })
 
 // ── fixture ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, nameKey: `${tag} vendor`.toLowerCase(), countryCode: 'SA' } })
-const pkg = await prisma.package.create({ data: { name: `${tag} paket`, price: 0 } })
-const tour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah`, price: 0 } })
+const pkg = await prisma.package.create({ data: { name: `${tag} paket` } })
+const tour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah` } })
 const stamp = new Date()
 await prisma.exchangeRate.createMany({ data: [
   { fromCurrency: 'USD', toCurrency: 'IDR', midRate: 16000, spreadPercent: 2.5, sellRate: 16400, source: SRC, fetchedAt: new Date(stamp.getTime() + 1000) },
@@ -49,8 +50,8 @@ await prisma.exchangeRate.createMany({ data: [
 const savedRules = await prisma.pricingRule.findMany({ where: { productType: { in: ['package', 'tour_package'] } } })
 await prisma.pricingRule.deleteMany({ where: { productType: { in: ['package', 'tour_package'] } } })
 await prisma.pricingRule.createMany({ data: [
-  { productType: 'package', minMarginPercent: 25, roundingIncrement: 100000 },
-  { productType: 'tour_package', minMarginPercent: 30, roundingIncrement: 50000 },
+  { productType: 'package', defaultMarginPercent: 25, roundingIncrement: 100000 },
+  { productType: 'tour_package', defaultMarginPercent: 30, roundingIncrement: 50000 },
 ] })
 
 const flat = (cost: number) => [{ minDays: 0, maxDays: 9999, cost }]
@@ -61,7 +62,7 @@ const ctx = (id: string) => ({ params: Promise.resolve({ id }) })
 const ictx = (id: string, costId: string) => ({ params: Promise.resolve({ id, costId }) })
 const json = async (r: Response) => ({ status: r.status, body: await r.json() as { success: boolean; data?: unknown; error?: string } })
 const priceOf = async (kind: 'package' | 'tour') =>
-  Number((kind === 'package' ? await prisma.package.findUniqueOrThrow({ where: { id: pkg.id } }) : await prisma.tourPackage.findUniqueOrThrow({ where: { id: tour.id } })).price)
+  kind === 'package' ? (await getPricePoint('package', pkg.id))?.sellIdr ?? 0 : (await getPricePoint('tour_package', tour.id))?.sellIdr ?? 0
 
 console.log('== hitung per komponen ==')
 
@@ -138,7 +139,7 @@ console.log('== penolakan ==')
 
 await t('G1: komponen milik modul lain / produk lain TIDAK bisa diubah atau dihapus lewat URL ini → 404 dan data tak tersentuh', async () => {
   const foreign = await mkCost('tour_package', tour.id, 'Milik Ziarah', 'IDR', 50000)
-  const otherPkg = await prisma.package.create({ data: { name: `${tag} lain`, price: 0 } })
+  const otherPkg = await prisma.package.create({ data: { name: `${tag} lain` } })
   const own = await mkCost('package', otherPkg.id, 'Milik Paket Lain', 'IDR', 60000)
   for (const [h, id, costId] of [[pkgH, pkg.id, foreign.id], [pkgH, pkg.id, own.id], [tourH, tour.id, own.id]] as const) {
     assert.equal((await json(await h.itemPUT(req({ cost: 1 }), ictx(id, costId)))).status, 404)
@@ -234,13 +235,13 @@ await t('UI: halaman admin memakai panel bersama (tanpa salinan inline) dan rout
   for (const verb of ["'POST'", "'PUT'", "'DELETE'"]) assert.ok(panel.includes(verb) || panel.includes(verb.replace(/'/g, '')), `panel harus punya ${verb}`)
 })
 
-await t('registry: setiap pemilik terdaftar punya route tipis dan fungsi refresh', () => {
+await t('registry: setiap pemilik terdaftar punya route tipis dan kait refresh ke mesin harga', () => {
   const reg = readFileSync('lib/pricing/costComponentOwners.ts', 'utf8')
   for (const key of ['package', 'tour_package']) assert.match(reg, new RegExp(`${key}: \\{`))
   const dirs = readdirSync('app/api/v1/admin/products')
   assert.ok(dirs.includes('packages') && dirs.includes('tour-packages'))
-  // Sejak Fase 1 harga terpadu: fungsi refresh hanya pembungkus mesin; mesinlah yang memakai breakdown paket.
-  assert.ok(readFileSync(join('lib/pricing/refreshPackagePriceCache.ts'), 'utf8').includes("repriceOwner('package'"))
+  // Sejak Fase 5 harga terpadu: pembungkus refresh dihapus — registry memanggil mesin langsung; mesinlah yang memakai breakdown paket.
+  assert.match(reg, /refresh: \(id\) => repriceOwner\('package', id\)/); assert.match(reg, /refresh: \(id\) => repriceOwner\('tour_package', id\)/)
   assert.ok(readFileSync(join('lib/pricing/engine/owners/composite.ts'), 'utf8').includes('computePackageBreakdown'))
 })
 
@@ -250,7 +251,7 @@ await prisma.package.deleteMany({ where: { id: pkg.id } }); await prisma.tourPac
 await prisma.vendor.deleteMany({ where: { id: vendor.id } })
 await prisma.exchangeRate.deleteMany({ where: { source: SRC } })
 await prisma.pricingRule.deleteMany({ where: { productType: { in: ['package', 'tour_package'] } } })
-if (savedRules.length) await prisma.pricingRule.createMany({ data: savedRules.map(({ productType, minMarginPercent, roundingIncrement }) => ({ productType, minMarginPercent, roundingIncrement })) })
+if (savedRules.length) await prisma.pricingRule.createMany({ data: savedRules.map(({ productType, defaultMarginPercent, roundingIncrement }) => ({ productType, defaultMarginPercent, roundingIncrement })) })
 await prisma.$disconnect()
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 process.exit(failed ? 1 : 0)

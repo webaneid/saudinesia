@@ -10,6 +10,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writ
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
+import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -67,6 +68,7 @@ console.log('== membangun DB pra-migrasi ==')
 await newDb(baseName)
 const pre = run(dbUrl(baseName), ['migrate', 'deploy', '--schema', 'schema.prisma'])
 assert.equal(pre.code, 0, `migrate deploy (pra) gagal:\n${pre.out.slice(-600)}`)
+assert.equal(exec(baseName, LEGACY_DEFAULTS_SQL).code, 0, 'default kolom harga lama gagal dipasang')
 // Sekarang tambahkan migrasi yang diuji — hanya akan diterapkan di salinan skenario.
 cpSync(join(root, 'prisma/migrations', MIGRATION), join(tmp, 'migrations', MIGRATION), { recursive: true })
 
@@ -96,25 +98,33 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
 
 async function legacyWorld(db: PrismaClient): Promise<Record<string, string>> {
   const route = await db.flightRoute.create({ data: { origin: 'CGK', destination: 'JED' } })
-  const flight = await db.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-01-01'), departureTo: new Date('2090-01-31'), price: 23_000_000 } })
-  const flight0 = await db.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-02-01'), departureTo: new Date('2090-02-28'), price: 0 } })
+  const flight = await db.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-01-01'), departureTo: new Date('2090-01-31') } })
+  await setLegacy(db, 'flight_schedules', flight.id, { price: 23_000_000 })
+  const flight0 = await db.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-02-01'), departureTo: new Date('2090-02-28') } })
   const roomType = await db.roomType.create({ data: { name: 'Quad', defaultCapacity: 4 } })
   const hotel = await db.hotel.create({ data: { name: 'H', city: 'makkah' } })
   const period = await db.hotelPricePeriod.create({ data: { hotelId: hotel.id, periodStart: new Date('2090-01-01'), periodEnd: new Date('2090-12-31') } })
-  const room = await db.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, price: 1_200_000, totalQuota: 5 } })
-  const room0 = await db.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: (await db.roomType.create({ data: { name: 'Double', defaultCapacity: 2 } })).id, price: 0, totalQuota: 5 } })
+  const room = await db.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, totalQuota: 5 } })
+  await setLegacy(db, 'hotel_room_schedules', room.id, { price: 1_200_000 })
+  const room0 = await db.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: (await db.roomType.create({ data: { name: 'Double', defaultCapacity: 2 } })).id, totalQuota: 5 } })
   const trip = await db.transportTrip.create({ data: { name: 'T', origin: 'A', destination: 'B' } })
   const vehicle = await db.transportVehicle.create({ data: { name: 'Bus', vehicleType: 'bus', capacity: 40 } })
-  const transport = await db.transportPricing.create({ data: { tripId: trip.id, vehicleId: vehicle.id, price: 6_000_000 } })
+  const transport = await db.transportPricing.create({ data: { tripId: trip.id, vehicleId: vehicle.id } })
+  await setLegacy(db, 'transport_pricing', transport.id, { price: 6_000_000 })
   // Tabel yang berubah di migrasi LEBIH BARU (muthowif_service_price.singleton, price_points.manual*) diisi lewat SQL: client Prisma terbaru mengenal kolom yang DB pra-migrasi belum punya.
   const muthowif = { id: '00000000-0000-4000-8000-0000000000cc' }
   await db.$executeRawUnsafe(`insert into muthowif_service_price (id, price, "updatedAt") values ('${muthowif.id}', 450000, now())`)
-  const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090, price: 4_200_000 } })
-  const haji0 = await db.hajiProduct.create({ data: { name: 'HJ0', hajiType: 'reguler', year: 2091, price: 0 } })
-  const pkg = await db.package.create({ data: { name: 'P', price: 6_600_000 } })
-  const tour = await db.tourPackage.create({ data: { name: 'Z', price: 350_000 } })
-  const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh', price: 2_500_000, durationFeeRules: [{ minDays: 1, maxDays: 14, fee: 2_500_000 }, { minDays: 15, maxDays: 30, fee: 2_900_000 }, { minDays: 31, maxDays: 40, fee: 0 }] } })
-  const visaNoRules = await db.visaProduct.create({ data: { name: 'V0', visaType: 'Umroh', price: 1_000_000, durationFeeRules: [] } })
+  const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090 } })
+  await setLegacy(db, 'haji_products', haji.id, { price: 4_200_000 })
+  const haji0 = await db.hajiProduct.create({ data: { name: 'HJ0', hajiType: 'reguler', year: 2091 } })
+  const pkg = await db.package.create({ data: { name: 'P' } })
+  await setLegacy(db, 'packages', pkg.id, { price: 6_600_000 })
+  const tour = await db.tourPackage.create({ data: { name: 'Z' } })
+  await setLegacy(db, 'tour_packages', tour.id, { price: 350_000 })
+  const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh' } })
+  await setLegacy(db, 'visa_products', visa.id, { price: 2_500_000, durationFeeRules: [{ minDays: 1, maxDays: 14, fee: 2_500_000 }, { minDays: 15, maxDays: 30, fee: 2_900_000 }, { minDays: 31, maxDays: 40, fee: 0 }] })
+  const visaNoRules = await db.visaProduct.create({ data: { name: 'V0', visaType: 'Umroh' } })
+  await setLegacy(db, 'visa_products', visaNoRules.id, { price: 1_000_000 })
   return { flight: flight.id, flight0: flight0.id, room: room.id, room0: room0.id, transport: transport.id, muthowif: muthowif.id, haji: haji.id, haji0: haji0.id, pkg: pkg.id, tour: tour.id, visa: visa.id, visaNoRules: visaNoRules.id }
 }
 
@@ -160,7 +170,7 @@ await t('IDEMPOTEN: menjalankan SQL migrasi sekali lagi tidak mengubah apa pun',
 await t('tabel sumber kosong: berhasil dan tak ada titik harga baru; durationFeeRules bukan array tidak merusak', async () => {
   const empty = await scenarioWith(async () => ({}))
   assert.equal(empty.code, 0, empty.out.slice(-300)); assert.deepEqual((await points(empty.name)).map(x => x.t), ['muthowif'], 'hanya baris tarif muthowif bawaan migrasi lama')
-  const odd = await scenarioWith(async db => ({ v: (await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh', price: 1, durationFeeRules: { bukan: 'array' } } })).id }))
+  const odd = await scenarioWith(async db => { const v = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh' } }); await setLegacy(db, 'visa_products', v.id, { price: 1, durationFeeRules: { bukan: 'array' } }); return { v: v.id } })
   assert.equal(odd.code, 0, odd.out.slice(-300)); assert.deepEqual((await points(odd.name)).map(x => x.t), ['muthowif'])
 })
 

@@ -27,8 +27,8 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { description, ...d } = parsed.data
     const p = await prisma.hajiProduct.create({
-      // price 0 = "belum ditetapkan" sampai Komponen Biaya diisi (cache dihitung dari komponen; tidak bisa dipesan selama 0 — SEC-66).
-      data: { ...d, price: 0, description: emptyToNull(description), priceLabel: 'per orang' },
+      // Belum ada titik harga = "belum ditetapkan" sampai Komponen Biaya diisi (tidak bisa dipesan — SEC-66).
+      data: { ...d, description: emptyToNull(description), priceLabel: 'per orang' },
     })
     return NextResponse.json(ok(p), { status: 201 })
   } catch (e) {

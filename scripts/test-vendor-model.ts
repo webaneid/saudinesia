@@ -92,19 +92,19 @@ await t('assertVendorUsable: aktif lolos; tak ada → not_found; nonaktif → in
   await assert.rejects(assertVendorUsable(v.id), (e) => e instanceof VendorNotUsableError && e.reason === 'inactive' && /menu Vendor/.test(e.message))
 })
 
-await t('getVendorUsage: biaya per productType + vendor pilihan + snapshot visa (JSON array_contains); vendor kosong → 0; vendor lain tak ikut', async () => {
+await t('getVendorUsage: biaya per productType + vendor pilihan + snapshot harga (JSON array_contains); vendor kosong → 0; vendor lain tak ikut', async () => {
   const v = await mkVendor('Dipakai'), other = await mkVendor('Lain')
   const cost = (type: string, vid: string) => prisma.productCost.create({ data: { productType: type, productId: randomUUID(), vendorId: vid, costComponent: 'k', currency: 'IDR', costTiers: [] } })
   await cost('haji', v.id); await cost('haji', v.id); await cost('package', v.id); await cost('flight', other.id)
   await prisma.preferredVendor.create({ data: { productType: 'flight', productId: randomUUID(), costComponent: 'tiket', vendorId: v.id } })
   const user = await prisma.user.create({ data: { email: `${tag}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } }); created.users.push(user.id)
   const bk = await prisma.booking.create({ data: { bookingCode: `VM${Date.now()}`, userId: user.id, departureDate: new Date('2027-01-01'), returnDate: new Date('2027-01-10'), season: 'regular', totalAmount: 1 } })
-  const pg = await prisma.bookingPilgrim.create({ data: { bookingId: bk.id } })
-  await prisma.visaApplication.create({ data: { bookingPilgrimId: pg.id, visaType: 'umroh', vendorIdsUsed: [v.id, randomUUID()] } })
+  // riwayat vendor ada di snapshot harga beku (kolom VisaApplication.vendorIdsUsed sudah dihapus — harga terpadu Fase 5)
+  await prisma.priceSnapshot.create({ data: { bookingId: bk.id, itemType: 'visa', itemId: randomUUID(), itemLabel: 'Visa', itemQty: 1, description: 'Visa', qty: 1, unit: 'person', unitSellIdr: 1, totalSellIdr: 1, mode: 'auto', vendorIds: [v.id] } })
   const u = await getVendorUsage(v.id)
-  assert.deepEqual(u, { costsByType: { haji: 2, package: 1 }, costs: 3, preferred: 1, visaSnapshots: 1, total: 5 })
-  assert.deepEqual(await getVendorUsage((await mkVendor('Kosong')).id), { costsByType: {}, costs: 0, preferred: 0, visaSnapshots: 0, total: 0 })
-  assert.equal((await getVendorUsage(other.id)).visaSnapshots, 0, 'snapshot milik vendor lain tak boleh terhitung')
+  assert.deepEqual(u, { costsByType: { haji: 2, package: 1 }, costs: 3, preferred: 1, snapshots: 1, total: 5 })
+  assert.deepEqual(await getVendorUsage((await mkVendor('Kosong')).id), { costsByType: {}, costs: 0, preferred: 0, snapshots: 0, total: 0 })
+  assert.equal((await getVendorUsage(other.id)).snapshots, 0, 'snapshot milik vendor lain tak boleh terhitung')
   await prisma.booking.delete({ where: { id: bk.id } })
 })
 

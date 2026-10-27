@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshVisaProductCache } from '@/lib/pricing/refreshVisaProductCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
@@ -131,7 +131,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       await prisma.preferredVendor.deleteMany({ where: { productType: 'visa', productId: id, costComponent: COMPONENT_BRN } })
     }
 
-    await refreshVisaProductCache(id)
+    await repriceOwner('visa', id)
 
     return NextResponse.json(ok({
       visa,

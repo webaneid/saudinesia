@@ -92,7 +92,7 @@ export function createVendorHandlers(options: Options = {}) {
       if (r.deleted) return NextResponse.json(ok({ deleted: true }))
       return NextResponse.json(ok({
         deleted: false, deactivated: true, usage: r.usage,
-        message: `Vendor dipakai di ${r.usage.costs} komponen biaya, ${r.usage.preferred} vendor pilihan, dan ${r.usage.visaSnapshots} riwayat visa sehingga tidak dihapus — vendor dinonaktifkan (tidak muncul di pilihan baru; riwayat harga tetap aman) dan dapat diaktifkan kembali.`,
+        message: `Vendor dipakai di ${r.usage.costs} komponen biaya, ${r.usage.preferred} vendor pilihan, dan ${r.usage.snapshots} riwayat harga pesanan sehingga tidak dihapus — vendor dinonaktifkan (tidak muncul di pilihan baru; riwayat harga tetap aman) dan dapat diaktifkan kembali.`,
       }))
     } catch (e) {
       return authFailureResponse(e, 'admin/system/vendors/[id]/DELETE')

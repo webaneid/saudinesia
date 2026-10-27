@@ -9,6 +9,7 @@ import { cpSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } fr
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
+import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -66,6 +67,7 @@ console.log('== membangun DB pra-migrasi ==')
 await newDb(baseName)
 const pre = run(dbUrl(baseName), ['migrate', 'deploy', '--schema', 'schema.prisma'])
 assert.equal(pre.code, 0, `migrate deploy (pra) gagal:\n${pre.out.slice(-600)}`)
+assert.equal(exec(baseName, LEGACY_DEFAULTS_SQL).code, 0, 'default kolom harga lama gagal dipasang')
 // Sekarang tambahkan migrasi yang diuji — hanya akan diterapkan di salinan skenario.
 cpSync(join(root, 'prisma/migrations', MIGRATION), join(tmp, 'migrations', MIGRATION), { recursive: true })
 
@@ -80,7 +82,6 @@ async function scenario(setup: string) {
   const res = run(dbUrl(name), ['migrate', 'deploy', '--schema', 'schema.prisma'])
   return { name, ...res }
 }
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const snaps = (name: string, bookingId: string) => query(name, `select "itemType" as t, "lineKey" as k, "itemLabel" as label, "itemDetail" as detail, "itemQty" as iq, "unitCostIdr"::float as cost, "totalSellIdr"::float as sell, mode from price_snapshots where "bookingId" = '${bookingId}' order by "itemType", "lineKey"`)
 
 async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<string, string>>) {
@@ -104,15 +105,15 @@ async function fullWorld(db: PrismaClient, withGap = 0) {
   const hotel = await db.hotel.create({ data: { name: 'Hotel M', city: 'makkah' } })
   const rt = await db.roomType.create({ data: { name: `Tipe ${Date.now()}${++seq}`, defaultCapacity: 2 } })
   const period = await db.hotelPricePeriod.create({ data: { hotelId: hotel.id, periodStart: new Date('2090-01-01'), periodEnd: new Date('2090-12-31') } })
-  const sch = await db.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: rt.id, price: 0, totalQuota: 5 } })
+  const sch = await db.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: rt.id, totalQuota: 5 } })
   const trip = await db.transportTrip.create({ data: { name: 'Trip M', origin: 'A', destination: 'B' } })
   const vehicle = await db.transportVehicle.create({ data: { name: 'Bus M', vehicleType: 'bus', capacity: 40 } })
   const pricing = await db.transportPricing.create({ data: { tripId: trip.id, vehicleId: vehicle.id } })
   const quota = await db.transportQuota.create({ data: { pricingId: pricing.id, travelDate: new Date('2027-06-02'), totalSeats: 100 } })
-  const cat = await db.cateringOption.create({ data: { name: 'Katering M', boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 0, pricePerPersonRamadan: 0, pricePerPersonHajj: 0 } })
-  const tour = await db.tourPackage.create({ data: { name: 'Ziarah M', price: 0 } })
-  const haji = await db.hajiProduct.create({ data: { name: 'Haji M', hajiType: 'reguler', year: 2090, price: 0 } })
-  const visa = await db.visaProduct.create({ data: { name: 'Umroh Reguler', visaType: 'Umroh', price: 0 } })
+  const cat = await db.cateringOption.create({ data: { name: 'Katering M', boardType: 'full_board', menuStyle: 'asian' } })
+  const tour = await db.tourPackage.create({ data: { name: 'Ziarah M' } })
+  const haji = await db.hajiProduct.create({ data: { name: 'Haji M', hajiType: 'reguler', year: 2090 } })
+  const visa = await db.visaProduct.create({ data: { name: 'Umroh Reguler', visaType: 'Umroh' } })
   const bk = await mkBooking(db, user.id, 7_200_000 + 500_000 + 3_000_000 + 900_000 + 2_000_000 + 12_000_000 + 1_800_000 + withGap)
   const d = (s: string) => new Date(s)
   const bh = await db.bookingHotel.create({ data: { bookingId: bk.id, hotelRoomScheduleId: sch.id, checkIn: d('2027-06-01'), checkOut: d('2027-06-04'), nights: 3, numRooms: 2, numGuests: 4, pricePerNight: 1_200_000, totalPrice: 7_200_000 } })
@@ -122,7 +123,8 @@ async function fullWorld(db: PrismaClient, withGap = 0) {
   const btp = await db.bookingTourPackage.create({ data: { bookingId: bk.id, tourPackageId: tour.id, tourDate: d('2027-06-02'), numPeople: 4, totalPrice: 2_000_000 } })
   const bj = await db.bookingHaji.create({ data: { bookingId: bk.id, hajiProductId: haji.id, numPersons: 2, totalPrice: 12_000_000 } })
   const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
-  const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh', selectedDurationDays: 30, hppSnapshotRupiah: 1_500_000, sellPriceSnapshot: 1_800_000 } })
+  const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh', selectedDurationDays: 30 } })
+  await setLegacy(db, 'visa_applications', va.id, { hppSnapshotRupiah: 1_500_000, sellPriceSnapshot: 1_800_000 })
   return { booking: bk.id, bh: bh.id, bt: bt.id, bm: bm.id, bc: bc.id, btp: btp.id, bj: bj.id, va: va.id, sch: sch.id }
 }
 
@@ -166,7 +168,7 @@ await t('total lama ≠ Σ item (era total-dari-klien): selisih ditutup baris pe
 await t('Visa tanpa HPP (0) → modal null; visa tanpa harga beku tidak dibuatkan baris', async () => {
   const r = await scenarioWith(async db => {
     const w = await fullWorld(db)
-    await db.visaApplication.update({ where: { id: w.va! }, data: { hppSnapshotRupiah: 0 } })
+    await setLegacy(db, 'visa_applications', w.va!, { hppSnapshotRupiah: 0 })
     const u = await mkUser(db)
     const bk = await mkBooking(db, u.id, 0)
     const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
@@ -209,13 +211,12 @@ await t('BEKU: UPDATE apa pun ditolak trigger (jual, modal, label); DELETE booki
   assert.equal(exec(r.name, `DELETE FROM bookings WHERE id = '${r.ids.booking}';`).code, 0, 'hapus booking harus lolos')
   assert.equal(Number((await query(r.name, `select count(*)::int as n from price_snapshots where "bookingId" = '${r.ids.booking}'`))[0]!.n), 0, 'cascade menghapus snapshot')
 })
-await t('tabel kosong aman; tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
+await t('tabel kosong aman', async () => {
   const r = await scenarioWith(async () => ({}))
   assert.equal(r.code, 0, r.out.slice(-300))
   assert.equal(Number((await query(r.name, `select count(*)::int as n from price_snapshots`))[0]!.n), 0)
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-600)}`)
 })
+// Uji drift skema ada di migrasi TERBARU (scripts/test-pricing-rule-default-margin-migration.ts) — di sini skema sudah lebih maju (kolom harga lama dihapus).
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

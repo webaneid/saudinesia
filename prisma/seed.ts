@@ -276,7 +276,13 @@ async function main() {
   // Harga layanan muthowif — satu baris flat, harga & HPP diisi lewat admin UI (docs/arsitektur-muthowif.md §10)
   await prisma.muthowifServicePrice.upsert({
     where: { id: 'seed-muthowif-service-price' },
-    create: { id: 'seed-muthowif-service-price', price: 300_000 },
+    create: { id: 'seed-muthowif-service-price' },
+    update: {},
+  })
+  // Harga jual = titik harga MANUAL (modal diisi lewat admin UI → PriceCard) — kolom harga lama sudah dihapus (harga terpadu Fase 5).
+  await prisma.pricePoint.upsert({
+    where: { ownerType_ownerId_variantKey: { ownerType: 'muthowif', ownerId: 'seed-muthowif-service-price', variantKey: '' } },
+    create: { ownerType: 'muthowif', ownerId: 'seed-muthowif-service-price', unit: 'person_day', manualSellIdr: 300_000, sellIdr: 300_000, manualNote: 'harga awal seed', manualAt: new Date() },
     update: {},
   })
 
@@ -292,29 +298,25 @@ async function main() {
 
   // ── 6. Catering ──────────────────────────────────────────────
   await prisma.cateringOption.deleteMany()
-  await prisma.cateringOption.createMany({
-    data: [
-      {
-        name: 'Full Board – Menu Asia (3x sehari)',
-        boardType: 'full_board', menuStyle: 'asian',
-        pricePerPersonRegular: 150_000, pricePerPersonRamadan: 200_000, pricePerPersonHajj: 250_000,
-      },
-      {
-        name: 'Full Board – Menu Arab (3x sehari)',
-        boardType: 'full_board', menuStyle: 'arabic',
-        pricePerPersonRegular: 165_000, pricePerPersonRamadan: 220_000, pricePerPersonHajj: 275_000,
-      },
-      {
-        name: 'Half Board – Menu Asia (sarapan + makan siang)',
-        boardType: 'half_board', menuStyle: 'asian',
-        pricePerPersonRegular: 100_000, pricePerPersonRamadan: 140_000, pricePerPersonHajj: 175_000,
-      },
-      {
-        name: 'Half Board – Menu Arab (sarapan + makan malam)',
-        boardType: 'half_board', menuStyle: 'arabic',
-        pricePerPersonRegular: 110_000, pricePerPersonRamadan: 155_000, pricePerPersonHajj: 195_000,
-      },
-    ],
+  const cateringSeed = [
+    { name: 'Full Board – Menu Asia (3x sehari)', boardType: 'full_board', menuStyle: 'asian', prices: { regular: 150_000, ramadan: 200_000, hajj: 250_000 } },
+    { name: 'Full Board – Menu Arab (3x sehari)', boardType: 'full_board', menuStyle: 'arabic', prices: { regular: 165_000, ramadan: 220_000, hajj: 275_000 } },
+    { name: 'Half Board – Menu Asia (sarapan + makan siang)', boardType: 'half_board', menuStyle: 'asian', prices: { regular: 100_000, ramadan: 140_000, hajj: 175_000 } },
+    { name: 'Half Board – Menu Arab (sarapan + makan malam)', boardType: 'half_board', menuStyle: 'arabic', prices: { regular: 110_000, ramadan: 155_000, hajj: 195_000 } },
+  ] as const
+  const cateringOptions = await prisma.cateringOption.createManyAndReturn({
+    data: cateringSeed.map(({ name, boardType, menuStyle }) => ({ name, boardType, menuStyle })),
+  })
+  // Harga per musim = titik harga MANUAL katering (modal diisi lewat admin UI) — kolom harga lama sudah dihapus.
+  await prisma.pricePoint.deleteMany({ where: { ownerType: 'catering' } })
+  await prisma.pricePoint.createMany({
+    data: cateringOptions.flatMap(o => {
+      const seed = cateringSeed.find(c => c.name === o.name)!
+      return (['regular', 'ramadan', 'hajj'] as const).map(season => ({
+        ownerType: 'catering', ownerId: o.id, variantKey: `season:${season}`, unit: 'person_day',
+        manualSellIdr: seed.prices[season], sellIdr: seed.prices[season], manualNote: 'harga awal seed', manualAt: new Date(),
+      }))
+    }),
   })
   console.log('✓ Catering: 4 paket')
 

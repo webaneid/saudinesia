@@ -4,6 +4,7 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
+import { withSellPrice } from '@/lib/pricing/engine/read'
 
 const updateSchema = z.object({
   periodStart: z.coerce.date().optional(),
@@ -22,7 +23,7 @@ export async function GET(_req: Request, { params }: Ctx) {
       include: { schedules: { include: { roomType: true } } },
     })
     if (!period) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok(period))
+    return NextResponse.json(ok({ ...period, schedules: await withSellPrice('hotel', period.schedules) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -42,7 +43,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const period = await prisma.hotelPricePeriod.update({
       where: { id: periodId }, data: parsed.data, include: { schedules: { include: { roomType: true } } },
     })
-    return NextResponse.json(ok(period))
+    return NextResponse.json(ok({ ...period, schedules: await withSellPrice('hotel', period.schedules) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

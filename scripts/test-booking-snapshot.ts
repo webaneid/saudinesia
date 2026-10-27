@@ -32,7 +32,7 @@ const n = (v: unknown) => (v == null ? null : Number(v))
 
 const savedRules = await prisma.pricingRule.findMany()
 await prisma.pricingRule.deleteMany({})
-await prisma.pricingRule.create({ data: { productType: GLOBAL_RULE_KEY, minMarginPercent: 20, roundingIncrement: 50000 } })
+await prisma.pricingRule.create({ data: { productType: GLOBAL_RULE_KEY, defaultMarginPercent: 20, roundingIncrement: 50000 } })
 
 const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, nameKey: `${tag} vendor`.toLowerCase(), countryCode: 'SA' } })
 const user = await prisma.user.create({ data: { email: `${tag}@example.test`, passwordHash: 'x', fullName: 'Uji Snapshot', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
@@ -49,7 +49,7 @@ const roomType = await prisma.roomType.create({ data: { name: `${tag} room`, def
 async function newSchedule(cost: number | null) {
   const hotel = await prisma.hotel.create({ data: { name: `${tag} hotel ${Math.random()}`, city: 'makkah' } })
   const period = await prisma.hotelPricePeriod.create({ data: { hotelId: hotel.id, periodStart: new Date('2090-01-01'), periodEnd: new Date('2090-12-31') } })
-  const schedule = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, price: 0, totalQuota: 50 } })
+  const schedule = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, totalQuota: 50 } })
   if (cost != null) { await addCost('hotel', schedule.id, 'kamar', cost); await repriceOwner('hotel', schedule.id) }
   return { hotel, schedule }
 }
@@ -68,7 +68,7 @@ const bus = await newPricing(vehicle.id, 400_000) // jual 500.000 (480.000 → k
 
 let svc = await prisma.muthowifServicePrice.findFirst()
 const createdSvc = !svc
-svc ??= await prisma.muthowifServicePrice.create({ data: { price: 0 } })
+svc ??= await prisma.muthowifServicePrice.create({ data: { } })
 await prisma.productCost.deleteMany({ where: { productType: 'muthowif', productId: svc.id } })
 await prisma.preferredVendor.deleteMany({ where: { productType: 'muthowif', productId: svc.id } })
 await addCost('muthowif', svc.id, 'layanan', 100_000)
@@ -76,21 +76,21 @@ await repriceOwner('muthowif', svc.id)
 const muthowifPoint = (await getPricePoint('muthowif', svc.id))!
 
 const season = await detectSeason(new Date('2090-06-01'))
-const catering = await prisma.cateringOption.create({ data: { name: `${tag} katering`, boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 0, pricePerPersonRamadan: 0, pricePerPersonHajj: 0 } })
+const catering = await prisma.cateringOption.create({ data: { name: `${tag} katering`, boardType: 'full_board', menuStyle: 'asian' } })
 await setManualSell({ ownerType: 'catering', ownerId: catering.id, variantKey: `season:${season}`, sellIdr: 150_000, byUserId: who })
 
-const visa = await prisma.visaProduct.create({ data: { name: `${tag} Umroh`, visaType: 'Umroh', price: 0 } })
+const visa = await prisma.visaProduct.create({ data: { name: `${tag} Umroh`, visaType: 'Umroh' } })
 await addCost('visa', visa.id, 'individu', 0, [{ minDays: 1, maxDays: 14, cost: 1_000_000 }, { minDays: 15, maxDays: 30, cost: 2_000_000 }])
 await repriceOwner('visa', visa.id) // 1-14: 1.200.000 / 15-30: 2.400.000
 
-const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'reguler', year: 2090, price: 0, totalQuota: 50 } })
+const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'reguler', year: 2090, totalQuota: 50 } })
 await addCost('haji', haji.id, 'akomodasi', 1_030_000); await addCost('haji', haji.id, 'transportasi', 1_030_000)
 await repriceOwner('haji', haji.id) // 2 × 1.250.000 = 2.500.000
 
 // Paket Ziarah: komponen guide (jual 1.200.000) + hotel included 2 malam × 1 kamar × 1.200.000 + kendaraan included 500.000 → 4.100.000
 const tourHotel = await newSchedule(1_000_000)
 const tour = await prisma.tourPackage.create({
-  data: { name: `${tag} ziarah`, price: 0, transportTripId: trip.id, transportMode: 'included', includedTransportPricingId: bus.pricing.id, includedTransportPrice: 500_000, hotelMode: 'included' },
+  data: { name: `${tag} ziarah`, transportTripId: trip.id, transportMode: 'included', includedTransportPricingId: bus.pricing.id, includedTransportPrice: 500_000, hotelMode: 'included' },
 })
 await prisma.tourPackageHotel.create({ data: { tourPackageId: tour.id, hotelRoomScheduleId: tourHotel.schedule.id, nights: 2, numRooms: 1, pricePerNight: 1_200_000 } })
 await addCost('tour_package', tour.id, 'guide', 1_000_000)
@@ -183,21 +183,21 @@ await t('Haji dengan HARGA MANUAL (2.700.000): ditagih harga manual — selisih 
   await prisma.pricePoint.updateMany({ where: { ownerType: 'haji', ownerId: haji.id }, data: { manualSellIdr: null, manualBy: null, manualAt: null, manualNote: null, sellIdr: 2_500_000 } })
 })
 await t('Haji belum berharga (titik 0 / tak ada) → ItemNotBookableError; tak ada yang tertulis', async () => {
-  const empty = await prisma.hajiProduct.create({ data: { name: `${tag} haji kosong`, hajiType: 'reguler', year: 2090, price: 0, totalQuota: 5 } })
+  const empty = await prisma.hajiProduct.create({ data: { name: `${tag} haji kosong`, hajiType: 'reguler', year: 2090, totalQuota: 5 } })
   await repriceOwner('haji', empty.id)
   const before = await snapCount()
   await rejectsNotBookable(() => book([{ itemType: 'haji', hajiProductId: empty.id, numPersons: 1 }]), /produk haji belum ditetapkan/)
   const zero = await newSchedule(null) // titik harga ADA tetapi bernilai 0 → tetap tidak boleh dijual
   await prisma.pricePoint.create({ data: { ownerType: 'hotel', ownerId: zero.schedule.id, unit: 'room_night', autoSellIdr: 0, sellIdr: 0 } })
   await rejectsNotBookable(() => book([{ itemType: 'hotel', hotelRoomScheduleId: zero.schedule.id, checkIn: '2090-06-01', checkOut: '2090-06-02', nights: 1, numRooms: 1 }]), /kamar hotel belum ditetapkan/)
-  const ghost = await prisma.hajiProduct.create({ data: { name: `${tag} haji hantu`, hajiType: 'reguler', year: 2090, price: 0, totalQuota: 5 } })
+  const ghost = await prisma.hajiProduct.create({ data: { name: `${tag} haji hantu`, hajiType: 'reguler', year: 2090, totalQuota: 5 } })
   await prisma.pricePoint.deleteMany({ where: { ownerType: 'haji', ownerId: ghost.id } })
   await rejectsNotBookable(() => book([{ itemType: 'haji', hajiProductId: ghost.id, numPersons: 1 }]), /belum ditetapkan/)
   assert.equal(await snapCount(), before)
 })
 
 // ── Visa: dua temuan Fase 3 ──────────────────────────────────────────────────────────────────────────────────────────
-await t('Visa per tier: durasi 10 hari → tier 1-14 (1.200.000); 20 hari → tier 15-30 (2.400.000); modal/kurs/vendor dibekukan, kolom lama VisaApplication dari titik yang sama', async () => {
+await t('Visa per tier: durasi 10 hari → tier 1-14 (1.200.000); 20 hari → tier 15-30 (2.400.000); modal/kurs/vendor dibekukan di snapshot', async () => {
   const b = await book([], [{ fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 10 }, { fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 20 }])
   const rows = await snaps(b.id)
   assert.deepEqual(rows.map(r => [r.variantKey, n(r.unitSellIdr), n(r.unitCostIdr), r.itemType, r.itemDetail]).sort(), [
@@ -205,7 +205,6 @@ await t('Visa per tier: durasi 10 hari → tier 1-14 (1.200.000); 20 hari → ti
   ])
   assert.equal(b.total, 3_600_000)
   const apps = await prisma.visaApplication.findMany({ where: { pilgrim: { bookingId: b.id } } })
-  assert.deepEqual(apps.map(a => [n(a.sellPriceSnapshot), n(a.hppSnapshotRupiah)]).sort(), [[1_200_000, 1_000_000], [2_400_000, 2_000_000]])
   assert.ok(rows.every(r => apps.some(a => a.id === r.itemId)), 'itemId = id VisaApplication')
   assert.ok(rows.every(r => !JSON.stringify(r).includes('Uji Snapshot')), 'tanpa data pribadi di snapshot')
 })
@@ -215,13 +214,11 @@ await t('Visa: HARGA MANUAL tier ditagih (dulu: harga otomatis), mode manual ter
   const rows = await snaps(b.id)
   assert.deepEqual(rows.map(r => [n(r.unitSellIdr), r.mode]), [[1_800_000, 'manual']])
   assert.equal(b.total, 1_800_000)
-  const app = await prisma.visaApplication.findFirstOrThrow({ where: { pilgrim: { bookingId: b.id } } })
-  assert.equal(n(app.sellPriceSnapshot), 1_800_000)
 })
 await t('Visa di luar semua tier / tier berharga 0 → ItemNotBookableError (dulu terjual Rp 0)', async () => {
   const before = await snapCount()
   await rejectsNotBookable(() => book([], [{ fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 60 }]), /60 hari/)
-  const bare = await prisma.visaProduct.create({ data: { name: `${tag} visa tanpa harga`, visaType: 'Umroh', price: 0 } })
+  const bare = await prisma.visaProduct.create({ data: { name: `${tag} visa tanpa harga`, visaType: 'Umroh' } })
   await rejectsNotBookable(() => book([], [{ fieldValues: {}, visaProductId: bare.id, selectedDurationDays: 5 }]), /belum ditetapkan/)
   assert.equal(await snapCount(), before)
 })
@@ -254,7 +251,7 @@ await t('Paket Ziarah: HARGA MANUAL titik harga ditagih (dulu: dihitung ulang da
 await t('Paket Ziarah user_choice: kendaraan & hotel pilihan = baris sendiri dari titik harga sub-modul; pilihan di luar opsi paket ditolak (dulu bernilai 0)', async () => {
   const van = await newPricing(vehicle2.id, 200_000) // jual 250.000
   const room2 = await newSchedule(1_000_000)        // jual 1.200.000
-  const choiceTour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah pilihan`, price: 0, transportTripId: trip.id, transportMode: 'user_choice', hotelMode: 'user_choice' } })
+  const choiceTour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah pilihan`, transportTripId: trip.id, transportMode: 'user_choice', hotelMode: 'user_choice' } })
   await prisma.tourPackageHotelOption.create({ data: { tourPackageId: choiceTour.id, hotelRoomScheduleId: room2.schedule.id, nights: 2 } })
   await addCost('tour_package', choiceTour.id, 'guide', 500_000); await repriceOwner('tour_package', choiceTour.id) // 600.000 → 600.000
   const breakdown = await computeTourPackageBreakdown(choiceTour.id)
@@ -288,9 +285,9 @@ await t('campuran semua tipe dalam SATU booking: total = Σ snapshot = Σ baris 
   const b = await book(items, [{ fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 20 }, { fieldValues: {} }], await resolveTour())
   const rows = await snaps(b.id)
   assert.deepEqual([...new Set(rows.map(r => r.itemType))].sort(), ['catering', 'haji', 'hotel', 'muthowif', 'tourPackage', 'transport', 'visa'])
-  const full = await prisma.booking.findUniqueOrThrow({ where: { id: b.id }, include: { hotels: true, transports: true, muthowif: true, catering: true, tourPackages: true, haji: true, pilgrims: { include: { visaApplication: true } } } })
+  const full = await prisma.booking.findUniqueOrThrow({ where: { id: b.id }, include: { hotels: true, transports: true, muthowif: true, catering: true, tourPackages: true, haji: true } })
   const itemRows = [...full.hotels, ...full.transports, ...full.muthowif, ...full.catering, ...full.tourPackages, ...full.haji].reduce((s, r) => s + Number(r.totalPrice), 0)
-    + full.pilgrims.reduce((s, p) => s + Number(p.visaApplication?.sellPriceSnapshot ?? 0), 0)
+    + sum(rows.filter(r => r.itemType === 'visa')) // harga visa hanya ada di snapshot (kolom lama VisaApplication sudah dihapus)
   assert.deepEqual([sum(rows), Number(full.totalAmount), itemRows], [b.total, b.total, b.total])
   // semua tersimpan dengan kunci unik (itemType,itemId,lineKey) — dan setiap itemId menunjuk baris yang ada
   assert.equal(new Set(rows.map(r => `${r.itemType}|${r.itemId}|${r.lineKey}`)).size, rows.length)
@@ -392,12 +389,10 @@ const root = new URL('..', import.meta.url).pathname
 await t('PENJAGA SUMBER: hanya engine/snapshot.ts menulis price_snapshots; route booking tak menghitung harga sendiri; invoice tak membaca kolom harga item', () => {
   const writers = [...walk(join(root, 'app')), ...walk(join(root, 'lib')), ...walk(join(root, 'components'))].filter(f => /priceSnapshot\.(create|createMany|update|updateMany|upsert)\b/.test(readFileSync(f, 'utf8')))
   assert.deepEqual(writers.map(f => f.slice(root.length)), ['lib/pricing/engine/snapshot.ts'])
-  // I5: respons/halaman pilgrim tak boleh membawa kolom modal/jejak beku VisaApplication
-  for (const f of ['app/api/v1/bookings/[id]/route.ts', 'app/[locale]/(pilgrim)/bookings/[id]/page.tsx']) {
-    const src = readFileSync(join(root, f), 'utf8')
-    assert.match(src, /omit: \{ hppSnapshotRupiah: true, exchangeRateIdsUsed: true, vendorIdsUsed: true \}/, `${f}: visaApplication harus membuang kolom modal`)
-    assert.doesNotMatch(src, /visaApplication: true/, `${f}: include penuh visaApplication`)
-  }
+  // I5: VisaApplication (di-include halaman/route pilgrim) tak boleh punya kolom modal/jejak beku — itu hanya ada di price_snapshots (kolom lama dihapus Fase 5)
+  const schema = readFileSync(join(root, 'prisma/schema.prisma'), 'utf8')
+  const visaModel = schema.slice(schema.indexOf('model VisaApplication {'), schema.indexOf('@@map("visa_applications")'))
+  assert.doesNotMatch(visaModel, /hppSnapshotRupiah|sellPriceSnapshot|exchangeRateIdsUsed|vendorIdsUsed/, 'modal/jejak beku Visa hanya di price_snapshots')
   // I5: modal/untung beku hanya boleh keluar lewat jalur admin yang diperiksa policy (Fase 6). Hari ini TIDAK ADA route/halaman/komponen yang menyentuh snapshot.
   const readers = [...walk(join(root, 'app')), ...walk(join(root, 'components'))].filter(f => /priceSnapshots?\b/.test(readFileSync(f, 'utf8')))
   assert.deepEqual(readers.map(f => f.slice(root.length)), [], 'snapshot (berisi modal) tak boleh dibaca dari app/ atau components/')
@@ -437,7 +432,7 @@ await sweepOrphanPricePoints()
 await prisma.vendor.delete({ where: { id: vendor.id } })
 await prisma.user.delete({ where: { id: user.id } }) // seed-guard menuntut DB uji tanpa jamaah tersisa
 await prisma.pricingRule.deleteMany({})
-for (const r of savedRules) await prisma.pricingRule.create({ data: { productType: r.productType, minMarginPercent: r.minMarginPercent, roundingIncrement: r.roundingIncrement, warnBelowPercent: r.warnBelowPercent } })
+for (const r of savedRules) await prisma.pricingRule.create({ data: { productType: r.productType, defaultMarginPercent: r.defaultMarginPercent, roundingIncrement: r.roundingIncrement, warnBelowPercent: r.warnBelowPercent } })
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 await prisma.$disconnect()
 process.exit(failed ? 1 : 0)

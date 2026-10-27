@@ -38,7 +38,7 @@ const polyCount = async (productType: string, productId: string) =>
     prisma.documentRequirement.count({ where: { productType, productId } }), prisma.manifestFieldRequirement.count({ where: { productType, productId } }),
   ])).reduce((a, b) => a + b, 0)
 const imgCount = (productType: string, productId: string) => prisma.productImage.count({ where: { productType, productId } })
-const bystander = await prisma.package.create({ data: { name: `${tag} penonton`, price: 0 } }) // data milik produk LAIN harus tak tersentuh
+const bystander = await prisma.package.create({ data: { name: `${tag} penonton` } }) // data milik produk LAIN harus tak tersentuh
 await poly('package', bystander.id)
 
 // ── MUTHOWIF ─────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -113,8 +113,8 @@ await t('Paket Ziarah: tanpa booking → dihapus beserta situs/biaya/foto; perna
 
 // ── PAKET UMROH ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await t('Paket Umroh: dihapus beserta opsi (CASCADE), biaya & foto polimorfik; milik paket lain tak tersentuh', async () => {
-  const v = await prisma.visaProduct.create({ data: { name: `${tag} v-opt`, visaType: 'Umroh', price: 0 } })
-  const p = await prisma.package.create({ data: { name: `${tag} pk1`, price: 0 } })
+  const v = await prisma.visaProduct.create({ data: { name: `${tag} v-opt`, visaType: 'Umroh' } })
+  const p = await prisma.package.create({ data: { name: `${tag} pk1` } })
   await prisma.packageVisaOption.create({ data: { packageId: p.id, visaProductId: v.id } })
   await poly('package', p.id); await img('package', p.id)
   assert.deepEqual(await deletePackage(p.id), { deleted: true })
@@ -126,27 +126,27 @@ await t('Paket Umroh: dihapus beserta opsi (CASCADE), biaya & foto polimorfik; m
 
 // ── VISA ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 await t('Visa: tanpa rujukan → dihapus beserta biaya, syarat dokumen, field manifest, vendor pilihan, foto (dulu yatim)', async () => {
-  const v = await prisma.visaProduct.create({ data: { name: `${tag} v1`, visaType: 'Umroh', price: 0 } })
+  const v = await prisma.visaProduct.create({ data: { name: `${tag} v1`, visaType: 'Umroh' } })
   await poly('visa', v.id); await img('visa', v.id)
   assert.deepEqual(await deleteVisaProduct(v.id), { deleted: true })
   assert.equal(await polyCount('visa', v.id), 0); assert.equal(await imgCount('visa', v.id), 0)
 })
 await t('Visa: dirujuk pengajuan visa / opsi paket / visa "included" paket → NONAKTIF; riwayat TIDAK dikosongkan (FK SET NULL)', async () => {
   // a) pengajuan visa jamaah
-  const va = await prisma.visaProduct.create({ data: { name: `${tag} v2`, visaType: 'Umroh', price: 0 } })
+  const va = await prisma.visaProduct.create({ data: { name: `${tag} v2`, visaType: 'Umroh' } })
   const bk = await newBooking()
   const pg = await prisma.bookingPilgrim.create({ data: { bookingId: bk } })
   const app = await prisma.visaApplication.create({ data: { bookingPilgrimId: pg.id, visaProductId: va.id, visaType: 'Umroh' } })
   assert.equal((await deleteVisaProduct(va.id)).deleted, false)
   assert.equal((await prisma.visaApplication.findUniqueOrThrow({ where: { id: app.id } })).visaProductId, va.id, 'pengajuan visa harus tetap menunjuk produknya')
   // b) opsi paket umroh
-  const vb = await prisma.visaProduct.create({ data: { name: `${tag} v3`, visaType: 'Umroh', price: 0 } })
-  const pk = await prisma.package.create({ data: { name: `${tag} pk2`, price: 0 } })
+  const vb = await prisma.visaProduct.create({ data: { name: `${tag} v3`, visaType: 'Umroh' } })
+  const pk = await prisma.package.create({ data: { name: `${tag} pk2` } })
   await prisma.packageVisaOption.create({ data: { packageId: pk.id, visaProductId: vb.id } })
   assert.equal((await deleteVisaProduct(vb.id)).deleted, false)
   // c) visa "included" di paket (SET NULL)
-  const vc = await prisma.visaProduct.create({ data: { name: `${tag} v4`, visaType: 'Umroh', price: 0 } })
-  const pk2 = await prisma.package.create({ data: { name: `${tag} pk3`, price: 0, visaMode: 'included', includedVisaProductId: vc.id } })
+  const vc = await prisma.visaProduct.create({ data: { name: `${tag} v4`, visaType: 'Umroh' } })
+  const pk2 = await prisma.package.create({ data: { name: `${tag} pk3`, visaMode: 'included', includedVisaProductId: vc.id } })
   assert.equal((await deleteVisaProduct(vc.id)).deleted, false)
   assert.equal((await prisma.package.findUniqueOrThrow({ where: { id: pk2.id } })).includedVisaProductId, vc.id, 'visa included paket harus utuh')
   for (const id of [va.id, vb.id, vc.id]) assert.equal((await prisma.visaProduct.findUniqueOrThrow({ where: { id } })).isActive, false)
@@ -157,8 +157,8 @@ async function hotelWithSchedule(name: string) {
   const address = await prisma.address.create({ data: { type: 'domestic', fullAddress: 'Jl. Uji 1' } as never })
   const hotel = await prisma.hotel.create({ data: { name, city: 'makkah', addressId: address.id } })
   const period = await prisma.hotelPricePeriod.create({ data: { hotelId: hotel.id, periodStart: new Date('2027-06-01'), periodEnd: new Date('2027-06-30') } })
-  const schedule = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, price: 100, totalQuota: 5 } })
-  const service = await prisma.hotelService.create({ data: { hotelId: hotel.id, serviceName: 'Laundry', price: 10 } })
+  const schedule = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, totalQuota: 5 } })
+  const service = await prisma.hotelService.create({ data: { hotelId: hotel.id, serviceName: 'Laundry' } })
   return { hotel, address, period, schedule, service }
 }
 await t('Hotel: tanpa rujukan → dihapus beserta periode, jadwal kamar, layanan, alamat, biaya per jadwal, foto', async () => {
@@ -182,7 +182,7 @@ await t('Hotel: dirujuk booking kamar / layanan / hotel "included" paket / pilih
   assert.equal((await deleteHotel(b.hotel.id)).deleted, false)
   // c) hotel "included" di paket umroh (SET NULL)
   const c = await hotelWithSchedule(`${tag} h4`)
-  const pk = await prisma.package.create({ data: { name: `${tag} pk4`, price: 0, hotelMakkahMode: 'included', includedHotelMakkahScheduleId: c.schedule.id } })
+  const pk = await prisma.package.create({ data: { name: `${tag} pk4`, hotelMakkahMode: 'included', includedHotelMakkahScheduleId: c.schedule.id } })
   assert.equal((await deleteHotel(c.hotel.id)).deleted, false)
   assert.equal((await prisma.package.findUniqueOrThrow({ where: { id: pk.id } })).includedHotelMakkahScheduleId, c.schedule.id, 'hotel included paket harus utuh')
   // d) pilihan kamar di booking paket ziarah (SET NULL)

@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshTransportPricingCache } from '@/lib/pricing/refreshTransportPricingCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
@@ -79,7 +79,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       update: { vendorId },
     })
 
-    await refreshTransportPricingCache(id)
+    await repriceOwner('transport', id)
 
     return NextResponse.json(ok({ vendorId, currency, hargaKendaraan }))
   } catch (e) {

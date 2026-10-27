@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
 
 // price TIDAK ada di sini secara sengaja — satu-satunya jalur penulisan adalah
-// refreshFlightScheduleCache(), lihat docs/arsitektur-tiket-pesawat.md §9 poin 7.
+// repriceOwner('flight', id) (lib/pricing/engine), lihat docs/arsitektur-tiket-pesawat.md §9 poin 7.
 const updateSchema = z.object({
   routeId:       z.string().min(1).optional(),
   departureFrom: z.coerce.date().optional(),

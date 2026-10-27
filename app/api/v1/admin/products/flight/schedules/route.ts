@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 
     const { routeId, departureFrom, departureTo, totalSeats, isActive } = parsed.data
     const schedule = await prisma.flightSchedule.create({
-      data: { routeId, departureFrom, departureTo, totalSeats, isActive, price: 0 },
+      data: { routeId, departureFrom, departureTo, totalSeats, isActive },
       include: { route: true },
     })
     return NextResponse.json(ok(schedule), { status: 201 })
