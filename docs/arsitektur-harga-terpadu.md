@@ -1,6 +1,6 @@
 # Arsitektur — Harga Terpadu: Modal – Jual – Untung, Satu Sumber Kebenaran
 
-> **Status: RENCANA DISETUJUI (2026-10-27) — keputusan pemilik di §11; Fase 0 (§13), Fase 1 (§14), Fase 2 (§15), Fase 3 (§16), Fase 4 (§17) dan Fase 5 (§18) dieksekusi, Fase 6+ menyusul satu per satu.** Ditulis dari recheck langsung ke kode (bukan dari dokumen lama).
+> **Status: RENCANA DISETUJUI (2026-10-27) — keputusan pemilik di §11; Fase 0 (§13), Fase 1 (§14), Fase 2 (§15), Fase 3 (§16), Fase 4 (§17), Fase 5 (§18) dan Fase 6 (§19) dieksekusi, Fase 7 menyusul.** Ditulis dari recheck langsung ke kode (bukan dari dokumen lama).
 > Tujuan pemilik: (1) dari harga kita tahu **modal, pengeluaran, dan keuntungan** tiap order; (2) harga di bagian mana pun **seragam**: a. harga dasar (modal/vendor), b. harga jual, c. selisih = keuntungan; (3) margin default ada, tetapi **bukan patokan utama** — admin bisa menetapkan harga jual sesuai kehendaknya. Satu data yang sama menjadi dasar booking engine, invoice, dan laporan keuangan.
 > Melengkapi (dan pada akhirnya menggantikan sebagian) `docs/arsitektur-harga.md` dan `docs/arsitektur-komponen-biaya.md`.
 
@@ -351,3 +351,19 @@ Perombakan bentuk data item booking (milik perombakan engine), pajak/PPN & biaya
 - **Pembuktian.** `bun run test` lulus penuh (lihat decisions untuk hitungannya); tsc 0 galat; build produksi terisolasi 0 error; migrasi diterapkan ke DB dev nyata (cek fail-closed lolos) dan DB uji; server dev sungguhan: 18 halaman admin (daftar + editor semua modul berharga + Kesehatan Margin + Pengaturan + Vendor) dimuat di Chrome tanpa `NaN`/`undefined` dan tanpa galat konsol, dump DTO memastikan `price` tampil (angka) di `transport/trips` bersarang dan `tour-packages/[id]` bersarang.
 - **Audit keamanan (`security-auditor`):** 0 Critical/High/Medium, 5 Low — SEC-85 (pra-cek Visa false positive; **diperbaiki** + diuji) selesai; SEC-86..89 dicatat Terbuka (jejak vendor baris included, prune tier Visa manual [pre-existing], runbook trigger, snapshot included 0 [pre-existing]). Urutan deploy migrasi kontraksi dicatat di `docs/deployment.md`.
 - **Catatan/utang:** dev DB hanya memuat sedikit data bersarang (paket tanpa kendaraan/hotel/visa), jadi DTO bersarang paket dibuktikan lewat bentuk (kode) dan bukan dengan data kaya; `ComponentBreakdown`/komponen hitung (`computeSellPrice`, `computePackageBreakdown`) tak berubah.
+
+## 19. Fase 6 — Laporan untung dari snapshot (2026-10-28)
+
+**Recheck (kode aktual).** Belum ada laporan keuangan apa pun (hanya hitungan operasional di Overview). Bahan sudah ada: `price_snapshots` (jual, modal nullable, mode, `vendorIds`, beku — tak bergeser oleh kurs/harga), `payments` (satu pembayaran per booking dalam praktik; `status confirmed` + `confirmedAt`), `refunds` (`approved|paid`), `bookings.status`. Fakta yang membentuk rancangan: (a) modal bisa `null` (katering manual-only, bagian included tanpa modal, booking lama hasil backfill) — laporan tak boleh mengklaim untung yang tak diketahui; (b) baris `penyesuaian` (selisih harga manual/diskon) tak punya modal karena modal ada di baris komponen; (c) tak ada indeks `bookings.createdAt` (cukup untuk skala sekarang — dicatat).
+
+**Keputusan rancangan.**
+1. **Satu modul** `lib/reports/profit.ts` (SQL mentah ber-parameter — Prisma ORM tak mengekspresikan agregat + rasio per booking; berkomentar), dipakai halaman dan API; peran lewat `lib/pricing/policy.ts` (`requirePricingView`) — jamaah/publik tak pernah.
+2. **Dasar & periode:** booking menurut **tanggal pesanan (WIB)**. Cakupan bawaan "Diakui" = `confirmed|active|completed`; pilihan "Termasuk menunggu bayar" menambah `awaiting_payment|payment_review`. `cancelled` TIDAK masuk penjualan/untung; uang yang ditahan dari pembatalan (bayar terkonfirmasi − refund disetujui/dibayar) tampil sebagai baris tersendiri "Ditahan dari pembatalan".
+3. **Untung jujur:** untung = Σ jual − Σ modal **hanya dari baris yang modalnya diketahui**; jual tanpa modal ditampilkan terpisah + **cakupan modal %**. Baris `penyesuaian` (kecuali sisa data lama) dihitung modal 0 (modal ada di baris komponen); sisa data lama ("Penyesuaian data lama") dianggap modal tak diketahui.
+4. **Terealisasi** per booking = jual × rasio dibayar, rasio = `clamp((Σ payment confirmed − Σ refund approved|paid) ÷ total, 0..1)`; untung terealisasi memakai rasio yang sama atas untung teridentifikasi.
+5. **Irisan:** ringkasan; per produk (`itemType`); per vendor (baris dengan tepat satu vendor → vendor itu; beberapa vendor → "Beberapa vendor"; tanpa jejak → "Vendor tak tercatat" — tak ada pembagian rata yang menyesatkan); per bulan; daftar booking (berhalaman) + ekspor CSV.
+6. **Antarmuka:** halaman `/admin/reports` (menu Operasional "Laporan"), API `GET /api/v1/admin/reports/profit` (+ `/export` CSV), filter di URL; kartu ringkasan + tabel `DataTable`.
+
+**Di luar fase ini:** pengeluaran aktual vendor/selisih HPP (Fase 7), diskon per order (Fase 7), laporan pajak/akuntansi, indeks `bookings.createdAt`.
+
+**Urutan eksekusi:** 6A modul + tes DB (angka dihitung tangan) → 6B route + penjaga akses → 6C halaman + menu → pembuktian (tes, mutasi, curl 4 peran, Chrome) → dokumen.
