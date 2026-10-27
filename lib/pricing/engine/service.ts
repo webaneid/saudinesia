@@ -1,6 +1,8 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { PRICE_OWNER_TYPES, priceOwner } from './owners'
+import { lockOwnerPoints } from './lock'
+import { toView } from './view'
 import type { PriceOwnerType, PriceView, PriceUnit, ResolvedVariant, StoredVariant } from './types'
 
 // SATU-SATUNYA penulis tabel `price_points` (invarian I3, docs/arsitektur-harga-terpadu.md). Menulis ganda ke kolom harga lama (dihapus di Fase 5).
@@ -21,10 +23,12 @@ export async function repriceOwner(ownerType: PriceOwnerType, ownerId: string): 
     await prisma.pricePoint.deleteMany({ where: { ownerType, ownerId } })
     return
   }
+  if (owner.manualOnly) return // harga diisi admin (PriceCard) — tak ada yang dihitung dari modal
   const resolved = await owner.resolve(ownerId)
   const legacy = resolved.some(v => v.autoSellIdr == null) ? await owner.adoptLegacy(ownerId) : null
 
   await prisma.$transaction(async tx => {
+    await lockOwnerPoints(tx, ownerType, ownerId) // serialkan dengan perubahan harga manual (jangan menimpa nilai yang baru commit)
     const existing = new Map((await tx.pricePoint.findMany({ where: { ownerType, ownerId } })).map(p => [p.variantKey, p]))
     const stored: StoredVariant[] = []
 
@@ -80,6 +84,7 @@ async function idsUsingCurrencies(ownerType: PriceOwnerType, ids: string[], curr
  */
 export async function repriceOwnerType(ownerType: PriceOwnerType, currencies?: string[]): Promise<boolean> {
   const owner = priceOwner(ownerType)
+  if (owner.manualOnly) return false
   let ids = await owner.listIds()
   if (currencies && currencies.length > 0 && !owner.dependsOnOthers) {
     const hit = await idsUsingCurrencies(ownerType, ids, currencies)
@@ -126,17 +131,6 @@ export async function repriceAll(currencies?: string[]): Promise<string[]> {
   return failed
 }
 
-function toView(p: { ownerType: string; ownerId: string; variantKey: string; unit: string; costIdr: Prisma.Decimal | null; sellIdr: Prisma.Decimal; manualSellIdr: Prisma.Decimal | null }): PriceView {
-  const cost = num(p.costIdr)
-  const sell = Number(p.sellIdr)
-  return {
-    ownerType: p.ownerType as PriceOwnerType, ownerId: p.ownerId, variantKey: p.variantKey, unit: p.unit as PriceUnit,
-    costIdr: cost, sellIdr: sell,
-    profitIdr: cost == null ? null : sell - cost,
-    marginPct: cost == null || cost <= 0 ? null : ((sell - cost) / cost) * 100,
-    mode: p.manualSellIdr != null ? 'manual' : 'auto',
-  }
-}
 
 /** Pembaca tunggal: semua varian satu pemilik (modal/jual/untung). Hanya untuk sisi admin — harga publik cukup `sellIdr` (invarian I5). */
 export async function getPricePoints(ownerType: PriceOwnerType, ownerId: string): Promise<PriceView[]> {

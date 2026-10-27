@@ -4,6 +4,8 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
+import { PriceInputError, setManualSell } from '@/lib/pricing/engine'
+import { sellPrice } from '@/lib/pricing/engine/read'
 
 const updateSchema = z.object({
   serviceName: z.string().min(1).optional(),
@@ -17,18 +19,24 @@ type Ctx = { params: Promise<{ id: string; serviceId: string }> }
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
-    await requireManager()
+    const session = await requireManager()
     const { serviceId } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const service = await prisma.hotelService.update({ where: { id: serviceId }, data: parsed.data })
-    return NextResponse.json(ok(service))
+    // Harga lewat mesin harga (audit + penulisan ganda ke kolom lama), bidang lain langsung.
+    const { price, ...rest } = parsed.data
+    const service = Object.keys(rest).length > 0
+      ? await prisma.hotelService.update({ where: { id: serviceId }, data: rest })
+      : await prisma.hotelService.findUniqueOrThrow({ where: { id: serviceId } })
+    if (price !== undefined) await setManualSell({ ownerType: 'hotel_service', ownerId: serviceId, sellIdr: price, byUserId: session.userId })
+    return NextResponse.json(ok({ ...service, price: await sellPrice('hotel_service', serviceId) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Layanan hotel tidak ditemukan'), { status: 404 })
+    if (e instanceof PriceInputError) return NextResponse.json(err(e.message), { status: 400 })
     console.error('[admin/products/hotels/[id]/services/[serviceId]/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
@@ -45,7 +53,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       await prisma.hotelService.update({ where: { id: serviceId }, data: { isActive: false } })
       return NextResponse.json(ok(null, { softDeleted: true }))
     }
-    await prisma.hotelService.delete({ where: { id: serviceId } })
+    await prisma.$transaction([prisma.pricePoint.deleteMany({ where: { ownerType: 'hotel_service', ownerId: serviceId } }), prisma.hotelService.delete({ where: { id: serviceId } })])
     return NextResponse.json(ok(null))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

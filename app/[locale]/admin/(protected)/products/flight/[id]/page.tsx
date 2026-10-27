@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Save, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -39,6 +40,7 @@ export default function FlightEditPage({ params }: Props) {
   const [savingCost, setSavingCost] = useState(false)
   const [costSaved, setCostSaved] = useState(false)
   const [costError, setCostError] = useState<string | null>(null)
+  const [priceTick, setPriceTick] = useState(0) // naik setiap biaya tersimpan → PriceCard memuat ulang
 
   // Live preview harga jual — debounce 500ms, sama pola docs/arsitektur-visa.md tapi hanya
   // 1 komponen HPP ("tiket") karena flight tidak punya BRN-equivalent (arsitektur-tiket-pesawat.md §4).
@@ -123,6 +125,7 @@ export default function FlightEditPage({ params }: Props) {
       return
     }
     await loadCost(id)
+    setPriceTick(t => t + 1)
     setSavingCost(false); setCostSaved(true)
     setTimeout(() => setCostSaved(false), 2000)
   }
@@ -253,6 +256,8 @@ export default function FlightEditPage({ params }: Props) {
         {costError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{costError}</p>}
         </div>
       </div>
+
+      <PriceCard ownerType="flight" ownerId={id} reloadKey={priceTick} onChanged={() => { void loadCost(id) }} />
 
       {/* Danger zone */}
       <div className="admin-form-panel border-admin-danger/20 space-y-3">

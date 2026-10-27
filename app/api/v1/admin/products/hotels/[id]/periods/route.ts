@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 const createSchema = z.object({
   periodStart: z.coerce.date(),
@@ -22,7 +23,8 @@ export async function GET(_req: Request, { params }: Ctx) {
       include: { schedules: { include: { roomType: true } } },
       orderBy: { periodStart: 'asc' },
     })
-    return NextResponse.json(ok(periods))
+    const prices = await sellPrices('hotel', periods.flatMap(p => p.schedules.map(s => s.id)))
+    return NextResponse.json(ok(periods.map(p => ({ ...p, schedules: p.schedules.map(s => ({ ...s, price: prices.get(s.id) ?? 0 })) }))))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

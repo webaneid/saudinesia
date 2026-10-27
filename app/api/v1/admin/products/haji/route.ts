@@ -4,11 +4,13 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { hajiProductCreateSchema } from '@/lib/validators/adminUpdates'
 import { emptyToNull } from '@/lib/validators/richText'
+import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
+import { canViewCost } from '@/lib/pricing/policy'
 
 export async function GET() {
   try {
-    await requireManager()
-    return NextResponse.json(ok(await prisma.hajiProduct.findMany({ orderBy: { year: 'asc' } })))
+    const session = await requireManager()
+    return NextResponse.json(ok(await withAdminPrices('haji', await prisma.hajiProduct.findMany({ orderBy: { year: 'asc' } }), { includeCost: canViewCost(session.role) })))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

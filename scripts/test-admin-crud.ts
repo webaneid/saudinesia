@@ -67,11 +67,13 @@ await t('DB: kendaraan yang dipakai harga trip → dinonaktifkan; tanpa rujukan 
 
 // ── skema ──
 await t('skema ubah: katering sebagian ok + isActive; kosong/kolom liar/harga negatif ditolak; musim urutan tanggal; pengguna fullName', () => {
-  assert.equal(cateringOptionUpdateSchema.safeParse({ pricePerPersonRegular: 100 }).success, true)
+  assert.equal(cateringOptionUpdateSchema.safeParse({ name: 'Paket B' }).success, true)
+  assert.equal(cateringOptionUpdateSchema.safeParse({ pricePerPersonRegular: 100 }).success, false, 'harga katering lewat PriceCard (mesin harga), bukan formulir')
   assert.equal(cateringOptionUpdateSchema.safeParse({ isActive: false }).success, true)
   assert.equal(cateringOptionUpdateSchema.safeParse({}).success, false)
   assert.equal(cateringOptionUpdateSchema.safeParse({ id: 'x' }).success, false, 'kolom liar')
   assert.equal(cateringOptionUpdateSchema.safeParse({ pricePerPersonHajj: -1 }).success, false)
+  assert.equal(cateringOptionUpdateSchema.safeParse({ name: '' }).success, false)
   assert.equal(seasonUpdateSchema.safeParse({ endDate: '2031-03-01' }).success, true)
   assert.equal(seasonUpdateSchema.safeParse({}).success, false)
   assert.equal(seasonUpdateSchema.safeParse({ startDate: '2031-03-02', endDate: '2031-03-01' }).success, false)

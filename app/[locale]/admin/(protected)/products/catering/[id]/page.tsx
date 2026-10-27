@@ -8,17 +8,15 @@ import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { MediaField } from '@/components/admin/media/MediaField'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
-type Catering = {
-  id: string; name: string; boardType: string; menuStyle: string; description: string | null
-  pricePerPersonRegular: number | string; pricePerPersonRamadan: number | string; pricePerPersonHajj: number | string; isActive: boolean
-}
+type Catering = { id: string; name: string; boardType: string; menuStyle: string; description: string | null; isActive: boolean }
 
 export default function EditCateringPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
   const list = `/${locale}/admin/products/catering`
   const e = useEditEntity<Catering>(`/api/v1/admin/products/catering/${id}`, list)
-  type Form = { name: string; boardType: string; menuStyle: string; description: string; pricePerPersonRegular: string; pricePerPersonRamadan: string; pricePerPersonHajj: string; isActive: boolean }
+  type Form = { name: string; boardType: string; menuStyle: string; description: string; isActive: boolean }
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)
 
@@ -26,7 +24,7 @@ export default function EditCateringPage() {
   useEffect(() => {
     const c = e.item
     if (c && !form) {
-      const f: Form = { name: c.name, boardType: c.boardType, menuStyle: c.menuStyle, description: c.description ?? '', pricePerPersonRegular: String(Number(c.pricePerPersonRegular)), pricePerPersonRamadan: String(Number(c.pricePerPersonRamadan)), pricePerPersonHajj: String(Number(c.pricePerPersonHajj)), isActive: c.isActive }
+      const f: Form = { name: c.name, boardType: c.boardType, menuStyle: c.menuStyle, description: c.description ?? '', isActive: c.isActive }
       setForm(f); markClean(f)
     }
   }, [e.item, form, markClean])
@@ -34,24 +32,22 @@ export default function EditCateringPage() {
   if (e.missing) return <p className="text-sm text-admin-muted">Paket katering tidak ditemukan — mungkin sudah dihapus. <a className="font-semibold underline" href={list}>Kembali ke daftar</a></p>
   if (e.loading || !form) return <p className="text-sm text-admin-muted">{e.error ?? 'Memuat…'}</p>
 
-  const set = (k: 'name' | 'boardType' | 'menuStyle' | 'pricePerPersonRegular' | 'pricePerPersonRamadan' | 'pricePerPersonHajj') => (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { e.clearMessages(); setForm(p => p && ({ ...p, [k]: ev.target.value })) }
+  const set = (k: 'name' | 'boardType' | 'menuStyle') => (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { e.clearMessages(); setForm(p => p && ({ ...p, [k]: ev.target.value })) }
 
   return (
     <EditPage
       icon={UtensilsCrossed} title={e.item?.name ?? 'Paket Katering'} backHref={list} backLabel="Daftar Katering"
       active={form.isActive} onActiveChange={v => { e.clearMessages(); setForm(p => p && ({ ...p, isActive: v })) }} dirty={dirty}
-      onSubmit={async () => { if (await e.save({ ...form, pricePerPersonRegular: +form.pricePerPersonRegular, pricePerPersonRamadan: +form.pricePerPersonRamadan, pricePerPersonHajj: +form.pricePerPersonHajj })) markClean(form) }}
+      onSubmit={async () => { if (await e.save({ ...form })) markClean(form) }}
       saving={e.saving} canSubmit={!!form.name.trim()} error={e.error} notice={e.notice}
       media={<MediaField productType="catering" productId={id} label="Foto Unggulan Katering" />}
+      after={<PriceCard ownerType="catering" ownerId={id} title="Harga per orang per hari (tiga musim): modal, jual, untung" />}
       remove={{ confirmText: 'Hapus paket katering ini? Bila sudah dipakai booking atau paket, ia hanya dinonaktifkan (bisa diaktifkan kembali).', onDelete: async () => { if (await e.remove() === 'deactivated') { setForm(p => p && ({ ...p, isActive: false })); patchClean({ isActive: false }) } }, deleting: e.deleting }}
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="md:col-span-2"><p className="mb-1 text-xs text-admin-muted">Nama Paket</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Board Type</p><select className="admin-select" value={form.boardType} onChange={set('boardType')}><option value="full_board">Full Board</option><option value="half_board">Half Board</option></select></div>
         <div><p className="mb-1 text-xs text-admin-muted">Menu</p><select className="admin-select" value={form.menuStyle} onChange={set('menuStyle')}><option value="asian">Asia</option><option value="arabic">Arab</option><option value="western">Barat</option></select></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Harga/org/hari Regular</p><input type="number" className="admin-inp" value={form.pricePerPersonRegular} onChange={set('pricePerPersonRegular')} /></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Harga/org/hari Ramadan</p><input type="number" className="admin-inp" value={form.pricePerPersonRamadan} onChange={set('pricePerPersonRamadan')} /></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Harga/org/hari Haji</p><input type="number" className="admin-inp" value={form.pricePerPersonHajj} onChange={set('pricePerPersonHajj')} /></div>
         <div className="min-w-0 md:col-span-2">
           <p className="mb-1 text-xs text-admin-muted">Deskripsi</p>
           <RichTextEditor id={`catering-edit-${id}`} title="Deskripsi paket katering" value={form.description} onChange={description => { e.clearMessages(); setForm(p => p && ({ ...p, description })) }} placeholder="Menu harian, jam makan, dan catatan khusus (alergi, porsi)…" />

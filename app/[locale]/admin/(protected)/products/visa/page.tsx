@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
 
 const COMMON_DOC_TYPES = [
   'passport', 'ktp', 'kk', 'photo', 'evaksin', 'etiket',
@@ -16,7 +17,7 @@ const COMMON_DOC_TYPES = [
 
 type VisaProduct = {
   id: string; name: string; country: string; visaType: string
-  price: number; processDays: number; isActive: boolean
+  price: number; profitIdr: number | null; marginPct: number | null; processDays: number; isActive: boolean
 }
 
 export default function VisaPage() {
@@ -48,6 +49,7 @@ export default function VisaPage() {
     { key: 'name', header: 'Nama', mobile: 'title', cell: v => <span className="text-[13px] font-medium">{v.name}</span> },
     { key: 'type', header: 'Jenis', cell: v => <Badge tone="accent">{v.visaType}</Badge> },
     { key: 'price', header: 'Harga', align: 'right', cell: v => <span className="text-[12px] font-semibold tabular-nums text-admin-ink/80">{formatRupiah(v.price)}</span> },
+    { key: 'profit', header: 'Untung', align: 'right', hideBelowLg: true, cell: v => <ProfitCell profitIdr={v.profitIdr} marginPct={v.marginPct} /> },
     { key: 'process', header: 'Proses', align: 'right', cell: v => <span className="text-[12px] text-admin-muted">{v.processDays} hari</span> },
     { key: 'status', header: 'Status', cell: v => <Badge tone={v.isActive ? 'ok' : 'neutral'}>{v.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
     {

@@ -12,7 +12,7 @@ const COMPONENT_VISA = 'individu'
 const COMPONENT_BRN = 'biaya_non_hotel'
 
 type TierWithId = { id: string; minDays: number; maxDays: number; cost: number }
-type IndividuTierWithId = TierWithId & { sellPriceOverride?: number | null }
+type IndividuTierWithId = TierWithId
 
 const tierRowSchema = z.object({
   id: z.string().min(1),
@@ -20,7 +20,6 @@ const tierRowSchema = z.object({
   maxDays: z.coerce.number().int().min(0),
   hargaVisa: z.coerce.number().positive(),
   hargaBrn: z.coerce.number().positive().nullable().optional(),
-  sellPriceOverride: z.coerce.number().positive().nullable().optional(),
 })
 
 const putSchema = z.object({
@@ -52,7 +51,6 @@ export async function GET(_req: Request, { params }: Ctx) {
       maxDays: t.maxDays,
       hargaVisa: t.cost,
       hargaBrn: brnByRowId.get(t.id)?.cost ?? null,
-      sellPriceOverride: t.sellPriceOverride ?? null,
     }))
 
     return NextResponse.json(ok({
@@ -81,7 +79,6 @@ export async function PUT(req: Request, { params }: Ctx) {
 
     const individuTiers: IndividuTierWithId[] = rows.map(r => ({
       id: r.id, minDays: r.minDays, maxDays: r.maxDays, cost: r.hargaVisa,
-      sellPriceOverride: r.sellPriceOverride ?? null,
     }))
     const brnRows = rows.filter(r => r.hargaBrn != null)
     const brnTiers: TierWithId[] = brnRows.map(r => ({ id: r.id, minDays: r.minDays, maxDays: r.maxDays, cost: r.hargaBrn as number }))
@@ -141,7 +138,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       brn: brnActive ? brn : null,
       rows: rows.map(r => ({
         id: r.id, minDays: r.minDays, maxDays: r.maxDays, hargaVisa: r.hargaVisa,
-        hargaBrn: r.hargaBrn ?? null, sellPriceOverride: r.sellPriceOverride ?? null,
+        hargaBrn: r.hargaBrn ?? null,
       })),
     }))
   } catch (e) {

@@ -36,6 +36,13 @@ const seasons = await Promise.all([
 const opt = await prisma.cateringOption.create({ data: { name: `${tag} katering`, boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 100000, pricePerPersonRamadan: 150000, pricePerPersonHajj: 200000 } })
 const inactive = await prisma.cateringOption.create({ data: { name: `${tag} nonaktif`, boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 100000, pricePerPersonRamadan: 100000, pricePerPersonHajj: 100000, isActive: false } })
 const noHajjPrice = await prisma.cateringOption.create({ data: { name: `${tag} tanpa harga haji`, boardType: 'full_board', menuStyle: 'asian', pricePerPersonRegular: 100000, pricePerPersonRamadan: 100000, pricePerPersonHajj: 0 } })
+// Sejak Fase 3 harga katering dibaca dari titik harga (tiga musim) — fixture memberi titik sesuai harga kolom (0 = belum berharga = tanpa titik).
+const seasonPoints = async (o: { id: string; pricePerPersonRegular: unknown; pricePerPersonRamadan: unknown; pricePerPersonHajj: unknown }) => {
+  for (const [season, value] of [['regular', o.pricePerPersonRegular], ['ramadan', o.pricePerPersonRamadan], ['hajj', o.pricePerPersonHajj]] as const) {
+    if (Number(value) > 0) await prisma.pricePoint.create({ data: { ownerType: 'catering', ownerId: o.id, variantKey: `season:${season}`, unit: 'person_day', manualSellIdr: Number(value), sellIdr: Number(value) } })
+  }
+}
+for (const o of [opt, inactive, noHajjPrice]) await seasonPoints(o)
 const price = (id: string, start: string, numDays = 3, numPeople = 4) => computeCateringBookingPrice({ cateringOptionId: id, startDate: new Date(start), numDays, numPeople })
 
 await t('katering: harga = harga musim PADA TANGGAL MULAI × hari × orang (reguler / Ramadan / Haji)', async () => {
@@ -61,7 +68,7 @@ await t('katering: skema booking TIDAK punya totalPrice (klien tak bisa menentuk
   assert.match(route, /computeCateringBookingPrice\(/, 'katering harus dihitung lewat computeCateringBookingPrice')
 })
 await t('katering: katalog publik dan booking memilih kolom musim lewat SATU fungsi', () => {
-  assert.equal(cateringPricePerPersonPerDay(opt, 'ramadan'), 150000)
+  assert.equal(cateringPricePerPersonPerDay({ regular: 100000, ramadan: 150000, hajj: 200000 }, 'ramadan'), 150000)
   for (const f of ['app/api/v1/catalog/catering/route.ts', 'app/[locale]/(public)/catering/page.tsx']) {
     const src = readFileSync(f, 'utf8')
     assert.match(src, /cateringPricePerPersonPerDay\(/, f); assert.doesNotMatch(src, /pricePerPerson\$\{/, `${f}: pemilihan kolom musim ganda`)
@@ -125,7 +132,7 @@ await t('mengubah margin global + refreshAllPricingCaches() → harga Hotel (non
   }
 })
 await t('penjaga sumber: semua cache dalam SATU daftar (urutan: dasar dulu, komposit terakhir); cron dan perubahan margin memakainya', () => {
-  assert.deepEqual(PRICE_CACHE_STEP_NAMES, ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'tour_package', 'package', 'haji'])
+  assert.deepEqual(PRICE_CACHE_STEP_NAMES, ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'tour_package', 'package', 'haji', 'catering', 'hotel_service'])
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
   assert.match(cron, /refreshAllPricingCaches\(updatedCurrencies\)/); assert.doesNotMatch(cron, /refreshAll(Visa|Flight|Hotel|Transport|Muthowif|TourPackage|Package|Haji)/, 'cron tak boleh punya daftar refresh sendiri')
   const route = readFileSync('app/api/v1/admin/system/settings/pricing-rule/route.ts', 'utf8')
@@ -133,6 +140,7 @@ await t('penjaga sumber: semua cache dalam SATU daftar (urutan: dasar dulu, komp
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
+await prisma.pricePoint.deleteMany({ where: { ownerType: 'catering', ownerId: { in: [opt.id, inactive.id, noHajjPrice.id] } } })
 await prisma.cateringOption.deleteMany({ where: { id: { in: [opt.id, inactive.id, noHajjPrice.id] } } })
 await prisma.season.deleteMany({ where: { id: { in: seasons.map(s => s.id) } } })
 await prisma.pricingRule.deleteMany({})

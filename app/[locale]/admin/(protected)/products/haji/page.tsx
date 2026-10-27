@@ -8,8 +8,9 @@ import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
 
-type HajiProduct = { id: string; name: string; hajiType: string; year: number; price: number; totalQuota: number; bookedQuota: number; isActive: boolean }
+type HajiProduct = { id: string; name: string; hajiType: string; year: number; price: number; profitIdr: number | null; marginPct: number | null; totalQuota: number; bookedQuota: number; isActive: boolean }
 
 export default function HajiPage() {
   const router = useRouter()
@@ -34,6 +35,7 @@ export default function HajiPage() {
     { key: 'price', header: 'Harga', align: 'right', cell: h => h.price > 0
       ? <span className="text-[12px] font-semibold tabular-nums text-admin-ink/80">{formatRupiah(h.price)}</span>
       : <span className="text-[12px] text-admin-muted">Belum diatur</span> },
+    { key: 'profit', header: 'Untung', align: 'right', hideBelowLg: true, cell: h => <ProfitCell profitIdr={h.profitIdr} marginPct={h.marginPct} /> },
     {
       key: 'quota', header: 'Kuota', align: 'right',
       cell: h => {

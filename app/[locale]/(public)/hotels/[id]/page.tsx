@@ -37,6 +37,7 @@ export default async function HotelDetailPage({ params }: Props) {
   if (!hotelRaw) notFound()
   // Harga jual per jadwal kamar dari titik harga (docs/arsitektur-harga-terpadu.md §15).
   const hotelPrices = await sellPrices('hotel', hotelRaw.pricePeriods.flatMap(p => p.schedules.map(s => s.id)))
+  const servicePrices = await sellPrices('hotel_service', hotelRaw.services.map(s => s.id))
   const hotel = { ...hotelRaw, pricePeriods: hotelRaw.pricePeriods.map(p => ({ ...p, schedules: p.schedules.map(s => ({ ...s, price: hotelPrices.get(s.id) ?? 0 })) })) }
 
   // Kolom tabel = union semua tipe kamar yang pernah dipakai di hotel ini, diurutkan kapasitas.
@@ -248,7 +249,7 @@ export default async function HotelDetailPage({ params }: Props) {
                   <CheckCircle className="h-4 w-4 text-green-500" />
                   <span className="text-sm">{s.serviceName}</span>
                 </div>
-                <span className="text-sm font-semibold">{formatRupiah(Number(s.price))}</span>
+                <span className="text-sm font-semibold">{formatRupiah(servicePrices.get(s.id) ?? 0)}</span>
               </div>
             ))}
           </div>

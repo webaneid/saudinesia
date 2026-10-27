@@ -12,6 +12,7 @@ import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -115,6 +116,7 @@ export default function PackageBuilderPage({ params }: Props) {
   const [loaded, setLoaded] = useState(false)
 
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
+  const [priceTick, setPriceTick] = useState(0) // naik setiap biaya/harga berubah → PriceCard memuat ulang
   const EMPTY_FORM = { name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true }
   const [form, setForm] = useState(EMPTY_FORM)
   // Baseline info yang tersimpan — dasar penanda "belum disimpan" dan agar muat-ulang akibat kotak komponen TIDAK menimpa ketikan yang belum disimpan.
@@ -734,12 +736,15 @@ export default function PackageBuilderPage({ params }: Props) {
         )}
       </MetaBox>
 
+      {/* Harga: modal · jual · untung (titik harga) */}
+      <PriceCard ownerType="package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
+
       {/* Komponen biaya */}
       <CostComponentsPanel
         apiBase={`/api/v1/admin/products/packages/${id}/costs`}
         hint="Tiap komponen (dokumen, admin fee, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-paket-umroh.md §5"
         namePlaceholder="Dokumen, Admin Fee, dst"
-        onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]) }}
+        onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]); setPriceTick(t => t + 1) }}
       />
 
       {/* Preview Harga — 2 blok: dasar (included) vs opsi tambahan (user_choice) */}

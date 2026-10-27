@@ -5,7 +5,7 @@ import { Send } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 
-type PricingRule = { id: string; minMarginPercent: number; roundingIncrement: number }
+type PricingRule = { id: string; minMarginPercent: number; roundingIncrement: number; warnBelowPercent: number }
 type SiteSetting = {
   id: string
   platformName: string | null
@@ -30,7 +30,8 @@ type TestEmailResult = { status: 'sent' | 'failed' | 'skipped'; detail: string |
 
 export default function SettingsPage() {
   const [rule, setRule] = useState<PricingRule | null>(null)
-  const [ruleForm, setRuleForm] = useState({ minMarginPercent: 20, roundingIncrement: 50000 })
+  const [ruleForm, setRuleForm] = useState({ minMarginPercent: 20, roundingIncrement: 50000, warnBelowPercent: 0 })
+  const [ruleError, setRuleError] = useState<string | null>(null)
   const [savingRule, setSavingRule] = useState(false)
 
   const [siteForm, setSiteForm] = useState(EMPTY_SITE_FORM)
@@ -47,7 +48,7 @@ export default function SettingsPage() {
   async function loadRule() {
     const r = await fetch('/api/v1/admin/system/settings/pricing-rule')
     const j = await r.json()
-    if (j.data) { setRule(j.data); setRuleForm({ minMarginPercent: Number(j.data.minMarginPercent), roundingIncrement: j.data.roundingIncrement }) }
+    if (j.data) { setRule(j.data); setRuleForm({ minMarginPercent: Number(j.data.minMarginPercent), roundingIncrement: j.data.roundingIncrement, warnBelowPercent: Number(j.data.warnBelowPercent ?? 0) }) }
   }
   async function loadSiteSetting() {
     const r = await fetch('/api/v1/admin/system/settings/site')
@@ -102,11 +103,13 @@ export default function SettingsPage() {
 
   async function handleSaveRule() {
     setSavingRule(true)
-    await fetch('/api/v1/admin/system/settings/pricing-rule', {
+    setRuleError(null)
+    const res = await fetch('/api/v1/admin/system/settings/pricing-rule', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(ruleForm),
     })
+    if (!res.ok) setRuleError((await res.json().catch(() => null))?.error ?? 'Aturan gagal disimpan.')
     await loadRule()
     setSavingRule(false)
   }
@@ -129,11 +132,11 @@ export default function SettingsPage() {
 
       <section className="space-y-3">
         <h2 className="text-sm font-semibold text-admin-ink">Margin &amp; Pembulatan Harga</h2>
-        <p className="text-xs text-admin-muted">Berlaku global untuk semua produk, kecuali di-override per tipe produk nanti.</p>
+        <p className="text-xs text-admin-muted">Margin bawaan hanyalah SARAN untuk harga otomatis (modal × margin, dibulatkan) — bukan batas: harga jual bisa diatur manual per produk. Berlaku global.</p>
         <div className="admin-form-panel">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <p className="text-xs text-admin-muted mb-1">Margin minimum (%)</p>
+              <p className="text-xs text-admin-muted mb-1">Margin bawaan (%) — maks 300</p>
               <input
                 type="number"
                 className="admin-inp"
@@ -150,10 +153,20 @@ export default function SettingsPage() {
                 onChange={e => setRuleForm(p => ({ ...p, roundingIncrement: +e.target.value }))}
               />
             </div>
+            <div>
+              <p className="text-xs text-admin-muted mb-1">Peringatan margin tipis di bawah (%) — 0 = hanya yang rugi</p>
+              <input
+                type="number"
+                className="admin-inp"
+                value={ruleForm.warnBelowPercent}
+                onChange={e => setRuleForm(p => ({ ...p, warnBelowPercent: +e.target.value }))}
+              />
+            </div>
           </div>
           <button onClick={handleSaveRule} disabled={savingRule} className="admin-btn-sm disabled:opacity-50">
             {savingRule ? '...' : 'Simpan'}
           </button>
+          {ruleError && <p className="text-xs font-medium text-admin-danger">{ruleError}</p>}
           {rule && <p className="text-[11px] text-admin-muted/70">Tersimpan: margin {Number(rule.minMarginPercent)}%, bulatkan ke kelipatan Rp{rule.roundingIncrement.toLocaleString('id-ID')}</p>}
         </div>
       </section>

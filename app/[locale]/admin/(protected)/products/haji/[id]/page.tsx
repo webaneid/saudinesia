@@ -12,6 +12,7 @@ import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
 import { MediaField } from '@/components/admin/media/MediaField'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 type HajiDetail = {
   id: string; name: string; description: string | null; hajiType: string; year: number
@@ -34,6 +35,7 @@ export default function HajiEditPage() {
   const e = useEditEntity<HajiDetail>(`/api/v1/admin/products/haji/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)
+  const [priceTick, setPriceTick] = useState(0) // naik setiap biaya/harga berubah → PriceCard memuat ulang
 
   // Formulir diisi SEKALI dari data yang dimuat. Muat-ulang akibat Komponen Biaya (harga berubah) hanya memperbarui `e.item`,
   // tidak menimpa ketikan yang belum disimpan.
@@ -73,7 +75,7 @@ export default function HajiEditPage() {
           ) : (
             <p className="m-0 text-[13px] text-admin-warning">Belum ditetapkan — tambahkan Komponen Biaya. Selama belum berharga, produk ini tidak dapat dipesan.</p>
           )}
-          <p className="m-0 text-[11px] text-admin-muted">Dihitung otomatis (jumlah harga jual semua komponen), diperbarui saat komponen atau kurs berubah. Tidak diisi manual.</p>
+          <p className="m-0 text-[11px] text-admin-muted">Otomatis = jumlah harga jual semua komponen (diperbarui saat komponen atau kurs berubah). Harga bisa diatur manual lewat kartu “Harga” di bawah.</p>
         </MetaBox>
       }
       remove={{
@@ -85,12 +87,15 @@ export default function HajiEditPage() {
         deleting: e.deleting,
       }}
       after={
+        <>
+        <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
         <CostComponentsPanel
           apiBase={`/api/v1/admin/products/haji/${id}/costs`}
           hint="Tiap komponen (visa, akomodasi, transportasi, dst) dapat margin sendiri, baru dijumlah jadi harga per orang — lihat docs/arsitektur-komponen-biaya.md"
           namePlaceholder="Visa Haji, Akomodasi Makkah, Transportasi, dst"
-          onChanged={async () => { await e.reload() }}
+          onChanged={async () => { await e.reload(); setPriceTick(t => t + 1) }}
         />
+        </>
       }
     >
       <div className="grid gap-3 md:grid-cols-2">

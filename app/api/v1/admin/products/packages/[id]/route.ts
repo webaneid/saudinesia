@@ -7,7 +7,7 @@ import { refreshPackagePriceCache } from '@/lib/pricing/refreshPackagePriceCache
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deletePackage } from '@/lib/admin/productDelete'
-import { sellPrice } from '@/lib/pricing/engine/read'
+import { cateringSeasonPrices, sellPrice } from '@/lib/pricing/engine/read'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -85,7 +85,7 @@ export async function GET(_req: Request, { params }: Ctx) {
       },
     })
     if (!pkg) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok(pkg))
+    return NextResponse.json(ok({ ...pkg, price: await sellPrice('package', id) })) // harga paket sendiri dari titik harga; harga sub-modul bersarang menyusul bersama PriceCard
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -176,8 +176,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       const numPeople = parsed.data.includedCateringNumPeople !== undefined ? parsed.data.includedCateringNumPeople : before.includedCateringNumPeople
       const numDays = parsed.data.includedCateringNumDays !== undefined ? parsed.data.includedCateringNumDays : before.includedCateringNumDays
       if (optionId && numPeople && numDays) {
-        const opt = await prisma.cateringOption.findUniqueOrThrow({ where: { id: optionId }, select: { pricePerPersonRegular: true } })
-        data.includedCateringPrice = numPeople * numDays * Number(opt.pricePerPersonRegular)
+        await prisma.cateringOption.findUniqueOrThrow({ where: { id: optionId }, select: { id: true } })
+        data.includedCateringPrice = numPeople * numDays * ((await cateringSeasonPrices([optionId])).get(optionId)?.regular ?? 0)
       } else {
         data.includedCateringPrice = null
       }

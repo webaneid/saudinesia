@@ -149,6 +149,8 @@ export function deleteHotel(id: string): Promise<DeleteOutcome> {
     drop: async tx => {
       const schedules = await tx.hotelRoomSchedule.findMany({ where: viaSchedule, select: { id: true } })
       await dropPolymorphic(tx, 'hotel', [id, ...schedules.map(s => s.id)]) // harga/vendor per jadwal kamar (productId = id jadwal)
+      const services = await tx.hotelService.findMany({ where: { hotelId: id }, select: { id: true } })
+      await tx.pricePoint.deleteMany({ where: { ownerType: 'hotel_service', ownerId: { in: services.map(s => s.id) } } }) // layanan ikut terhapus (CASCADE) — titik harganya tak punya FK
       const hotel = await tx.hotel.findUnique({ where: { id }, select: { addressId: true } })
       await tx.hotel.delete({ where: { id } }) // periode, jadwal kamar, layanan ikut (CASCADE)
       if (hotel?.addressId) await tx.address.delete({ where: { id: hotel.addressId } }) // alamat 1:1 milik hotel

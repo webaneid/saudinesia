@@ -4,6 +4,7 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { getFlightAirlineNames } from '@/lib/pricing/flightAirlines'
 import { z } from 'zod'
+import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-tiket-pesawat.md §9 poin 7, sama pelajaran
 // docs/arsitektur-harga.md §17) — jadwal baru dibuat dengan price:0, terisi otomatis setelah
@@ -21,10 +22,10 @@ const createSchema = z.object({
 export async function GET() {
   try {
     await requireManager()
-    const schedules = await prisma.flightSchedule.findMany({
+    const schedules = await withSellPrice('flight', await prisma.flightSchedule.findMany({
       include: { route: true },
       orderBy: { departureFrom: 'asc' },
-    })
+    }))
     const airlineByScheduleId = await getFlightAirlineNames(schedules.map(s => s.id))
     return NextResponse.json(ok(
       schedules.map(s => ({ ...s, airlineName: airlineByScheduleId.get(s.id) ?? null }))

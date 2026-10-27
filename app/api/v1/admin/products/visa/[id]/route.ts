@@ -7,6 +7,7 @@ import { z } from 'zod'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteVisaProduct } from '@/lib/admin/productDelete'
+import { visaFeeRules, visaPriceSummary } from '@/lib/pricing/engine/read'
 
 const requirementSchema = z.object({
   docType:     z.string().min(1),
@@ -40,7 +41,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     // docs/arsitektur-dokumen.md §4 — sumber kebenaran BARU, dikirim berdampingan `requirements`
     // (Json lama, deprecated) supaya builder bisa pindah bertahap tanpa breaking.
     const documentRequirements = await getDocumentRequirements('visa', id)
-    return NextResponse.json(ok({ ...product, documentRequirements }))
+    const [summary, rules] = await Promise.all([visaPriceSummary([id]), visaFeeRules([id])])
+    return NextResponse.json(ok({ ...product, price: summary.get(id)?.from ?? 0, durationFeeRules: rules.get(id) ?? [], documentRequirements }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -77,7 +79,7 @@ export async function PUT(req: Request, { params }: Ctx) {
         })
       }
     }
-    return NextResponse.json(ok(product))
+    return NextResponse.json(ok({ ...product, price: (await visaPriceSummary([id])).get(id)?.from ?? 0, durationFeeRules: (await visaFeeRules([id])).get(id) ?? [] }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

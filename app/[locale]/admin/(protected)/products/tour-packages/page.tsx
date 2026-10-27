@@ -7,9 +7,10 @@ import { Plus, Pencil, Landmark } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Badge } from '@/components/admin/ui/Badge'
+import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
 
 type TourPackage = {
-  id: string; name: string; price: string | number; isActive: boolean
+  id: string; name: string; price: string | number; profitIdr: number | null; marginPct: number | null; isActive: boolean
   transportMode: 'included' | 'user_choice' | 'none'
   transportTrip: { name: string; origin: string; destination: string } | null
   includedTransportPricing: { vehicle: { name: string } } | null
@@ -47,6 +48,7 @@ export default function TourPackagesPage() {
     { key: 'transport', header: 'Kendaraan', cell: p => <span className="text-[12px] text-admin-muted">{transportLabel(p)}</span> },
     { key: 'sites', header: 'Situs', cell: p => <span className="text-[12px] text-admin-muted">{p._count.sites} situs</span> },
     { key: 'price', header: 'Harga Jual Paket', cell: p => <span className="text-[12px] font-medium text-admin-ink/80">{formatPrice(p.price)}</span> },
+    { key: 'profit', header: 'Untung', align: 'right', hideBelowLg: true, cell: p => <ProfitCell profitIdr={p.profitIdr} marginPct={p.marginPct} /> },
     { key: 'status', header: 'Status', cell: p => <Badge tone={p.isActive ? 'ok' : 'neutral'}>{p.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
     {
       key: 'actions', header: '', align: 'right',

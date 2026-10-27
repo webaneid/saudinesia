@@ -13,6 +13,7 @@ import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
+import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -85,6 +86,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
   const [loaded, setLoaded] = useState(false)
 
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
+  const [priceTick, setPriceTick] = useState(0) // naik setiap biaya/harga berubah → PriceCard memuat ulang
   const [form, setForm] = useState({ name: '', description: '', isActive: true })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -515,12 +517,15 @@ export default function TourPackageBuilderPage({ params }: Props) {
         )}
       </MetaBox>
 
+      {/* Harga: modal · jual · untung (titik harga) */}
+      <PriceCard ownerType="tour_package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
+
       {/* Komponen biaya */}
       <CostComponentsPanel
         apiBase={`/api/v1/admin/products/tour-packages/${id}/costs`}
         hint="Tiap komponen (Guide, Makan, Minum, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-ziarah.md §8.3"
         namePlaceholder="Guide, Makan Siang, Air Mineral, dst"
-        onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]) }}
+        onChanged={async () => { await Promise.all([loadBreakdown(id), loadPackage(id)]); setPriceTick(t => t + 1) }}
       />
 
       {/* Preview Harga — 2 blok terpisah (§12.7): dasar (included) vs opsi tambahan (user_choice) */}
