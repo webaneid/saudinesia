@@ -24,3 +24,7 @@ export type InfoForm = {
   processDays: string
   isActive: boolean
 }
+
+/** Hasil hapus: null = terhapus (halaman berpindah); `notice` = dinonaktifkan karena dirujuk; `error` = gagal. */
+export type DeleteResult = { error: string } | { notice: string } | null
+

@@ -12,7 +12,7 @@ import type { VisaRequirement } from '@/lib/types/visa'
 import { CostTiersTab } from './CostTiersTab'
 import { ProductInfoTab } from './ProductInfoTab'
 import { RequirementsTab } from './RequirementsTab'
-import type { InfoForm, ProductDetail } from './types'
+import type { DeleteResult, InfoForm, ProductDetail } from './types'
 
 type TabKey = 'info' | 'docs' | 'price'
 type Props = { params: Promise<{ locale: string; id: string }> }
@@ -110,14 +110,21 @@ export default function VisaEditPage({ params }: Props) {
     setJustSaved(true)
   }
 
-  async function remove(): Promise<string | null> {
-    const res = await fetch(`/api/v1/admin/products/visa/${id}`, { method: 'DELETE' })
-    if (!res.ok) {
+  // Hapus-aman (lib/admin/productDelete.ts): terhapus → kembali ke daftar; dirujuk pesanan/pengajuan/paket → dinonaktifkan dan pesannya ditampilkan.
+  async function remove(): Promise<DeleteResult> {
+    try {
+      const res = await fetch(`/api/v1/admin/products/visa/${id}`, { method: 'DELETE' })
       const j = await res.json().catch(() => null)
-      return j?.error ?? 'Produk gagal dihapus. Pastikan tidak sedang dipakai paket atau pesanan.'
+      if (!res.ok || !j?.data) return { error: j?.error ?? 'Produk gagal dihapus.' }
+      if (j.data.deleted) { router.push(`/${locale}/admin/products/visa`); return null }
+      // Status di formulir DAN baseline ikut nonaktif, ketikan lain yang belum disimpan tetap terhitung "belum disimpan".
+      setForm(f => (f ? { ...f, isActive: false } : f))
+      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; reqs: VisaRequirement[] }; return snapshotOf({ ...saved.form, isActive: false }, saved.reqs) })
+      await refreshProduct()
+      return { notice: j.data.message ?? 'Dipakai sehingga dinonaktifkan.' }
+    } catch {
+      return { error: 'Tidak dapat menghubungi server.' }
     }
-    router.push(`/${locale}/admin/products/visa`)
-    return null
   }
 
   const tabs: readonly TabItem<TabKey>[] = [

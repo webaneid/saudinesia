@@ -12,6 +12,13 @@ export function useDirtyForm<T>(form: T | null) {
   const dirty = form !== null && baseline !== null && JSON.stringify(form) !== baseline
   const markClean = useCallback((value: T) => setBaseline(JSON.stringify(value)), [])
   /** Menggeser baseline sebagian tanpa menyentuh ketikan (mis. server menonaktifkan entitas saat hapus → isActive=false di formulir dan baseline). */
-  const patchClean = useCallback((patch: Partial<T>) => setBaseline(prev => (prev === null ? prev : JSON.stringify({ ...(JSON.parse(prev) as object), ...patch }))), [])
+  const patchClean = useCallback(
+    (patch: Partial<T> | ((prev: T) => T)) => setBaseline(prev => {
+      if (prev === null) return prev
+      const base = JSON.parse(prev) as T
+      return JSON.stringify(typeof patch === 'function' ? patch(base) : { ...base, ...patch })
+    }),
+    [],
+  )
   return { dirty, markClean, patchClean }
 }

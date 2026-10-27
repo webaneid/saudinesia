@@ -17,7 +17,7 @@ export default function TourismSiteEditPage() {
   const list = `/${locale}/admin/products/tourism-sites`
   const e = useEditEntity<TourismSite>(`/api/v1/admin/products/tourism-sites/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
-  const { dirty, markClean } = useDirtyForm(form)
+  const { dirty, markClean, patchClean } = useDirtyForm(form)
 
   // Formulir diisi SEKALI dari data yang dimuat; simpan berikutnya hanya menggeser baseline.
   useEffect(() => {
@@ -39,6 +39,11 @@ export default function TourismSiteEditPage() {
       active={form.isActive} onActiveChange={isActive => patch({ isActive })} dirty={dirty}
       onSubmit={async () => { if (await e.save({ ...form, gmapsUrl: form.gmapsUrl || null })) markClean(form) }}
       saving={e.saving} canSubmit={!!form.name.trim()} error={e.error} notice={e.notice}
+      remove={{
+        confirmText: 'Hapus situs wisata ini? Bila sudah dipakai paket ziarah, ia hanya dinonaktifkan (bisa diaktifkan kembali).',
+        onDelete: async () => { if (await e.remove() === 'deactivated') { setForm(p => p && ({ ...p, isActive: false })); patchClean({ isActive: false }) } },
+        deleting: e.deleting,
+      }}
       media={<MediaField productType="tourism_site" productId={id} label="Foto Unggulan Situs" />}
       sidebar={
         <p className="m-0 rounded-2xl border border-admin-line bg-white p-4 text-[11px] text-admin-muted">

@@ -818,4 +818,4 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] F1 komponen `components/admin/editor/*` + halaman edit Paket Umroh dua kolom (Terbitkan, Foto Unggulan, Atribut, Ringkasan Harga di kanan), penanda perubahan belum disimpan, galat simpan tampil, penjaga CI — selesai 2026-10-27 (Chrome asli desktop + HP)
 - [x] F2 halaman edit lain: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan (+ Musim/Rute/Pengguna lewat `EditPage`); bug penanda belum-disimpan palsu (editor teks kaya) + 3 galat tertelan ditutup — selesai 2026-10-27 (Chrome asli desktop + HP; 410 PASS)
 - [ ] F3 taksonomi/kategori produk (kotak Kategori di sidebar) — menunggu keputusan model
-
+- [x] Perapian hapus: hapus-aman Muthowif, Situs Wisata, Hotel, Paket Umroh, Paket Ziarah + Visa (dirujuk → nonaktif, tak lagi 500/yatim) lewat `lib/admin/productDelete.ts`; rujukan SET NULL dihitung, polimorfik dibersihkan, kunci anti-race, penyidik FK — selesai 2026-10-27 (424 PASS; 6 mutasi; Chrome asli 8 entitas)

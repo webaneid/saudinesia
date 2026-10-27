@@ -9,6 +9,8 @@ import { EditorShell } from '@/components/admin/editor/EditorShell'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
+import { DeleteBox } from '@/components/admin/editor/DeleteBox'
+import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
@@ -68,8 +70,12 @@ export default function HotelDetailPage() {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Dilacak: info hotel (form + alamat). Periode/layanan/tipe kamar tersimpan langsung per aksi, bukan lewat tombol Simpan.
-  const { dirty, markClean } = useDirtyForm(hotel ? { form, address } : null)
+  const { dirty, markClean, patchClean } = useDirtyForm(hotel ? { form, address } : null)
   useUnsavedGuard(dirty)
+  const del = useDeleteEntity(`/api/v1/admin/products/hotels/${id}`, `/${locale}/admin/products/hotels`)
+  async function handleDelete() {
+    if (await del.run() === 'deactivated') { setForm(f => ({ ...f, isActive: false })); patchClean(prev => ({ ...prev, form: { ...prev.form, isActive: false } })) }
+  }
 
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
@@ -225,7 +231,11 @@ export default function HotelDetailPage() {
     <EditorShell
       backHref={`/${locale}/admin/products/hotels`}
       backLabel="Daftar Hotel"
-      banner={error ? <p role="alert" className="m-0 rounded-xl bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
+      banner={
+        (error || del.error || del.notice) ? (
+          <p role={del.notice && !error && !del.error ? 'status' : 'alert'} className={`m-0 rounded-xl px-3 py-2 text-sm font-medium ${del.notice && !error && !del.error ? 'border border-admin-line bg-admin-spot text-admin-ink' : 'bg-admin-danger/10 text-admin-danger'}`}>{error ?? del.error ?? del.notice}</p>
+        ) : undefined
+      }
       title={
         <div className="space-y-3">
           <label htmlFor="hotel-name" className="sr-only">Nama hotel</label>
@@ -261,6 +271,10 @@ export default function HotelDetailPage() {
               <input id="hotel-distance" type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
             </div>
           </MetaBox>
+          <DeleteBox
+            confirmText="Hapus hotel ini beserta periode, harga kamar, layanan, dan alamatnya? Bila sudah dipakai booking atau paket, ia hanya dinonaktifkan (bisa diaktifkan kembali)."
+            onDelete={handleDelete} deleting={del.deleting}
+          />
         </>
       }
       mobileBar={

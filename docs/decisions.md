@@ -2857,3 +2857,16 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `components/admin/shell/{EditPage,useEditEntity}`, `components/admin/editor/*`, `components/shared/rich-text/RichTextEditorImpl.tsx`, 8 halaman edit produk, `scripts/test-{admin-editor,admin-crud,haji-pricing}.ts`, docs.
 
+## 2026-10-27 — Hapus-aman untuk produk yang belum punya hapus (Muthowif, Situs, Hotel, Paket Umroh, Paket Ziarah, Visa)
+**Decision:** Semua penghapusan produk ini lewat `lib/admin/productDelete.ts` + `deleteOrDeactivate`: hapus fisik hanya bila tak ada riwayat yang merujuk, selain itu nonaktif dengan pesan. Rujukan `ON DELETE SET NULL` dihitung eksplisit; baris polimorfik (biaya, vendor pilihan, syarat dokumen, field manifest) dihapus di transaksi yang sama dan foto setelah commit; pemeriksaan ulang di bawah `SELECT … FOR UPDATE` pada baris induk; penyidik FK dan tabel polimorfik di tes membuat perubahan skema yang belum dipertimbangkan jadi merah.
+
+**Rationale:** FK `SET NULL` tidak menolak hapus — ia mengosongkan riwayat (penugasan muthowif, pengajuan visa, hotel di paket), sehingga hanya penghitungan eksplisit yang melindungi. Tabel polimorfik tak punya FK sehingga yatim bila tak dibersihkan (Visa lama meninggalkan yatim). Tanpa kunci baris, hitung→hapus bisa disalip rujukan baru. Penyidik skema mengubah "ingat untuk memperbarui" menjadi kegagalan CI.
+
+**Alternatives considered:** Mengandalkan FK RESTRICT + tangkap P2003 saja (ditolak: SET NULL tidak melempar); fungsi hapus generik berbasis introspeksi pg_constraint (ditolak: sulit membedakan anak milik vs riwayat, dan SQL dinamis lebih berisiko); soft-delete saja tanpa hapus fisik (ditolak: arahan pemilik — hapus sungguhan bila memang tak terpakai).
+
+**Security check (SOP langkah 5):** 1 temuan Low dicatat (SEC-70: kunci Hotel hanya pada baris hotel, jendela sempit untuk SET NULL tingkat jadwal; hanya admin yang memicu). 0 Critical/High. `requireManager` di awal tiap DELETE (dijaga tes), 401/403/404/500 dibedakan, tanpa body/Prisma mentah, `$queryRaw` hanya dengan nama tabel dari union literal (dikomentari), `bun audit` tanpa critical.
+
+**Verifikasi:** tsc; `bun run build` (terisolasi) 0 error; `bun run test` 424 PASS (13 tes baru DB sungguhan termasuk race); 6 mutasi tertangkap; Chrome asli 8 entitas (hapus + nonaktif + aktifkan kembali); data uji dibersihkan.
+
+**Affects:** `lib/admin/productDelete.ts`, 6 route `DELETE`, `components/admin/editor/{useDeleteEntity,useDirtyForm}`, halaman edit Muthowif/Situs/Hotel/Paket/Ziarah/Visa, `scripts/test-admin-{delete,editor}.ts`, `package.json`, docs.
+

@@ -17,7 +17,7 @@ export default function MuthowifEditPage() {
   const list = `/${locale}/admin/products/muthowif`
   const e = useEditEntity<Muthowif>(`/api/v1/admin/products/muthowif/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
-  const { dirty, markClean } = useDirtyForm(form)
+  const { dirty, markClean, patchClean } = useDirtyForm(form)
 
   // Formulir diisi SEKALI dari data yang dimuat; simpan berikutnya hanya menggeser baseline.
   useEffect(() => {
@@ -46,6 +46,11 @@ export default function MuthowifEditPage() {
         if (ok) markClean(form)
       }}
       saving={e.saving} canSubmit={!!form.name.trim() && Number(form.dailyCapacity) > 0} error={e.error} notice={e.notice}
+      remove={{
+        confirmText: 'Hapus muthowif ini? Bila pernah ditugaskan ke booking, ia hanya dinonaktifkan (riwayat penugasan tetap utuh, bisa diaktifkan kembali).',
+        onDelete: async () => { if (await e.remove() === 'deactivated') { setForm(p => p && ({ ...p, isActive: false })); patchClean({ isActive: false }) } },
+        deleting: e.deleting,
+      }}
       media={<MediaField productType="muthowif" productId={id} label="Foto Profil Muthowif" />}
       mediaTitle="Foto Profil"
       sidebar={
