@@ -1,6 +1,6 @@
 // Uji migrasi pemilik manual-only (prisma/migrations/20261028170000_price_points_manual_owners; docs/arsitektur-harga-terpadu.md §16, Fase 3).
 // Katering (tiga musim) dan Layanan Hotel: harga yang sudah diisi admin disalin sebagai HARGA MANUAL titik harga (modal NULL), harga 0 dilewati, idempoten, tidak
-// menimpa titik yang sudah ada, dan tanpa drift skema (uji drift terbaru berada di berkas ini).
+// menimpa titik yang sudah ada.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -80,7 +80,6 @@ async function scenario(setup: string) {
   const res = run(dbUrl(name), ['migrate', 'deploy', '--schema', 'schema.prisma'])
   return { name, ...res }
 }
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const points = (name: string) => query(name, `select "ownerType" as t, "variantKey" as v, unit, "costIdr"::float as cost, "autoSellIdr"::float as auto, "manualSellIdr"::float as manual, "sellIdr"::float as sell from price_points where "ownerType" in ('catering','hotel_service') order by "ownerType", "ownerId", "variantKey"`)
 
 async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<string, string>>) {
@@ -126,12 +125,7 @@ await t('tabel kosong aman', async () => {
   const r = await scenarioWith(async () => ({}))
   assert.equal(r.code, 0, r.out.slice(-300)); assert.equal((await points(r.name)).length, 0)
 })
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-600)}`)
-})
+// Uji drift skema ada di migrasi TERBARU (scripts/test-price-snapshots-migration.ts) — di sini skema sudah lebih maju dari migrasi yang diuji.
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

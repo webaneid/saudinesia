@@ -17,7 +17,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         muthowif:   { include: { muthowif: true } },
         catering:   { include: { cateringOption: true } },
         tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
-        pilgrims:   { include: { visaApplication: true, documents: true } },
+        // modal/jejak kurs-vendor beku Visa TIDAK boleh sampai ke pilgrim (invarian I5, docs/arsitektur-harga-terpadu.md §17)
+        pilgrims:   { include: { visaApplication: { omit: { hppSnapshotRupiah: true, exchangeRateIdsUsed: true, vendorIdsUsed: true } }, documents: true } },
         payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
       },
     })

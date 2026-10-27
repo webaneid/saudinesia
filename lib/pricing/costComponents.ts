@@ -10,6 +10,8 @@ type CostTier = { minDays: number; maxDays: number; cost: number }
 const PROBE_DAY = 1
 
 export type ComponentBreakdown = {
+  /** ProductCost.id — kunci baris snapshot harga (nama komponen boleh kembar antar vendor). */
+  costId: string
   costComponent: string
   vendorId: string
   currency: string
@@ -47,7 +49,7 @@ export async function computeCostComponents(productType: string, productId: stri
     }
 
     const sellPrice = roundToNearest(hppRupiah * (1 + minMarginPercent / 100), roundingIncrement)
-    components.push({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice, rateId })
+    components.push({ costId: c.id, costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice, rateId })
   }
 
   return { components, totalSellPrice: components.reduce((sum, c) => sum + c.sellPrice, 0) }
