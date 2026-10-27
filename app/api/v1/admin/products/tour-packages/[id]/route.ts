@@ -3,11 +3,11 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
-import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteTourPackage } from '@/lib/admin/productDelete'
-import { sellPrice } from '@/lib/pricing/engine/read'
+import { sellPrice, sellPrices } from '@/lib/pricing/engine/read'
 
 // transportTripId/includedTransportPricingId nullable eksplisit — admin bisa MELEPAS (kirim
 // null), bukan cuma "tidak diubah". transportMode/hotelMode adalah pemilih 3-mode (included/
@@ -44,7 +44,20 @@ export async function GET(_req: Request, { params }: Ctx) {
       },
     })
     if (!pkg) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok({ ...pkg, price: await sellPrice('tour_package', id) })) // harga paket sendiri dari titik harga
+    // Kolom `price` sub-modul sudah dihapus (harga terpadu Fase 5): editor membaca `price` bersarang, jadi disematkan lagi dari titik harga.
+    const [transport, hotel, self] = await Promise.all([
+      sellPrices('transport', [...(pkg.transportTrip?.pricing.map(p => p.id) ?? []), ...(pkg.includedTransportPricingId ? [pkg.includedTransportPricingId] : [])]),
+      sellPrices('hotel', [...pkg.hotels.map(h => h.hotelRoomScheduleId), ...pkg.hotelOptions.map(o => o.hotelRoomScheduleId)]),
+      sellPrice('tour_package', id),
+    ])
+    const p = (m: Map<string, number>, row: { id: string }) => ({ ...row, price: m.get(row.id) ?? 0 })
+    return NextResponse.json(ok({
+      ...pkg, price: self,
+      transportTrip: pkg.transportTrip && { ...pkg.transportTrip, pricing: pkg.transportTrip.pricing.map(x => p(transport, x)) },
+      includedTransportPricing: pkg.includedTransportPricing && p(transport, pkg.includedTransportPricing),
+      hotels: pkg.hotels.map(h => ({ ...h, hotelRoomSchedule: p(hotel, h.hotelRoomSchedule) })),
+      hotelOptions: pkg.hotelOptions.map(o => ({ ...o, hotelRoomSchedule: p(hotel, o.hotelRoomSchedule) })),
+    }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -80,7 +93,7 @@ export async function PUT(req: Request, { params }: Ctx) {
 
     const priceAffected = PRICE_AFFECTING_FIELDS.some(f => f in parsed.data)
     if (priceAffected) {
-      await refreshTourPackagePriceCache(id)
+      await repriceOwner('tour_package', id)
     }
 
     return NextResponse.json(ok(pkg))

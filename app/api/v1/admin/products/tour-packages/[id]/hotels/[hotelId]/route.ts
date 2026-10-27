@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
-import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 
 const updateSchema = z.object({
@@ -24,7 +24,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     await prisma.tourPackageHotel.update({ where: { id: hotelId }, data: parsed.data })
-    await refreshTourPackagePriceCache(tourPackageId)
+    await repriceOwner('tour_package', tourPackageId)
 
     return NextResponse.json(ok(null))
   } catch (e) {
@@ -43,7 +43,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     const { id: tourPackageId, hotelId } = await params
 
     await prisma.tourPackageHotel.delete({ where: { id: hotelId } })
-    await refreshTourPackagePriceCache(tourPackageId)
+    await repriceOwner('tour_package', tourPackageId)
 
     return NextResponse.json(ok(null))
   } catch (e) {

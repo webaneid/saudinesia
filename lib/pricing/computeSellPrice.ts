@@ -72,14 +72,14 @@ export async function computeSellPrice(
     vendorUsed.push(component.vendorId)
   }
 
-  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
+  const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
-  const minSellPrice = hppRupiah * (1 + minMarginPercent / 100)
+  const minSellPrice = hppRupiah * (1 + defaultMarginPercent / 100)
   const autoSellPrice = roundToNearest(minSellPrice, roundingIncrement)
   const sellPrice = autoSellPrice
 
   return {
     hppRupiah, minSellPrice, autoSellPrice,
-    marginPercentUsed: minMarginPercent, roundingUsed: roundingIncrement, sellPrice, rateUsed, vendorUsed,
+    marginPercentUsed: defaultMarginPercent, roundingUsed: roundingIncrement, sellPrice, rateUsed, vendorUsed,
   }
 }

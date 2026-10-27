@@ -29,7 +29,7 @@ export type CostComponentsResult = { components: ComponentBreakdown[]; totalSell
  */
 export async function computeCostComponents(productType: string, productId: string): Promise<CostComponentsResult> {
   const costs = await prisma.productCost.findMany({ where: { productType, productId, isActive: true } })
-  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
+  const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
   const components: ComponentBreakdown[] = []
   for (const c of costs) {
@@ -48,7 +48,7 @@ export async function computeCostComponents(productType: string, productId: stri
       rateId = rate.id
     }
 
-    const sellPrice = roundToNearest(hppRupiah * (1 + minMarginPercent / 100), roundingIncrement)
+    const sellPrice = roundToNearest(hppRupiah * (1 + defaultMarginPercent / 100), roundingIncrement)
     components.push({ costId: c.id, costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, hppRupiah, sellPrice, rateId })
   }
 

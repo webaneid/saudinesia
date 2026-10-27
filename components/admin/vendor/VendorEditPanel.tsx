@@ -8,7 +8,7 @@ import { Button } from '@/components/admin/ui/Button'
 import { VendorForm } from './VendorForm'
 import type { VendorCategoryOption, VendorRecord } from './types'
 
-export type VendorUsageView = { costsByType: Record<string, number>; costs: number; preferred: number; visaSnapshots: number; total: number }
+export type VendorUsageView = { costsByType: Record<string, number>; costs: number; preferred: number; snapshots: number; total: number }
 
 const COST_TYPE_LABEL: Record<string, string> = {
   package: 'Paket Umroh', tour_package: 'Paket Ziarah', haji: 'Haji', visa: 'Visa',
@@ -71,7 +71,7 @@ export function VendorEditPanel({ locale, vendor, usage, categories }: Props) {
                 <li key={type} className="flex justify-between"><span className="text-admin-muted">Komponen biaya {COST_TYPE_LABEL[type] ?? type}</span><span className="font-semibold tabular-nums">{n}</span></li>
               ))}
               <li className="flex justify-between"><span className="text-admin-muted">Vendor pilihan</span><span className="font-semibold tabular-nums">{usage.preferred}</span></li>
-              <li className="flex justify-between"><span className="text-admin-muted">Riwayat visa</span><span className="font-semibold tabular-nums">{usage.visaSnapshots}</span></li>
+              <li className="flex justify-between"><span className="text-admin-muted">Riwayat harga pesanan</span><span className="font-semibold tabular-nums">{usage.snapshots}</span></li>
             </ul>
           )}
         </section>

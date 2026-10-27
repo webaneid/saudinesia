@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { priceOwner } from './owners'
 import { lockOwnerPoints } from './lock'
 import { toView } from './view'
-import type { PriceOwnerType, PriceUnit, PriceView, StoredVariant } from './types'
+import type { PriceOwnerType, PriceUnit, PriceView } from './types'
 
 // HARGA MANUAL (docs/arsitektur-harga-terpadu.md §2 I2/I6, §16): admin menetapkan harga jual sendiri; margin default hanyalah saran. Hidup di `price_points`
 // (manualSellIdr), diubah HANYA di sini, dan tiap perubahan tercatat di `price_changes`. Hitung-ulang tak pernah menimpanya (modal bergerak, jual tetap, untung ikut).
@@ -28,11 +28,6 @@ function validAmount(value: number, what: string): number {
   if (!Number.isFinite(value) || value <= 0) throw new PriceInputError(`${what} harus lebih dari 0`)
   if (value > MAX_PRICE_IDR) throw new PriceInputError(`${what} melebihi batas wajar (${MAX_PRICE_IDR.toLocaleString('id-ID')})`)
   return Math.round(value * 100) / 100
-}
-
-async function storedOf(tx: Tx, ownerType: PriceOwnerType, ownerId: string): Promise<StoredVariant[]> {
-  const rows = await tx.pricePoint.findMany({ where: { ownerType, ownerId }, orderBy: { variantKey: 'asc' } })
-  return rows.map(r => ({ variantKey: r.variantKey, sellIdr: Number(r.sellIdr), costIdr: num(r.costIdr) }))
 }
 
 async function ensureOwner(ownerType: PriceOwnerType, ownerId: string): Promise<void> {
@@ -65,7 +60,6 @@ export async function setManualSell(input: PointKey & Actor & { sellIdr: number;
     await tx.priceChange.create({
       data: { ownerType, ownerId, variantKey, kind: 'manual_set', oldSellIdr: oldSell, newSellIdr: sell, oldCostIdr: cost, newCostIdr: cost, note, byUserId },
     })
-    await owner.writeLegacy(tx, ownerId, await storedOf(tx, ownerType, ownerId))
     return toView(row)
   })
   return view
@@ -89,7 +83,6 @@ export async function clearManualSell(input: PointKey & Actor & { note?: string 
     await tx.priceChange.create({
       data: { ownerType, ownerId, variantKey, kind: 'manual_clear', oldSellIdr: num(existing.sellIdr), newSellIdr: auto, oldCostIdr: num(existing.costIdr), newCostIdr: num(existing.costIdr), note, byUserId },
     })
-    await owner.writeLegacy(tx, ownerId, await storedOf(tx, ownerType, ownerId))
     return toView(row)
   })
 }

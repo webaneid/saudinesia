@@ -207,7 +207,6 @@ model HotelRoomSchedule {
   id           String   @id @default(uuid())
   periodId     String
   roomTypeId   String
-  price        Decimal  @db.Decimal(12, 2) // cache hasil computeSellPrice() — TIDAK diisi manual
   totalQuota   Int      @default(0)
   pendingQuota Int      @default(0)
   bookedQuota  Int      @default(0)
@@ -233,7 +232,6 @@ model HotelService {
   hotelId     String
   serviceName String
   serviceType String?
-  price       Decimal @db.Decimal(12, 2)
   description String?
   isActive    Boolean @default(true)
 
@@ -281,7 +279,6 @@ model TransportPricing {
   id        String   @id @default(uuid())
   tripId    String
   vehicleId String
-  price     Decimal  @default(0) @db.Decimal(12, 2) // cache computeSellPrice(), diisi lewat endpoint cost — bukan diisi manual
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
 
@@ -331,7 +328,6 @@ model FlightSchedule {
   routeId       String
   departureFrom DateTime @db.Date // periode mulai — harga & kuota berlaku untuk keberangkatan di rentang ini
   departureTo   DateTime @db.Date // periode akhir
-  price         Decimal  @db.Decimal(12, 2) // cache hasil computeSellPrice() — docs/arsitektur-harga.md, TIDAK diisi manual
   totalSeats    Int      @default(0)
   pendingSeats  Int      @default(0)
   bookedSeats   Int      @default(0)
@@ -381,7 +377,6 @@ model Muthowif {
 
 model MuthowifServicePrice {
   id        String   @id @default(uuid())
-  price     Decimal  @default(0) @db.Decimal(12, 2) // cache computeSellPrice(), diisi lewat endpoint cost
   // Penjaga singleton oleh DB: unik + CHECK (singleton) di migrasi ⇒ paling banyak SATU baris (docs/arsitektur-harga-terpadu.md §1.2-14, §16).
   singleton Boolean  @default(true) @unique
   updatedAt DateTime @updatedAt
@@ -431,7 +426,6 @@ model HajiProduct {
   returnDate    DateTime? @db.Date
   durationDays  Int?
   includes      Json      @default("[]") // list of what's included
-  price         Decimal   @db.Decimal(14, 2)
   priceLabel    String? // e.g. "per orang"
   totalQuota    Int       @default(0)
   pendingQuota  Int       @default(0) // docs/arsitektur-booking.md §6 Step 2 — menutup Gap #1 (docs/arsitektur-umroh.md §7)
@@ -453,7 +447,6 @@ model VisaProduct {
   visaType     String // free text — admin defines (e.g. "Umroh", "Visitor", "Bisnis")
   description  String?
   requirements Json     @default("[]") // VisaRequirement[] — see lib/types/visa.ts
-  price        Decimal  @db.Decimal(12, 2) // cache hasil computeSellPrice() (durasi default) — docs/arsitektur-harga.md §6
   priceLabel   String?
   processDays  Int      @default(14)
   isActive     Boolean  @default(true)
@@ -461,7 +454,6 @@ model VisaProduct {
 
   // BARU (docs/arsitektur-visa.md §9.2) — belum dipakai wizard/booking, lihat gap di docs/arsitektur-visa.md §9.5
   requiredComponents Json @default("[]") // ["hotel","transport"] dst — komponen booking lain yang wajib untuk varian ini
-  durationFeeRules   Json @default("[]") // cache hasil computeSellPrice() per rentang hari — docs/arsitektur-harga.md §6.2
 
   bookingVisa        BookingVisa[]
   visaApplications   VisaApplication[]
@@ -523,7 +515,6 @@ model Package {
   id          String   @id @default(uuid())
   name        String // "Paket Umroh Hemat 9 Hari"
   description String?
-  price       Decimal  @db.Decimal(14, 2) // cache hasil computePackageBreakdown().baseTotal() — TIDAK diisi manual lagi
   priceLabel  String? // "per orang"
   highlights  Json     @default("[]") // bullet points
   isActive    Boolean  @default(true)
@@ -640,9 +631,6 @@ model CateringOption {
   boardType             String
   menuStyle             String
   description           String? // teks kaya (JSON dokumen Tiptap atau teks polos) — docs/arsitektur-editor-teks.md §9
-  pricePerPersonRegular Decimal @db.Decimal(12, 2)
-  pricePerPersonRamadan Decimal @db.Decimal(12, 2)
-  pricePerPersonHajj    Decimal @db.Decimal(12, 2)
   isActive              Boolean @default(true)
 
   bookingCatering    BookingCatering[]
@@ -700,7 +688,6 @@ model TourPackage {
   // TourPackageHotelOption (list opsi, §12.3).
   hotelMode PriceVariableMode @default(none)
 
-  price     Decimal  @default(0) @db.Decimal(14, 2)
   // cache "harga jual paket dasar" (komponen + included transport/hotel saja, TIDAK termasuk
   // opsi user_choice) untuk katalog — harga final dihitung ulang server-side saat booking
   // (docs/arsitektur-ziarah.md §12.4).
@@ -891,10 +878,6 @@ model VisaApplication {
   // DIISI kode manapun: menunggu Gap #1/#2 di docs/arsitektur-visa.md §7 diperbaiki dulu
   // (visaProductId tidak pernah di-set saat create booking, wizard belum punya step pilih VisaProduct).
   selectedDurationDays Int?
-  hppSnapshotRupiah    Decimal? @db.Decimal(14, 2)
-  sellPriceSnapshot    Decimal? @db.Decimal(14, 2)
-  exchangeRateIdsUsed  Json? // string[] — ExchangeRate.id per komponen HPP yang dipakai
-  vendorIdsUsed        Json? // string[] — Vendor.id per komponen HPP yang dipakai
 
   pilgrim     BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
   visaProduct VisaProduct?   @relation(fields: [visaProductId], references: [id])
@@ -1278,7 +1261,7 @@ model PriceChange {
 model PricingRule {
   id                String   @id @default(uuid())
   productType       String   @default("global") // "global" = default semua tipe (kunci sentinel — lib/pricing/pricingHelpers.ts), "visa" = override khusus tipe itu
-  minMarginPercent  Decimal  @db.Decimal(5, 2)
+  defaultMarginPercent  Decimal  @db.Decimal(5, 2)
   roundingIncrement Int      @default(50000)
   warnBelowPercent  Decimal  @default(0) @db.Decimal(5, 2) // ambang "margin tipis" untuk Kesehatan Margin; 0 = hanya peringatkan yang rugi (jual < modal)
   updatedAt         DateTime @updatedAt

@@ -4,6 +4,7 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 const updateSchema = z.object({
   name:        z.string().min(1).optional(),
@@ -30,7 +31,8 @@ export async function GET(_req: Request, { params }: Ctx) {
       },
     })
     if (!trip) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok(trip))
+    const prices = await sellPrices('transport', trip.pricing.map(p => p.id))
+    return NextResponse.json(ok({ ...trip, pricing: trip.pricing.map(p => ({ ...p, price: prices.get(p.id) ?? 0 })) }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

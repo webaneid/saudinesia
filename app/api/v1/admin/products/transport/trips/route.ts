@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 // origin/destination wajib — struktur rute meniru FlightRoute (docs/arsitektur-transportasi.md §9.1)
 const createSchema = z.object({
@@ -25,7 +26,9 @@ export async function GET() {
         },
       },
     })
-    return NextResponse.json(ok(trips))
+    // harga jual tiap kendaraan dari titik harga (kolom `price` sudah dihapus — harga terpadu Fase 5)
+    const prices = await sellPrices('transport', trips.flatMap(t => t.pricing.map(p => p.id)))
+    return NextResponse.json(ok(trips.map(t => ({ ...t, pricing: t.pricing.map(p => ({ ...p, price: prices.get(p.id) ?? 0 })) }))))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

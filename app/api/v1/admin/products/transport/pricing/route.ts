@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     if (existing) return NextResponse.json(err('Kombinasi trip + kendaraan sudah ada'), { status: 409 })
 
     const pricing = await prisma.transportPricing.create({
-      data: { ...parsed.data, price: 0 },
+      data: { ...parsed.data },
       include: {
         trip:    { select: { id: true, name: true, category: true } },
         vehicle: { select: { id: true, name: true, vehicleType: true, capacity: true } },

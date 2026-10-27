@@ -34,9 +34,9 @@ export async function simulateSellPrice(
     hppRupiah += component.cost * Number(rate.sellRate)
   }
 
-  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
+  const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
-  const minSellPrice = hppRupiah * (1 + minMarginPercent / 100)
+  const minSellPrice = hppRupiah * (1 + defaultMarginPercent / 100)
   const sellPrice = roundToNearest(minSellPrice, roundingIncrement)
 
   return { hppRupiah, minSellPrice, sellPrice }

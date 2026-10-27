@@ -1,7 +1,7 @@
 // Fase 1 harga terpadu (docs/arsitektur-harga-terpadu.md §3/§4/§14): mesin harga `lib/pricing/engine` terhadap DATABASE SUNGGUHAN.
-// Dibuktikan: modal/jual/untung per titik harga, harga manual menang atas otomatis, modal hilang tidak mereset harga, "jual tanpa modal" dipungut,
+// Dibuktikan: modal/jual/untung per titik harga, harga manual menang atas otomatis, modal hilang tidak mereset harga, 
 // tier Visa → varian (+ override jadi harga manual, tier dibuang → varian dibuang), komposit (modal = komponen + bagian yang diketahui, null bila tak lengkap),
-// kolom lama TETAP ditulis ganda (ekuivalen dengan perilaku sebelum mesin), pemicu margin menyegarkan titik harga, penyapuan yatim, hapus produk membersihkan
+// pemicu margin menyegarkan titik harga, penyapuan yatim, hapus produk membersihkan
 // titik harga, serta penjaga sumber (satu penulis).
 //
 // PENGAMAN: menulis data sementara → menolak jalan kecuali nama database memuat "test", "_ci" atau "tmp".
@@ -34,7 +34,7 @@ const cleanup: Array<() => Promise<unknown>> = []
 
 const savedRules = await prisma.pricingRule.findMany()
 await prisma.pricingRule.deleteMany({})
-await prisma.pricingRule.create({ data: { productType: GLOBAL_RULE_KEY, minMarginPercent: 20, roundingIncrement: 50000 } })
+await prisma.pricingRule.create({ data: { productType: GLOBAL_RULE_KEY, defaultMarginPercent: 20, roundingIncrement: 50000 } })
 
 const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, nameKey: `${tag} vendor`.toLowerCase(), countryCode: 'SA' } })
 const rate = await prisma.exchangeRate.create({ data: { fromCurrency: 'ZZZ', toCurrency: 'IDR', midRate: 14000, spreadPercent: 5, sellRate: 15000, source: 'TEST' } })
@@ -45,25 +45,24 @@ async function addCost(productType: string, productId: string, component: string
   await prisma.preferredVendor.create({ data: { productType, productId, costComponent: component, vendorId: vendor.id } })
 }
 const roomType = await prisma.roomType.create({ data: { name: `${tag} room`, defaultCapacity: 2 } })
-async function newSchedule(price = 0) {
+async function newSchedule() {
   const hotel = await prisma.hotel.create({ data: { name: `${tag} hotel ${Math.random()}`, city: 'makkah' } })
   const period = await prisma.hotelPricePeriod.create({ data: { hotelId: hotel.id, periodStart: new Date('2090-01-01'), periodEnd: new Date('2090-12-31') } })
-  const schedule = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, price, totalQuota: 5 } })
+  const schedule = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, totalQuota: 5 } })
   return { hotel, schedule }
 }
-const hotelPrice = async (id: string) => Number((await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id } })).price)
+const hotelPrice = async (id: string) => (await getPricePoint('hotel', id))?.sellIdr ?? 0
 const n = (v: unknown) => (v == null ? null : Number(v))
 
 // ── SATU VARIAN: modal / jual / untung ───────────────────────────────────────────────────────────────────────────────
 const h1 = await newSchedule()
 await addCost('hotel', h1.schedule.id, 'kamar', 1_000_000)
-await t('titik harga: modal 1.000.000, jual 1.200.000 (margin 20%, bulat 50.000), untung 200.000 — dan kolom lama ditulis ganda (sama dengan perilaku sebelum mesin)', async () => {
+await t('titik harga: modal 1.000.000, jual 1.200.000 (margin 20%, bulat 50.000), untung 200.000', async () => {
   await repriceOwner('hotel', h1.schedule.id)
   const p = await getPricePoint('hotel', h1.schedule.id)
   assert.ok(p)
   assert.deepEqual([p.costIdr, p.sellIdr, p.profitIdr, p.mode, p.unit], [1_000_000, 1_200_000, 200_000, 'auto', 'room_night'])
   assert.equal(Math.round(p.marginPct ?? 0), 20)
-  assert.equal(await hotelPrice(h1.schedule.id), 1_200_000, 'penulisan ganda ke HotelRoomSchedule.price')
   const row = await prisma.pricePoint.findUniqueOrThrow({ where: { ownerType_ownerId_variantKey: { ownerType: 'hotel', ownerId: h1.schedule.id, variantKey: '' } } })
   assert.deepEqual([n(row.marginPctUsed), row.roundingUsed, row.vendorIds], [20, 50000, [vendor.id]])
 })
@@ -85,21 +84,16 @@ await t('modal dihapus → harga DIPERTAHANKAN (tak direset ke 0), modal ditanda
   await repriceOwner('hotel', h.schedule.id)
   const p = await getPricePoint('hotel', h.schedule.id)
   assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [null, 2_400_000, null], 'modal kosong → untung tak diklaim')
-  assert.equal(await hotelPrice(h.schedule.id), 2_400_000, 'kolom lama tak berubah')
   await prisma.productCost.create({ data: { productType: 'hotel', productId: h.schedule.id, vendorId: vendor.id, costComponent: 'kamar', currency: 'IDR', costTiers: flat(3_000_000) } }) // vendor pilihan masih ada
   await repriceOwner('hotel', h.schedule.id)
   assert.deepEqual([(await getPricePoint('hotel', h.schedule.id))?.costIdr, await hotelPrice(h.schedule.id)], [3_000_000, 3_600_000])
 })
 
-await t('"jual tanpa modal": harga lama > 0 tanpa titik & tanpa modal dipungut (modal null); harga 0 tanpa modal → tak ada titik', async () => {
-  const legacy = await newSchedule(6_000_000)
-  const zero = await newSchedule(0)
-  await repriceOwner('hotel', legacy.schedule.id); await repriceOwner('hotel', zero.schedule.id)
-  const p = await getPricePoint('hotel', legacy.schedule.id)
-  assert.deepEqual([p?.costIdr, p?.sellIdr, p?.mode], [null, 6_000_000, 'auto'])
-  assert.equal(await hotelPrice(legacy.schedule.id), 6_000_000)
-  assert.equal(await getPricePoint('hotel', zero.schedule.id), null)
-  assert.equal(await hotelPrice(zero.schedule.id), 0)
+await t('tanpa modal dan tanpa titik harga → TIDAK ada titik (kolom harga lama sudah tiada: tak ada yang dipungut)', async () => {
+  const bare = await newSchedule()
+  await repriceOwner('hotel', bare.schedule.id)
+  assert.equal(await getPricePoint('hotel', bare.schedule.id), null)
+  assert.equal(await hotelPrice(bare.schedule.id), 0)
 })
 
 await t('harga manual MENANG atas otomatis dan bertahan saat dihitung ulang (jual = manual ?? otomatis); untung ikut modal', async () => {
@@ -112,7 +106,7 @@ await t('harga manual MENANG atas otomatis dan bertahan saat dihitung ulang (jua
   assert.deepEqual([p?.costIdr, p?.sellIdr, p?.mode, p?.profitIdr], [1_500_000, 1_100_000, 'manual', -400_000], 'manual bertahan; modal naik → untung negatif terlihat (tak diblokir)')
   const row = await prisma.pricePoint.findUniqueOrThrow({ where: { ownerType_ownerId_variantKey: { ownerType: 'hotel', ownerId: h.schedule.id, variantKey: '' } } })
   assert.equal(n(row.autoSellIdr), 1_800_000, 'otomatis tetap dihitung di samping manual')
-  assert.equal(await hotelPrice(h.schedule.id), 1_100_000, 'kolom lama = harga efektif')
+  
 })
 
 await t('paralel: 8 hitung ulang bersamaan → tetap SATU titik harga, nilai benar', async () => {
@@ -124,61 +118,56 @@ await t('paralel: 8 hitung ulang bersamaan → tetap SATU titik harga, nilai ben
 })
 
 // ── VISA: varian per tier ────────────────────────────────────────────────────────────────────────────────────────────
-const visa = await prisma.visaProduct.create({ data: { name: `${tag} visa`, visaType: 'Umroh', price: 0 } })
+const visa = await prisma.visaProduct.create({ data: { name: `${tag} visa`, visaType: 'Umroh' } })
 await addCost('visa', visa.id, 'individu', 0, 'IDR', [{ minDays: 1, maxDays: 14, cost: 1_000_000 }, { minDays: 15, maxDays: 30, cost: 1_500_000 }])
-await t('Visa: satu titik harga per tier; harga manual varian (lewat mesin); kolom lama (durationFeeRules + price termurah) ekuivalen', async () => {
+await t('Visa: satu titik harga per tier; harga manual varian (lewat mesin); pembaca tier + "mulai dari"', async () => {
   await repriceOwner('visa', visa.id)
   await setManualSell({ ownerType: 'visa', ownerId: visa.id, variantKey: 'days:15-30', sellIdr: 1_600_000, byUserId: 'u-engine-test' })
   const pts = await getPricePoints('visa', visa.id)
   assert.deepEqual(pts.map(p => [p.variantKey, p.costIdr, p.sellIdr, p.mode]), [['days:1-14', 1_000_000, 1_200_000, 'auto'], ['days:15-30', 1_500_000, 1_600_000, 'manual']])
-  const row = await prisma.visaProduct.findUniqueOrThrow({ where: { id: visa.id } })
-  assert.deepEqual(row.durationFeeRules, [{ minDays: 1, maxDays: 14, fee: 1_200_000 }, { minDays: 15, maxDays: 30, fee: 1_600_000 }])
-  assert.equal(Number(row.price), 1_200_000, '"mulai dari" = termurah')
+  assert.deepEqual((await visaFeeRules([visa.id])).get(visa.id), [{ minDays: 1, maxDays: 14, fee: 1_200_000 }, { minDays: 15, maxDays: 30, fee: 1_600_000 }])
+  assert.equal((await visaPriceSummary([visa.id])).get(visa.id)?.from, 1_200_000, '"mulai dari" = termurah')
   assert.equal(n((await prisma.pricePoint.findUniqueOrThrow({ where: { ownerType_ownerId_variantKey: { ownerType: 'visa', ownerId: visa.id, variantKey: 'days:15-30' } } })).autoSellIdr), 1_800_000, 'otomatis tetap tercatat di samping override')
 })
-await t('Visa: tier dibuang → varian dibuang (tak ada titik harga basi); semua biaya dihapus → durationFeeRules kosong, price lama dipertahankan', async () => {
+await t('Visa: tier dibuang → varian dibuang (tak ada titik harga basi); semua biaya dihapus → tak ada tier/titik harga', async () => {
   await prisma.productCost.updateMany({ where: { productType: 'visa', productId: visa.id }, data: { costTiers: [{ minDays: 1, maxDays: 14, cost: 1_000_000 }] } })
   await repriceOwner('visa', visa.id)
   assert.deepEqual((await getPricePoints('visa', visa.id)).map(p => p.variantKey), ['days:1-14'])
   await prisma.productCost.deleteMany({ where: { productType: 'visa', productId: visa.id } })
   await repriceOwner('visa', visa.id)
   assert.equal((await getPricePoints('visa', visa.id)).length, 0)
-  const row = await prisma.visaProduct.findUniqueOrThrow({ where: { id: visa.id } })
-  assert.deepEqual(row.durationFeeRules, []); assert.equal(Number(row.price), 1_200_000)
+  assert.deepEqual((await visaFeeRules([visa.id])).get(visa.id) ?? [], [])
 })
 
 // ── KOMPOSIT ─────────────────────────────────────────────────────────────────────────────────────────────────────────
-const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'reguler', year: 2090, price: 0 } })
+const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'reguler', year: 2090 } })
 await addCost('haji', haji.id, 'akomodasi', 1_030_000); await addCost('haji', haji.id, 'transportasi', 1_030_000)
-await t('Haji (komposit): jual = Σ jual PER KOMPONEN (bukan satu margin atas total), modal = Σ HPP; kolom lama ditulis ganda', async () => {
+await t('Haji (komposit): jual = Σ jual PER KOMPONEN (bukan satu margin atas total), modal = Σ HPP', async () => {
   await repriceOwner('haji', haji.id)
   const p = await getPricePoint('haji', haji.id)
   // tiap komponen 1.030.000 × 1,2 = 1.236.000 → 1.250.000; dua komponen = 2.500.000 (satu margin atas 2.060.000 akan 2.450.000)
   assert.deepEqual([p?.costIdr, p?.sellIdr, p?.unit], [2_060_000, 2_500_000, 'package'])
-  assert.equal(Number((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).price), 2_500_000)
 })
 await t('Haji tanpa komponen: titik harga TETAP ada bernilai 0 dengan modal null (seperti cache lama yang selalu menulis)', async () => {
-  const empty = await prisma.hajiProduct.create({ data: { name: `${tag} haji kosong`, hajiType: 'reguler', year: 2090, price: 123 } })
+  const empty = await prisma.hajiProduct.create({ data: { name: `${tag} haji kosong`, hajiType: 'reguler', year: 2090 } })
   await repriceOwner('haji', empty.id)
   const p = await getPricePoint('haji', empty.id)
   assert.deepEqual([p?.costIdr, p?.sellIdr], [null, 0])
-  assert.equal(Number((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: empty.id } })).price), 0)
 })
 
 const hp = await newSchedule(); await addCost('hotel', hp.schedule.id, 'kamar', 1_000_000); await repriceOwner('hotel', hp.schedule.id)
 const pkg = await prisma.package.create({
   data: {
-    name: `${tag} paket`, price: 0,
+    name: `${tag} paket`, 
     hotelMakkahMode: 'included', includedHotelMakkahScheduleId: hp.schedule.id, includedHotelMakkahNights: 3, includedHotelMakkahNumRooms: 2, includedHotelMakkahPrice: 1_200_000,
   },
 })
 await addCost('package', pkg.id, 'layanan', 500_000)
-await t('Paket Umroh: modal = komponen + (malam × kamar × modal hotel), jual = komponen + harga hotel tersimpan; kolom lama ditulis ganda', async () => {
+await t('Paket Umroh: modal = komponen + (malam × kamar × modal hotel), jual = komponen + harga hotel tersimpan', async () => {
   await repriceOwner('package', pkg.id)
   const p = await getPricePoint('package', pkg.id)
   // jual: komponen 500.000×1,2=600.000 + hotel 3×2×1.200.000=7.200.000 ; modal: 500.000 + 3×2×1.000.000
   assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [6_500_000, 7_800_000, 1_300_000])
-  assert.equal(Number((await prisma.package.findUniqueOrThrow({ where: { id: pkg.id } })).price), 7_800_000)
 })
 await t('Paket Umroh: bagian included yang modalnya TAK bisa dipastikan (muthowif) → modal paket null, jual tetap benar (untung tak diklaim)', async () => {
   await prisma.package.update({ where: { id: pkg.id }, data: { muthowifMode: 'included', includedMuthowifPrice: 400_000 } })
@@ -187,26 +176,25 @@ await t('Paket Umroh: bagian included yang modalnya TAK bisa dipastikan (muthowi
   assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [null, 8_200_000, null])
 })
 await t('Paket Umroh: hotel included yang titik harganya TANPA modal → modal paket null', async () => {
-  const legacyHotel = await newSchedule(900_000); await repriceOwner('hotel', legacyHotel.schedule.id)
-  const p2 = await prisma.package.create({ data: { name: `${tag} paket2`, price: 0, hotelMadinahMode: 'included', includedHotelMadinahScheduleId: legacyHotel.schedule.id, includedHotelMadinahNights: 2, includedHotelMadinahNumRooms: 1, includedHotelMadinahPrice: 900_000 } })
+  const legacyHotel = await newSchedule(); await setManualSell({ ownerType: 'hotel', ownerId: legacyHotel.schedule.id, sellIdr: 900_000, byUserId: 'u-engine-test' }) // jual tanpa modal
+  const p2 = await prisma.package.create({ data: { name: `${tag} paket2`, hotelMadinahMode: 'included', includedHotelMadinahScheduleId: legacyHotel.schedule.id, includedHotelMadinahNights: 2, includedHotelMadinahNumRooms: 1, includedHotelMadinahPrice: 900_000 } })
   await repriceOwner('package', p2.id)
   const p = await getPricePoint('package', p2.id)
   assert.deepEqual([p?.costIdr, p?.sellIdr], [null, 1_800_000])
   await prisma.package.delete({ where: { id: p2.id } })
 })
 
-const tour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah`, price: 0 } })
+const tour = await prisma.tourPackage.create({ data: { name: `${tag} ziarah` } })
 await addCost('tour_package', tour.id, 'guide', 300_000)
-await t('Paket Ziarah: modal = Σ HPP komponen, jual = Σ jual per komponen; kolom lama ditulis ganda', async () => {
+await t('Paket Ziarah: modal = Σ HPP komponen, jual = Σ jual per komponen', async () => {
   await repriceOwner('tour_package', tour.id)
   const p = await getPricePoint('tour_package', tour.id)
   assert.deepEqual([p?.costIdr, p?.sellIdr], [300_000, 350_000])
-  assert.equal(Number((await prisma.tourPackage.findUniqueOrThrow({ where: { id: tour.id } })).price), 350_000)
 })
 
 // ── PEMICU: margin berubah ───────────────────────────────────────────────────────────────────────────────────────────
-await t('ubah margin + repriceAll → SEMUA titik harga (dasar dan komposit) bergeser, modal tetap, kolom lama ikut', async () => {
-  await prisma.pricingRule.update({ where: { productType: GLOBAL_RULE_KEY }, data: { minMarginPercent: 50, roundingIncrement: 100000 } })
+await t('ubah margin + repriceAll → SEMUA titik harga (dasar dan komposit) bergeser, modal tetap', async () => {
+  await prisma.pricingRule.update({ where: { productType: GLOBAL_RULE_KEY }, data: { defaultMarginPercent: 50, roundingIncrement: 100000 } })
   const failedOwners = await repriceAll()
   assert.deepEqual(failedOwners, [])
   const hp1 = await getPricePoint('hotel', h1.schedule.id)
@@ -230,7 +218,7 @@ await t('pemilik terhapus berantai (hotel) → titik harga yatim disapu; reprice
   assert.equal(await getPricePoint('hotel', h.schedule.id), null)
 })
 await t('hapus produk lewat deleteVisaProduct → titik harga Visa ikut terhapus dalam transaksi yang sama', async () => {
-  const v = await prisma.visaProduct.create({ data: { name: `${tag} visa hapus`, visaType: 'Umroh', price: 0 } })
+  const v = await prisma.visaProduct.create({ data: { name: `${tag} visa hapus`, visaType: 'Umroh' } })
   await addCost('visa', v.id, 'individu', 0, 'IDR', [{ minDays: 1, maxDays: 14, cost: 1_000_000 }])
   await repriceOwner('visa', v.id)
   assert.equal((await getPricePoints('visa', v.id)).length, 1)
@@ -242,16 +230,16 @@ await t('hapus produk lewat deleteVisaProduct → titik harga Visa ikut terhapus
 // ── PEMBACA (Fase 2) ─────────────────────────────────────────────────────────────────────────────────────────────────
 await t('pembaca: sellPrice/sellPrices/withSellPrice mengikuti titik harga dan sama dengan kolom lama (dual-write); tanpa titik → 0 / tak ada di peta', async () => {
   assert.equal(await sellPrice('hotel', h1.schedule.id), 1_500_000) // margin 50% dari tes sebelumnya
-  const none = await newSchedule(0)
+  const none = await newSchedule()
   const map = await sellPrices('hotel', [h1.schedule.id, none.schedule.id])
   assert.deepEqual([map.get(h1.schedule.id), map.has(none.schedule.id)], [1_500_000, false])
   const [row] = await withSellPrice('hotel', [{ id: none.schedule.id, x: 1 }])
   assert.deepEqual(row, { id: none.schedule.id, x: 1, price: 0 })
-  assert.equal(await sellPrice('hotel', h1.schedule.id), await hotelPrice(h1.schedule.id), 'pembaca baru = kolom lama selama penulisan ganda')
+  assert.equal(await sellPrice('hotel', h1.schedule.id), (await getPricePoint('hotel', h1.schedule.id))?.sellIdr, 'pembaca = titik harga')
   assert.deepEqual([...(await sellPrices('hotel', [])).keys()], [])
 })
 await t('requireSellPrice (jalur pesan): tanpa titik atau ≤ 0 → ItemNotBookableError (422), tak pernah gratis; berharga → nilainya; dibaca lewat klien transaksi juga', async () => {
-  const none = await newSchedule(0)
+  const none = await newSchedule()
   const bookable = (e: unknown) => e instanceof ItemNotBookableError && /belum ditetapkan/.test((e as Error).message)
   await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable)
   await prisma.pricePoint.create({ data: { ownerType: 'hotel', ownerId: none.schedule.id, unit: 'room_night', autoSellIdr: 0, sellIdr: 0 } })
@@ -267,7 +255,7 @@ await t('requireSellPrice (jalur pesan): tanpa titik atau ≤ 0 → ItemNotBooka
   await prisma.pricePoint.deleteMany({ where: { ownerId: none.schedule.id } })
 })
 await t('Visa: visaFeeRules urut hari awal; visaPriceSummary = termurah + "rentang" bila ≥ 2 harga berbeda; produk tanpa titik → 0 dan bukan rentang', async () => {
-  const v = await prisma.visaProduct.create({ data: { name: `${tag} visa baca`, visaType: 'Umroh', price: 0 } })
+  const v = await prisma.visaProduct.create({ data: { name: `${tag} visa baca`, visaType: 'Umroh' } })
   await addCost('visa', v.id, 'individu', 0, 'IDR', [{ minDays: 15, maxDays: 30, cost: 2_000_000 }, { minDays: 1, maxDays: 14, cost: 1_000_000 }])
   await repriceOwner('visa', v.id)
   assert.deepEqual((await visaFeeRules([v.id])).get(v.id), [{ minDays: 1, maxDays: 14, fee: 1_500_000 }, { minDays: 15, maxDays: 30, fee: 3_000_000 }]) // margin 50%, bulat 100.000
@@ -277,7 +265,7 @@ await t('Visa: visaFeeRules urut hari awal; visaPriceSummary = termurah + "renta
   assert.equal(await sellPrice("visa", v.id), 1_500_000)
 })
 await t('I5 — respons katalog publik TIDAK memuat modal/margin/HPP/jejak kurs-vendor, dan memuat harga jual dari titik harga', async () => {
-  const forbidden = /"(costIdr|hppRupiah|hpp|marginPct\w*|autoSellIdr|manualSellIdr|fxRateIds|vendorIds|roundingUsed|minMarginPercent)"/
+  const forbidden = /"(costIdr|hppRupiah|hpp|marginPct\w*|autoSellIdr|manualSellIdr|fxRateIds|vendorIds|roundingUsed|defaultMarginPercent)"/
   const call = async (name: string, handler: (r: Request) => Promise<Response>, url: string) => {
     const res = await handler(new Request(url))
     const text = await res.text()
@@ -329,7 +317,7 @@ await prisma.vendor.deleteMany({ where: { id: vendor.id } })
 for (const fn of cleanup) await fn().catch(() => undefined)
 await sweepOrphanPricePoints()
 await prisma.pricingRule.deleteMany({})
-if (savedRules.length) await prisma.pricingRule.createMany({ data: savedRules.map(({ productType, minMarginPercent, roundingIncrement }) => ({ productType, minMarginPercent, roundingIncrement })) })
+if (savedRules.length) await prisma.pricingRule.createMany({ data: savedRules.map(({ productType, defaultMarginPercent, roundingIncrement }) => ({ productType, defaultMarginPercent, roundingIncrement })) })
 await prisma.$disconnect()
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 process.exit(failed ? 1 : 0)

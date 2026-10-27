@@ -1,91 +1,85 @@
-// Fase 2 harga terpadu (docs/arsitektur-harga-terpadu.md §15): TIDAK ADA lagi pembaca kolom harga cache lama di luar mesin harga.
+// Fase 5 harga terpadu (docs/arsitektur-harga-terpadu.md §18): kolom harga lama SUDAH TIADA — `price_points` adalah satu-satunya sumber harga.
 //
-// Cara membuktikan (bukan pencarian teks): skema SALINAN tanpa 13 kolom harga lama (`VisaProduct.price/durationFeeRules`, `FlightSchedule/HotelRoomSchedule/
-// TransportPricing/MuthowifServicePrice/HajiProduct/Package/TourPackage.price`, harga katering 3 musim, `HotelService.price`) → client Prisma di direktori sementara → `tsc` atas seluruh proyek.
-// Setiap galat tipe = satu tempat yang masih membaca/menulis kolom itu. Penulis (`create`/`update` dengan `price`) dikecualikan sampai Fase 5
-// (kolom dihapus); PEMBACA (select/orderBy/where/akses properti) hanya boleh ada di daftar putih admin di bawah — yang WAJIB menyusut dan kosong di Fase 3.
+// Sejak kontraksi, penjaga pembaca lama (Fase 2: skema salinan tanpa kolom → tsc) tak lagi perlu: klien Prisma proyek sendiri tidak mengenal kolom itu, jadi `tsc`/`next build`
+// menolak tiap pembaca/penulis baru. Yang tersisa untuk dijaga dengan tes adalah hal yang kompiler TIDAK lihat: skema, SQL mentah, JSON DTO, dan sisa-sisa kode kontraksi.
 //
-// Tak membutuhkan database (generate client tidak menyambung).
+// Tak membutuhkan database.
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
-// Di dalam node_modules/.cache (diabaikan git): `prisma generate` mencari package.json proyek dari lokasi skema — di luar proyek ia mencoba memasang Prisma via npm.
-const cacheDir = join(root, 'node_modules/.cache')
-mkdirSync(cacheDir, { recursive: true })
-const tmp = mkdtempSync(join(cacheDir, 'price-readers-'))
-
 let failed = 0
 function t(name: string, fn: () => void) {
   try { fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 14).join('\n     ')}`) }
 }
-
-// Pembaca yang SENGAJA masih ada: tampilan admin (halaman/route yang mengembalikan baris + price ke editor lama). Dirombak di Fase 3 (PriceCard) — daftar ini
-// hanya boleh menyusut. Menambah entri di sini = menambah utang; tes juga gagal bila entri sudah tak relevan.
-const ADMIN_READER_ALLOWLIST: readonly string[] = []
-
-const COLUMNS: ReadonlyArray<[string, string]> = [
-  ['VisaProduct', 'price'], ['VisaProduct', 'durationFeeRules'], ['FlightSchedule', 'price'], ['HotelRoomSchedule', 'price'], ['TransportPricing', 'price'],
-  ['MuthowifServicePrice', 'price'], ['HajiProduct', 'price'], ['Package', 'price'], ['TourPackage', 'price'],
-  // Fase 3: pemilik manual-only (harga diisi admin di PriceCard → titik harga; kolom lama ditulis ganda)
-  ['CateringOption', 'pricePerPersonRegular'], ['CateringOption', 'pricePerPersonRamadan'], ['CateringOption', 'pricePerPersonHajj'], ['HotelService', 'price'],
-]
-
-function stripColumns(schema: string): string {
-  let out = schema.replace('provider = "prisma-client-js"', `provider = "prisma-client-js"\n  output   = "${join(tmp, 'gen')}"`)
-  for (const [model, field] of COLUMNS) {
-    const block = new RegExp(`^model ${model} \\{[\\s\\S]*?^\\}`, 'm').exec(out)?.[0]
-    assert.ok(block, `model ${model} tidak ditemukan di schema.prisma`)
-    const next = block.replace(new RegExp(`^\\s*${field}\\s+.*\\n`, 'm'), '')
-    assert.notEqual(next, block, `kolom ${model}.${field} tidak ditemukan — penjaga ini perlu diperbarui`)
-    out = out.replace(block, next)
+function walk(dir: string, out: string[] = []): string[] {
+  for (const f of readdirSync(dir)) {
+    if (f === 'node_modules' || f === '.next' || f.startsWith('.')) continue
+    const p = join(dir, f)
+    if (statSync(p).isDirectory()) walk(p, out)
+    else if (/\.(ts|tsx)$/.test(f)) out.push(p)
   }
   return out
 }
-
-const schemaPath = join(tmp, 'schema.prisma')
-writeFileSync(schemaPath, stripColumns(readFileSync(join(root, 'prisma/schema.prisma'), 'utf8')))
-const gen = spawnSync(join(root, 'node_modules/.bin/prisma'), ['generate', '--schema', schemaPath], { encoding: 'utf8', env: { ...process.env, DATABASE_URL: 'postgresql://x@localhost:5432/x' } })
-assert.equal(gen.status, 0, `prisma generate gagal:\n${(gen.stdout + gen.stderr).slice(-600)}`)
-
-writeFileSync(join(tmp, 'tsconfig.json'), JSON.stringify({
-  extends: join(root, 'tsconfig.json'),
-  compilerOptions: {
-    incremental: false, noEmit: true,
-    paths: { '@prisma/client': [join(tmp, 'gen')], '@/*': [`${root}/*`] },
-  },
-  include: [`${root}/**/*.ts`, `${root}/**/*.tsx`, join(root, 'next-env.d.ts')],
-  exclude: [join(root, 'node_modules'), join(root, '.next'), join(root, '.next-verify')],
-}))
-const tsc = spawnSync(join(root, 'node_modules/.bin/tsc'), ['-p', join(tmp, 'tsconfig.json')], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })
-const errors = `${tsc.stdout}${tsc.stderr}`.split('\n').filter(l => / error TS\d+:/.test(l))
-
-// Galat penulis: tipe sasaran `…CreateInput`/`…UpdateInput` (termasuk Unchecked/Many). Selain itu = pembaca (select/orderBy/where/akses properti/turunannya).
-const WRITER = /(Create|Update)(Many)?(Unchecked)?(Input|ManyMutationInput)|Without<\w*(Create|Update)/
-const ENGINE_OR_TEST = /^(lib\/pricing\/engine\/|scripts\/|prisma\/)/
-const readerFiles = new Set<string>()
-const writerFiles = new Set<string>()
-for (const line of errors) {
-  const file = relative(root, /^(.*?)\(\d+,\d+\): error/.exec(line)?.[1] ?? line) // jalur dapat memuat "(public)" — potong pada "(baris,kolom)"
-  if (ENGINE_OR_TEST.test(file)) continue
-  ;(WRITER.test(line) ? writerFiles : readerFiles).add(file)
+const schema = readFileSync(join(root, 'prisma/schema.prisma'), 'utf8')
+const model = (name: string): string => {
+  const m = new RegExp(`^model ${name} \\{[\\s\\S]*?^\\}`, 'm').exec(schema)
+  assert.ok(m, `model ${name} tidak ditemukan`)
+  return m[0]
 }
+const hasField = (name: string, field: string) => new RegExp(`^\\s+${field}\\s`, 'm').test(model(name))
 
-t('tsc dengan skema tanpa kolom cache berjalan dan menghasilkan galat (kalau 0, penjaga ini buta)', () => {
-  assert.ok(errors.length > 0, `tsc tidak menghasilkan galat apa pun:\n${(tsc.stdout + tsc.stderr).slice(-400)}`)
-})
-t('tidak ada pembaca kolom harga cache lama di luar mesin harga, kecuali daftar putih admin', () => {
-  const offenders = [...readerFiles].filter(f => !ADMIN_READER_ALLOWLIST.includes(f)).sort()
-  assert.deepEqual(offenders, [], `pembaca kolom lama (pindahkan ke lib/pricing/engine/read.ts):\n${offenders.join('\n')}`)
-})
-t('daftar putih tidak basi: setiap entri masih membaca kolom lama (selesai dipindah → hapus dari daftar)', () => {
-  const stale = ADMIN_READER_ALLOWLIST.filter(f => !readerFiles.has(f))
-  assert.deepEqual(stale, [], `entri basi:\n${stale.join('\n')}`)
-})
-console.log(`(info) penulis kolom lama yang menunggu kontraksi Fase 5: ${writerFiles.size} berkas`)
+const REMOVED: ReadonlyArray<[string, string]> = [
+  ['VisaProduct', 'price'], ['VisaProduct', 'durationFeeRules'], ['FlightSchedule', 'price'], ['HotelRoomSchedule', 'price'], ['TransportPricing', 'price'],
+  ['MuthowifServicePrice', 'price'], ['HajiProduct', 'price'], ['Package', 'price'], ['TourPackage', 'price'], ['HotelService', 'price'],
+  ['CateringOption', 'pricePerPersonRegular'], ['CateringOption', 'pricePerPersonRamadan'], ['CateringOption', 'pricePerPersonHajj'],
+  ['VisaApplication', 'hppSnapshotRupiah'], ['VisaApplication', 'sellPriceSnapshot'], ['VisaApplication', 'exchangeRateIdsUsed'], ['VisaApplication', 'vendorIdsUsed'],
+  ['PricingRule', 'minMarginPercent'],
+]
 
-rmSync(tmp, { recursive: true, force: true })
+t('skema: 17 kolom harga/riwayat lama dan `minMarginPercent` tidak ada lagi; `defaultMarginPercent` ada', () => {
+  for (const [m, f] of REMOVED) assert.ok(!hasField(m, f), `${m}.${f} masih ada di schema.prisma`)
+  assert.ok(hasField('PricingRule', 'defaultMarginPercent'))
+})
+
+const code = [...walk(join(root, 'app')), ...walk(join(root, 'lib')), ...walk(join(root, 'components')), join(root, 'instrumentation-node.ts')]
+const read = (f: string) => readFileSync(f, 'utf8')
+
+t('tidak ada sisa pembungkus `refresh*Cache` / kait penulisan ganda (`writeLegacy`/`adoptLegacy`) / `StoredVariant` di kode', () => {
+  const offenders = code.filter(f => /refresh(Flight|Hotel|Transport|Muthowif|Visa|Package|TourPackage|Haji)[A-Za-z]*Cache|refreshAll(Flight|Hotel|Transport|Muthowif|Visa|Package|TourPackage|Haji)|writeLegacy|adoptLegacy|StoredVariant/.test(read(f)))
+  assert.deepEqual(offenders.map(f => relative(root, f)), [])
+})
+
+t('SQL mentah tidak menyentuh kolom harga lama (kompiler tak melihat string SQL)', () => {
+  const offenders = code.filter(f => {
+    const src = read(f)
+    return /\$(queryRaw|executeRaw)/.test(src) && /(flight_schedules|hotel_room_schedules|transport_pricing|muthowif_service_price|haji_products|"packages"|tour_packages|visa_products|hotel_services|catering_options)[\s\S]{0,80}\bprice\b|pricePerPerson|durationFeeRules|minMarginPercent/.test(src)
+  })
+  assert.deepEqual(offenders.map(f => relative(root, f)), [])
+})
+
+t('nama lama `minMarginPercent` tak muncul di kode aplikasi/skrip uji (rename ke defaultMarginPercent)', () => {
+  const files = [...code, ...walk(join(root, 'scripts'))].filter(f => !f.endsWith('test-price-readers.ts') && !/migration\.ts$/.test(f) && !/test-(pricing-rule|price-points)-migration/.test(f))
+  assert.deepEqual(files.filter(f => /minMarginPercent/.test(read(f))).map(f => relative(root, f)), [])
+})
+
+t('satu pintu hitung ulang: cron kurs & ubah aturan margin memakai refreshAllPricingCaches → repriceAll; komponen biaya memanggil mesin', () => {
+  assert.match(read(join(root, 'lib/pricing/refreshAll.ts')), /repriceAll\(currencies\)/)
+  assert.match(read(join(root, 'lib/cron/exchangeRateJob.ts')), /refreshAllPricingCaches\(updatedCurrencies\)/)
+  assert.match(read(join(root, 'lib/pricing/costComponentOwners.ts')), /repriceOwner\('haji'/)
+})
+
+t('DTO admin bersarang yang kolom `price`-nya dihapus menyematkan harga dari titik harga (kompiler tak melihat include → JSON)', () => {
+  const NESTED: ReadonlyArray<[string, RegExp]> = [
+    ['app/api/v1/admin/products/transport/trips/route.ts', /sellPrices\('transport'/],
+    ['app/api/v1/admin/products/transport/trips/[id]/route.ts', /sellPrices\('transport'/],
+    ['app/api/v1/admin/products/hotels/[id]/periods/[periodId]/route.ts', /withSellPrice\('hotel'/],
+    ['app/api/v1/admin/products/tour-packages/[id]/route.ts', /sellPrices\('transport'[\s\S]*sellPrices\('hotel'/],
+    ['app/api/v1/admin/products/packages/[id]/route.ts', /sellPrices\('transport'[\s\S]*sellPrices\('hotel'[\s\S]*sellPrices\('flight'[\s\S]*visaPriceSummary/],
+  ]
+  for (const [f, re] of NESTED) assert.match(read(join(root, f)), re, `${f}: harga bersarang harus dari titik harga`)
+})
+
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 process.exit(failed ? 1 : 0)

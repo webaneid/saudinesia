@@ -75,7 +75,7 @@ await t('processImage: EXIF (termasuk GPS) dibuang dan orientasi diterapkan', as
 // ── layanan (DB sungguhan) ──
 const tag = `media${Date.now()}`
 const mkHotel = () => prisma.hotel.create({ data: { name: `${tag} hotel`, city: 'makkah' } })
-const mkHaji = () => prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027, price: 0, totalQuota: 1 } })
+const mkHaji = () => prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027, totalQuota: 1 } })
 
 await t('galeri (hotel): foto pertama = sampul; berikutnya bukan; urutan bertambah; objek tampilan + kartu tersimpan', async () => {
   const { storage, objects } = memoryStorage(); const svc = createMediaService(storage)

@@ -1,7 +1,5 @@
 import { prisma } from '@/lib/db'
-import { refreshPackagePriceCache } from './refreshPackagePriceCache'
-import { refreshTourPackagePriceCache } from './refreshTourPackagePriceCache'
-import { refreshHajiPriceCache } from './computeHajiPrice'
+import { repriceOwner } from './engine'
 
 // Registry pemilik Komponen Biaya (docs/arsitektur-komponen-biaya.md §3.1). Modul baru = satu entri di sini + dua berkas route tipis.
 export type CostOwner = {
@@ -16,19 +14,19 @@ export const COST_OWNERS = {
     productType: 'package',
     routeBase: 'packages',
     exists: async (id) => (await prisma.package.findUnique({ where: { id }, select: { id: true } })) !== null,
-    refresh: refreshPackagePriceCache,
+    refresh: (id) => repriceOwner('package', id),
   },
   tour_package: {
     productType: 'tour_package',
     routeBase: 'tour-packages',
     exists: async (id) => (await prisma.tourPackage.findUnique({ where: { id }, select: { id: true } })) !== null,
-    refresh: refreshTourPackagePriceCache,
+    refresh: (id) => repriceOwner('tour_package', id),
   },
   haji: {
     productType: 'haji',
     routeBase: 'haji',
     exists: async (id) => (await prisma.hajiProduct.findUnique({ where: { id }, select: { id: true } })) !== null,
-    refresh: refreshHajiPriceCache,
+    refresh: (id) => repriceOwner('haji', id),
   },
 } as const satisfies Record<string, CostOwner>
 

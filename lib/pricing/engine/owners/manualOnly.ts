@@ -1,8 +1,8 @@
 import { prisma } from '@/lib/db'
-import type { PriceOwner, StoredVariant } from '../types'
+import type { PriceOwner } from '../types'
 
 // Pemilik MANUAL-ONLY (docs/arsitektur-harga-terpadu.md §16): harga jual (dan modal, opsional) diisi admin langsung di PriceCard — tidak ada perhitungan dari
-// Komponen Biaya, jadi hitung-ulang tak menyentuhnya. Kolom lama ditulis ganda dari titik harga sampai Fase 5.
+// Komponen Biaya, jadi hitung-ulang tak menyentuhnya.
 
 export const CATERING_SEASONS = ['regular', 'ramadan', 'hajj'] as const
 export const cateringVariantKey = (season: (typeof CATERING_SEASONS)[number]) => `season:${season}`
@@ -18,16 +18,6 @@ export const cateringOwner: PriceOwner = {
     return new Map(rows.map(r => [r.id, { label: `Katering — ${r.name}`, href: `/admin/products/catering/${r.id}` }]))
   },
   resolve: async () => [],
-  adoptLegacy: async () => null,
-  writeLegacy: async (tx, id, stored: StoredVariant[]) => {
-    const by = new Map(stored.map(v => [v.variantKey, v.sellIdr]))
-    const data = {
-      ...(by.has('season:regular') ? { pricePerPersonRegular: by.get('season:regular')! } : {}),
-      ...(by.has('season:ramadan') ? { pricePerPersonRamadan: by.get('season:ramadan')! } : {}),
-      ...(by.has('season:hajj') ? { pricePerPersonHajj: by.get('season:hajj')! } : {}),
-    }
-    if (Object.keys(data).length > 0) await tx.cateringOption.update({ where: { id }, data })
-  },
 }
 
 export const hotelServiceOwner: PriceOwner = {
@@ -41,9 +31,4 @@ export const hotelServiceOwner: PriceOwner = {
     return new Map(rows.map(r => [r.id, { label: `${r.hotel.name} — layanan ${r.serviceName}`, href: `/admin/products/hotels/${r.hotelId}` }]))
   },
   resolve: async () => [],
-  adoptLegacy: async () => null,
-  writeLegacy: async (tx, id, stored) => {
-    const price = stored.find(v => v.variantKey === '')?.sellIdr
-    if (price !== undefined) await tx.hotelService.update({ where: { id }, data: { price } })
-  },
 }

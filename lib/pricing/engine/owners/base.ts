@@ -1,11 +1,9 @@
 import { prisma } from '@/lib/db'
-import type { PriceOwner, StoredVariant } from '../types'
+import type { PriceOwner } from '../types'
 import { resolveSingle } from './shared'
 
 // Modul dasar satu-varian: Tiket Pesawat, Hotel (jadwal kamar), Transport (rute×kendaraan), Muthowif (singleton).
-// Modal = ProductCost × kurs; jual = margin tipe produk → pembulatan (computeSellPrice). Kolom lama (`price`) ditulis ganda.
-
-const sellOf = (stored: StoredVariant[]) => stored.find(v => v.variantKey === '')?.sellIdr
+// Modal = ProductCost × kurs; jual = margin tipe produk → pembulatan (computeSellPrice).
 
 export const flightOwner: PriceOwner = {
   ownerType: 'flight', unit: 'person', creatableVariants: [{ key: '', unit: 'person' }], dependsOnOthers: false, prunes: false,
@@ -16,14 +14,6 @@ export const flightOwner: PriceOwner = {
     return new Map(rows.map(r => [r.id, { label: `Tiket ${r.route.origin} → ${r.route.destination} (${r.departureFrom.toISOString().slice(0, 10)})`, href: `/admin/products/flight/${r.id}` }]))
   },
   resolve: id => resolveSingle('flight', id, 'person'),
-  adoptLegacy: async id => {
-    const r = await prisma.flightSchedule.findUnique({ where: { id }, select: { price: true } })
-    return r ? Number(r.price) : null
-  },
-  writeLegacy: async (tx, id, stored) => {
-    const price = sellOf(stored)
-    if (price !== undefined) await tx.flightSchedule.update({ where: { id }, data: { price } })
-  },
 }
 
 export const hotelOwner: PriceOwner = {
@@ -35,14 +25,6 @@ export const hotelOwner: PriceOwner = {
     return new Map(rows.map(r => [r.id, { label: `${r.period.hotel.name} — ${r.roomType.name} (${r.period.periodStart.toISOString().slice(0, 10)} s/d ${r.period.periodEnd.toISOString().slice(0, 10)})`, href: `/admin/products/hotels/${r.period.hotelId}` }]))
   },
   resolve: id => resolveSingle('hotel', id, 'room_night'),
-  adoptLegacy: async id => {
-    const r = await prisma.hotelRoomSchedule.findUnique({ where: { id }, select: { price: true } })
-    return r ? Number(r.price) : null
-  },
-  writeLegacy: async (tx, id, stored) => {
-    const price = sellOf(stored)
-    if (price !== undefined) await tx.hotelRoomSchedule.update({ where: { id }, data: { price } })
-  },
 }
 
 export const transportOwner: PriceOwner = {
@@ -54,14 +36,6 @@ export const transportOwner: PriceOwner = {
     return new Map(rows.map(r => [r.id, { label: `${r.trip.name} — ${r.vehicle.name}`, href: `/admin/products/transport/trips/${r.tripId}` }]))
   },
   resolve: id => resolveSingle('transport', id, 'vehicle'),
-  adoptLegacy: async id => {
-    const r = await prisma.transportPricing.findUnique({ where: { id }, select: { price: true } })
-    return r ? Number(r.price) : null
-  },
-  writeLegacy: async (tx, id, stored) => {
-    const price = sellOf(stored)
-    if (price !== undefined) await tx.transportPricing.update({ where: { id }, data: { price } })
-  },
 }
 
 // Tarif layanan muthowif adalah SINGLETON (docs/arsitektur-muthowif.md §10) dan sejak Fase 3 dijaga DB (kolom `singleton` unik + CHECK) — paling banyak satu baris.
@@ -71,12 +45,4 @@ export const muthowifOwner: PriceOwner = {
   existing: async ids => (await prisma.muthowifServicePrice.findMany({ where: { id: { in: ids } }, select: { id: true } })).map(r => r.id),
   describe: async ids => new Map(ids.map(id => [id, { label: 'Tarif layanan muthowif (per orang per hari)', href: '/admin/products/muthowif' }])),
   resolve: id => resolveSingle('muthowif', id, 'person_day'),
-  adoptLegacy: async id => {
-    const r = await prisma.muthowifServicePrice.findUnique({ where: { id }, select: { price: true } })
-    return r ? Number(r.price) : null
-  },
-  writeLegacy: async (tx, id, stored) => {
-    const price = sellOf(stored)
-    if (price !== undefined) await tx.muthowifServicePrice.update({ where: { id }, data: { price } })
-  },
 }

@@ -3,11 +3,11 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
-import { refreshPackagePriceCache } from '@/lib/pricing/refreshPackagePriceCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deletePackage } from '@/lib/admin/productDelete'
-import { cateringSeasonPrices, sellPrice } from '@/lib/pricing/engine/read'
+import { cateringSeasonPrices, sellPrice, sellPrices, visaPriceSummary } from '@/lib/pricing/engine/read'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -85,7 +85,29 @@ export async function GET(_req: Request, { params }: Ctx) {
       },
     })
     if (!pkg) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    return NextResponse.json(ok({ ...pkg, price: await sellPrice('package', id) })) // harga paket sendiri dari titik harga; harga sub-modul bersarang menyusul bersama PriceCard
+    // Kolom `price` sub-modul sudah dihapus (harga terpadu Fase 5): editor membaca `price` bersarang, jadi disematkan lagi dari titik harga.
+    const ids = <T,>(xs: Array<T | null | undefined>): T[] => xs.filter((x): x is T => x != null)
+    const [transport, hotel, flight, visa, self] = await Promise.all([
+      sellPrices('transport', ids([...(pkg.transportTrip?.pricing.map(p => p.id) ?? []), pkg.includedTransportPricingId])),
+      sellPrices('hotel', ids([...pkg.hotelOptions.map(o => o.hotelRoomScheduleId), pkg.includedHotelMakkahScheduleId, pkg.includedHotelMadinahScheduleId])),
+      sellPrices('flight', ids([...(pkg.flightRoute?.schedules.map(s => s.id) ?? []), pkg.includedFlightScheduleId])),
+      visaPriceSummary(ids([...pkg.visaOptions.map(o => o.visaProductId), pkg.includedVisaProductId])),
+      sellPrice('package', id),
+    ])
+    const p = (m: Map<string, number>, row: { id: string }) => ({ ...row, price: m.get(row.id) ?? 0 })
+    const visaFrom = (v: { id: string }) => ({ ...v, price: visa.get(v.id)?.from ?? 0 })
+    return NextResponse.json(ok({
+      ...pkg, price: self,
+      transportTrip: pkg.transportTrip && { ...pkg.transportTrip, pricing: pkg.transportTrip.pricing.map(x => p(transport, x)) },
+      includedTransportPricing: pkg.includedTransportPricing && p(transport, pkg.includedTransportPricing),
+      includedHotelMakkahSchedule: pkg.includedHotelMakkahSchedule && p(hotel, pkg.includedHotelMakkahSchedule),
+      includedHotelMadinahSchedule: pkg.includedHotelMadinahSchedule && p(hotel, pkg.includedHotelMadinahSchedule),
+      hotelOptions: pkg.hotelOptions.map(o => ({ ...o, hotelRoomSchedule: p(hotel, o.hotelRoomSchedule) })),
+      includedVisaProduct: pkg.includedVisaProduct && visaFrom(pkg.includedVisaProduct),
+      visaOptions: pkg.visaOptions.map(o => ({ ...o, visaProduct: visaFrom(o.visaProduct) })),
+      flightRoute: pkg.flightRoute && { ...pkg.flightRoute, schedules: pkg.flightRoute.schedules.map(x => p(flight, x)) },
+      includedFlightSchedule: pkg.includedFlightSchedule && p(flight, pkg.includedFlightSchedule),
+    }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -187,7 +209,7 @@ export async function PUT(req: Request, { params }: Ctx) {
 
     const priceAffected = PRICE_AFFECTING_FIELDS.some(f => f in parsed.data)
     if (priceAffected) {
-      await refreshPackagePriceCache(id)
+      await repriceOwner('package', id)
     }
 
     return NextResponse.json(ok(pkg))

@@ -105,7 +105,7 @@ await t('GET [id]: superadmin memuat pemakaian; manager/tanpa login → 403; id 
   const v = await mk('Detail')
   await prisma.productCost.create({ data: { productType: 'haji', productId: randomUUID(), vendorId: v.id, costComponent: 'k', currency: 'IDR', costTiers: [] } })
   const r = await json(await su.vendorGET(get(), ctx(v.id)))
-  assert.equal(r.status, 200); assert.deepEqual(r.body.data.usage, { costsByType: { haji: 1 }, costs: 1, preferred: 0, visaSnapshots: 0, total: 1 })
+  assert.equal(r.status, 200); assert.deepEqual(r.body.data.usage, { costsByType: { haji: 1 }, costs: 1, preferred: 0, snapshots: 0, total: 1 })
   assert.equal((await json(await mg.vendorGET(get(), ctx(v.id)))).status, 403)
   assert.equal((await json(await anon.vendorGET(get(), ctx(v.id)))).status, 403)
   assert.equal((await json(await su.vendorGET(get(), ctx(randomUUID())))).status, 404)
@@ -152,8 +152,7 @@ await t('DELETE: tak dirujuk → HAPUS SUNGGUHAN (alamat dan tautan kategori iku
   await prisma.preferredVendor.create({ data: { productType: 'flight', productId: randomUUID(), costComponent: 'tiket', vendorId: byPref.id } })
   const user = await prisma.user.create({ data: { email: `${tag}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
   const bk = await prisma.booking.create({ data: { bookingCode: `VA${Date.now()}`, userId: user.id, departureDate: new Date('2027-01-01'), returnDate: new Date('2027-01-10'), season: 'regular', totalAmount: 1 } })
-  const pg = await prisma.bookingPilgrim.create({ data: { bookingId: bk.id } })
-  await prisma.visaApplication.create({ data: { bookingPilgrimId: pg.id, visaType: 'umroh', vendorIdsUsed: [bySnap.id] } })
+  await prisma.priceSnapshot.create({ data: { bookingId: bk.id, itemType: 'visa', itemId: randomUUID(), itemLabel: 'Visa', itemQty: 1, description: 'Visa', qty: 1, unit: 'person', unitSellIdr: 1, totalSellIdr: 1, mode: 'auto', vendorIds: [bySnap.id] } }) // riwayat vendor di snapshot harga
   for (const v of [byCost, byPref, bySnap]) {
     const r = await json(await su.vendorDELETE(req(), ctx(v.id)))
     assert.equal(r.status, 200); assert.equal(r.body.data.deleted, false); assert.equal(r.body.data.deactivated, true); assert.match(r.body.data.message, /dinonaktifkan/)
@@ -206,7 +205,7 @@ console.log('== integrasi dengan route biaya ==')
 
 await t('route biaya bersama: vendor NONAKTIF → 400 jelas (menyebut menu Vendor), vendor tak ada → 400, aktif → 201', async () => {
   const H = createCostComponentHandlers('haji', { authorize: async () => undefined })
-  const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027, price: 0, totalQuota: 1 } })
+  const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027, totalQuota: 1 } })
   const v = await mk('UntukBiaya')
   const post = async (vendorId: string) => H.collectionPOST(req({ costComponent: 'K', vendorId, currency: 'IDR', cost: 1000 }), ctx(haji.id))
   assert.equal((await post(v.id)).status, 201)

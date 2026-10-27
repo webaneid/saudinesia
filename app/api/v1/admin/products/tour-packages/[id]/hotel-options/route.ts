@@ -2,7 +2,6 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
 import { z } from 'zod'
 
 // Opsi hotel untuk mode user_choice (docs/arsitektur-ziarah.md §12.3) — daftar tipe kamar yang

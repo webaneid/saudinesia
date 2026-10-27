@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshHotelRoomScheduleCache } from '@/lib/pricing/refreshHotelRoomScheduleCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
@@ -91,7 +91,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     for (const room of rooms) {
       const schedule = await prisma.hotelRoomSchedule.upsert({
         where: { periodId_roomTypeId: { periodId, roomTypeId: room.roomTypeId } },
-        create: { periodId, roomTypeId: room.roomTypeId, totalQuota: room.totalQuota, price: 0 },
+        create: { periodId, roomTypeId: room.roomTypeId, totalQuota: room.totalQuota },
         update: { totalQuota: room.totalQuota },
       })
 
@@ -119,7 +119,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
 
     for (const scheduleId of updatedScheduleIds) {
-      await refreshHotelRoomScheduleCache(scheduleId)
+      await repriceOwner('hotel', scheduleId)
     }
 
     const result = await withSellPrice('hotel', await prisma.hotelRoomSchedule.findMany({

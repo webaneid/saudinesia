@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { refreshMuthowifServicePriceCache } from '@/lib/pricing/refreshMuthowifServicePriceCache'
+import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { SYSTEM_VENDOR_KEYS } from '@/lib/constants/vendor'
 
@@ -26,7 +26,7 @@ const putSchema = z.object({
 async function getOrCreateServicePrice() {
   const existing = await prisma.muthowifServicePrice.findFirst()
   if (existing) return existing
-  return prisma.muthowifServicePrice.create({ data: { price: 0 } })
+  return prisma.muthowifServicePrice.create({ data: {} })
 }
 
 // Vendor sistem 'saudinesia' dibuat oleh MIGRASI (ADR-0003) — di sini hanya dibaca (tak ada lagi pembuatan diam-diam di dalam route).
@@ -92,7 +92,7 @@ export async function PUT(req: Request) {
       update: { vendorId: vendor.id },
     })
 
-    await refreshMuthowifServicePriceCache()
+    await repriceOwner('muthowif', servicePrice.id)
 
     return NextResponse.json(ok({ vendorName: vendor.name, currency, hargaLayanan }))
   } catch (e) {

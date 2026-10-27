@@ -41,7 +41,7 @@ await t('deleteOrDeactivate: tabrakan FK (P2003) saat hapus → jatuh ke nonakti
 // ── DB sungguhan: perilaku route lama yang rusak ──
 await t('DB: rute dengan jadwal NONAKTIF (bug lama: galat FK 500) → dinonaktifkan; rute tanpa rujukan → terhapus', async () => {
   const route = await prisma.flightRoute.create({ data: { origin: `${tag}-A`, destination: `${tag}-B` } })
-  const sched = await prisma.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2031-01-01'), departureTo: new Date('2031-02-01'), price: 0, isActive: false } })
+  const sched = await prisma.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2031-01-01'), departureTo: new Date('2031-02-01'), isActive: false } })
   const del = (id: string) => deleteOrDeactivate({
     references: async () => { const r = await prisma.flightRoute.findUniqueOrThrow({ where: { id }, select: { _count: { select: { schedules: true, packages: true } } } }); return r._count.schedules + r._count.packages },
     remove: () => prisma.flightRoute.delete({ where: { id } }), deactivate: () => prisma.flightRoute.update({ where: { id }, data: { isActive: false } }), usedBy: n => `dipakai ${n}`,

@@ -5,13 +5,9 @@ import type { PriceOwner, ResolvedVariant } from '../types'
 type CostTier = { minDays: number; maxDays: number }
 
 export const visaVariantKey = (minDays: number, maxDays: number) => `days:${minDays}-${maxDays}`
-const parseVariantKey = (key: string) => {
-  const m = /^days:(\d+)-(\d+)$/.exec(key)
-  return m ? { minDays: Number(m[1]), maxDays: Number(m[2]) } : null
-}
 
 // Visa: harga per RENTANG HARI (tier). Satu varian per batas tier unik dari semua komponen biaya; modal = HPP pada hari awal rentang. Harga jual manual per tier
-// hidup di titik harga varian itu (setManualSell; override JSON lama dipindah oleh migrasi Fase 3). Kolom lama: `durationFeeRules` (JSON per tier) + `price` = harga termurah ("mulai dari").
+// hidup di titik harga varian itu (setManualSell; override JSON lama dipindah oleh migrasi Fase 3).
 export const visaOwner: PriceOwner = {
   ownerType: 'visa', unit: 'person', creatableVariants: [], dependsOnOthers: false, prunes: true,
   listIds: async () => (await prisma.visaProduct.findMany({ where: { isActive: true }, select: { id: true } })).map(r => r.id),
@@ -40,16 +36,5 @@ export const visaOwner: PriceOwner = {
     return out
   },
 
-  adoptLegacy: async () => null, // varian Visa hanya lahir dari tier biaya — tak ada harga lama tanpa modal untuk dipungut
 
-  writeLegacy: async (tx, id, stored) => {
-    const durationFeeRules = stored.flatMap(v => {
-      const range = parseVariantKey(v.variantKey)
-      return range ? [{ ...range, fee: v.sellIdr }] : []
-    }).sort((a, b) => a.minDays - b.minDays || a.maxDays - b.maxDays) // urutan tak bergantung pada pemanggil (hitung ulang vs. harga manual)
-    await tx.visaProduct.update({
-      where: { id },
-      data: { ...(durationFeeRules.length > 0 ? { price: Math.min(...durationFeeRules.map(r => r.fee)) } : {}), durationFeeRules },
-    })
-  },
 }

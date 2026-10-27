@@ -41,7 +41,7 @@ export async function POST(req: Request) {
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { highlights, ...rest } = parsed.data
-    const p = await prisma.package.create({ data: { ...rest, description: emptyToNull(rest.description), highlights, price: 0 } })
+    const p = await prisma.package.create({ data: { ...rest, description: emptyToNull(rest.description), highlights } })
     return NextResponse.json(ok(p), { status: 201 })
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })

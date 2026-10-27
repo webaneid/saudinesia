@@ -3,18 +3,17 @@ import { prisma } from '@/lib/db'
 import { PRICE_OWNER_TYPES, priceOwner } from './owners'
 import { lockOwnerPoints } from './lock'
 import { toView } from './view'
-import type { PriceOwnerType, PriceView, PriceUnit, ResolvedVariant, StoredVariant } from './types'
+import type { PriceOwnerType, PriceView, PriceUnit, ResolvedVariant } from './types'
 
-// SATU-SATUNYA penulis tabel `price_points` (invarian I3, docs/arsitektur-harga-terpadu.md). Menulis ganda ke kolom harga lama (dihapus di Fase 5).
-// Dipanggil lewat pembungkus lama (`refresh*Cache`) dan `refreshAllPricingCaches` agar semua pemicu yang ada (biaya berubah, kurs, margin) tetap sama.
+// SATU-SATUNYA penulis tabel `price_points` (invarian I3, docs/arsitektur-harga-terpadu.md).
+// Dipanggil lewat `refreshAllPricingCaches` agar semua pemicu (biaya berubah, kurs, margin) satu pintu.
 
 const num = (d: Prisma.Decimal | null): number | null => (d == null ? null : Number(d))
 
 /**
- * Hitung ulang SEMUA varian satu pemilik dari modalnya, simpan ke `price_points`, tulis ganda ke kolom lama — satu transaksi.
+ * Hitung ulang SEMUA varian satu pemilik dari modalnya, simpan ke `price_points` — satu transaksi.
  *  - Modal ada → modal & harga otomatis diperbarui; harga manual (bila ada) tetap menang atas otomatis.
  *  - Modal hilang/kosong → harga yang ada DIPERTAHANKAN dan modal ditandai kosong (null) — tak pernah direset ke 0, tak pernah diam-diam basi tanpa tanda.
- *  - Belum ada titik harga + modal kosong + kolom lama berisi harga > 0 → harga lama dipungut sebagai titik (modal null): "jual tanpa modal".
  *  - Pemilik sudah dihapus → titik harganya dibersihkan.
  */
 export async function repriceOwner(ownerType: PriceOwnerType, ownerId: string): Promise<void> {
@@ -25,12 +24,10 @@ export async function repriceOwner(ownerType: PriceOwnerType, ownerId: string): 
   }
   if (owner.manualOnly) return // harga diisi admin (PriceCard) — tak ada yang dihitung dari modal
   const resolved = await owner.resolve(ownerId)
-  const legacy = resolved.some(v => v.autoSellIdr == null) ? await owner.adoptLegacy(ownerId) : null
 
   await prisma.$transaction(async tx => {
     await lockOwnerPoints(tx, ownerType, ownerId) // serialkan dengan perubahan harga manual (jangan menimpa nilai yang baru commit)
     const existing = new Map((await tx.pricePoint.findMany({ where: { ownerType, ownerId } })).map(p => [p.variantKey, p]))
-    const stored: StoredVariant[] = []
 
     for (const v of resolved) {
       const ex = existing.get(v.variantKey)
@@ -38,7 +35,6 @@ export async function repriceOwner(ownerType: PriceOwnerType, ownerId: string): 
       let cost: number | null
       if (v.autoSellIdr != null) { auto = v.autoSellIdr; cost = v.costIdr }
       else if (ex) { auto = num(ex.autoSellIdr); cost = null }
-      else if (legacy != null && legacy > 0 && v.variantKey === '') { auto = legacy; cost = null }
       else continue // tak ada modal dan tak ada harga untuk dipertahankan → tak ada titik harga
 
       const manual = v.manualSellIdr !== undefined ? v.manualSellIdr : num(ex?.manualSellIdr ?? null)
@@ -58,14 +54,12 @@ export async function repriceOwner(ownerType: PriceOwnerType, ownerId: string): 
         create: { ownerType, ownerId, variantKey: v.variantKey, ...data },
         update: data,
       })
-      stored.push({ variantKey: v.variantKey, sellIdr: sell, costIdr: cost })
     }
 
     if (owner.prunes) {
       const keep = new Set(resolved.map(v => v.variantKey))
       await tx.pricePoint.deleteMany({ where: { ownerType, ownerId, variantKey: { notIn: [...keep] } } })
     }
-    await owner.writeLegacy(tx, ownerId, stored)
   })
 }
 

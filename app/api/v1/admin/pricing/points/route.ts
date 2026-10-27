@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     ])
     return NextResponse.json(ok({
       points,
-      rule: { marginPercent: rule.minMarginPercent, roundingIncrement: rule.roundingIncrement, warnBelowPercent: warn ? Number(warn.warnBelowPercent) : 0 },
+      rule: { marginPercent: rule.defaultMarginPercent, roundingIncrement: rule.roundingIncrement, warnBelowPercent: warn ? Number(warn.warnBelowPercent) : 0 },
       manualOnly: PRICE_OWNERS[ownerType].manualOnly === true,
       // Varian yang boleh dibuat lewat harga manual (mis. musim katering yang belum diisi) — agar PriceCard dapat menampilkan baris "belum berharga".
       creatable: PRICE_OWNERS[ownerType].creatableVariants.map(v => v.key),

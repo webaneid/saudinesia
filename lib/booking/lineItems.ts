@@ -152,7 +152,7 @@ export async function writeBookingItems(
 
   // ── Pilgrims + Visa applications ───────────────────────────────────────────────────────────────────────────────────
   // visaProductId opsional per jamaah (docs/arsitektur-booking.md §6 Step 6a): tanpa visa = tanpa VisaApplication dan tanpa sumbangan harga. Harga visa = tier
-  // titik harga yang memuat lama tinggal (harga manual menang); kolom beku lama di VisaApplication tetap ditulis dari titik yang SAMA.
+  // titik harga yang memuat lama tinggal (harga manual menang); modal/jejak kurs-vendor beku ada di `price_snapshots`.
   for (const p of data.pilgrims) {
     const pilgrim = await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: p.fieldValues as Prisma.InputJsonValue } })
     if (!p.visaProductId) continue
@@ -169,10 +169,6 @@ export async function writeBookingItems(
         visaType: visaProduct.visaType, // fallback/display, lihat docs/arsitektur-visa.md §2
         status: 'pending_documents',
         selectedDurationDays: p.selectedDurationDays ?? null,
-        hppSnapshotRupiah: point.costIdr,
-        sellPriceSnapshot: point.sellIdr,
-        exchangeRateIdsUsed: point.fxRateIds,
-        vendorIdsUsed: point.vendorIds,
       },
     })
     add({ itemType: 'visa', itemId: application.id, label, detail: p.selectedDurationDays ? `${p.selectedDurationDays} hari` : '', qty: 1 }, [line])

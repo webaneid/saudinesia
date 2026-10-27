@@ -55,7 +55,7 @@ export async function POST(req: Request) {
     // pindah, docs/arsitektur-dokumen.md §5), tapi DocumentRequirement (di bawah) adalah sumber
     // kebenaran BARU — pemanggil baru pakai getDocumentRequirements(), bukan field ini.
     const product = await prisma.visaProduct.create({
-      data: { name, country, visaType, description: emptyToNull(description), requirements, price: 0, priceLabel: priceLabel ?? 'per orang', processDays, isActive },
+      data: { name, country, visaType, description: emptyToNull(description), requirements, priceLabel: priceLabel ?? 'per orang', processDays, isActive },
     })
     if (requirements.length > 0) {
       await prisma.documentRequirement.createMany({

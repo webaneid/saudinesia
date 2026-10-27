@@ -11,7 +11,7 @@ import { z } from 'zod'
 const MAX_MARGIN_PERCENT = 300
 const MAX_ROUNDING_INCREMENT = 10_000_000
 const updateSchema = z.object({
-  minMarginPercent: z.coerce.number().min(0, 'Margin tidak boleh negatif').max(MAX_MARGIN_PERCENT, `Margin maksimal ${MAX_MARGIN_PERCENT}%`),
+  defaultMarginPercent: z.coerce.number().min(0, 'Margin tidak boleh negatif').max(MAX_MARGIN_PERCENT, `Margin maksimal ${MAX_MARGIN_PERCENT}%`),
   roundingIncrement: z.coerce.number().int().positive('Pembulatan harus lebih dari 0').max(MAX_ROUNDING_INCREMENT, `Pembulatan maksimal Rp${MAX_ROUNDING_INCREMENT.toLocaleString('id-ID')}`),
   warnBelowPercent: z.coerce.number().min(0, 'Ambang tidak boleh negatif').max(100, 'Ambang maksimal 100%').optional(),
 }).strict()
@@ -22,7 +22,7 @@ function getOrCreateGlobalRule() {
   return prisma.pricingRule.upsert({
     where: { productType: GLOBAL_RULE_KEY },
     update: {},
-    create: { productType: GLOBAL_RULE_KEY, minMarginPercent: DEFAULT_MARGIN_PERCENT, roundingIncrement: DEFAULT_ROUNDING_INCREMENT },
+    create: { productType: GLOBAL_RULE_KEY, defaultMarginPercent: DEFAULT_MARGIN_PERCENT, roundingIncrement: DEFAULT_ROUNDING_INCREMENT },
   })
 }
 

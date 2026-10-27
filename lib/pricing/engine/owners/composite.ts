@@ -25,7 +25,7 @@ async function partsCost(parts: Part[]): Promise<number | null> {
 }
 
 async function build(ownerType: 'package' | 'tour_package' | 'haji', components: ComponentBreakdown[], autoSell: number, parts: Part[]): Promise<ResolvedVariant[]> {
-  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(ownerType)
+  const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(ownerType)
   const componentCost = components.reduce((s, c) => s + c.hppRupiah, 0)
   const partCost = await partsCost(parts)
   // Tanpa satu pun komponen maupun bagian bermodal → belum ada modal sama sekali.
@@ -34,7 +34,7 @@ async function build(ownerType: 'package' | 'tour_package' | 'haji', components:
     variantKey: '', unit: 'package',
     costIdr: hasAnyCost && partCost != null ? componentCost + partCost : null,
     autoSellIdr: autoSell, // komposit SELALU punya titik harga (juga bernilai 0), seperti cache lama
-    marginPctUsed: minMarginPercent, roundingUsed: roundingIncrement,
+    marginPctUsed: defaultMarginPercent, roundingUsed: roundingIncrement,
     fxRateIds: nums(components.map(c => c.rateId)), vendorIds: nums(components.map(c => c.vendorId)),
   }]
 }
@@ -51,11 +51,6 @@ export const hajiOwner: PriceOwner = {
   resolve: async id => {
     const { components, totalSellPrice } = await computeCostComponents('haji', id)
     return build('haji', components, totalSellPrice, [])
-  },
-  adoptLegacy: async () => null,
-  writeLegacy: async (tx, id, stored) => {
-    const price = stored.find(v => v.variantKey === '')?.sellIdr
-    if (price !== undefined) await tx.hajiProduct.update({ where: { id }, data: { price } })
   },
 }
 
@@ -95,11 +90,6 @@ export const packageOwner: PriceOwner = {
     ]
     return build('package', b.components, packageBaseTotal(b), parts)
   },
-  adoptLegacy: async () => null,
-  writeLegacy: async (tx, id, stored) => {
-    const price = stored.find(v => v.variantKey === '')?.sellIdr
-    if (price !== undefined) await tx.package.update({ where: { id }, data: { price } })
-  },
 }
 
 export const tourPackageOwner: PriceOwner = {
@@ -130,10 +120,5 @@ export const tourPackageOwner: PriceOwner = {
       ...hotelParts,
     ]
     return build('tour_package', b.components, tourBaseTotal(b), parts)
-  },
-  adoptLegacy: async () => null,
-  writeLegacy: async (tx, id, stored) => {
-    const price = stored.find(v => v.variantKey === '')?.sellIdr
-    if (price !== undefined) await tx.tourPackage.update({ where: { id }, data: { price } })
   },
 }
