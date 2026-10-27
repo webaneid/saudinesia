@@ -2831,3 +2831,16 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `prisma/schema.prisma`, `prisma/migrations/20261027180000_product_images_contract/`, `lib/media/service.ts`, `lib/haji/delete.ts`, route hapus Kendaraan/Katering/Visa, pembuat Haji/Hotel/Paket Umroh, `prisma/seed.ts`, `scripts/test-media{,-migration,-contraction}.ts`, `package.json`, docs.
 
+## 2026-10-27 — Tata letak editor admin ala WordPress (F1: Paket Umroh)
+**Decision:** Halaman edit produk memakai tata letak dua kolom: konten di kiri (judul besar, deskripsi, kotak meta yang dapat dilipat), kotak samping lengket di kanan (Terbitkan, Foto Unggulan, Atribut, Ringkasan Harga). Satu set komponen bersama `components/admin/editor/` (`EditorShell`, `MetaBox`, `PublishBox`, `useUnsavedGuard`); tombol Simpan hanya aktif saat ada perubahan dan kotak Terbitkan menyebut jujur bahwa kotak komponen tersimpan langsung. Perbaikan sampingan: respons simpan diperiksa (galat tampil), dan muat-ulang akibat kotak komponen tidak menimpa ketikan info yang belum disimpan. Halaman lain menyusul (F2); kategori produk (F3) menunggu model.
+
+**Rationale:** Pengguna admin sudah terbiasa dengan WordPress; status/simpan/foto/harga yang dulu tersebar di tumpukan satu kolom kini selalu terlihat. Komponen bersama mencegah tiap halaman punya gaya sendiri; penjaga CI mencegah kembali ke panel tersebar.
+
+**Alternatives considered:** Hanya menata CSS per halaman (ditolak: gaya menyimpang lagi); menyatukan semua simpan jadi satu tombol (ditolak: mengubah perilaku kotak komponen yang sengaja menyimpan langsung, di luar scope penataan).
+
+**Security check (SOP langkah 5):** 0 temuan. Hanya sisi tampilan — tanpa route, auth, upload, skema, atau dependensi baru; payload PUT tidak berubah; `bun audit` tanpa critical.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` 408 PASS (termasuk `test-admin-editor.ts`); Chrome asli desktop + 390px (sticky, dirty, simpan, mode komponen tak menimpa ketikan, tanpa galat konsol).
+
+**Affects:** `components/admin/editor/*`, `app/[locale]/admin/(protected)/products/packages/[id]/page.tsx`, `scripts/test-admin-editor.ts`, `package.json`, docs.
+

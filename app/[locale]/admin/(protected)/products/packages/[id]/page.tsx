@@ -1,11 +1,15 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Plus, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Package as PackageIcon } from 'lucide-react'
+import { Plus, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Wallet, Package as PackageIcon } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { Badge } from '@/components/admin/ui/Badge'
 import { MediaField } from '@/components/admin/media/MediaField'
+import { EditorShell } from '@/components/admin/editor/EditorShell'
+import { MetaBox } from '@/components/admin/editor/MetaBox'
+import { PublishBox } from '@/components/admin/editor/PublishBox'
+import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -104,15 +108,20 @@ function ModeSelector({ value, onChange }: { value: Mode; onChange: (m: Mode) =>
 }
 
 export default function PackageBuilderPage({ params }: Props) {
-  const router = useRouter()
   const [id, setId] = useState('')
   const [locale, setLocale] = useState('id')
   const [loaded, setLoaded] = useState(false)
 
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
-  const [form, setForm] = useState({ name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true })
+  const EMPTY_FORM = { name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true }
+  const [form, setForm] = useState(EMPTY_FORM)
+  // Baseline info yang tersimpan — dasar penanda "belum disimpan" dan agar muat-ulang akibat kotak komponen TIDAK menimpa ketikan yang belum disimpan.
+  const [baseline, setBaseline] = useState(EMPTY_FORM)
+  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const dirty = JSON.stringify(form) !== JSON.stringify(baseline)
+  useUnsavedGuard(dirty)
 
   const [allHotelSchedules, setAllHotelSchedules] = useState<HotelScheduleOption[]>([])
   const [allTrips, setAllTrips] = useState<Trip[]>([])
@@ -144,16 +153,19 @@ export default function PackageBuilderPage({ params }: Props) {
   const [addCateringOption, setAddCateringOption] = useState({ optionId: '', numPeople: '1', numDays: '1' })
 
 
-  const loadPackage = useCallback(async (pkgId: string) => {
+  const loadPackage = useCallback(async (pkgId: string, resetInfo = false) => {
     const r = await fetch(`/api/v1/admin/products/packages/${pkgId}`)
     const j = await r.json()
     if (j.data) {
       const p: PackageDetail = j.data
       setPkg(p)
-      setForm({
-        name: p.name, description: p.description ?? '', priceLabel: p.priceLabel ?? '',
-        highlights: (p.highlights ?? []).join('\n'), isFeatured: p.isFeatured, isActive: p.isActive,
-      })
+      if (resetInfo) {
+        const info = {
+          name: p.name, description: p.description ?? '', priceLabel: p.priceLabel ?? '',
+          highlights: (p.highlights ?? []).join('\n'), isFeatured: p.isFeatured, isActive: p.isActive,
+        }
+        setForm(info); setBaseline(info)
+      }
       setHmForm({ scheduleId: p.includedHotelMakkahScheduleId ?? '', nights: String(p.includedHotelMakkahNights ?? 1), numRooms: String(p.includedHotelMakkahNumRooms ?? 1) })
       setHdForm({ scheduleId: p.includedHotelMadinahScheduleId ?? '', nights: String(p.includedHotelMadinahNights ?? 1), numRooms: String(p.includedHotelMadinahNumRooms ?? 1) })
       setIncludedPricingChoice(p.transportTripId && p.includedTransportPricingId ? `${p.transportTripId}::${p.includedTransportPricingId}` : '')
@@ -174,7 +186,7 @@ export default function PackageBuilderPage({ params }: Props) {
     params.then(async (p) => {
       setId(p.id); setLocale(p.locale)
       const [, tripsRes, hotelSchedulesRes, visaRes, flightSchedulesRes, cateringRes] = await Promise.all([
-        loadPackage(p.id),
+        loadPackage(p.id, true),
         fetch('/api/v1/admin/products/transport/trips').then(r => r.json()),
         fetch('/api/v1/admin/products/hotels/schedules').then(r => r.json()),
         fetch('/api/v1/admin/products/visa').then(r => r.json()),
@@ -195,21 +207,36 @@ export default function PackageBuilderPage({ params }: Props) {
     await Promise.all([loadPackage(id), loadBreakdown(id)])
   }
 
-  async function patch(body: Record<string, unknown>) {
-    await fetch(`/api/v1/admin/products/packages/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    })
-    await refreshAll()
+  // Satu pintu simpan: respons diperiksa dan galat server ditampilkan (dulu ditelan). Mengembalikan sukses/gagal.
+  async function patch(body: Record<string, unknown>): Promise<boolean> {
+    setError(null)
+    try {
+      const res = await fetch(`/api/v1/admin/products/packages/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        setError(j?.error ?? 'Perubahan gagal disimpan.')
+        return false
+      }
+      await refreshAll()
+      return true
+    } catch {
+      setError('Tidak dapat menghubungi server.')
+      return false
+    }
   }
 
   async function handleSaveInfo() {
     setSaving(true)
-    await patch({
+    const okSaved = await patch({
       name: form.name, description: form.description || null, priceLabel: form.priceLabel || null,
       highlights: form.highlights.split('\n').map(s => s.trim()).filter(Boolean),
       isFeatured: form.isFeatured, isActive: form.isActive,
     })
-    setSaving(false); setSaved(true)
+    setSaving(false)
+    if (!okSaved) return
+    setBaseline(form); setSaved(true)
     setTimeout(() => setSaved(false), 2000)
   }
 
@@ -348,64 +375,78 @@ export default function PackageBuilderPage({ params }: Props) {
   const uniqueFlightRoutes = Array.from(new Map(allFlightSchedules.map(s => [s.route.id, s.route])).values())
   const availableCateringOptions = allCateringOptions.filter(c => !pkg.cateringOptions.some(o => o.cateringOptionId === c.id))
 
+  const baseTotal = breakdown
+    ? breakdown.componentsTotalSellPrice
+      + (breakdown.hotelMakkahMode === 'included' && breakdown.hotelMakkah ? breakdown.hotelMakkah.totalPrice : 0)
+      + (breakdown.hotelMadinahMode === 'included' && breakdown.hotelMadinah ? breakdown.hotelMadinah.totalPrice : 0)
+      + (breakdown.transportMode === 'included' ? (breakdown.includedTransportPrice ?? 0) : 0)
+      + (breakdown.muthowifMode === 'included' ? (breakdown.includedMuthowifPrice ?? 0) : 0)
+      + (breakdown.visaMode === 'included' ? (breakdown.includedVisaPrice ?? 0) : 0)
+      + (breakdown.flightMode === 'included' ? (breakdown.includedFlightPrice ?? 0) : 0)
+      + (breakdown.cateringMode === 'included' ? (breakdown.includedCateringPrice ?? 0) : 0)
+    : null
+
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push(`/${locale}/admin/products/packages`)}
-          className="text-admin-muted/70 hover:text-admin-ink transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <h1 className="admin-h1 flex items-center gap-2"><PackageIcon className="h-5 w-5 text-admin-primary-medium" /> {pkg.name}</h1>
-      </div>
-
-      <div className="admin-form-panel">
-        <MediaField productType="package" productId={pkg.id} label="Foto Unggulan Paket Umroh" />
-      </div>
-
-      {/* Info dasar */}
-      <div className="admin-form-panel space-y-3">
-        <p className="text-sm font-semibold text-admin-ink">Info Paket</p>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div className="md:col-span-2">
-            <p className="text-xs text-admin-muted mb-1">Nama Paket</p>
-            <input className="admin-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-          </div>
-          <div className="md:col-span-2 min-w-0">
-            <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
+    <EditorShell
+      backHref={`/${locale}/admin/products/packages`}
+      backLabel="Paket Umroh"
+      banner={error ? <p role="alert" className="m-0 rounded-xl bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
+      title={
+        <div className="space-y-3">
+          <label htmlFor="package-name" className="sr-only">Nama paket</label>
+          <input
+            id="package-name" className="admin-inp text-lg font-semibold" placeholder="Nama paket umroh"
+            value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+          />
+          <div className="min-w-0">
             <RichTextEditor id="package-description" title="Deskripsi paket umroh" value={form.description} onChange={description => setForm(f => ({ ...f, description }))} placeholder="Ringkasan paket, program, dan keunggulan…" />
           </div>
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Label Harga</p>
-            <input className="admin-inp" placeholder="per orang" value={form.priceLabel} onChange={e => setForm(f => ({ ...f, priceLabel: e.target.value }))} />
-          </div>
-          <div className="flex items-center gap-2 self-end pb-2">
-            <input type="checkbox" id="featured" checked={form.isFeatured} onChange={e => setForm(p => ({ ...p, isFeatured: e.target.checked }))} className="h-4 w-4 accent-admin-accent" />
-            <label htmlFor="featured" className="text-sm text-admin-ink/80">Tampilkan di halaman utama</label>
-          </div>
-          <div className="md:col-span-2">
-            <p className="text-xs text-admin-muted mb-1">Highlight (satu baris per poin)</p>
-            <textarea className="admin-inp" rows={3} value={form.highlights} onChange={e => setForm(f => ({ ...f, highlights: e.target.value }))}
-              placeholder={"Hotel bintang 5 Makkah & Madinah\nVisa Umroh termasuk\nMuthowif berpengalaman"} />
-          </div>
         </div>
-        <label className="flex items-center gap-2.5 cursor-pointer w-fit">
-          <div onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}>
-            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
-          </div>
-          <span className="text-sm font-medium text-admin-ink">Aktif</span>
-        </label>
-        <button onClick={handleSaveInfo} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
-          <Save className="h-3.5 w-3.5" /> {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan'}
+      }
+      sidebar={
+        <>
+          <PublishBox
+            active={form.isActive}
+            onActiveChange={isActive => setForm(f => ({ ...f, isActive }))}
+            options={
+              <label className="flex cursor-pointer items-center gap-2 text-sm text-admin-ink/80">
+                <input type="checkbox" checked={form.isFeatured} onChange={e => setForm(f => ({ ...f, isFeatured: e.target.checked }))} className="h-4 w-4 accent-admin-accent" />
+                Tampilkan di halaman utama
+              </label>
+            }
+            hint="Tombol ini menyimpan nama, deskripsi, highlight, label harga, dan status. Kotak komponen di bawah tersimpan langsung saat diubah."
+            onSave={handleSaveInfo} saving={saving} dirty={dirty} saved={saved} canSave={!!form.name.trim()}
+          />
+          <MetaBox title="Foto Unggulan" icon={PackageIcon} collapsible={false}>
+            <MediaField productType="package" productId={pkg.id} label="Foto Unggulan Paket Umroh" />
+          </MetaBox>
+          <MetaBox title="Atribut">
+            <label htmlFor="package-price-label" className="mb-1 block text-xs text-admin-muted">Label Harga</label>
+            <input id="package-price-label" className="admin-inp" placeholder="per orang" value={form.priceLabel} onChange={e => setForm(f => ({ ...f, priceLabel: e.target.value }))} />
+          </MetaBox>
+          {baseTotal !== null && (
+            <MetaBox title="Ringkasan Harga" icon={Wallet} collapsible={false}>
+              <p className="m-0 text-[11px] text-admin-muted">Harga Jual Paket (dasar) — yang tampil di katalog publik.</p>
+              <p className="m-0 text-xl font-bold text-admin-accent-strong">{rupiah(baseTotal)}</p>
+              <p className="m-0 text-[11px] text-admin-muted">Rincian ada di kotak &quot;Rincian Harga&quot; di bawah.</p>
+            </MetaBox>
+          )}
+        </>
+      }
+      mobileBar={
+        <button type="button" onClick={() => void handleSaveInfo()} disabled={saving || !dirty || !form.name.trim()} className="admin-btn w-full disabled:opacity-50">
+          {saving ? 'Menyimpan…' : saved ? 'Tersimpan ✓' : dirty ? 'Simpan perubahan' : 'Tidak ada perubahan'}
         </button>
-      </div>
+      }
+      main={
+        <>
+      <MetaBox title="Highlight" description="Satu baris per poin — tampil sebagai daftar keunggulan di katalog.">
+        <textarea className="admin-inp" rows={3} value={form.highlights} onChange={e => setForm(f => ({ ...f, highlights: e.target.value }))}
+          placeholder={"Hotel bintang 5 Makkah & Madinah\nVisa Umroh termasuk\nMuthowif berpengalaman"} />
+      </MetaBox>
 
       {/* Hotel Makkah */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-admin-accent" /> Hotel Makkah</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana hotel Makkah masuk ke paket ini — lihat docs/arsitektur-paket-umroh.md §3</p>
-        </div>
+      <MetaBox title="Hotel Makkah" icon={Building2} description="Pilih bagaimana hotel Makkah masuk ke paket ini — lihat docs/arsitektur-paket-umroh.md §3" defaultOpen={pkg.hotelMakkahMode !== 'none'} aside={<Badge tone={pkg.hotelMakkahMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.hotelMakkahMode]}</Badge>}>
         <ModeSelector value={pkg.hotelMakkahMode} onChange={handleSetHotelMakkahMode} />
 
         {pkg.hotelMakkahMode === 'included' && (
@@ -453,14 +494,10 @@ export default function PackageBuilderPage({ params }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Hotel Madinah */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-admin-accent" /> Hotel Madinah</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Sama konsep dengan Hotel Makkah</p>
-        </div>
+      <MetaBox title="Hotel Madinah" icon={Building2} description="Sama konsep dengan Hotel Makkah" defaultOpen={pkg.hotelMadinahMode !== 'none'} aside={<Badge tone={pkg.hotelMadinahMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.hotelMadinahMode]}</Badge>}>
         <ModeSelector value={pkg.hotelMadinahMode} onChange={handleSetHotelMadinahMode} />
 
         {pkg.hotelMadinahMode === 'included' && (
@@ -508,14 +545,10 @@ export default function PackageBuilderPage({ params }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Kendaraan */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Bus className="h-4 w-4 text-admin-accent" /> Kendaraan</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana kendaraan masuk ke paket ini</p>
-        </div>
+      <MetaBox title="Kendaraan" icon={Bus} description="Pilih bagaimana kendaraan masuk ke paket ini" defaultOpen={pkg.transportMode !== 'none'} aside={<Badge tone={pkg.transportMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.transportMode]}</Badge>}>
         <ModeSelector value={pkg.transportMode} onChange={handleSetTransportMode} />
 
         {pkg.transportMode === 'included' && (
@@ -542,14 +575,10 @@ export default function PackageBuilderPage({ params }: Props) {
             </select>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Muthowif */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Users className="h-4 w-4 text-admin-accent" /> Muthowif</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Harga jasa muthowif — singleton, tidak ada opsi untuk dipilih</p>
-        </div>
+      <MetaBox title="Muthowif" icon={Users} description="Harga jasa muthowif — singleton, tidak ada opsi untuk dipilih" defaultOpen={pkg.muthowifMode !== 'none'} aside={<Badge tone={pkg.muthowifMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.muthowifMode]}</Badge>}>
         <ModeSelector value={pkg.muthowifMode} onChange={handleSetMuthowifMode} />
 
         {pkg.muthowifMode === 'included' && (
@@ -562,14 +591,10 @@ export default function PackageBuilderPage({ params }: Props) {
             TIDAK masuk Harga Jual Paket — harga saat ini {rupiah(breakdown.currentMuthowifPrice)}, ditambahkan terpisah saat booking.
           </p>
         )}
-      </div>
+      </MetaBox>
 
       {/* Visa */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><FileText className="h-4 w-4 text-admin-accent" /> Visa</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana visa masuk ke paket ini</p>
-        </div>
+      <MetaBox title="Visa" icon={FileText} description="Pilih bagaimana visa masuk ke paket ini" defaultOpen={pkg.visaMode !== 'none'} aside={<Badge tone={pkg.visaMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.visaMode]}</Badge>}>
         <ModeSelector value={pkg.visaMode} onChange={handleSetVisaMode} />
 
         {pkg.visaMode === 'included' && (
@@ -611,14 +636,10 @@ export default function PackageBuilderPage({ params }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Tiket Pesawat */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Plane className="h-4 w-4 text-admin-accent" /> Tiket Pesawat</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana tiket pesawat masuk ke paket ini</p>
-        </div>
+      <MetaBox title="Tiket Pesawat" icon={Plane} description="Pilih bagaimana tiket pesawat masuk ke paket ini" defaultOpen={pkg.flightMode !== 'none'} aside={<Badge tone={pkg.flightMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.flightMode]}</Badge>}>
         <ModeSelector value={pkg.flightMode} onChange={handleSetFlightMode} />
 
         {pkg.flightMode === 'included' && (
@@ -645,14 +666,10 @@ export default function PackageBuilderPage({ params }: Props) {
             </select>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Katering */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Utensils className="h-4 w-4 text-admin-accent" /> Katering</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana katering masuk ke paket ini</p>
-        </div>
+      <MetaBox title="Katering" icon={Utensils} description="Pilih bagaimana katering masuk ke paket ini" defaultOpen={pkg.cateringMode !== 'none'} aside={<Badge tone={pkg.cateringMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.cateringMode]}</Badge>}>
         <ModeSelector value={pkg.cateringMode} onChange={handleSetCateringMode} />
 
         {pkg.cateringMode === 'included' && (
@@ -701,7 +718,7 @@ export default function PackageBuilderPage({ params }: Props) {
             </button>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Komponen biaya */}
       <CostComponentsPanel
@@ -713,7 +730,7 @@ export default function PackageBuilderPage({ params }: Props) {
 
       {/* Preview Harga — 2 blok: dasar (included) vs opsi tambahan (user_choice) */}
       {breakdown && (
-        <div className="admin-card p-4 space-y-4">
+        <MetaBox title="Rincian Harga" icon={Wallet}>
           <div>
             <p className="text-sm font-semibold text-admin-ink">Harga Jual Paket (dasar)</p>
             <p className="text-[11px] text-admin-muted/70 mt-0.5">Komponen + tiap bagian yang modenya &quot;Included&quot; saja — ini yang tampil di katalog publik.</p>
@@ -768,16 +785,7 @@ export default function PackageBuilderPage({ params }: Props) {
             <div className="flex items-center justify-between rounded-lg px-4 py-2 border-t border-admin-line">
               <span className="text-[13px] font-bold text-admin-ink">Harga Jual Paket</span>
               <span className="text-[15px] font-bold text-admin-accent-strong">
-                {rupiah(
-                  breakdown.componentsTotalSellPrice
-                  + (breakdown.hotelMakkahMode === 'included' && breakdown.hotelMakkah ? breakdown.hotelMakkah.totalPrice : 0)
-                  + (breakdown.hotelMadinahMode === 'included' && breakdown.hotelMadinah ? breakdown.hotelMadinah.totalPrice : 0)
-                  + (breakdown.transportMode === 'included' ? (breakdown.includedTransportPrice ?? 0) : 0)
-                  + (breakdown.muthowifMode === 'included' ? (breakdown.includedMuthowifPrice ?? 0) : 0)
-                  + (breakdown.visaMode === 'included' ? (breakdown.includedVisaPrice ?? 0) : 0)
-                  + (breakdown.flightMode === 'included' ? (breakdown.includedFlightPrice ?? 0) : 0)
-                  + (breakdown.cateringMode === 'included' ? (breakdown.includedCateringPrice ?? 0) : 0)
-                )}
+                {rupiah(baseTotal ?? 0)}
               </span>
             </div>
           </div>
@@ -834,8 +842,10 @@ export default function PackageBuilderPage({ params }: Props) {
               </div>
             </div>
           )}
-        </div>
+        </MetaBox>
       )}
-    </div>
+        </>
+      }
+    />
   )
 }
