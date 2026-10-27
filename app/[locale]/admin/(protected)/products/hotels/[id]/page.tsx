@@ -1,10 +1,15 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, ArrowLeft, Save, Wallet, Trash2, Pencil } from 'lucide-react'
+import { Plus, Save, Wallet, Trash2, Pencil, Building2, ConciergeBell, MapPin, ListChecks } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { useParams } from 'next/navigation'
 import { MediaField } from '@/components/admin/media/MediaField'
+import { EditorShell } from '@/components/admin/editor/EditorShell'
+import { MetaBox } from '@/components/admin/editor/MetaBox'
+import { PublishBox } from '@/components/admin/editor/PublishBox'
+import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
+import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
@@ -61,7 +66,10 @@ export default function HotelDetailPage() {
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
-
+  const [error, setError] = useState<string | null>(null)
+  // Dilacak: info hotel (form + alamat). Periode/layanan/tipe kamar tersimpan langsung per aksi, bukan lewat tombol Simpan.
+  const { dirty, markClean } = useDirtyForm(hotel ? { form, address } : null)
+  useUnsavedGuard(dirty)
 
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
@@ -84,12 +92,13 @@ export default function HotelDetailPage() {
     if (j.data) {
       const h: Hotel = j.data
       setHotel(h)
-      setForm({
+      const f = {
         name: h.name, city: h.city, stars: h.stars ?? 4,
         distanceToHaramM: h.distanceToHaramM ?? 0, description: h.description ?? '',
         facilities: Array.isArray(h.facilities) ? h.facilities : [], isActive: h.isActive,
-      })
-      setAddress(toAddressValue(h.address))
+      }
+      const a = toAddressValue(h.address)
+      setForm(f); setAddress(a); markClean({ form: f, address: a })
     }
   }
   async function loadRoomTypes() {
@@ -122,18 +131,29 @@ export default function HotelDetailPage() {
   }
 
   async function handleSave() {
-    setSaving(true)
-    await fetch(`/api/v1/admin/products/hotels/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        ...form, stars: +form.stars, distanceToHaramM: +form.distanceToHaramM,
-        ...(address.fullAddress.trim() ? { address } : {}),
-      }),
-    })
-    await loadHotel()
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch(`/api/v1/admin/products/hotels/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form, stars: +form.stars, distanceToHaramM: +form.distanceToHaramM,
+          ...(address.fullAddress.trim() ? { address } : {}),
+        }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        setError(j?.error ?? 'Perubahan gagal disimpan.')
+        return
+      }
+      await loadHotel()
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      setError('Tidak dapat menghubungi server.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSavePeriod() {
@@ -202,106 +222,75 @@ export default function HotelDetailPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
-      <div>
-        <a
-          href={`/${locale}/admin/products/hotels`}
-          className="inline-flex items-center gap-1.5 text-[12px] text-admin-muted hover:text-admin-ink transition-colors mb-3"
-        >
-          <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke daftar hotel
-        </a>
-        <h1 className="admin-h1 flex items-center gap-2">
-          {hotel.name}
-          <span className="text-admin-gold-strong text-lg">{'★'.repeat(form.stars)}</span>
-        </h1>
-      </div>
-
-      {/* Informasi Dasar */}
-      <div className="admin-form-panel space-y-4">
-        <p className="text-sm font-semibold text-admin-ink">Informasi Dasar</p>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Nama Hotel</p>
-            <input className="admin-inp" value={form.name} onChange={set('name')} />
-          </div>
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Kota</p>
-            <select className="admin-select" value={form.city} onChange={set('city')}>
-              <option value="makkah">Makkah</option>
-              <option value="madinah">Madinah</option>
-            </select>
-          </div>
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Bintang</p>
-            <input type="number" min={1} max={5} className="admin-inp" value={form.stars} onChange={set('stars')} />
-          </div>
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Jarak ke Haram (meter)</p>
-            <input type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
-          </div>
-          <div className="md:col-span-2 min-w-0">
-            <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-            <RichTextEditor id="hotel-description" title="Deskripsi hotel" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Tentang hotel, lokasi, fasilitas unggulan, catatan untuk jamaah…" />
-          </div>
+    <EditorShell
+      backHref={`/${locale}/admin/products/hotels`}
+      backLabel="Daftar Hotel"
+      banner={error ? <p role="alert" className="m-0 rounded-xl bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
+      title={
+        <div className="space-y-3">
+          <label htmlFor="hotel-name" className="sr-only">Nama hotel</label>
+          <input id="hotel-name" className="admin-inp text-lg font-semibold" placeholder="Nama hotel" value={form.name} onChange={set('name')} />
+          <RichTextEditor id="hotel-description" title="Deskripsi hotel" value={form.description} onChange={description => setForm(p => ({ ...p, description }))} placeholder="Tentang hotel, lokasi, fasilitas unggulan, catatan untuk jamaah…" />
         </div>
-
-        <div>
-          <p className="text-xs text-admin-muted mb-2">Fasilitas</p>
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-            {HOTEL_FACILITIES.map(f => (
-              <label key={f.code} className="flex items-center gap-2 text-[13px] text-admin-ink/80 cursor-pointer">
-                <input
-                  type="checkbox" className="h-3.5 w-3.5"
-                  checked={form.facilities.includes(f.code)}
-                  onChange={() => toggleFacility(f.code)}
-                />
-                {f.label}
-              </label>
-            ))}
-          </div>
+      }
+      sidebar={
+        <>
+          <PublishBox
+            active={form.isActive}
+            onActiveChange={isActive => setForm(p => ({ ...p, isActive }))}
+            hint="Tombol ini menyimpan info hotel (nama, deskripsi, kota, fasilitas, alamat, status). Periode, harga kamar, dan layanan tersimpan langsung saat diubah."
+            onSave={handleSave} saving={saving} dirty={dirty} saved={saved} canSave={!!form.name.trim()}
+          />
+          <MetaBox title="Galeri Hotel" icon={Building2} collapsible={false}>
+            <MediaField productType="hotel" productId={hotel.id} label="Foto Hotel" />
+          </MetaBox>
+          <MetaBox title="Atribut" icon={ListChecks} collapsible={false}>
+            <div>
+              <label htmlFor="hotel-city" className="mb-1 block text-xs text-admin-muted">Kota</label>
+              <select id="hotel-city" className="admin-select" value={form.city} onChange={set('city')}>
+                <option value="makkah">Makkah</option>
+                <option value="madinah">Madinah</option>
+              </select>
+            </div>
+            <div>
+              <label htmlFor="hotel-stars" className="mb-1 block text-xs text-admin-muted">Bintang</label>
+              <input id="hotel-stars" type="number" min={1} max={5} className="admin-inp" value={form.stars} onChange={set('stars')} />
+            </div>
+            <div>
+              <label htmlFor="hotel-distance" className="mb-1 block text-xs text-admin-muted">Jarak ke Haram (meter)</label>
+              <input id="hotel-distance" type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
+            </div>
+          </MetaBox>
+        </>
+      }
+      mobileBar={
+        <button type="button" onClick={() => void handleSave()} disabled={saving || !dirty || !form.name.trim()} className="admin-btn w-full disabled:opacity-50">
+          {saving ? 'Menyimpan…' : saved ? 'Tersimpan ✓' : dirty ? 'Simpan perubahan' : 'Tidak ada perubahan'}
+        </button>
+      }
+      main={
+        <>
+      <MetaBox title="Fasilitas" icon={ListChecks}>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+          {HOTEL_FACILITIES.map(f => (
+            <label key={f.code} className="flex cursor-pointer items-center gap-2 text-[13px] text-admin-ink/80">
+              <input type="checkbox" className="h-3.5 w-3.5" checked={form.facilities.includes(f.code)} onChange={() => toggleFacility(f.code)} />
+              {f.label}
+            </label>
+          ))}
         </div>
+      </MetaBox>
 
-        <div>
-          <p className="text-xs text-admin-muted mb-2">Alamat (docs/arsitektur-alamat.md)</p>
-          <AddressPicker value={address} onChange={setAddress} />
-        </div>
-
-        <label className="flex items-center gap-2.5 cursor-pointer w-fit">
-          <div
-            onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}
-          >
-            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
-          </div>
-          <span className="text-sm font-medium text-admin-ink">Aktif (tampil di katalog)</span>
-        </label>
-
-        <div className="flex gap-2 pt-1">
-          <button onClick={handleSave} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
-            <Save className="h-3.5 w-3.5" />
-            {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan'}
-          </button>
-        </div>
-      </div>
-
-      {/* Foto */}
-      <div className="admin-card p-5">
-        <MediaField productType="hotel" productId={hotel.id} label="Foto Hotel" />
-      </div>
+      <MetaBox title="Alamat" icon={MapPin} description="docs/arsitektur-alamat.md" defaultOpen={!!address.fullAddress.trim()}>
+        <AddressPicker value={address} onChange={setAddress} />
+      </MetaBox>
 
       {/* Periode & Harga Kamar */}
-      <div className="admin-form-panel space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-admin-ink">Periode &amp; Harga Kamar</p>
-            <p className="text-[11px] text-admin-muted/70 mt-0.5">
-              Satu periode tanggal bisa punya harga berbeda untuk banyak tipe kamar sekaligus — sama seperti rate sheet dari vendor.
-            </p>
-          </div>
-          <button onClick={() => setShowPeriodForm(!showPeriodForm)} className="admin-btn-sm flex items-center gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> Tambah Periode
-          </button>
-        </div>
+      <MetaBox
+        title="Periode & Harga Kamar" icon={Wallet}
+        description="Satu periode tanggal bisa punya harga berbeda untuk banyak tipe kamar sekaligus — sama seperti rate sheet dari vendor."
+        aside={<button onClick={() => setShowPeriodForm(!showPeriodForm)} className="admin-btn-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Tambah Periode</button>}
+      >
 
         {showPeriodForm && (
           <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
@@ -349,19 +338,14 @@ export default function HotelDetailPage() {
             />
           ))}
         </div>
-      </div>
+      </MetaBox>
 
       {/* Layanan Hotel — menutup Gap #3 (docs/arsitektur-hotel.md §8): dulu tidak ada jalur admin */}
-      <div className="admin-form-panel space-y-4">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-admin-ink">Layanan Hotel</p>
-            <p className="text-[11px] text-admin-muted/70 mt-0.5">Layanan tambahan (mis. airport pickup, laundry) yang tampil di halaman publik hotel ini.</p>
-          </div>
-          <button onClick={() => openServiceForm()} className="admin-btn-sm flex items-center gap-1.5">
-            <Plus className="h-3.5 w-3.5" /> Tambah Layanan
-          </button>
-        </div>
+      <MetaBox
+        title="Layanan Hotel" icon={ConciergeBell}
+        description="Layanan tambahan (mis. airport pickup, laundry) yang tampil di halaman publik hotel ini."
+        aside={<button onClick={() => openServiceForm()} className="admin-btn-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Tambah Layanan</button>}
+      >
 
         {showServiceForm && (
           <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
@@ -424,14 +408,10 @@ export default function HotelDetailPage() {
             </div>
           ))}
         </div>
-      </div>
-
-      {/* Danger zone */}
-      <div className="admin-form-panel border-admin-danger/20 space-y-3">
-        <p className="text-sm font-semibold text-admin-danger">Zona Berbahaya</p>
-        <p className="text-[12px] text-admin-muted">Nonaktifkan hotel ini lewat toggle "Aktif" di atas — hapus permanen belum didukung dari sini.</p>
-      </div>
-    </div>
+      </MetaBox>
+        </>
+      }
+    />
   )
 }
 

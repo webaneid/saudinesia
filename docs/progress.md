@@ -816,6 +816,6 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 
 **Admin — tata letak editor ala WordPress (2026-10-27, `docs/arsitektur-admin-editor.md`):**
 - [x] F1 komponen `components/admin/editor/*` + halaman edit Paket Umroh dua kolom (Terbitkan, Foto Unggulan, Atribut, Ringkasan Harga di kanan), penanda perubahan belum disimpan, galat simpan tampil, penjaga CI — selesai 2026-10-27 (Chrome asli desktop + HP)
-- [ ] F2 halaman edit lain: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan
+- [x] F2 halaman edit lain: Haji, Paket Ziarah, Hotel, Visa, Katering, Muthowif, Situs Wisata, Kendaraan (+ Musim/Rute/Pengguna lewat `EditPage`); bug penanda belum-disimpan palsu (editor teks kaya) + 3 galat tertelan ditutup — selesai 2026-10-27 (Chrome asli desktop + HP; 410 PASS)
 - [ ] F3 taksonomi/kategori produk (kotak Kategori di sidebar) — menunggu keputusan model
 

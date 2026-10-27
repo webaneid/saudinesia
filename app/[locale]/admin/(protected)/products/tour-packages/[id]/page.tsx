@@ -1,11 +1,16 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Plus, Pencil, Trash2, MapPin, Landmark, Building2, Bus } from 'lucide-react'
+import { Plus, Pencil, Trash2, MapPin, Landmark, Building2, Bus, Wallet } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { Badge } from '@/components/admin/ui/Badge'
 import { MediaField } from '@/components/admin/media/MediaField'
+import { EditorShell } from '@/components/admin/editor/EditorShell'
+import { MetaBox } from '@/components/admin/editor/MetaBox'
+import { PublishBox } from '@/components/admin/editor/PublishBox'
+import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
+import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -73,7 +78,6 @@ function ModeSelector({ value, onChange }: { value: Mode; onChange: (m: Mode) =>
 }
 
 export default function TourPackageBuilderPage({ params }: Props) {
-  const router = useRouter()
   const [id, setId] = useState('')
   const [locale, setLocale] = useState('id')
   const [loaded, setLoaded] = useState(false)
@@ -82,6 +86,10 @@ export default function TourPackageBuilderPage({ params }: Props) {
   const [form, setForm] = useState({ name: '', description: '', isActive: true })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  // Dilacak: info paket (nama, deskripsi, status). Kotak situs/kendaraan/hotel/biaya tersimpan langsung per aksi.
+  const { dirty, markClean } = useDirtyForm(loaded ? form : null)
+  useUnsavedGuard(dirty)
 
   const [allTrips, setAllTrips] = useState<Trip[]>([])
   const [allSites, setAllSites] = useState<TourismSite[]>([])
@@ -111,17 +119,17 @@ export default function TourPackageBuilderPage({ params }: Props) {
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
 
 
-  const loadPackage = useCallback(async (pkgId: string) => {
+  const loadPackage = useCallback(async (pkgId: string, resetInfo = false) => {
     const r = await fetch(`/api/v1/admin/products/tour-packages/${pkgId}`)
     const j = await r.json()
     if (j.data) {
       const p: PackageDetail = j.data
       setPkg(p)
-      setForm({ name: p.name, description: p.description ?? '', isActive: p.isActive })
+      if (resetInfo) { const f = { name: p.name, description: p.description ?? '', isActive: p.isActive }; setForm(f); markClean(f) }
       setIncludedPricingChoice(p.transportTripId && p.includedTransportPricingId ? `${p.transportTripId}::${p.includedTransportPricingId}` : '')
       setUserChoiceTripId(p.transportMode === 'user_choice' ? (p.transportTripId ?? '') : '')
     }
-  }, [])
+  }, [markClean])
 
   const loadBreakdown = useCallback(async (pkgId: string) => {
     const r = await fetch(`/api/v1/admin/products/tour-packages/${pkgId}/breakdown`)
@@ -133,7 +141,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
     params.then(async (p) => {
       setId(p.id); setLocale(p.locale)
       const [, tripsRes, sitesRes, hotelSchedulesRes] = await Promise.all([
-        loadPackage(p.id),
+        loadPackage(p.id, true),
         fetch('/api/v1/admin/products/transport/trips').then(r => r.json()),
         fetch('/api/v1/admin/products/tourism-sites').then(r => r.json()),
         fetch('/api/v1/admin/products/hotels/schedules').then(r => r.json()),
@@ -150,15 +158,28 @@ export default function TourPackageBuilderPage({ params }: Props) {
     await Promise.all([loadPackage(id), loadBreakdown(id)])
   }
 
+  // Satu pintu simpan info: respons diperiksa dan galat server ditampilkan (dulu ditelan).
   async function handleSaveInfo() {
-    setSaving(true)
-    await fetch(`/api/v1/admin/products/tour-packages/${id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: form.name, description: form.description || null, isActive: form.isActive }),
-    })
-    await refreshAll()
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
+    setSaving(true); setError(null)
+    try {
+      const res = await fetch(`/api/v1/admin/products/tour-packages/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: form.name, description: form.description || null, isActive: form.isActive }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => null)
+        setError(j?.error ?? 'Perubahan gagal disimpan.')
+        return
+      }
+      await refreshAll()
+      markClean(form)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 2000)
+    } catch {
+      setError('Tidak dapat menghubungi server.')
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function handleSetTransportMode(mode: Mode) {
@@ -285,50 +306,49 @@ export default function TourPackageBuilderPage({ params }: Props) {
   const availableHotelOptionSchedules = allHotelSchedules.filter(s => !pkg.hotelOptions.some(o => o.hotelRoomScheduleId === s.id))
   const allPricingFlat = allTrips.filter(t => t.isActive).flatMap(t => t.pricing.map(p => ({ tripId: t.id, tripName: t.name, ...p })))
 
+  const baseTotal = breakdown ? breakdown.componentsTotalSellPrice + breakdown.hotelsTotalPrice + (breakdown.includedTransportPrice ?? 0) : null
+
   return (
-    <div className="space-y-6 max-w-3xl">
-      <div className="flex items-center gap-3">
-        <button onClick={() => router.push(`/${locale}/admin/products/tour-packages`)}
-          className="text-admin-muted/70 hover:text-admin-ink transition-colors">
-          <ArrowLeft className="h-4 w-4" />
-        </button>
-        <h1 className="admin-h1 flex items-center gap-2"><Landmark className="h-5 w-5 text-admin-accent" /> {pkg.name}</h1>
-      </div>
-
-      <div className="admin-form-panel">
-        <MediaField productType="tour_package" productId={pkg.id} label="Galeri Paket Ziarah" />
-      </div>
-
-      {/* Info dasar */}
-      <div className="admin-form-panel space-y-3">
-        <p className="text-sm font-semibold text-admin-ink">Info Paket</p>
-        <div className="grid md:grid-cols-2 gap-3">
-          <div className="md:col-span-2">
-            <p className="text-xs text-admin-muted mb-1">Nama Paket</p>
-            <input className="admin-inp" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
-          </div>
-          <div className="md:col-span-2 min-w-0">
-            <p className="text-xs text-admin-muted mb-1">Deskripsi</p>
-            <RichTextEditor id="tourpackage-description" title="Deskripsi paket ziarah" value={form.description} onChange={description => setForm(f => ({ ...f, description }))} placeholder="Program ziarah, situs yang dikunjungi, dan catatan untuk jamaah…" />
-          </div>
+    <EditorShell
+      backHref={`/${locale}/admin/products/tour-packages`}
+      backLabel="Paket Ziarah"
+      banner={error ? <p role="alert" className="m-0 rounded-xl bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
+      title={
+        <div className="space-y-3">
+          <label htmlFor="tourpackage-name" className="sr-only">Nama paket</label>
+          <input id="tourpackage-name" className="admin-inp text-lg font-semibold" placeholder="Nama paket ziarah" value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} />
+          <RichTextEditor id="tourpackage-description" title="Deskripsi paket ziarah" value={form.description} onChange={description => setForm(f => ({ ...f, description }))} placeholder="Program ziarah, situs yang dikunjungi, dan catatan untuk jamaah…" />
         </div>
-        <label className="flex items-center gap-2.5 cursor-pointer w-fit">
-          <div onClick={() => setForm(p => ({ ...p, isActive: !p.isActive }))}
-            className={`relative w-10 h-5 rounded-full transition-colors ${form.isActive ? 'bg-admin-accent' : 'bg-admin-line-strong'}`}>
-            <span className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${form.isActive ? 'translate-x-5' : ''}`} />
-          </div>
-          <span className="text-sm font-medium text-admin-ink">Aktif</span>
-        </label>
-        <button onClick={handleSaveInfo} disabled={saving || !form.name} className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
-          <Save className="h-3.5 w-3.5" /> {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan'}
+      }
+      sidebar={
+        <>
+          <PublishBox
+            active={form.isActive}
+            onActiveChange={isActive => setForm(f => ({ ...f, isActive }))}
+            hint="Tombol ini menyimpan nama, deskripsi, dan status. Situs, kendaraan, hotel, dan Komponen Biaya tersimpan langsung saat diubah."
+            onSave={handleSaveInfo} saving={saving} dirty={dirty} saved={saved} canSave={!!form.name.trim()}
+          />
+          <MetaBox title="Galeri Paket Ziarah" icon={Landmark} collapsible={false}>
+            <MediaField productType="tour_package" productId={pkg.id} label="Galeri Paket Ziarah" />
+          </MetaBox>
+          {baseTotal !== null && (
+            <MetaBox title="Ringkasan Harga" icon={Wallet} collapsible={false}>
+              <p className="m-0 text-[11px] text-admin-muted">Harga Jual Paket (dasar) — yang tampil di katalog publik.</p>
+              <p className="m-0 text-xl font-bold text-admin-accent-strong">{rupiah(baseTotal)}</p>
+              <p className="m-0 text-[11px] text-admin-muted">Rincian ada di kotak &quot;Rincian Harga&quot; di bawah.</p>
+            </MetaBox>
+          )}
+        </>
+      }
+      mobileBar={
+        <button type="button" onClick={() => void handleSaveInfo()} disabled={saving || !dirty || !form.name.trim()} className="admin-btn w-full disabled:opacity-50">
+          {saving ? 'Menyimpan…' : saved ? 'Tersimpan ✓' : dirty ? 'Simpan perubahan' : 'Tidak ada perubahan'}
         </button>
-      </div>
-
+      }
+      main={
+        <>
       {/* Situs wisata */}
-      <div className="admin-card p-4 space-y-3">
-        <div className="flex items-center justify-between">
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><MapPin className="h-4 w-4 text-admin-accent" /> Situs Wisata dalam Paket</p>
-        </div>
+      <MetaBox title="Situs Wisata dalam Paket" icon={MapPin} description="Situs yang dikunjungi, berurutan.">
         <div className="space-y-2">
           {pkg.sites.map(s => (
             <div key={s.tourismSiteId} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
@@ -350,14 +370,10 @@ export default function TourPackageBuilderPage({ params }: Props) {
             <Plus className="h-3.5 w-3.5" /> Tambah
           </button>
         </div>
-      </div>
+      </MetaBox>
 
       {/* Kendaraan — 3 mode (§12) */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Bus className="h-4 w-4 text-admin-accent" /> Kendaraan</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana kendaraan masuk ke paket ini — lihat docs/arsitektur-ziarah.md §12.2</p>
-        </div>
+      <MetaBox title="Kendaraan" icon={Bus} description="Pilih bagaimana kendaraan masuk ke paket ini — lihat docs/arsitektur-ziarah.md §12.2" defaultOpen={pkg.transportMode !== 'none'} aside={<Badge tone={pkg.transportMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.transportMode]}</Badge>}>
         <ModeSelector value={pkg.transportMode} onChange={handleSetTransportMode} />
 
         {pkg.transportMode === 'included' && (
@@ -386,14 +402,10 @@ export default function TourPackageBuilderPage({ params }: Props) {
             </select>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Hotel — 3 mode (§12) */}
-      <div className="admin-card p-4 space-y-3">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Building2 className="h-4 w-4 text-admin-accent" /> Hotel</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">Pilih bagaimana hotel masuk ke paket ini — sama konsep dengan Kendaraan (§12.2)</p>
-        </div>
+      <MetaBox title="Hotel" icon={Building2} description="Pilih bagaimana hotel masuk ke paket ini — sama konsep dengan Kendaraan (§12.2)" defaultOpen={pkg.hotelMode !== 'none'} aside={<Badge tone={pkg.hotelMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.hotelMode]}</Badge>}>
         <ModeSelector value={pkg.hotelMode} onChange={handleSetHotelMode} />
 
         {pkg.hotelMode === 'included' && (
@@ -487,7 +499,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
             </div>
           </div>
         )}
-      </div>
+      </MetaBox>
 
       {/* Komponen biaya */}
       <CostComponentsPanel
@@ -499,7 +511,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
 
       {/* Preview Harga — 2 blok terpisah (§12.7): dasar (included) vs opsi tambahan (user_choice) */}
       {breakdown && (
-        <div className="admin-card p-4 space-y-4">
+        <MetaBox title="Rincian Harga" icon={Wallet}>
           <div>
             <p className="text-sm font-semibold text-admin-ink">Harga Jual Paket (dasar)</p>
             <p className="text-[11px] text-admin-muted/70 mt-0.5">Komponen + kendaraan/hotel yang modenya &quot;Included&quot; saja — ini yang tampil di katalog publik.</p>
@@ -524,7 +536,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
             <div className="flex items-center justify-between rounded-lg px-4 py-2 border-t border-admin-line">
               <span className="text-[13px] font-bold text-admin-ink">Harga Jual Paket</span>
               <span className="text-[15px] font-bold text-admin-accent-strong">
-                {rupiah(breakdown.componentsTotalSellPrice + breakdown.hotelsTotalPrice + (breakdown.includedTransportPrice ?? 0))}
+                {rupiah(baseTotal ?? 0)}
               </span>
             </div>
           </div>
@@ -549,8 +561,10 @@ export default function TourPackageBuilderPage({ params }: Props) {
               </div>
             </div>
           )}
-        </div>
+        </MetaBox>
       )}
-    </div>
+        </>
+      }
+    />
   )
 }

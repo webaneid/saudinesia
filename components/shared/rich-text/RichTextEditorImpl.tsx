@@ -46,7 +46,10 @@ export default function RichTextEditorImpl({ id, value, onChange, placeholder, t
     editable: !disabled,
     immediatelyRender: false, // wajib untuk Next.js (hindari hydration mismatch)
     editorProps: { attributes: { id, role: 'textbox', 'aria-multiline': 'true', 'aria-label': title, class: 'rich-text rich-text-editing px-3.5 py-3 outline-none' } },
-    onUpdate: ({ editor: e }) => {
+    onUpdate: ({ editor: e, transaction }) => {
+      // Tiptap memancarkan satu `update` saat dimuat (tanpa langkah): meneruskannya menormalkan teks polos lama jadi JSON dan membuat
+      // formulir tampak "berubah" padahal pengguna belum menyentuh apa pun (penanda belum-disimpan palsu). Hanya perubahan dokumen nyata yang diteruskan.
+      if (!transaction.docChanged) return
       const next = serialize(e)
       lastEmitted.current = next
       onChange(next)
