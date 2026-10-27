@@ -20,7 +20,6 @@ export function toCatalogHaji(p: HajiProduct) {
     returnDate: p.returnDate,
     durationDays: p.durationDays,
     includes: p.includes,
-    images: p.images,
     priceLabel: p.priceLabel,
     price: Number(p.price),
     priced: hajiPriced(p),

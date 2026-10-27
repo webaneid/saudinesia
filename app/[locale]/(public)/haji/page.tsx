@@ -1,3 +1,5 @@
+import { ProductImage } from '@/components/shared/ProductImage'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
 import { Star, Calendar, Users, ArrowRight } from 'lucide-react'
@@ -29,6 +31,8 @@ export default async function HajiCatalogPage({ params }: Props) {
     where: { isActive: true },
     orderBy: [{ hajiType: 'asc' }, { year: 'asc' }],
   })
+
+  const covers = await getFeaturedCards('haji', products.map(p => p.id))
 
   const byType = products.reduce<Record<string, typeof products>>((acc, p) => {
     (acc[p.hajiType] ??= []).push(p)
@@ -69,7 +73,9 @@ export default async function HajiCatalogPage({ params }: Props) {
               const sisa = hajiAvailable(p)
               const includes = p.includes as string[]
               return (
-                <div key={p.id} className="rounded-xl border bg-card p-5 space-y-4 hover:border-primary hover:shadow-sm transition-all">
+                <div key={p.id} className="overflow-hidden rounded-xl border bg-card hover:border-primary hover:shadow-sm transition-all">
+                  <ProductImage src={covers.get(p.id)?.src} alt={covers.get(p.id)?.alt} fallbackAlt={p.name} type="haji" />
+                  <div className="p-5 space-y-4">
                   <div className="space-y-1">
                     <p className="font-semibold leading-tight">{p.name}</p>
                     <div className="flex items-center gap-2 flex-wrap">
@@ -130,6 +136,7 @@ export default async function HajiCatalogPage({ params }: Props) {
                         </Link>
                       </Button>
                     </div>
+                  </div>
                   </div>
                 </div>
               )
