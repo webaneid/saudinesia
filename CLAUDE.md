@@ -58,6 +58,8 @@ Status per 2026-07-25: `docs/arsitektur-visa.md`, `docs/arsitektur-transportasi.
 
 **Prinsip proses wajib (ditambahkan 2026-07-20):** sebelum merencanakan upgrade modul apa pun, selalu recheck `docs/arsitektur-<modul>.md` vs kode aktual dulu — lihat "Fase Eksekusi SOP" poin 1 di bawah. Jangan percaya status "SELESAI & TERVERIFIKASI" begitu saja tanpa verifikasi ulang.
 
+`docs/arsitektur-harga-terpadu.md` — **RENCANA DISETUJUI (2026-10-27), Fase 0 selesai**: tujuan pemilik = harga seragam **Modal · Jual · Untung** dari satu sumber (`PricePoint` + `PriceSnapshot` beku saat order), margin default hanya saran (jual bisa manual), diskon/nego di total (catatan wajib bila di bawah HPP awal), pengeluaran aktual vendor + catatan selisih HPP, role harga terbuka untuk semua admin dulu (satu titik `lib/pricing/policy.ts`). **Aturan berlaku sekarang:** harga booking SELALU dihitung server (tak ada `totalPrice` dari klien — katering lewat `computeCateringBookingPrice`); nilai bawaan margin/pembulatan HANYA di `lib/pricing/pricingHelpers.ts` (`resolveMarginRule`); aturan global berkunci `'global'`; semua cache harga disegarkan lewat SATU daftar `lib/pricing/refreshAll.ts` (jangan menambah refresh di cron/route sendiri). Fase 1+ dikerjakan satu per satu.
+
 `docs/arsitektur-harga.md` — rancangan HPP/kurs/margin universal (tidak ada infrastruktur ini sama sekali di kode saat ini). Scope tahap awal: Visa saja, tapi skema (`ProductCost` polimorfik, mirip pola `PackageItem`) dirancang untuk diperluas ke modul lain nanti. Ada 1 keputusan bisnis belum final: sumber API kurs (lihat §4 — Bank Indonesia JISDOR vs API komersial gratis).
 
 **Perhatian — bug produksi kritis ditemukan lewat audit, wajib diperbaiki sebelum deployment (M15):**

@@ -115,12 +115,8 @@ await t('FAIL-CLOSED + ATOMIK: tanpa tabel product_images (ekspansi belum ditera
   assert.equal((await legacyColumns(r.name)).length, 7, 'tak satu kolom pun boleh terhapus saat migrasi gagal')
 })
 
-await t('skema hasil SEMUA migrasi == schema.prisma (tidak ada drift): prisma migrate diff', async () => {
-  const r = await scenario('')
-  assert.equal(r.code, 0)
-  const diff = run(dbUrl(r.name), ['migrate', 'diff', '--from-url', dbUrl(r.name), '--to-schema-datamodel', 'schema.prisma', '--script'])
-  assert.match(diff.out, /empty migration/i, `masih ada drift:\n${diff.out.slice(-500)}`)
-})
+// (Uji drift skema pindah ke scripts/test-pricing-rule-migration.ts — migrasi TERBARU membangun DB dari SEMUA migrasi, jadi hanya di sana skema penuh sama dengan schema.prisma.
+//  Saat ada migrasi yang lebih baru, pindahkan uji drift itu ke tes migrasi terbaru yang baru.)
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

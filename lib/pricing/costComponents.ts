@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { getLatestRate, getMarginRule, roundToNearest } from './pricingHelpers'
+import { getLatestRate, resolveMarginRule, roundToNearest } from './pricingHelpers'
 
 // Komponen Biaya bebas — satu-satunya tempat baris `ProductCost` diubah menjadi HPP + harga jual PER KOMPONEN
 // (docs/arsitektur-komponen-biaya.md). Sebelumnya blok ini ditulis identik di computePackagePrice dan computeTourPackagePrice.
@@ -25,9 +25,7 @@ export type CostComponentsResult = { components: ComponentBreakdown[]; totalSell
  */
 export async function computeCostComponents(productType: string, productId: string): Promise<CostComponentsResult> {
   const costs = await prisma.productCost.findMany({ where: { productType, productId, isActive: true } })
-  const marginRule = await getMarginRule(productType)
-  const minMarginPercent = marginRule ? Number(marginRule.minMarginPercent) : 20
-  const roundingIncrement = marginRule ? marginRule.roundingIncrement : 50000
+  const { minMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
 
   const components: ComponentBreakdown[] = []
   for (const c of costs) {

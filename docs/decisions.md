@@ -2870,3 +2870,16 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `lib/admin/productDelete.ts`, 6 route `DELETE`, `components/admin/editor/{useDeleteEntity,useDirtyForm}`, halaman edit Muthowif/Situs/Hotel/Paket/Ziarah/Visa, `scripts/test-admin-{delete,editor}.ts`, `package.json`, docs.
 
+## 2026-10-27 — Harga terpadu Fase 0: katering server-side, aturan margin global satu-satunya, semua cache disegarkan
+**Decision:** (1) Harga katering booking dihitung server dari `CateringOption` (musim pada tanggal mulai × hari × orang); `totalPrice` klien dihapus dari skema; nonaktif/harga 0 → 422. (2) Aturan margin global berkunci sentinel `'global'` (non-NULL, `@@unique`) lewat migrasi dedupe-lalu-kunci (atomik, fail-closed); route memakai `upsert`. (3) Nilai bawaan margin/pembulatan satu tempat (`pricingHelpers.ts`). (4) Satu daftar semua cache harga (`refreshAll.ts`) dipakai cron kurs dan perubahan margin. Rencana lengkap Modal–Jual–Untung (PricePoint/PriceSnapshot, harga manual, pengeluaran aktual) di `docs/arsitektur-harga-terpadu.md`; keputusan pemilik: role terbuka dulu (satu titik `lib/pricing/policy.ts` nanti), pengeluaran aktual dengan catatan selisih HPP, override jual di total, diskon di total dengan catatan wajib bila di bawah HPP awal.
+
+**Rationale:** Harga katering dari klien memungkinkan pemesanan seharga Rp 1 (High). `NULL` pada indeks unik tidak mencegah baris ganda — terjadi nyata (dua baris global di DB dev) — dan sentinel non-NULL dapat diekspresikan Prisma tanpa indeks parsial/drift. Mengubah margin hanya menyegarkan Visa membuat harga katalog berbeda dari aturan yang berlaku. Fase 0 berdiri sendiri dan memperbaiki cacat nyata tanpa menunggu fondasi.
+
+**Alternatives considered:** Indeks unik parsial `WHERE productType IS NULL` (ditolak: Prisma tak mengekspresikannya → drift migrasi); membiarkan `findFirst` + mengandalkan route (ditolak: balapan nyata); langsung membangun PricePoint dan menutup katering di dalamnya (ditolak: High tidak boleh menunggu fase besar).
+
+**Security check (SOP langkah 5):** 1 High pre-existing ditemukan dan **ditutup di fase ini** (SEC-71), 1 Low dicatat (SEC-72: batas atas aturan margin), 0 temuan pada kode baru. Auth/Zod/rate-limit route booking tidak berubah; migrasi SQL statis tanpa input pengguna; `bun audit` tanpa critical.
+
+**Verifikasi:** tsc; `bun run build` (terisolasi) 0 error; `bun run test` 436 PASS; 9 mutasi tertangkap; curl ke server berjalan (totalPrice=1 diabaikan; 422 untuk nonaktif/harga 0; margin 20→40→20 menggeser Pesawat/Haji/Paket/Visa); migrasi diterapkan ke DB dev ber-baris ganda nyata (dua → satu).
+
+**Affects:** `lib/pricing/{computeCateringPrice,refreshAll,pricingHelpers,computeSellPrice,costComponents,simulateSellPrice}.ts`, `lib/cron/exchangeRateJob.ts`, `lib/validators/booking.ts`, route bookings/pricing-rule/catalog catering, halaman katering publik, `prisma/schema.prisma` + migrasi, `scripts/test-pricing-{phase0,rule-migration}.ts`, `test-haji-pricing.ts`, `test-media-contraction.ts`, `package.json`, docs.
+

@@ -10,6 +10,7 @@ import { notify } from '@/lib/notifications/notify'
 import { formatDeadline } from '@/lib/notifications/events'
 import { ok, err } from '@/lib/validators'
 import { computeSellPrice } from '@/lib/pricing/computeSellPrice'
+import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import { computeTourPackageBreakdown, baseTotal, totalForVehicle, hotelChoicePrice } from '@/lib/pricing/computeTourPackagePrice'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
 import { ItemNotBookableError } from '@/lib/booking/errors'
@@ -195,14 +196,19 @@ export async function POST(request: Request) {
             break
           }
           case 'catering': {
+            // Harga dihitung server-side dari CateringOption (musim pada tanggal mulai) — `totalPrice` dari klien TIDAK dipakai
+            // (dan tak ada lagi di skema). Opsi nonaktif / belum berharga → 422 (ItemNotBookableError).
+            const { totalPrice } = await computeCateringBookingPrice({
+              cateringOptionId: item.cateringOptionId, startDate: new Date(item.startDate), numDays: item.numDays, numPeople: item.numPeople,
+            })
             await tx.bookingCatering.create({
               data: {
                 bookingId: bk.id, cateringOptionId: item.cateringOptionId,
                 startDate: new Date(item.startDate), endDate: new Date(item.endDate),
-                numDays: item.numDays, numPeople: item.numPeople, totalPrice: item.totalPrice,
+                numDays: item.numDays, numPeople: item.numPeople, totalPrice,
               },
             })
-            totalAmount += item.totalPrice
+            totalAmount += totalPrice
             break
           }
           case 'tourPackage': {

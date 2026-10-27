@@ -39,7 +39,7 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
     endDate:          z.string().date(),
     numDays:          z.number().int().min(1),
     numPeople:        z.number().int().min(1),
-    totalPrice:       z.number().positive(),
+    // `totalPrice` SENGAJA tidak ada: harga katering dihitung server dari CateringOption (lib/pricing/computeCateringPrice.ts).
   }),
   z.object({
     itemType: z.literal('tourPackage'),

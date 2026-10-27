@@ -1224,7 +1224,7 @@ model ProductCost {
 
 model PricingRule {
   id                String   @id @default(uuid())
-  productType       String? // null = default global, "visa" = override khusus tipe itu
+  productType       String   @default("global") // "global" = default semua tipe (kunci sentinel — lib/pricing/pricingHelpers.ts), "visa" = override khusus tipe itu
   minMarginPercent  Decimal  @db.Decimal(5, 2)
   roundingIncrement Int      @default(50000)
   updatedAt         DateTime @updatedAt
