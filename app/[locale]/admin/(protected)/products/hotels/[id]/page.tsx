@@ -1,10 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Plus, ArrowLeft, Save, Star, Wallet, Trash2, Pencil } from 'lucide-react'
+import { Plus, ArrowLeft, Save, Wallet, Trash2, Pencil } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { useParams } from 'next/navigation'
-import { ProductMediaGallery } from '@/components/admin/media/ProductMediaGallery'
+import { MediaField } from '@/components/admin/media/MediaField'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
@@ -29,7 +29,7 @@ type AddressRecord = {
 type Hotel = {
   id: string; name: string; city: string; stars: number | null
   distanceToHaramM: number | null; description: string | null
-  facilities: string[]; featuredImageKey: string | null; isActive: boolean
+  facilities: string[]; isActive: boolean
   address: AddressRecord // docs/arsitektur-alamat.md §9
 }
 
@@ -41,7 +41,6 @@ function toAddressValue(a: AddressRecord): AddressValue {
     countryCode: a.countryCode, city: a.city ?? '', stateRegion: a.stateRegion ?? '',
   }
 }
-type ImageItem = { key: string; url: string | null }
 type HotelService = {
   id: string; serviceName: string; serviceType: string | null
   price: number; description: string | null; isActive: boolean
@@ -63,9 +62,6 @@ export default function HotelDetailPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [images, setImages] = useState<ImageItem[]>([])
-  const [featuredImageKey, setFeaturedImageKey] = useState<string | null>(null)
-  const [savingFeatured, setSavingFeatured] = useState(false)
 
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
@@ -94,13 +90,7 @@ export default function HotelDetailPage() {
         facilities: Array.isArray(h.facilities) ? h.facilities : [], isActive: h.isActive,
       })
       setAddress(toAddressValue(h.address))
-      setFeaturedImageKey(h.featuredImageKey)
     }
-  }
-  async function loadImages() {
-    const r = await fetch(`/api/v1/admin/products/hotels/${id}/images`)
-    const j = await r.json()
-    setImages(j.data ?? [])
   }
   async function loadRoomTypes() {
     const r = await fetch('/api/v1/admin/products/hotels/room-types')
@@ -118,7 +108,7 @@ export default function HotelDetailPage() {
     setServices(j.data ?? [])
   }
 
-  useEffect(() => { loadHotel(); loadImages(); loadRoomTypes(); loadPeriods(); loadServices() }, [id])
+  useEffect(() => { loadHotel(); loadRoomTypes(); loadPeriods(); loadServices() }, [id])
 
   function set(k: string) {
     return (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) =>
@@ -144,17 +134,6 @@ export default function HotelDetailPage() {
     await loadHotel()
     setSaving(false); setSaved(true)
     setTimeout(() => setSaved(false), 2000)
-  }
-
-  async function handleSetFeatured(key: string) {
-    setSavingFeatured(true)
-    await fetch(`/api/v1/admin/products/hotels/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ featuredImageKey: key }),
-    })
-    setFeaturedImageKey(key)
-    setSavingFeatured(false)
   }
 
   async function handleSavePeriod() {
@@ -306,30 +285,8 @@ export default function HotelDetailPage() {
       </div>
 
       {/* Foto */}
-      <div className="admin-card p-5 space-y-4">
-        <ProductMediaGallery
-          hotelId={hotel.id}
-          apiBase={`/api/v1/admin/products/hotels/${hotel.id}/images`}
-          label="Foto Hotel"
-          maxImages={10}
-        />
-        {images.length > 0 && (
-          <div className="border-t border-admin-line pt-4">
-            <p className="text-xs font-semibold text-admin-ink mb-2 flex items-center gap-1.5"><Star className="h-3.5 w-3.5" /> Foto Sampul</p>
-            <div className="flex flex-wrap gap-2">
-              {images.map(img => (
-                <button
-                  key={img.key} type="button" disabled={savingFeatured}
-                  onClick={() => handleSetFeatured(img.key)}
-                  className={`h-16 w-16 rounded-lg overflow-hidden border-2 transition-colors ${featuredImageKey === img.key ? 'border-admin-accent' : 'border-transparent hover:border-admin-line'}`}
-                  title={featuredImageKey === img.key ? 'Foto sampul saat ini' : 'Jadikan foto sampul'}
-                >
-                  {img.url && <img src={img.url} alt="" className="h-full w-full object-cover" />}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      <div className="admin-card p-5">
+        <MediaField productType="hotel" productId={hotel.id} label="Foto Hotel" />
       </div>
 
       {/* Periode & Harga Kamar */}

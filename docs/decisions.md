@@ -2789,3 +2789,17 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 
 **Affects:** `prisma/schema.prisma`, `prisma/migrations/20261027120000_product_images_expand/`, `lib/media/**`, `app/api/v1/admin/media/**`, 4 route foto lama (jembatan), route hotel/muthowif/situs, halaman publik (home, hotels, transport, muthowif, tours), 3 API katalog, `scripts/test-media{,-migration}.ts`, `package.json`, docs.
 
+## 2026-10-27 — Media F2: satu `MediaField` admin, jembatan foto lama dihapus
+
+**Decision:** Seluruh unggah foto di admin lewat `MediaField` (featured/gallery mengikuti registry); `ProductMediaGallery`, empat route foto lama, `legacyRoutes.ts`, UI foto ad-hoc muthowif/situs, `featuredImageKey` di route hotel, dan `photoUrl` di GET muthowif/situs dihapus. Penjaga CI mewajibkan setiap tipe registry punya `MediaField` di halaman edit-nya dan melarang input file ad-hoc di halaman admin. Unggah tetap di halaman edit setelah simpan; geser urutan lewat tombol.
+
+**Rationale:** Menutup jembatan sementara F1 tanpa dualisme; satu komponen mencegah tiap modul menulis UI foto sendiri (penyebab empat implementasi salinan). Komponen lama menelan galat hapus — kelas bug yang sama dengan panel buat sebaris.
+
+**Alternatives considered:** Seret-lepas untuk urutan (ditolak sementara: aksesibilitas dan dependensi — tombol cukup); unggah di halaman buat (ditolak: entitas belum ada; opsi dicatat); mempertahankan jembatan hingga F4 (ditolak: dualisme jalur tulis).
+
+**Security check (SOP langkah 5):** 0 temuan. Route berkurang empat (permukaan serang turun); tak ada route atau dependensi baru; komponen hanya memanggil API media yang sudah dijaga (`requireManager`, registry, uuid, `.strict()`); URL gambar hanya presigned dan dirender sebagai `src` (tanpa HTML mentah); alt dirender sebagai teks.
+
+**Verifikasi:** tsc; `bun run build` (salinan terpisah) 0 error; `bun run test` hijau; Chrome + MinIO nyata (unggah/sampul/geser/alt/hapus/galat/ganti-foto di 4 halaman); 3 mutasi penjaga tertangkap.
+
+**Affects:** `components/admin/media/{MediaField,ImageUploadModal}.tsx`, `components/admin/shell/EditPage.tsx`, 9 halaman edit, route hotel/muthowif/situs, 4 route foto lama + `lib/media/legacyRoutes.ts` (dihapus), `scripts/test-media.ts`, `scripts/test-routes.ts`, docs.
+

@@ -29,6 +29,8 @@ type EditPageProps = {
   remove?: DeleteConfig
   /** Elemen di samping judul (mis. lencana status). */
   headerAside?: ReactNode
+  /** Bagian di ATAS formulir tetapi di luar `<form>` (mis. MediaField — punya tombol/unggahan sendiri). */
+  top?: ReactNode
   children: ReactNode
 }
 
@@ -36,7 +38,7 @@ type EditPageProps = {
  * Halaman "Ubah" admin sepadan CreatePage (docs/arsitektur-admin-create.md §6): kembali, banner galat/pesan, formulir milik modul (children),
  * bilah simpan `sticky`, dan zona hapus dengan konfirmasi inline (CRUD lengkap: hapus bila tak dirujuk, selain itu dinonaktifkan oleh server).
  */
-export function EditPage({ title, description, icon, backHref, backLabel, onSubmit, saving, canSubmit, error, notice, remove, headerAside, children }: EditPageProps) {
+export function EditPage({ title, description, icon, backHref, backLabel, onSubmit, saving, canSubmit, error, notice, remove, headerAside, top, children }: EditPageProps) {
   const [confirming, setConfirming] = useState(false)
 
   function handleSubmit(e: FormEvent) {
@@ -58,6 +60,8 @@ export function EditPage({ title, description, icon, backHref, backLabel, onSubm
 
       {error && <p role="alert" className="m-0 rounded-xl border border-admin-danger/30 bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p>}
       {notice && <p role="status" className="m-0 rounded-xl border border-admin-line bg-admin-spot px-3 py-2 text-sm font-medium text-admin-ink">{notice}</p>}
+
+      {top && <div className="admin-form-panel">{top}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-5">
         <div className="admin-form-panel">{children}</div>

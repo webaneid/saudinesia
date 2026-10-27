@@ -810,6 +810,6 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 
 **Media produk universal (2026-10-27, `docs/arsitektur-media.md`):**
 - [x] F1 `ProductImage` + migrasi ekspansi + `lib/media` + route generik + jembatan route lama + pembaca publik dipindah — selesai 2026-10-27 (MinIO nyata; 6 mutasi + 3 mutasi SQL)
-- [ ] F2 `MediaField` (featured/gallery) di semua halaman edit; hapus jembatan
+- [x] F2 `MediaField` (featured/gallery) di semua 9 halaman edit; jembatan + komponen lama dihapus — selesai 2026-10-27 (MinIO nyata, unggah lewat UI; 3 mutasi)
 - [ ] F3 `ProductImage` + placeholder di semua katalog publik
 - [ ] F4 kontraksi (drop kolom foto lama), `removeAll` saat produk dihapus, penjaga CI

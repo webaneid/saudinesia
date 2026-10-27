@@ -1,5 +1,6 @@
 'use client'
 
+import { MediaField } from '@/components/admin/media/MediaField'
 import { useState } from 'react'
 import { ExternalLink, FileText, Info, Trash2, Wallet } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
@@ -14,6 +15,7 @@ import type { InfoForm } from './types'
 const VISA_TYPE_SUGGESTIONS = ['Umroh', 'Visitor', 'Bisnis', 'Kerja', 'Transit', 'Haji']
 
 type Props = {
+  productId: string
   form: InfoForm
   onChange: (patch: Partial<InfoForm>) => void
   price: number
@@ -24,10 +26,13 @@ type Props = {
   onDelete: () => Promise<string | null>
 }
 
-export function ProductInfoTab({ form, onChange, price, locale, productName, onShowPrice, onDelete }: Props) {
+export function ProductInfoTab({ productId, form, onChange, price, locale, productName, onShowPrice, onDelete }: Props) {
   return (
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
       <div className="min-w-0 space-y-4 lg:col-span-2">
+        <Card className="p-5">
+          <MediaField productType="visa" productId={productId} label="Foto Unggulan Visa" />
+        </Card>
         <Card className="space-y-4 p-5">
           <SectionTitle icon={Info} title="Informasi dasar" />
           <div className="grid items-start gap-4 sm:grid-cols-2">

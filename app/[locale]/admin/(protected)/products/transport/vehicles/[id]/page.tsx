@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2, Save, Trash2 } from 'lucide-react'
-import { ProductMediaGallery } from '@/components/admin/media/ProductMediaGallery'
+import { MediaField } from '@/components/admin/media/MediaField'
 
 const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
 
@@ -102,11 +102,9 @@ export default function VehicleEditPage({ params }: Props) {
       {error && <p role="alert" className="text-[13px] font-medium text-admin-danger">{error}</p>}
       {notice && <p role="status" className="text-[13px] font-medium text-admin-ink">{notice}</p>}
 
-      <ProductMediaGallery
-        hotelId={id}
-        apiBase={`/api/v1/admin/products/transport/vehicles/${id}/images`}
-        label="Foto Kendaraan"
-      />
+      <div className="admin-form-panel">
+        <MediaField productType="vehicle" productId={id} label="Foto Kendaraan" />
+      </div>
 
       <div className="admin-form-panel space-y-4">
         <p className="text-sm font-semibold text-admin-ink">Informasi Kendaraan</p>

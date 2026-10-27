@@ -1,13 +1,14 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { MediaField } from '@/components/admin/media/MediaField'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, MapPin, Upload, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 
 type TourismSite = {
   id: string; name: string; city: string | null; description: string | null
-  gmapsUrl: string | null; isActive: boolean; photoUrl: string | null
+  gmapsUrl: string | null; isActive: boolean
 }
 
 type Props = { params: Promise<{ locale: string; id: string }> }
@@ -21,10 +22,6 @@ export default function TourismSiteEditPage({ params }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [uploadingPhoto, setUploadingPhoto] = useState(false)
-  const [photoError, setPhotoError] = useState('')
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   async function loadSite(siteId: string) {
     const r = await fetch(`/api/v1/admin/products/tourism-sites/${siteId}`)
@@ -35,7 +32,6 @@ export default function TourismSiteEditPage({ params }: Props) {
         name: s.name, city: s.city ?? 'makkah', description: s.description ?? '',
         gmapsUrl: s.gmapsUrl ?? '', isActive: s.isActive,
       })
-      setPhotoUrl(s.photoUrl)
     }
   }
 
@@ -57,27 +53,6 @@ export default function TourismSiteEditPage({ params }: Props) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  async function handlePhotoUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploadingPhoto(true); setPhotoError('')
-    const formData = new FormData()
-    formData.append('file', file)
-    const r = await fetch(`/api/v1/admin/products/tourism-sites/${id}/photo`, { method: 'POST', body: formData })
-    const j = await r.json()
-    setUploadingPhoto(false)
-    if (!j.success) { setPhotoError(j.error ?? 'Gagal upload foto'); return }
-    setPhotoUrl(j.data.url)
-    if (fileInputRef.current) fileInputRef.current.value = ''
-  }
-
-  async function handlePhotoDelete() {
-    setUploadingPhoto(true)
-    await fetch(`/api/v1/admin/products/tourism-sites/${id}/photo`, { method: 'DELETE' })
-    setPhotoUrl(null)
-    setUploadingPhoto(false)
-  }
-
   if (!loaded) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
   return (
@@ -91,33 +66,7 @@ export default function TourismSiteEditPage({ params }: Props) {
       </div>
 
       <div className="admin-form-panel space-y-4">
-        <div className="flex items-center gap-4">
-          <div className="h-20 w-20 rounded-lg bg-admin-spot border border-admin-line overflow-hidden shrink-0 grid place-items-center">
-            {photoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={photoUrl} alt="Foto situs" className="h-full w-full object-cover" />
-            ) : (
-              <MapPin className="h-8 w-8 text-admin-muted/50" />
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <div className="flex gap-2">
-              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={uploadingPhoto}
-                className="admin-btn-sm text-xs disabled:opacity-50 flex items-center gap-1.5">
-                <Upload className="h-3.5 w-3.5" /> {uploadingPhoto ? 'Memproses...' : photoUrl ? 'Ganti Foto' : 'Upload Foto'}
-              </button>
-              {photoUrl && (
-                <button type="button" onClick={handlePhotoDelete} disabled={uploadingPhoto}
-                  className="admin-btn-ghost text-xs disabled:opacity-50 flex items-center gap-1.5 text-admin-danger">
-                  <Trash2 className="h-3.5 w-3.5" /> Hapus
-                </button>
-              )}
-            </div>
-            <p className="text-[11px] text-admin-muted/70">JPG/PNG/WebP, maks 5 MB</p>
-            {photoError && <p className="text-[11px] text-admin-danger">{photoError}</p>}
-            <input ref={fileInputRef} type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={handlePhotoUpload} />
-          </div>
-        </div>
+        <MediaField productType="tourism_site" productId={id} label="Foto Unggulan Situs" />
 
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">

@@ -8,6 +8,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { HAJI_TYPES } from '@/lib/constants/haji'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { MediaField } from '@/components/admin/media/MediaField'
 
 type HajiDetail = {
   id: string; name: string; description: string | null; hajiType: string; year: number
@@ -118,6 +119,10 @@ export default function HajiEditPage({ params }: Props) {
 
       {error && <p role="alert" className="text-[13px] font-medium text-admin-danger">{error}</p>}
       {notice && <p role="status" className="text-[13px] font-medium text-admin-ink">{notice}</p>}
+
+      <div className="admin-form-panel">
+        <MediaField productType="haji" productId={haji.id} label="Foto Unggulan Haji" />
+      </div>
 
       {/* Info dasar */}
       <div className="admin-form-panel space-y-3">
