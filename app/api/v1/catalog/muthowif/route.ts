@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { getMuthowifServicePrice } from '@/lib/pricing/engine/read'
 
 const querySchema = z.object({
   language: z.string().optional(),
@@ -33,8 +34,8 @@ export async function GET(request: Request) {
       languages: g.languages, rating: Number(g.rating), dailyCapacity: g.dailyCapacity,
     }))
 
-    const servicePrice = await prisma.muthowifServicePrice.findFirst()
-    const pricePerDay = servicePrice ? Number(servicePrice.price) : 0
+    const servicePrice = await getMuthowifServicePrice()
+    const pricePerDay = servicePrice ? servicePrice.price : 0
 
     return NextResponse.json(ok(data, { total: data.length, pricePerDay }))
   } catch (error) {

@@ -5,6 +5,7 @@ import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { Building2, Star, MapPin } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah, formatDistance } from '@/lib/utils'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<{ city?: string; stars?: string }> }
 
@@ -24,13 +25,18 @@ export default async function HotelsPage({ params, searchParams }: Props) {
     include: {
       pricePeriods: {
         where: { isActive: true, periodStart: { lte: today }, periodEnd: { gte: today } },
-        include: { schedules: { where: { isActive: true }, include: { roomType: true }, orderBy: { price: 'asc' } } },
+        include: { schedules: { where: { isActive: true }, include: { roomType: true } } },
       },
     },
     orderBy: [{ stars: 'desc' }, { distanceToHaramM: 'asc' }],
   })
   // Flatten ke bentuk `schedules` yang sama seperti sebelumnya supaya sisa halaman ini tidak perlu berubah.
-  const hotels = hotelsRaw.map(h => ({ ...h, schedules: h.pricePeriods.flatMap(p => p.schedules).sort((a, b) => Number(a.price) - Number(b.price)) }))
+  // Harga jual per jadwal kamar dari titik harga (docs/arsitektur-harga-terpadu.md §15); urut termurah dulu.
+  const hotelPrices = await sellPrices('hotel', hotelsRaw.flatMap(h => h.pricePeriods.flatMap(p => p.schedules.map(s => s.id))))
+  const hotels = hotelsRaw.map(h => ({
+    ...h,
+    schedules: h.pricePeriods.flatMap(p => p.schedules).map(s => ({ ...s, price: hotelPrices.get(s.id) ?? 0 })).sort((a, b) => a.price - b.price),
+  }))
 
   // Foto sampul — layanan media universal (satu query batch; sampul eksplisit, fallback foto pertama sudah ditangani layanan).
   const covers = await getFeaturedCardUrls('hotel', hotels.map(h => h.id))

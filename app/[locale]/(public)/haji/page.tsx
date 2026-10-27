@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { hajiAvailable, hajiPriced } from '@/lib/haji/catalog'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -33,6 +34,7 @@ export default async function HajiCatalogPage({ params }: Props) {
   })
 
   const covers = await getFeaturedCards('haji', products.map(p => p.id))
+  const prices = await sellPrices('haji', products.map(p => p.id))
 
   const byType = products.reduce<Record<string, typeof products>>((acc, p) => {
     (acc[p.hajiType] ??= []).push(p)
@@ -111,11 +113,11 @@ export default async function HajiCatalogPage({ params }: Props) {
 
                   <div className="pt-2 border-t space-y-3">
                     <div>
-                      {hajiPriced(p) ? (
+                      {hajiPriced(prices.get(p.id) ?? 0) ? (
                         <>
                           <p className="text-xs text-muted-foreground">Mulai dari</p>
                           <p className="text-xl font-bold text-primary">
-                            {formatRupiah(Number(p.price))}
+                            {formatRupiah(prices.get(p.id) ?? 0)}
                             <span className="text-xs font-normal text-muted-foreground"> /orang</span>
                           </p>
                         </>

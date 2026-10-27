@@ -6,6 +6,7 @@ import { refreshHotelRoomScheduleCache } from '@/lib/pricing/refreshHotelRoomSch
 import { z } from 'zod'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
+import { sellPrices, withSellPrice } from '@/lib/pricing/engine/read'
 
 // Hotel punya persis 1 komponen HPP tetap "kamar" (docs/arsitektur-hotel.md §10.4) — pola sama Flight.
 const COMPONENT_KAMAR = 'kamar'
@@ -45,13 +46,14 @@ export async function GET(_req: Request, { params }: Ctx) {
     const costByScheduleId = new Map(costs.map(c => [c.productId, c]))
     const first = costs[0]
 
+    const prices = await sellPrices('hotel', scheduleIds)
     const rooms = schedules.map(s => {
       const cost = costByScheduleId.get(s.id)
       const tiers = (cost?.costTiers as unknown as CostTier[]) ?? []
       return {
         roomTypeId: s.roomTypeId, roomTypeName: s.roomType.name,
         scheduleId: s.id, cost: tiers[0]?.cost ?? null,
-        totalQuota: s.totalQuota, price: Number(s.price),
+        totalQuota: s.totalQuota, price: prices.get(s.id) ?? 0,
       }
     })
 
@@ -120,10 +122,10 @@ export async function PUT(req: Request, { params }: Ctx) {
       await refreshHotelRoomScheduleCache(scheduleId)
     }
 
-    const result = await prisma.hotelRoomSchedule.findMany({
+    const result = await withSellPrice('hotel', await prisma.hotelRoomSchedule.findMany({
       where: { id: { in: updatedScheduleIds } },
       include: { roomType: true },
-    })
+    }))
     return NextResponse.json(ok(result))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

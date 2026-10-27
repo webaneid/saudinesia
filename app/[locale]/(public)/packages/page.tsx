@@ -7,15 +7,16 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { withSellPrice } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
 export default async function PackagesCatalogPage({ params }: Props) {
   const { locale } = await params
-  const packages = await prisma.package.findMany({
+  const packages = await withSellPrice('package', await prisma.package.findMany({
     where: { isActive: true },
     orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
-  })
+  }))
   const covers = await getFeaturedCards('package', packages.map(p => p.id))
   const hasAddOns = (p: (typeof packages)[number]) =>
     [p.hotelMakkahMode, p.hotelMadinahMode, p.transportMode, p.muthowifMode, p.visaMode, p.flightMode, p.cateringMode]

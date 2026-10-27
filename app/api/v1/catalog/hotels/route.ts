@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getProductImages } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 const querySchema = z.object({
   city:      z.enum(['makkah', 'madinah']).optional(),
@@ -36,6 +37,8 @@ export async function GET(request: Request) {
       orderBy: { distanceToHaramM: 'asc' },
     })
 
+    const hotelPrices = await sellPrices('hotel', hotels.flatMap(h => h.pricePeriods.flatMap(p => p.schedules.map(s => s.id))))
+
     // Foto dari layanan media universal (URL presigned; kunci objek mentah tak lagi keluar dari API publik).
     const photos = await getProductImages('hotel', hotels.map(h => h.id))
     const data = hotels.map((h) => {
@@ -44,7 +47,7 @@ export async function GET(request: Request) {
         return {
           id: s.id, roomTypeId: s.roomTypeId, roomTypeName: s.roomType.name,
           capacity: s.roomType.defaultCapacity,
-          pricePerNight: Number(s.price),
+          pricePerNight: hotelPrices.get(s.id) ?? 0,
           availableRooms: available,
         }
       })

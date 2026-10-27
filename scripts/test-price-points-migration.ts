@@ -82,7 +82,6 @@ async function scenario(setup: string) {
   return { name, ...res }
 }
 const id = (i: number) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 
 const point = (i: number, cols: string, vals: string, variant = '') =>
   `INSERT INTO price_points (id, "ownerType", "ownerId", "variantKey", unit, ${cols}, "updatedAt") VALUES ('${id(i)}', 'hotel', '${id(100 + i)}', '${variant}', 'room_night', ${vals}, now());`
@@ -135,12 +134,7 @@ await t('keunikan (pemilik, varian): duplikat ditolak, varian berbeda dan pemili
   assert.equal(exec(r.name, row(4, id(501), 'days:0-9')).code, 0, 'pemilik lain')
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenario('')
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-600)}`)
-})
+// Uji drift skema ada di migrasi TERBARU (scripts/test-price-points-backfill-migration.ts) — di sini skema sudah lebih maju dari migrasi yang diuji.
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

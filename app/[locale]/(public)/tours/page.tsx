@@ -6,19 +6,19 @@ import { MapPin } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import Link from 'next/link'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { withSellPrice } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
 export default async function ToursPage({ params }: Props) {
   const { locale } = await params
-  const packages = await prisma.tourPackage.findMany({
+  const packages = (await withSellPrice('tour_package', await prisma.tourPackage.findMany({
     where: { isActive: true },
     include: {
       transportTrip: { select: { origin: true, destination: true } },
       sites: { include: { tourismSite: true }, orderBy: { order: 'asc' } },
     },
-    orderBy: { price: 'asc' },
-  })
+  }))).sort((a, b) => a.price - b.price) // termurah dulu; harga dari titik harga (Fase 2)
 
   const covers = await getFeaturedCards('tour_package', packages.map(p => p.id))
   const sitePhotos = await getFeaturedCardUrls('tourism_site', [...new Set(packages.flatMap(p => p.sites.map(s => s.tourismSite.id)))])

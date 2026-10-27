@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { formatRupiah, formatDistance } from '@/lib/utils'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -34,7 +35,9 @@ export default async function HotelDetailPage({ params }: Props) {
     },
   })
   if (!hotelRaw) notFound()
-  const hotel = hotelRaw
+  // Harga jual per jadwal kamar dari titik harga (docs/arsitektur-harga-terpadu.md §15).
+  const hotelPrices = await sellPrices('hotel', hotelRaw.pricePeriods.flatMap(p => p.schedules.map(s => s.id)))
+  const hotel = { ...hotelRaw, pricePeriods: hotelRaw.pricePeriods.map(p => ({ ...p, schedules: p.schedules.map(s => ({ ...s, price: hotelPrices.get(s.id) ?? 0 })) })) }
 
   // Kolom tabel = union semua tipe kamar yang pernah dipakai di hotel ini, diurutkan kapasitas.
   const roomTypeMap = new Map<string, { id: string; name: string; defaultCapacity: number }>()

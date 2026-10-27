@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { getMuthowifServicePrice } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -16,7 +17,7 @@ export default async function MuthowifDetailPage({ params }: Props) {
 
   const [guide, servicePrice] = await Promise.all([
     prisma.muthowif.findUnique({ where: { id, isActive: true } }),
-    prisma.muthowifServicePrice.findFirst(),
+    getMuthowifServicePrice(),
   ])
   if (!guide) notFound()
 
@@ -71,7 +72,7 @@ export default async function MuthowifDetailPage({ params }: Props) {
           <div>
             <p className="text-sm text-muted-foreground">Harga layanan muthowif per hari</p>
             {servicePrice && (
-              <p className="text-2xl font-bold text-primary">{formatRupiah(Number(servicePrice.price))}</p>
+              <p className="text-2xl font-bold text-primary">{formatRupiah(servicePrice.price)}</p>
             )}
             <p className="text-xs text-muted-foreground mt-0.5">Tim kami yang menentukan pembimbing bertugas — tidak selalu {guide.name}.</p>
           </div>

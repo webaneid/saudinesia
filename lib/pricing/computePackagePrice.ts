@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { computeCostComponents, type ComponentBreakdown } from './costComponents'
+import { sellPrices } from './engine/read'
 
 export type { ComponentBreakdown }
 
@@ -96,6 +97,16 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
 
   const { components, totalSellPrice: componentsTotalSellPrice } = await computeCostComponents('package', packageId)
 
+  // Harga jual HIDUP sub-modul dibaca dari titik harga (docs/arsitektur-harga-terpadu.md §15), bukan kolom cache lama.
+  const muthowifSingleton = await prisma.muthowifServicePrice.findFirst({ select: { id: true } })
+  const [hotelPrice, transportPrice, visaPrice, flightPrice, muthowifPrice] = await Promise.all([
+    sellPrices('hotel', pkg.hotelOptions.map(o => o.hotelRoomScheduleId)),
+    sellPrices('transport', pkg.transportTrip?.pricing.map(p => p.id) ?? []),
+    sellPrices('visa', pkg.visaOptions.map(o => o.visaProductId)),
+    sellPrices('flight', pkg.flightRoute?.schedules.map(s => s.id) ?? []),
+    sellPrices('muthowif', muthowifSingleton ? [muthowifSingleton.id] : []),
+  ])
+
   // Hotel Makkah
   const hotelMakkah: HotelSlotBreakdown = pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahNumRooms != null && pkg.includedHotelMakkahPrice != null
     ? {
@@ -114,7 +125,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
         hotelName: o.hotelRoomSchedule.period.hotel.name,
         roomTypeName: o.hotelRoomSchedule.roomType.name,
         nights: o.nights,
-        pricePerNight: Number(o.hotelRoomSchedule.price),
+        pricePerNight: hotelPrice.get(o.hotelRoomScheduleId) ?? 0,
       }))
     : []
 
@@ -136,7 +147,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
         hotelName: o.hotelRoomSchedule.period.hotel.name,
         roomTypeName: o.hotelRoomSchedule.roomType.name,
         nights: o.nights,
-        pricePerNight: Number(o.hotelRoomSchedule.price),
+        pricePerNight: hotelPrice.get(o.hotelRoomScheduleId) ?? 0,
       }))
     : []
 
@@ -144,19 +155,18 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
   const includedTransportPrice = pkg.transportMode === 'included' && pkg.includedTransportPrice != null ? Number(pkg.includedTransportPrice) : null
   const includedVehicleName = pkg.transportMode === 'included' && pkg.includedTransportPricing ? pkg.includedTransportPricing.vehicle.name : null
   const vehicleOptions: VehicleOption[] = pkg.transportMode === 'user_choice'
-    ? (pkg.transportTrip?.pricing.map(p => ({ transportPricingId: p.id, vehicleName: p.vehicle.name, vehiclePrice: Number(p.price) })) ?? [])
+    ? (pkg.transportTrip?.pricing.map(p => ({ transportPricingId: p.id, vehicleName: p.vehicle.name, vehiclePrice: transportPrice.get(p.id) ?? 0 })) ?? [])
     : []
 
   // Muthowif — singleton, tidak ada opsi untuk dipilih
-  const muthowifSingleton = await prisma.muthowifServicePrice.findFirst()
   const includedMuthowifPrice = pkg.muthowifMode === 'included' && pkg.includedMuthowifPrice != null ? Number(pkg.includedMuthowifPrice) : null
-  const currentMuthowifPrice = muthowifSingleton ? Number(muthowifSingleton.price) : null
+  const currentMuthowifPrice = muthowifSingleton ? (muthowifPrice.get(muthowifSingleton.id) ?? 0) : null
 
   // Visa
   const includedVisaPrice = pkg.visaMode === 'included' && pkg.includedVisaPrice != null ? Number(pkg.includedVisaPrice) : null
   const includedVisaName = pkg.visaMode === 'included' && pkg.includedVisaProduct ? pkg.includedVisaProduct.name : null
   const visaOptions: VisaOption[] = pkg.visaMode === 'user_choice'
-    ? pkg.visaOptions.map(o => ({ visaProductId: o.visaProductId, name: o.visaProduct.name, price: Number(o.visaProduct.price) }))
+    ? pkg.visaOptions.map(o => ({ visaProductId: o.visaProductId, name: o.visaProduct.name, price: visaPrice.get(o.visaProductId) ?? 0 }))
     : []
 
   // Tiket Pesawat
@@ -168,7 +178,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
     ? (pkg.flightRoute?.schedules.map(s => ({
         flightScheduleId: s.id,
         label: `${pkg.flightRoute!.origin} → ${pkg.flightRoute!.destination}`,
-        price: Number(s.price),
+        price: flightPrice.get(s.id) ?? 0,
       })) ?? [])
     : []
 

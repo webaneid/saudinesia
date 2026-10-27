@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { VisaCheckoutForm } from '@/components/booking/VisaCheckoutForm'
+import { visaPriceSummary } from '@/lib/pricing/engine/read'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -14,8 +15,9 @@ export default async function VisaCheckoutPage({ searchParams }: Props) {
   const products = await prisma.visaProduct.findMany({
     where: { isActive: true },
     orderBy: [{ country: 'asc' }, { visaType: 'asc' }],
-    select: { id: true, name: true, country: true, visaType: true, price: true },
+    select: { id: true, name: true, country: true, visaType: true },
   })
+  const summary = await visaPriceSummary(products.map(p => p.id))
 
   return (
     <div className="max-w-3xl mx-auto space-y-6">
@@ -24,7 +26,7 @@ export default async function VisaCheckoutPage({ searchParams }: Props) {
         <p className="text-sm text-muted-foreground">Pesan visa saja, tanpa produk lain — isi data jamaah dan lanjut ke pembayaran.</p>
       </div>
       <VisaCheckoutForm
-        products={products.map(p => ({ ...p, price: Number(p.price) }))}
+        products={products.map(p => ({ ...p, price: summary.get(p.id)?.from ?? 0 }))}
         preselectedProductId={productId ?? null}
       />
     </div>

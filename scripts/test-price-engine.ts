@@ -12,6 +12,14 @@ import { prisma } from '@/lib/db'
 import { getPricePoint, getPricePoints, repriceAll, repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { deleteVisaProduct } from '@/lib/admin/productDelete'
+import { requireSellPrice, sellPrice, sellPrices, visaFeeRules, visaPriceSummary, withSellPrice } from '@/lib/pricing/engine/read'
+import { ItemNotBookableError } from '@/lib/booking/errors'
+import { GET as catalogFlight } from '@/app/api/v1/catalog/flight/route'
+import { GET as catalogVisa } from '@/app/api/v1/catalog/visa/route'
+import { GET as catalogHaji } from '@/app/api/v1/catalog/haji/route'
+import { GET as catalogPackages } from '@/app/api/v1/catalog/packages/route'
+import { GET as catalogTours } from '@/app/api/v1/catalog/tour-packages/route'
+import { GET as catalogHotels } from '@/app/api/v1/catalog/hotels/route'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -228,6 +236,65 @@ await t('hapus produk lewat deleteVisaProduct → titik harga Visa ikut terhapus
   const outcome = await deleteVisaProduct(v.id)
   assert.equal(outcome.deleted, true)
   assert.equal((await getPricePoints('visa', v.id)).length, 0)
+})
+
+// ── PEMBACA (Fase 2) ─────────────────────────────────────────────────────────────────────────────────────────────────
+await t('pembaca: sellPrice/sellPrices/withSellPrice mengikuti titik harga dan sama dengan kolom lama (dual-write); tanpa titik → 0 / tak ada di peta', async () => {
+  assert.equal(await sellPrice('hotel', h1.schedule.id), 1_500_000) // margin 50% dari tes sebelumnya
+  const none = await newSchedule(0)
+  const map = await sellPrices('hotel', [h1.schedule.id, none.schedule.id])
+  assert.deepEqual([map.get(h1.schedule.id), map.has(none.schedule.id)], [1_500_000, false])
+  const [row] = await withSellPrice('hotel', [{ id: none.schedule.id, x: 1 }])
+  assert.deepEqual(row, { id: none.schedule.id, x: 1, price: 0 })
+  assert.equal(await sellPrice('hotel', h1.schedule.id), await hotelPrice(h1.schedule.id), 'pembaca baru = kolom lama selama penulisan ganda')
+  assert.deepEqual([...(await sellPrices('hotel', [])).keys()], [])
+})
+await t('requireSellPrice (jalur pesan): tanpa titik atau ≤ 0 → ItemNotBookableError (422), tak pernah gratis; berharga → nilainya; dibaca lewat klien transaksi juga', async () => {
+  const none = await newSchedule(0)
+  const bookable = (e: unknown) => e instanceof ItemNotBookableError && /belum ditetapkan/.test((e as Error).message)
+  await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable)
+  await prisma.pricePoint.create({ data: { ownerType: 'hotel', ownerId: none.schedule.id, unit: 'room_night', autoSellIdr: 0, sellIdr: 0 } })
+  await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable, 'titik bernilai 0 juga ditolak')
+  assert.equal(await requireSellPrice('hotel', h1.schedule.id, 'kamar hotel'), 1_500_000)
+  assert.equal(await prisma.$transaction(tx => requireSellPrice('hotel', h1.schedule.id, 'kamar hotel', tx)), 1_500_000)
+  // Klien transaksi dihormati: titik harga yang BARU dibuat di dalam transaksi (belum commit) terbaca lewat `tx`, bukan lewat klien global.
+  await prisma.$transaction(async tx => {
+    await tx.pricePoint.update({ where: { ownerType_ownerId_variantKey: { ownerType: 'hotel', ownerId: none.schedule.id, variantKey: '' } }, data: { autoSellIdr: 777_000, sellIdr: 777_000 } })
+    assert.equal(await requireSellPrice('hotel', none.schedule.id, 'kamar hotel', tx), 777_000)
+    await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable, 'di luar transaksi masih 0')
+  })
+  await prisma.pricePoint.deleteMany({ where: { ownerId: none.schedule.id } })
+})
+await t('Visa: visaFeeRules urut hari awal; visaPriceSummary = termurah + "rentang" bila ≥ 2 harga berbeda; produk tanpa titik → 0 dan bukan rentang', async () => {
+  const v = await prisma.visaProduct.create({ data: { name: `${tag} visa baca`, visaType: 'Umroh', price: 0 } })
+  await addCost('visa', v.id, 'individu', 0, 'IDR', [{ minDays: 15, maxDays: 30, cost: 2_000_000 }, { minDays: 1, maxDays: 14, cost: 1_000_000 }])
+  await repriceOwner('visa', v.id)
+  assert.deepEqual((await visaFeeRules([v.id])).get(v.id), [{ minDays: 1, maxDays: 14, fee: 1_500_000 }, { minDays: 15, maxDays: 30, fee: 3_000_000 }]) // margin 50%, bulat 100.000
+  const sum = await visaPriceSummary([v.id, haji.id])
+  assert.deepEqual(sum.get(v.id), { from: 1_500_000, isRange: true })
+  assert.deepEqual(sum.get(haji.id), { from: 0, isRange: false })
+  assert.equal(await sellPrice("visa", v.id), 1_500_000)
+})
+await t('I5 — respons katalog publik TIDAK memuat modal/margin/HPP/jejak kurs-vendor, dan memuat harga jual dari titik harga', async () => {
+  const forbidden = /"(costIdr|hppRupiah|hpp|marginPct\w*|autoSellIdr|manualSellIdr|fxRateIds|vendorIds|roundingUsed|minMarginPercent)"/
+  const call = async (name: string, handler: (r: Request) => Promise<Response>, url: string) => {
+    const res = await handler(new Request(url))
+    const text = await res.text()
+    assert.equal(res.status, 200, `${name} → ${res.status}: ${text.slice(0, 120)}`)
+    assert.doesNotMatch(text, forbidden, `${name} membocorkan kolom modal/margin`)
+    return JSON.parse(text) as { data: Array<Record<string, unknown>> }
+  }
+  await call('flight', catalogFlight, 'http://t/api/v1/catalog/flight')
+  await call('haji', catalogHaji, 'http://t/api/v1/catalog/haji')
+  await call('packages', catalogPackages, 'http://t/api/v1/catalog/packages')
+  await call('tour-packages', catalogTours, 'http://t/api/v1/catalog/tour-packages')
+  const visas = await call('visa', catalogVisa, 'http://t/api/v1/catalog/visa')
+  const mine = visas.data.find(x => x.id === visa.id)
+  void mine // produk uji `visa` sudah dihapus tesnya sendiri; yang dipastikan: tak ada rincian tier yang bocor
+  assert.ok(visas.data.every(x => !('durationFeeRules' in x)), 'rincian tier tak keluar ke publik')
+  const hotels = await call('hotels', catalogHotels, 'http://t/api/v1/catalog/hotels?check_in=2090-03-01&check_out=2090-03-05')
+  const mineHotel = hotels.data.find(h => h.id === h1.hotel.id) as { schedules: Array<{ pricePerNight: number }> } | undefined
+  assert.deepEqual(mineHotel?.schedules.map(x => x.pricePerNight), [1_500_000], 'harga hotel di katalog = titik harga')
 })
 
 // ── PENJAGA SUMBER ───────────────────────────────────────────────────────────────────────────────────────────────────

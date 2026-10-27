@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { computeCostComponents, type ComponentBreakdown } from './costComponents'
+import { sellPrices } from './engine/read'
 
 export type { ComponentBreakdown }
 
@@ -83,6 +84,12 @@ export async function computeTourPackageBreakdown(tourPackageId: string): Promis
 
   const { components, totalSellPrice: componentsTotalSellPrice } = await computeCostComponents('tour_package', tourPackageId)
 
+  // Harga jual HIDUP kendaraan/hotel pilihan dibaca dari titik harga (docs/arsitektur-harga-terpadu.md §15), bukan kolom cache lama.
+  const [transportPrice, hotelPrice] = await Promise.all([
+    sellPrices('transport', tourPackage.transportTrip?.pricing.map(p => p.id) ?? []),
+    sellPrices('hotel', tourPackage.hotelOptions.map(o => o.hotelRoomScheduleId)),
+  ])
+
   // Kendaraan — hanya SATU dari dua sumber ini yang relevan tergantung mode (§12.4).
   const includedTransportPrice = tourPackage.transportMode === 'included' && tourPackage.includedTransportPrice != null
     ? Number(tourPackage.includedTransportPrice)
@@ -92,7 +99,7 @@ export async function computeTourPackageBreakdown(tourPackageId: string): Promis
     : null
   const vehicleOptions: VehicleOption[] = tourPackage.transportMode === 'user_choice'
     ? (tourPackage.transportTrip?.pricing.map(p => ({
-        transportPricingId: p.id, vehicleName: p.vehicle.name, vehiclePrice: Number(p.price),
+        transportPricingId: p.id, vehicleName: p.vehicle.name, vehiclePrice: transportPrice.get(p.id) ?? 0,
       })) ?? [])
     : []
 
@@ -117,7 +124,7 @@ export async function computeTourPackageBreakdown(tourPackageId: string): Promis
         hotelName: o.hotelRoomSchedule.period.hotel.name,
         roomTypeName: o.hotelRoomSchedule.roomType.name,
         nights: o.nights,
-        pricePerNight: Number(o.hotelRoomSchedule.price),
+        pricePerNight: hotelPrice.get(o.hotelRoomScheduleId) ?? 0,
       }))
     : []
 

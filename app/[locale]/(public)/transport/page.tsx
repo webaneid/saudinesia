@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { Bus } from 'lucide-react'
 import TransportSearch, { type TripData } from '@/components/shared/TransportSearch'
+import { sellPrices } from '@/lib/pricing/engine/read'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -21,6 +22,8 @@ export default async function TransportCatalogPage({ params }: Props) {
     },
   })
 
+  const transportPrices = await sellPrices('transport', trips.flatMap(t => t.pricing.map(p => p.id)))
+
   // Foto sampul tiap kendaraan — layanan media universal (satu query batch).
   const vehicleIds = [...new Set(trips.flatMap(t => t.pricing.map(p => p.vehicle.id)))]
   const coverMap = await getFeaturedCardUrls('vehicle', vehicleIds)
@@ -35,7 +38,7 @@ export default async function TransportCatalogPage({ params }: Props) {
     vehicles: t.pricing.map(p => ({
       pricingId: p.id, vehicleId: p.vehicle.id, vehicleName: p.vehicle.name,
       vehicleType: p.vehicle.vehicleType, capacity: p.vehicle.capacity, fleetCount: p.vehicle.fleetCount,
-      price: Number(p.price), coverUrl: coverUrls[p.vehicle.id] ?? null,
+      price: transportPrices.get(p.id) ?? 0, coverUrl: coverUrls[p.vehicle.id] ?? null,
     })),
   }))
 
