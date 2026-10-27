@@ -10,6 +10,8 @@ import { EditorShell } from '@/components/admin/editor/EditorShell'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
+import { DeleteBox } from '@/components/admin/editor/DeleteBox'
+import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 
 type Mode = 'included' | 'user_choice' | 'none'
@@ -88,8 +90,12 @@ export default function TourPackageBuilderPage({ params }: Props) {
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Dilacak: info paket (nama, deskripsi, status). Kotak situs/kendaraan/hotel/biaya tersimpan langsung per aksi.
-  const { dirty, markClean } = useDirtyForm(loaded ? form : null)
+  const { dirty, markClean, patchClean } = useDirtyForm(loaded ? form : null)
   useUnsavedGuard(dirty)
+  const del = useDeleteEntity(`/api/v1/admin/products/tour-packages/${id}`, `/${locale}/admin/products/tour-packages`)
+  async function handleDelete() {
+    if (await del.run() === 'deactivated') { setForm(f => ({ ...f, isActive: false })); patchClean(prev => ({ ...prev, isActive: false })) }
+  }
 
   const [allTrips, setAllTrips] = useState<Trip[]>([])
   const [allSites, setAllSites] = useState<TourismSite[]>([])
@@ -312,7 +318,11 @@ export default function TourPackageBuilderPage({ params }: Props) {
     <EditorShell
       backHref={`/${locale}/admin/products/tour-packages`}
       backLabel="Paket Ziarah"
-      banner={error ? <p role="alert" className="m-0 rounded-xl bg-admin-danger/10 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
+      banner={
+        (error || del.error || del.notice) ? (
+          <p role={del.notice && !error && !del.error ? 'status' : 'alert'} className={`m-0 rounded-xl px-3 py-2 text-sm font-medium ${del.notice && !error && !del.error ? 'border border-admin-line bg-admin-spot text-admin-ink' : 'bg-admin-danger/10 text-admin-danger'}`}>{error ?? del.error ?? del.notice}</p>
+        ) : undefined
+      }
       title={
         <div className="space-y-3">
           <label htmlFor="tourpackage-name" className="sr-only">Nama paket</label>
@@ -338,6 +348,10 @@ export default function TourPackageBuilderPage({ params }: Props) {
               <p className="m-0 text-[11px] text-admin-muted">Rincian ada di kotak &quot;Rincian Harga&quot; di bawah.</p>
             </MetaBox>
           )}
+          <DeleteBox
+            confirmText="Hapus paket ziarah ini beserta situs, hotel, dan komponen biayanya? Bila sudah dipesan, ia hanya dinonaktifkan (bisa diaktifkan kembali)."
+            onDelete={handleDelete} deleting={del.deleting}
+          />
         </>
       }
       mobileBar={

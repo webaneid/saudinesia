@@ -6,6 +6,7 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { refreshPackagePriceCache } from '@/lib/pricing/refreshPackagePriceCache'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { deletePackage } from '@/lib/admin/productDelete'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -200,3 +201,19 @@ export async function PUT(req: Request, { params }: Ctx) {
 }
 
 // Tidak ada DELETE — nonaktifkan via isActive (pola sama TourPackage).
+
+// Hapus sungguhan hanya bila tak ada riwayat yang merujuk; selain itu nonaktif (lib/admin/productDelete.ts).
+export async function DELETE(_req: Request, { params }: Ctx) {
+  try {
+    await requireManager()
+    const { id } = await params
+    return NextResponse.json(ok(await deletePackage(id)))
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
+      return NextResponse.json(err('Forbidden'), { status: 403 })
+    }
+    if (isRecordNotFound(e)) return NextResponse.json(err('Paket umroh tidak ditemukan'), { status: 404 })
+    console.error('[admin/products/packages/[id]/DELETE]', e instanceof Error ? e.name : e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
+}

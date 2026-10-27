@@ -1,4 +1,3 @@
-import { purgeProductMedia } from '@/lib/media/service'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
@@ -7,6 +6,7 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { deleteVisaProduct } from '@/lib/admin/productDelete'
 
 const requirementSchema = z.object({
   docType:     z.string().min(1),
@@ -88,19 +88,18 @@ export async function PUT(req: Request, { params }: Ctx) {
   }
 }
 
+// Hapus sungguhan hanya bila tak ada riwayat yang merujuk; selain itu nonaktif (lib/admin/productDelete.ts).
 export async function DELETE(_req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    await prisma.visaProduct.delete({ where: { id } })
-    await purgeProductMedia('visa', id) // foto produk ikut bersih (tak ada objek yatim di bucket)
-    return NextResponse.json(ok(null))
+    return NextResponse.json(ok(await deleteVisaProduct(id)))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Produk visa tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/visa/[id]/DELETE]', e)
+    console.error('[admin/products/visa/[id]/DELETE]', e instanceof Error ? e.name : e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

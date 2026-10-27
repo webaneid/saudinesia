@@ -6,6 +6,7 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { refreshTourPackagePriceCache } from '@/lib/pricing/refreshTourPackagePriceCache'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { deleteTourPackage } from '@/lib/admin/productDelete'
 
 // transportTripId/includedTransportPricingId nullable eksplisit — admin bisa MELEPAS (kirim
 // null), bukan cuma "tidak diubah". transportMode/hotelMode adalah pemilih 3-mode (included/
@@ -96,3 +97,19 @@ export async function PUT(req: Request, { params }: Ctx) {
 }
 
 // Tidak ada DELETE — dipakai histori BookingTourPackage, nonaktifkan via isActive.
+
+// Hapus sungguhan hanya bila tak ada riwayat yang merujuk; selain itu nonaktif (lib/admin/productDelete.ts).
+export async function DELETE(_req: Request, { params }: Ctx) {
+  try {
+    await requireManager()
+    const { id } = await params
+    return NextResponse.json(ok(await deleteTourPackage(id)))
+  } catch (e) {
+    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
+      return NextResponse.json(err('Forbidden'), { status: 403 })
+    }
+    if (isRecordNotFound(e)) return NextResponse.json(err('Paket ziarah tidak ditemukan'), { status: 404 })
+    console.error('[admin/products/tour-packages/[id]/DELETE]', e instanceof Error ? e.name : e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
+}

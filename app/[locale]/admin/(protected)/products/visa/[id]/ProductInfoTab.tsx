@@ -10,7 +10,7 @@ import { FormField } from '@/components/admin/ui/FormField'
 import { Switch } from '@/components/admin/ui/Switch'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { formatRupiah } from '@/lib/utils'
-import type { InfoForm } from './types'
+import type { DeleteResult, InfoForm } from './types'
 
 const VISA_TYPE_SUGGESTIONS = ['Umroh', 'Visitor', 'Bisnis', 'Kerja', 'Transit', 'Haji']
 
@@ -22,8 +22,7 @@ type Props = {
   locale: string
   productName: string
   onShowPrice: () => void
-  /** Mengembalikan pesan galat bila gagal, null bila berhasil (halaman yang mengalihkan). */
-  onDelete: () => Promise<string | null>
+  onDelete: () => Promise<DeleteResult>
 }
 
 export function ProductInfoTab({ productId, form, onChange, price, locale, productName, onShowPrice, onDelete }: Props) {
@@ -119,23 +118,28 @@ function SectionTitle({ icon: Icon, title, hint }: { icon?: typeof Info; title: 
   )
 }
 
-function DangerZone({ productName, onDelete }: { productName: string; onDelete: () => Promise<string | null> }) {
+function DangerZone({ productName, onDelete }: { productName: string; onDelete: () => Promise<DeleteResult> }) {
   const [confirming, setConfirming] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
 
   async function run() {
     setDeleting(true)
     setError(null)
-    const message = await onDelete()
-    if (message) { setError(message); setDeleting(false) }
+    setNotice(null)
+    const result = await onDelete()
+    if (result && 'error' in result) setError(result.error)
+    if (result && 'notice' in result) { setNotice(result.notice); setConfirming(false) }
+    setDeleting(false)
   }
 
   return (
     <Card className="space-y-3 border-admin-danger/25 p-5">
       <h2 className="m-0 text-sm font-bold text-admin-danger">Zona berbahaya</h2>
-      <p className="m-0 text-xs text-admin-muted">Menghapus produk ini permanen. Data jamaah yang sudah memesan tidak terpengaruh.</p>
-      {error && <p className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
+      <p className="m-0 text-xs text-admin-muted">Menghapus produk ini permanen. Bila sudah dipakai pesanan, pengajuan visa, atau paket, ia hanya dinonaktifkan (riwayat tetap utuh, bisa diaktifkan kembali lewat saklar Publikasi).</p>
+      {error && <p role="alert" className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
+      {notice && <p role="status" className="m-0 text-xs font-medium text-admin-ink">{notice}</p>}
       {!confirming ? (
         <Button variant="outline" size="sm" className="border-admin-danger/30 text-admin-danger hover:border-admin-danger" onClick={() => setConfirming(true)}>
           <Trash2 className="size-3.5" /> Hapus produk

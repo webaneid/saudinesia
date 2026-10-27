@@ -71,6 +71,23 @@ await t('Visa: Foto Unggulan di kolom kanan (sidebar), bukan di atas formulir', 
   assert.ok(sidebarAt > 0 && mediaAt > sidebarAt, 'MediaField harus berada setelah pembuka kolom kanan')
 })
 
+await t('hapus di halaman edit: semua entitas produk punya kotak Hapus (EditPage.remove / DeleteBox) dan memakai satu pemeriksa respons', () => {
+  for (const e of ['products/muthowif/[id]', 'products/tourism-sites/[id]']) {
+    const src = read(ADMIN + e + '/page.tsx')
+    assert.match(src, /remove=\{\{/, `${e}: tidak punya remove`); assert.match(src, /e\.remove\(\)/, `${e}: tidak memakai useEditEntity.remove`)
+    assert.match(src, /patchClean\(\{ isActive: false \}\)/, `${e}: nonaktif karena dirujuk harus menggeser baseline`)
+  }
+  for (const e of ['products/packages/[id]', 'products/tour-packages/[id]', 'products/hotels/[id]']) {
+    const src = read(ADMIN + e + '/page.tsx')
+    assert.match(src, /<DeleteBox\b/, `${e}: tidak punya <DeleteBox>`); assert.match(src, /useDeleteEntity\(/, `${e}: tidak memakai useDeleteEntity`)
+    assert.match(src, /=== 'deactivated'/, `${e}: hasil nonaktif tidak ditangani`)
+  }
+  const visa = read(ADMIN + 'products/visa/[id]/page.tsx')
+  assert.match(visa, /j\.data\.deleted/, 'Visa: hasil hapus (terhapus/nonaktif) tidak dibedakan'); assert.match(visa, /!j\?\.data/, 'Visa: respons hapus tidak diperiksa')
+  const hook = read('components/admin/editor/useDeleteEntity.ts')
+  assert.match(hook, /!res\.ok \|\| !json\?\.data/, 'useDeleteEntity harus memeriksa respons'); assert.match(hook, /json\.data\.deleted/)
+})
+
 await t('komponen editor: MetaBox menjaga isi tetap ter-mount saat dilipat; DeleteBox memakai konfirmasi inline', () => {
   assert.match(read('components/admin/editor/MetaBox.tsx'), /hidden=\{!expanded\}/, 'isi harus disembunyikan, bukan di-unmount')
   const del = read('components/admin/editor/DeleteBox.tsx')
