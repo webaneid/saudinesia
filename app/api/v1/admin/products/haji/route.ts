@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     const { description, ...d } = parsed.data
     const p = await prisma.hajiProduct.create({
       // price 0 = "belum ditetapkan" sampai Komponen Biaya diisi (cache dihitung dari komponen; tidak bisa dipesan selama 0 — SEC-66).
-      data: { ...d, price: 0, description: emptyToNull(description), priceLabel: 'per orang', images: [] },
+      data: { ...d, price: 0, description: emptyToNull(description), priceLabel: 'per orang' },
     })
     return NextResponse.json(ok(p), { status: 201 })
   } catch (e) {

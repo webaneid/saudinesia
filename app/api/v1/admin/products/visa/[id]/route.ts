@@ -1,3 +1,4 @@
+import { purgeProductMedia } from '@/lib/media/service'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
@@ -92,6 +93,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     await prisma.visaProduct.delete({ where: { id } })
+    await purgeProductMedia('visa', id) // foto produk ikut bersih (tak ada objek yatim di bucket)
     return NextResponse.json(ok(null))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

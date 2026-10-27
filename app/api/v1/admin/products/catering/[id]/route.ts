@@ -1,3 +1,4 @@
+import { purgeProductMedia } from '@/lib/media/service'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
@@ -50,7 +51,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
         if (!row) throw Object.assign(new Error('not found'), { code: 'P2025' })
         return row._count.bookingCatering + row._count.includedInPackages + row._count.packageOptions
       },
-      remove: () => prisma.cateringOption.delete({ where: { id } }),
+      remove: async () => { await prisma.cateringOption.delete({ where: { id } }); await purgeProductMedia('catering', id) },
       deactivate: () => prisma.cateringOption.update({ where: { id }, data: { isActive: false } }),
       usedBy: n => `Paket katering dipakai di ${n} booking/paket`,
     })

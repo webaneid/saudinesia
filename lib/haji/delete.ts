@@ -1,3 +1,4 @@
+import { purgeProductMedia } from '@/lib/media/service'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 
@@ -20,7 +21,7 @@ export async function deleteOrDeactivateHaji(id: string): Promise<HajiDeleteResu
   }
 
   try {
-    return await prisma.$transaction(async (tx): Promise<HajiDeleteResult> => {
+    const result = await prisma.$transaction(async (tx): Promise<HajiDeleteResult> => {
       const product = await tx.hajiProduct.findUnique({ where: { id }, select: { id: true } })
       if (!product) return { found: false }
       const bookingCount = await tx.bookingHaji.count({ where: { hajiProductId: id } })
@@ -36,6 +37,8 @@ export async function deleteOrDeactivateHaji(id: string): Promise<HajiDeleteResu
       await tx.hajiProduct.delete({ where: { id } })
       return { found: true, deleted: true }
     })
+    if (result.found && result.deleted) await purgeProductMedia('haji', id) // setelah commit: baris + objek foto ikut bersih
+    return result
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') {
       return deactivate(await prisma.bookingHaji.count({ where: { hajiProductId: id } }))

@@ -120,7 +120,7 @@ async function main() {
       data: {
         name: h.name, city: h.city, stars: h.stars,
         distanceToHaramM: h.distanceToHaramM,
-        description: h.description, images: [], facilities: h.facilities,
+        description: h.description, facilities: h.facilities,
       },
     })
   }

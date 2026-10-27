@@ -130,3 +130,12 @@ function normalizeAlt(alt: string | null | undefined): string | null {
 }
 
 export const mediaService = createMediaService()
+
+/**
+ * Dipanggil SETELAH produk dihapus sungguhan: membersihkan baris + objek fotonya. Kegagalan di sini tidak boleh menggagalkan penghapusan produk yang
+ * sudah berhasil — dicatat (tanpa data pribadi) dan dilewati; objek yang tertinggal dapat disapu lewat `removeAll` nanti.
+ */
+export async function purgeProductMedia(type: MediaProductType, productId: string): Promise<void> {
+  try { await mediaService.removeAll(type, productId) } catch (e) { console.error('[media/purge]', type, e instanceof Error ? e.name : e) }
+}
+

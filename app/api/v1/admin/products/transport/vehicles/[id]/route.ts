@@ -1,3 +1,4 @@
+import { purgeProductMedia } from '@/lib/media/service'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
@@ -62,7 +63,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
         if (!row) throw Object.assign(new Error('not found'), { code: 'P2025' })
         return row._count.pricing
       },
-      remove: () => prisma.transportVehicle.delete({ where: { id } }),
+      remove: async () => { await prisma.transportVehicle.delete({ where: { id } }); await purgeProductMedia('vehicle', id) },
       deactivate: () => prisma.transportVehicle.update({ where: { id }, data: { isActive: false } }),
       usedBy: n => `Kendaraan dipakai di ${n} harga trip`,
     })
