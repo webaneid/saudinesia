@@ -1,40 +1,71 @@
+import { Plane } from 'lucide-react'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { Plane, CalendarRange } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { escapeLike } from '@/lib/utils/search'
 import { withSellPrice } from '@/lib/pricing/engine/read'
+import { buildListHref, paginate, parseListParams } from '@/lib/table/pagination'
+import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
+import { FilterBar } from '@/components/shared/data-table/FilterBar'
+import { Pagination } from '@/components/shared/data-table/Pagination'
+import { SearchForm } from '@/components/shared/data-table/SearchForm'
 
-type Props = { params: Promise<{ locale: string }> }
+// Katalog tiket pesawat (publik). Tabel + pencarian + paginasi memakai kit bersama (docs/arsitektur-tabel.md Fase 4): di HP tiap baris menjadi kartu.
+
+type Props = {
+  params: Promise<{ locale: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
 
 function formatDate(d: Date) {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default async function FlightCatalogPage({ params }: Props) {
-  await params
+type Row = { id: string; origin: string; destination: string; departureFrom: Date; departureTo: Date; price: number; airline: string | null }
 
-  const schedules = await withSellPrice('flight', await prisma.flightSchedule.findMany({
-    where: { isActive: true, route: { isActive: true } },
-    orderBy: { departureFrom: 'asc' },
-    include: { route: true },
-  }))
+export default async function FlightCatalogPage({ params, searchParams }: Props) {
+  const { locale } = await params
+  const sp = await searchParams
+  const list = parseListParams(sp)
+  const q = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 100)
+  const like = { contains: escapeLike(q), mode: 'insensitive' as const }
+  const where: Prisma.FlightScheduleWhereInput = {
+    isActive: true,
+    route: { isActive: true, ...(q ? { OR: [{ origin: like }, { destination: like }] } : {}) },
+  }
 
-  // Satu query batch untuk semua maskapai (Vendor lewat ProductCost) — bukan N+1 per jadwal.
+  const { items, meta } = await paginate(
+    list,
+    () => prisma.flightSchedule.count({ where }),
+    range => prisma.flightSchedule.findMany({ where, orderBy: [{ departureFrom: 'asc' }, { id: 'asc' }], include: { route: true }, ...range }),
+  )
+  const schedules = await withSellPrice('flight', items)
+
+  // Satu query batch untuk maskapai halaman ini (Vendor lewat ProductCost) — bukan N+1 per jadwal.
   const costs = await prisma.productCost.findMany({
-    where: {
-      productType: 'flight',
-      productId: { in: schedules.map(s => s.id) },
-      costComponent: 'tiket',
-      isActive: true,
-    },
+    where: { productType: 'flight', productId: { in: schedules.map(s => s.id) }, costComponent: 'tiket', isActive: true },
     include: { vendor: true },
   })
   const airlineByScheduleId = new Map(costs.map(c => [c.productId, c.vendor.name]))
+  const rows: Row[] = schedules.map(s => ({
+    id: s.id, origin: s.route.origin, destination: s.route.destination, departureFrom: s.departureFrom, departureTo: s.departureTo,
+    price: Number(s.price), airline: airlineByScheduleId.get(s.id) ?? null,
+  }))
+
+  const base = `/${locale}/flight`
+  const limitParam = sp.limit === undefined ? undefined : String(list.limit)
+  const columns: Column<Row>[] = [
+    { key: 'route', header: 'Rute', mobile: 'title', cell: r => <span className="text-[14px] font-semibold">{r.origin} → {r.destination}</span> },
+    { key: 'airline', header: 'Maskapai', cell: r => <span className="text-[13px] text-admin-muted">{r.airline ?? '—'}</span> },
+    { key: 'period', header: 'Periode Keberangkatan', cell: r => <span className="text-[13px] text-admin-muted">{formatDate(r.departureFrom)} – {formatDate(r.departureTo)}</span> },
+    { key: 'price', header: 'Harga', align: 'right', cell: r => <span className="text-[14px] font-bold tabular-nums text-admin-accent">{formatRupiah(r.price)}</span> },
+  ]
 
   return (
     <div className="space-y-8">
       <div className="space-y-2">
         <h1 className="text-3xl font-bold flex items-center gap-3">
-          <Plane className="h-8 w-8 text-teal-600" />
+          <Plane className="h-8 w-8 text-admin-accent" />
           Tiket Pesawat
         </h1>
         <p className="text-muted-foreground max-w-2xl">
@@ -43,63 +74,18 @@ export default async function FlightCatalogPage({ params }: Props) {
         </p>
       </div>
 
-      {schedules.length === 0 && (
-        <div className="rounded-xl border border-dashed p-16 text-center text-muted-foreground">
-          <Plane className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Jadwal penerbangan akan segera tersedia.</p>
-        </div>
-      )}
-
-      {schedules.length > 0 && (
-        <>
-          {/* Desktop: tabel */}
-          <div className="hidden md:block rounded-xl border bg-card overflow-hidden">
-            <table className="w-full text-sm text-left">
-              <thead className="border-b bg-muted/40">
-                <tr>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Maskapai</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Rute</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Periode Keberangkatan</th>
-                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground text-right">Harga</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {schedules.map(s => (
-                  <tr key={s.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="px-4 py-3 font-medium text-foreground">{airlineByScheduleId.get(s.id) ?? '—'}</td>
-                    <td className="px-4 py-3 text-foreground">{s.route.origin} → {s.route.destination}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{formatDate(s.departureFrom)} – {formatDate(s.departureTo)}</td>
-                    <td className="px-4 py-3 text-right font-bold text-teal-700">{formatRupiah(Number(s.price))}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Mobile: card */}
-          <div className="md:hidden space-y-3">
-            {schedules.map(s => (
-              <div key={s.id} className="rounded-xl border bg-card p-4 space-y-2.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-foreground">{s.route.origin} → {s.route.destination}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{airlineByScheduleId.get(s.id) ?? '—'}</p>
-                  </div>
-                  <p className="text-lg font-bold text-teal-700 shrink-0">{formatRupiah(Number(s.price))}</p>
-                </div>
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground pt-2 border-t">
-                  <CalendarRange className="h-3.5 w-3.5 text-teal-500 shrink-0" />
-                  {formatDate(s.departureFrom)} – {formatDate(s.departureTo)}
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      <p className="text-xs text-muted-foreground text-center">
-        Harga berlaku per orang untuk pemberangkatan pada periode yang tertera. Hubungi kami untuk pemesanan.
-      </p>
+      <div className="space-y-4">
+        <FilterBar active={Boolean(q)} resetHref={buildListHref(base, { limit: limitParam })}>
+          <SearchForm action={base} q={q} placeholder="Cari kota asal / tujuan…" preserve={{ limit: limitParam }} clearHref={buildListHref(base, { limit: limitParam })} />
+        </FilterBar>
+        <DataTable
+          columns={columns} rows={rows} getRowId={r => r.id}
+          empty={q ? 'Tidak ada jadwal yang cocok dengan pencarian.' : (
+            <span className="flex flex-col items-center gap-2"><Plane className="h-10 w-10 opacity-30" />Jadwal penerbangan akan segera tersedia.</span>
+          )}
+          footer={meta.total > 0 ? <Pagination {...meta} hrefFor={page => buildListHref(base, { q: q || undefined, limit: limitParam, page })} /> : undefined}
+        />
+      </div>
     </div>
   )
 }

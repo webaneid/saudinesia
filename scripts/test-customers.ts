@@ -90,6 +90,18 @@ await t('detail: profil, penanda Google (boolean), pesanan terbaru dulu, ringkas
   assert.equal(await getCustomer('00000000-0000-0000-0000-000000000000'), null)
   assert.equal((await getCustomer(gone.id))!.deleted, true)
 })
+await t('detail: daftar pesanan berpaginasi (12 pesanan, 5 per halaman → halaman 1/2/3, total 12, terbaru dulu, halaman di luar batas dijepit)', async () => {
+  const dana = await mk('dana')
+  for (let i = 0; i < 12; i++) await prisma.booking.create({ data: { bookingCode: `${tag}-d${String(i).padStart(2, '0')}`, userId: dana.id, status: 'confirmed', departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 1_000_000, createdAt: new Date(Date.UTC(2090, 0, 1 + i)) } })
+  const page = (p: number) => getCustomer(dana.id, parseListParams(new URLSearchParams(`page=${p}&limit=5`)))
+  const [p1, p2, p3, p9] = [await page(1), await page(2), await page(3), await page(9)]
+  assert.deepEqual([p1!.bookings.length, p2!.bookings.length, p3!.bookings.length], [5, 5, 2])
+  assert.deepEqual([p1!.bookingsMeta.total, p1!.bookingsMeta.totalPages, p9!.bookingsMeta.page, p9!.bookings.length], [12, 3, 3, 2])
+  assert.equal(p1!.bookings[0]!.bookingCode, `${tag}-d11`, 'terbaru dulu')
+  assert.equal(new Set([...p1!.bookings, ...p2!.bookings, ...p3!.bookings].map(b => b.id)).size, 12, 'tak ada duplikat/lompatan')
+  assert.equal(p1!.bookingCount, 12, 'agregat tak terpengaruh paginasi')
+  assert.equal((await getCustomer(dana.id))!.bookings.length, 10, 'bawaan: 10 per halaman')
+})
 await t('detail tak pernah membocorkan rahasia: hasil serialisasi tak memuat passwordHash/googleSub/token/sessionVersion', async () => {
   const json = JSON.stringify({ d: await getCustomer(alice.id), l: await list({}) })
   for (const bad of ['SECRET-HASH', `${tag}-sub`, 'passwordHash', 'googleSub', 'sessionVersion']) assert.ok(!json.includes(bad), `bocor: ${bad}`)

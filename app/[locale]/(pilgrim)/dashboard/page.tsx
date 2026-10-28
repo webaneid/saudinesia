@@ -4,15 +4,34 @@ import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
-import { CalendarDays, Plus, FileText } from 'lucide-react'
+import { Plus, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
+import type { BookingStatus, Prisma } from '@prisma/client'
+import { buildListHref, paginate, parseListParams } from '@/lib/table/pagination'
+import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
+import { FilterBar } from '@/components/shared/data-table/FilterBar'
+import { FilterSelect } from '@/components/shared/data-table/FilterSelect'
+import { Pagination } from '@/components/shared/data-table/Pagination'
+import { ActionLink, RowActions } from '@/components/shared/data-table/RowActions'
 
-type Props = { params: Promise<{ locale: string }> }
+type Props = {
+  params: Promise<{ locale: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
 
-export default async function DashboardPage({ params }: Props) {
+type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } } } }>
+
+// hasOwnProperty, bukan `in` — `in` meloloskan "toString"/"constructor" dari prototype.
+const isBookingStatus = (v: string | undefined): v is BookingStatus => !!v && Object.prototype.hasOwnProperty.call(BOOKING_STATUS, v)
+
+export default async function DashboardPage({ params, searchParams }: Props) {
   const { locale } = await params
+  const sp = await searchParams
+  const list = parseListParams(sp, 10)
+  const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
+  const status = isBookingStatus(rawStatus) ? rawStatus : undefined
   const session = await getSession()
   if (!session) redirect(`/${safeLocale(locale)}/login`)
 
@@ -21,14 +40,36 @@ export default async function DashboardPage({ params }: Props) {
     select: { fullName: true, email: true, phone: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true },
   })
 
-  const bookings = await prisma.booking.findMany({
-    where: { userId: session.userId },
-    orderBy: { createdAt: 'desc' },
-    include: {
-      _count: { select: { pilgrims: true } },
-      payments: { where: { status: 'confirmed' }, take: 1 },
+  // Jumlah SELURUH booking pemilik (tanpa filter) menentukan tampilan "belum ada booking"; daftar sendiri berpaginasi + filter status.
+  const ownBookings = await prisma.booking.count({ where: { userId: session.userId } })
+  const where: Prisma.BookingWhereInput = { userId: session.userId, ...(status ? { status } : {}) }
+  const { items: bookings, meta } = await paginate<BookingRow>(
+    list,
+    () => prisma.booking.count({ where }),
+    range => prisma.booking.findMany({
+      where,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
+      include: { _count: { select: { pilgrims: true } } },
+      ...range,
+    }),
+  )
+
+  const base = `/${locale}/dashboard`
+  const limitParam = sp.limit === undefined ? undefined : String(list.limit)
+  const columns: Column<BookingRow>[] = [
+    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
+    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{new Date(b.departureDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span> },
+    { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{b._count.pilgrims} jamaah</span> },
+    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(Number(b.totalAmount))}</span> },
+    {
+      key: 'status', header: 'Status',
+      cell: b => {
+        const cfg = BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS] ?? { label: b.status, badge: 'secondary' }
+        return <Badge variant={cfg.badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>{cfg.label}</Badge>
+      },
     },
-  })
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+  ]
 
   return (
     <div className="space-y-8">
@@ -56,7 +97,7 @@ export default async function DashboardPage({ params }: Props) {
       </div>
 
       {/* Booking list */}
-      {bookings.length === 0 ? (
+      {ownBookings === 0 ? (
         <div className="rounded-xl border border-dashed p-12 text-center space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-muted">
             <FileText className="h-7 w-7 text-muted-foreground" />
@@ -74,33 +115,13 @@ export default async function DashboardPage({ params }: Props) {
       ) : (
         <div className="space-y-3">
           <h2 className="text-lg font-semibold">Riwayat Booking</h2>
-          {bookings.map((b) => {
-            const cfg = BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS] ?? { label: b.status, badge: 'secondary' }
-            return (
-              <Link key={b.id} href={`/${locale}/bookings/${b.id}`}
-                className="flex items-center justify-between gap-4 rounded-xl border bg-card p-4 hover:border-primary hover:shadow-sm transition-all">
-                <div className="space-y-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono font-bold text-primary">{b.bookingCode}</span>
-                    <Badge variant={cfg.badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>
-                      {cfg.label}
-                    </Badge>
-                  </div>
-                  <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
-                    <span className="flex items-center gap-1">
-                      <CalendarDays className="h-3.5 w-3.5" />
-                      {new Date(b.departureDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}
-                    </span>
-                    <span>{b._count.pilgrims} jamaah</span>
-                  </div>
-                </div>
-                <div className="text-right shrink-0">
-                  <p className="font-bold">{formatRupiah(Number(b.totalAmount))}</p>
-                  <p className="text-xs text-muted-foreground capitalize">{b.season}</p>
-                </div>
-              </Link>
-            )
-          })}
+          <FilterBar active={Boolean(status)} resetHref={buildListHref(base, { limit: limitParam })}>
+            <FilterSelect label="Status" value={status ?? ''} options={Object.entries(BOOKING_STATUS).map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: { limit: limitParam } }} />
+          </FilterBar>
+          <DataTable
+            columns={columns} rows={bookings} getRowId={b => b.id} empty="Tidak ada booking dengan status ini."
+            footer={meta.total > 0 ? <Pagination {...meta} hrefFor={page => buildListHref(base, { status, limit: limitParam, page })} /> : undefined}
+          />
         </div>
       )}
     </div>

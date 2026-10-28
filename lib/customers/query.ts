@@ -97,10 +97,14 @@ export type CustomerDetail = CustomerRow & {
   /** Alamat rumah dirangkai satu baris; null = belum diisi. */
   address: string | null
   bookings: Array<{ id: string; bookingCode: string; status: string; departureDate: Date; totalAmount: number; createdAt: Date }>
+  /** Paginasi daftar pesanan (total = SEMUA pesanan akun ini). */
+  bookingsMeta: PageMeta
   payments: { confirmedIdr: number; confirmedCount: number; pendingCount: number; rejectedCount: number }
 }
 
-export async function getCustomer(id: string): Promise<CustomerDetail | null> {
+export const CUSTOMER_BOOKINGS_PAGE_SIZE = 10
+
+export async function getCustomer(id: string, bookingList: ListParams = { page: 1, limit: CUSTOMER_BOOKINGS_PAGE_SIZE, skip: 0 }): Promise<CustomerDetail | null> {
   const u = await prisma.user.findFirst({
     where: { id, role: 'pilgrim' },
     select: {
@@ -113,11 +117,15 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     },
   })
   if (!u) return null
-  const [bookings, payments, agg] = await Promise.all([
-    prisma.booking.findMany({
-      where: { userId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 100,
-      select: { id: true, bookingCode: true, status: true, departureDate: true, totalAmount: true, createdAt: true },
-    }),
+  const [bookingsPage, payments, agg] = await Promise.all([
+    paginate(
+      bookingList,
+      () => prisma.booking.count({ where: { userId: id } }),
+      range => prisma.booking.findMany({
+        where: { userId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], ...range,
+        select: { id: true, bookingCode: true, status: true, departureDate: true, totalAmount: true, createdAt: true },
+      }),
+    ),
     prisma.payment.groupBy({ by: ['status'], where: { booking: { userId: id } }, _count: true, _sum: { amount: true } }),
     aggregates([id]),
   ])
@@ -132,7 +140,7 @@ export async function getCustomer(id: string): Promise<CustomerDetail | null> {
     deleted: isDeletedAccount(u.email), emailVerifiedAt: u.emailVerifiedAt, whatsappVerifiedAt: u.whatsappVerifiedAt, googleLinked: u.googleSub !== null,
     address,
     bookingCount: agg.get(id)?.bookingCount ?? 0, paidIdr: agg.get(id)?.paidIdr ?? 0,
-    bookings: bookings.map(b => ({ ...b, totalAmount: Number(b.totalAmount) })),
+    bookings: bookingsPage.items.map(b => ({ ...b, totalAmount: Number(b.totalAmount) })), bookingsMeta: bookingsPage.meta,
     payments: { confirmedIdr: Number(pay('confirmed')?._sum.amount ?? 0), confirmedCount: pay('confirmed')?._count ?? 0, pendingCount: pay('pending')?._count ?? 0, rejectedCount: pay('rejected')?._count ?? 0 },
   }
 }

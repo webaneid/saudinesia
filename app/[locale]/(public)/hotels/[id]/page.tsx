@@ -3,22 +3,30 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
 import { getProductImages } from '@/lib/media/urls'
-import { MapPin, Star, ArrowLeft, BedDouble, CheckCircle, Building2 } from 'lucide-react'
+import { MapPin, Star, ArrowLeft, CheckCircle, Building2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah, formatDistance } from '@/lib/utils'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { buildListHref, buildPageMeta, parseListParams } from '@/lib/table/pagination'
+import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
+import { Pagination } from '@/components/shared/data-table/Pagination'
 
-type Props = { params: Promise<{ locale: string; id: string }> }
+type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
+
+const RATE_PAGE_SIZE = 10
+
+type Period = { id: string; periodStart: Date; periodEnd: Date; schedules: Array<{ roomTypeId: string; totalQuota: number; pendingQuota: number; bookedQuota: number; price: number }> }
 
 function formatShortDate(d: Date) {
   return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-export default async function HotelDetailPage({ params }: Props) {
+export default async function HotelDetailPage({ params, searchParams }: Props) {
   const { locale, id } = await params
+  const list = parseListParams(await searchParams, RATE_PAGE_SIZE)
 
   // Rate sheet — tampilkan SEMUA periode aktif (bukan cuma yang mencakup hari ini), supaya
   // pengunjung bisa lihat harga ke depan sebelum pilih tanggal, sama seperti rate sheet vendor
@@ -157,85 +165,30 @@ export default async function HotelDetailPage({ params }: Props) {
           <p className="text-sm text-muted-foreground">Belum ada periode harga untuk hotel ini.</p>
         )}
 
-        {hotel.pricePeriods.length > 0 && (
-          <>
-            {/* Desktop: tabel */}
-            <div className="hidden md:block rounded-xl border overflow-hidden">
-              <table className="w-full text-sm text-left">
-                <thead className="border-b bg-muted/40">
-                  <tr>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dari</th>
-                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Sampai</th>
-                    {roomTypeColumns.map(rt => (
-                      <th key={rt.id} className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground text-right">
-                        {rt.name}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y">
-                  {hotel.pricePeriods.map(period => {
-                    const priceByRoomType = new Map(period.schedules.map(s => [s.roomTypeId, s]))
-                    return (
-                      <tr key={period.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="px-4 py-3 text-foreground">{formatShortDate(period.periodStart)}</td>
-                        <td className="px-4 py-3 text-foreground">{formatShortDate(period.periodEnd)}</td>
-                        {roomTypeColumns.map(rt => {
-                          const s = priceByRoomType.get(rt.id)
-                          const available = s ? s.totalQuota - s.pendingQuota - s.bookedQuota : 0
-                          return (
-                            <td key={rt.id} className="px-4 py-3 text-right">
-                              {s ? (
-                                <span className={available > 0 ? 'font-semibold text-foreground' : 'text-muted-foreground line-through'}>
-                                  {formatRupiah(Number(s.price))}
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">—</span>
-                              )}
-                            </td>
-                          )
-                        })}
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile: card per periode */}
-            <div className="md:hidden space-y-3">
-              {hotel.pricePeriods.map(period => {
-                const priceByRoomType = new Map(period.schedules.map(s => [s.roomTypeId, s]))
-                return (
-                  <div key={period.id} className="rounded-xl border p-4 space-y-3">
-                    <div className="flex items-center gap-1.5 text-sm font-medium">
-                      <BedDouble className="h-4 w-4 text-muted-foreground shrink-0" />
-                      {formatShortDate(period.periodStart)} – {formatShortDate(period.periodEnd)}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 pt-2 border-t">
-                      {roomTypeColumns.map(rt => {
-                        const s = priceByRoomType.get(rt.id)
-                        const available = s ? s.totalQuota - s.pendingQuota - s.bookedQuota : 0
-                        return (
-                          <div key={rt.id} className="text-xs">
-                            <p className="text-muted-foreground">{rt.name}</p>
-                            {s ? (
-                              <p className={available > 0 ? 'font-semibold text-foreground' : 'text-muted-foreground line-through'}>
-                                {formatRupiah(Number(s.price))}
-                              </p>
-                            ) : (
-                              <p className="text-muted-foreground">—</p>
-                            )}
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </>
-        )}
+        {hotel.pricePeriods.length > 0 && (() => {
+          // Paginasi per PERIODE (baris rate sheet); kolom = tipe kamar. Tabel bersama: di HP tiap periode menjadi kartu.
+          const meta = buildPageMeta(hotel.pricePeriods.length, Math.min(list.page, Math.max(1, Math.ceil(hotel.pricePeriods.length / list.limit))), list.limit)
+          const rows: Period[] = hotel.pricePeriods.slice((meta.page - 1) * meta.limit, meta.page * meta.limit)
+          const columns: Column<Period>[] = [
+            { key: 'period', header: 'Periode', mobile: 'title', cell: p => <span className="whitespace-nowrap text-[13px] font-medium">{formatShortDate(p.periodStart)} – {formatShortDate(p.periodEnd)}</span> },
+            ...roomTypeColumns.map<Column<Period>>(rt => ({
+              key: `rt-${rt.id}`, header: rt.name, align: 'right',
+              cell: p => {
+                const s = p.schedules.find(x => x.roomTypeId === rt.id)
+                const available = s ? s.totalQuota - s.pendingQuota - s.bookedQuota : 0
+                return s
+                  ? <span className={available > 0 ? 'text-[13px] font-semibold tabular-nums' : 'text-[13px] tabular-nums text-admin-muted line-through'}>{formatRupiah(Number(s.price))}</span>
+                  : <span className="text-admin-muted">—</span>
+              },
+            })),
+          ]
+          return (
+            <DataTable
+              columns={columns} rows={rows} getRowId={p => p.id}
+              footer={meta.total > RATE_PAGE_SIZE || meta.page > 1 ? <Pagination {...meta} hrefFor={page => buildListHref(`/${locale}/hotels/${hotel.id}`, { page })} /> : undefined}
+            />
+          )
+        })()}
       </div>
 
       {/* Services */}

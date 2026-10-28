@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Check, Info, Pencil, Wallet } from 'lucide-react'
+import { AlertTriangle, Check, Info, Pencil, Undo2, Wallet, X } from 'lucide-react'
+import { ActionButton, RowActions } from '@/components/admin/data-table/RowActions'
 import { Button } from '@/components/admin/ui/Button'
 import { formatRupiah } from '@/lib/utils'
 import { evaluatePricing, type PricingEvaluation, type PricingInput } from '@/lib/pricing/warnings'
@@ -127,22 +128,26 @@ export function BookingPriceCard({ bookingId, status }: { bookingId: string; sta
                 <p className="m-0 font-semibold text-admin-ink">{a.label}{a.reversed && <span className="ml-1.5 text-admin-muted">(dibatalkan)</span>}{a.belowCost && <span className="ml-1.5 rounded bg-admin-danger/10 px-1.5 py-0.5 text-[10px] font-bold text-admin-danger">di bawah HPP</span>}</p>
                 <p className="m-0 text-admin-muted">{new Date(a.createdAt).toLocaleString('id-ID')} · {a.byName ?? 'staf'} · total {rp(a.totalBefore)} → {rp(a.totalAfter)}</p>
                 {editId === a.id ? (
-                  <div className="mt-1 flex flex-wrap gap-2">
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
                     <input aria-label="Catatan internal penyesuaian" autoFocus className="admin-inp min-w-0 flex-1" maxLength={500} value={editText} onChange={e => setEditText(e.target.value)} />
-                    <button type="button" disabled={busy} onClick={() => saveNote(a.id)} className="admin-btn-sm">Simpan catatan</button>
-                    <button type="button" disabled={busy} onClick={() => setEditId(null)} className="admin-btn-sm">Batal</button>
+                    <RowActions>
+                      <ActionButton icon={Check} label="Simpan catatan" disabled={busy} onClick={() => saveNote(a.id)} />
+                      <ActionButton icon={X} label="Batal ubah catatan" disabled={busy} onClick={() => setEditId(null)} />
+                    </RowActions>
                   </div>
                 ) : (
                   <p className="m-0 text-admin-muted">
                     {a.reason ? <>Catatan: {a.reason}</> : <span className="italic">Tanpa catatan</span>}
-                    {a.reasonEditedAt && <span className="text-[11px]"> (diubah oleh {a.reasonEditedByName ?? 'staf'}, {new Date(a.reasonEditedAt).toLocaleString('id-ID')})</span>}{' '}
-                    <button type="button" className="font-semibold text-admin-accent underline" onClick={() => { setEditId(a.id); setEditText(a.reason ?? '') }}>{a.reason ? 'Ubah catatan' : 'Tambah catatan'}</button>
+                    {a.reasonEditedAt && <span className="text-[11px]"> (diubah oleh {a.reasonEditedByName ?? 'staf'}, {new Date(a.reasonEditedAt).toLocaleString('id-ID')})</span>}
                   </p>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <span className={`font-bold tabular-nums ${a.amountIdr < 0 ? 'text-admin-danger' : 'text-admin-ok'}`}>{rp(a.amountIdr)}</span>
-                {editable && !a.reversed && !a.reversesId && <button type="button" disabled={busy} onClick={() => reverse(a.id)} className="admin-btn-sm">Batalkan</button>}
+                <RowActions>
+                  <ActionButton icon={Pencil} label={a.reason ? 'Ubah catatan' : 'Tambah catatan'} onClick={() => { setEditId(a.id); setEditText(a.reason ?? '') }} />
+                  {editable && !a.reversed && !a.reversesId && <ActionButton icon={Undo2} label={`Batalkan penyesuaian ${a.label}`} disabled={busy} onClick={() => reverse(a.id)} />}
+                </RowActions>
               </div>
             </li>
           ))}

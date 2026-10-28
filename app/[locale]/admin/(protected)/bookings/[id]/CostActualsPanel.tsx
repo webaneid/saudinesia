@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { Wallet } from 'lucide-react'
+import { Wallet, Undo2 } from 'lucide-react'
+import { ActionButton, RowActions } from '@/components/admin/data-table/RowActions'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 
@@ -79,7 +80,7 @@ export function CostActualsPanel({ bookingId }: { bookingId: string }) {
       </div>
       <div className="flex items-center gap-2">
         <span className="font-semibold tabular-nums">{formatRupiah(e.amountIdr)}</span>
-        {!e.voided && <button type="button" disabled={busy} onClick={() => voidEntry(e.id)} className="admin-btn-sm">Batalkan</button>}
+        {!e.voided && <RowActions><ActionButton icon={Undo2} label={`Batalkan pengeluaran ${e.component}`} disabled={busy} onClick={() => voidEntry(e.id)} /></RowActions>}
       </div>
     </li>
   )

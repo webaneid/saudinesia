@@ -9,6 +9,8 @@ import { BOOKING_TONE } from '@/lib/admin/statusTone'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
 import { Badge } from '@/components/admin/ui/Badge'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -54,6 +56,15 @@ export default async function AdminOverview({ params }: Props) {
     include: { user: { select: { fullName: true } }, _count: { select: { pilgrims: true } } },
   })
 
+  type RecentRow = (typeof recentBookings)[number]
+  const recentColumns: Column<RecentRow>[] = [
+    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent-strong hover:text-admin-accent">{b.bookingCode}</Link> },
+    { key: 'name', header: 'Pemesan', cell: b => <span className="text-[13px] text-admin-ink/80">{b.user.fullName ?? '-'}</span> },
+    { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{b._count.pilgrims} jamaah</span> },
+    { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status.replace(/_/g, ' ')}</Badge> },
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+  ]
+
   return (
     <div className="space-y-7">
       <PageHeader title="Overview" />
@@ -96,35 +107,16 @@ export default async function AdminOverview({ params }: Props) {
         </div>
       )}
 
-      {/* Recent bookings */}
-      <Card className="overflow-hidden">
-        <div className="px-5 py-4 border-b border-admin-line flex items-center justify-between">
+      {/* Booking terbaru — ringkasan tetap 5 baris (bukan daftar yang tumbuh); daftar lengkap berpaginasi di /admin/bookings */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
           <span className="text-[14px] font-bold text-admin-ink">Booking Terbaru</span>
           <Link href={`/${locale}/admin/bookings`} className="text-[12px] text-admin-accent hover:text-admin-accent-strong font-medium transition-colors">
             Lihat semua →
           </Link>
         </div>
-        <div className="divide-y divide-admin-line">
-          {recentBookings.map(b => (
-            <Link key={b.id} href={`/${locale}/admin/bookings/${b.id}`}
-              className="flex items-center justify-between px-5 py-3.5 hover:bg-admin-spot/30 transition-colors text-[13px]">
-              <div className="flex items-center gap-3">
-                <span className="font-mono font-semibold text-admin-accent-strong text-[12px]">{b.bookingCode}</span>
-                <span className="text-admin-ink/80">{b.user.fullName ?? '-'}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-[12px] text-admin-muted">{b._count.pilgrims} jamaah</span>
-                <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>
-                  {BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status.replace(/_/g, ' ')}
-                </Badge>
-              </div>
-            </Link>
-          ))}
-          {recentBookings.length === 0 && (
-            <p className="px-5 py-10 text-center text-admin-muted/70 text-sm">Belum ada booking.</p>
-          )}
-        </div>
-      </Card>
+        <DataTable columns={recentColumns} rows={recentBookings} getRowId={b => b.id} empty="Belum ada booking." />
+      </div>
     </div>
   )
 }

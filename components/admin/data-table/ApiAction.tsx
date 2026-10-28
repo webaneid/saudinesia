@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ConfirmDialog } from '@/components/admin/ui/ConfirmDialog'
-import { ACTION_ICONS, ACTION_LABELS, actionClass, type ActionKind } from './RowActions'
+import { ACTION_ICONS, ACTION_LABELS, actionClass, type ActionKind } from '@/components/shared/data-table/RowActions'
 
 // Aksi baris yang MENGUBAH data lewat API (docs/arsitektur-tabel.md §2.4): hapus (dengan dialog konfirmasi) dan aktif/nonaktif. Props sengaja data biasa (url/method/body)
 // supaya Server Component boleh memakainya langsung; setelah sukses halaman dimuat ulang (`router.refresh()`), halaman klien yang menyimpan daftar sendiri memberi `onDone`.
