@@ -11,6 +11,8 @@ export type Column<T> = {
   align?: 'left' | 'right'
   /** Peran di kartu HP: title = judul kartu (bawaan: kolom pertama), field = "label: nilai" (bawaan bila ada header), footer = aksi di dasar (bawaan bila tanpa header). */
   mobile?: 'title' | 'field' | 'footer'
+  /** Kolom AKSI standar (docs/arsitektur-tabel.md §2.4): isi memakai <RowActions>; judul "Aksi", rata kanan, lebar pas, dan di HP pindah ke dasar kartu. */
+  actions?: boolean
 }
 
 type DataTableProps<T> = {
@@ -34,7 +36,7 @@ const SKELETON_ROWS = 5
  * Layar >= md: tabel. Layar HP: tiap baris jadi kartu — baca `Column.mobile`.
  */
 export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.', loading, footer, rowClassName }: DataTableProps<T>) {
-  const roleOf = (c: Column<T>): NonNullable<Column<T>['mobile']> => c.mobile ?? (c.header ? 'field' : 'footer')
+  const roleOf = (c: Column<T>): NonNullable<Column<T>['mobile']> => c.mobile ?? (c.actions || !c.header ? 'footer' : 'field')
   const titleCol = columns.find(c => c.mobile === 'title') ?? columns.find(c => roleOf(c) !== 'footer')
   const fieldCols = columns.filter(c => c !== titleCol && roleOf(c) === 'field')
   const footerCols = columns.filter(c => c !== titleCol && roleOf(c) === 'footer')
@@ -51,10 +53,11 @@ export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.
                 className={cn(
                   'px-4 py-3 text-[10.5px] font-bold uppercase tracking-[0.1em] text-admin-muted',
                   c.hideBelowLg && 'hidden lg:table-cell',
-                  c.align === 'right' && 'text-right',
+                  (c.align === 'right' || c.actions) && 'text-right',
+                  c.actions && 'w-px whitespace-nowrap',
                 )}
               >
-                {c.header}
+                {c.header || (c.actions ? 'Aksi' : '')}
               </th>
             ))}
           </tr>
@@ -69,7 +72,7 @@ export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.
             : rows.map(row => (
                 <tr key={getRowId(row)} className={cn('transition-colors hover:bg-admin-spot/40', rowClassName?.(row))}>
                   {columns.map(c => (
-                    <td key={c.key} className={cn('px-4 py-3 align-top', c.hideBelowLg && 'hidden lg:table-cell', c.align === 'right' && 'text-right')}>
+                    <td key={c.key} className={cn('px-4 py-3 align-top', c.hideBelowLg && 'hidden lg:table-cell', (c.align === 'right' || c.actions) && 'text-right', c.actions && 'w-px whitespace-nowrap')}>
                       {c.cell(row)}
                     </td>
                   ))}
