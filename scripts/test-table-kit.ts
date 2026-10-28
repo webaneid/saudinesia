@@ -10,10 +10,17 @@ import { DataTable } from '@/components/admin/data-table/DataTable'
 import { ACTION_ICONS, ACTION_LABELS, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { filterHref, filterOptions } from '@/lib/admin/filter'
 import { matchPreset, periodPresets, wibDate } from '@/lib/admin/period'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
 
 let failed = 0
-function t(name: string, fn: () => void) {
-  try { fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 10).join('\n     ')}`) }
+const pending: Promise<void>[] = []
+function t(name: string, fn: () => void | Promise<void>) {
+  const bad = (e: unknown) => { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 10).join('\n     ')}`) }
+  try {
+    const r = fn()
+    if (r instanceof Promise) pending.push(r.then(() => console.log(`PASS ${name}`)).catch(bad))
+    else console.log(`PASS ${name}`)
+  } catch (e) { bad(e) }
 }
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const G = 'gap' as const
@@ -158,5 +165,59 @@ t('PENJAGA SUMBER: Pembayaran tak lagi membuat daftar sendiri; filter status per
   }
 })
 
+t('readCatalogQuery: paginasi OPT-IN (tanpa page/limit = semua), page/limit rusak jatuh ke bawaan, q dipangkas, status/param asing diabaikan', () => {
+  const rq = (qs: string) => readCatalogQuery(new URLSearchParams(qs))
+  assert.equal(rq('').list, null, 'tanpa page/limit: picker memuat daftar utuh')
+  assert.equal(rq('q=abc').list, null, 'q saja bukan permintaan paginasi')
+  assert.deepEqual(rq('page=3&limit=10').list, { page: 3, limit: 10, skip: 20 })
+  assert.deepEqual(rq('limit=5').list, { page: 1, limit: 5, skip: 0 })
+  assert.deepEqual(rq('page=abc&limit=zzz').list, { page: 1, limit: 20, skip: 0 })
+  assert.equal(rq('page=1&limit=100000').list!.limit, 20, 'di atas batas jatuh ke bawaan, bukan 500')
+  assert.equal(rq(`q=${'x'.repeat(300)}`).q.length, 100)
+  assert.equal(rq('q=%20%20abc%20').q, 'abc')
+  assert.deepEqual([rq('status=active').status, rq('status=inactive').status, rq('status=ngawur').status, rq('').status], ['active', 'inactive', undefined, undefined])
+  assert.equal(pickParam(new URLSearchParams('city=makkah'), 'city', ['makkah', 'madinah'] as const), 'makkah')
+  assert.equal(pickParam(new URLSearchParams('city=toString'), 'city', ['makkah', 'madinah'] as const), undefined, 'bukan lewat prototype')
+  assert.deepEqual([activeFilter('active'), activeFilter('inactive'), activeFilter(undefined)], [{ isActive: true }, { isActive: false }, {}])
+})
+
+t('paginateCatalog: tanpa list = semua baris tanpa meta; dengan list = halaman terjepit + meta (total, halaman terakhir)', async () => {
+  const data = Array.from({ length: 45 }, (_, i) => i + 1)
+  const find = async (range?: { skip: number; take: number }) => (range ? data.slice(range.skip, range.skip + range.take) : data)
+  const all = await paginateCatalog(null, async () => data.length, find)
+  assert.deepEqual([all.items.length, all.meta], [45, undefined])
+  const p2 = await paginateCatalog({ page: 2, limit: 20, skip: 20 }, async () => data.length, find)
+  assert.deepEqual([p2.items[0], p2.items.length, p2.meta?.page, p2.meta?.total, p2.meta?.totalPages], [21, 20, 2, 45, 3])
+  const over = await paginateCatalog({ page: 99, limit: 20, skip: 1960 }, async () => data.length, find)
+  assert.deepEqual([over.meta?.page, over.items[0], over.items.length], [3, 41, 5], 'halaman melewati batas dijepit ke terakhir')
+  const empty = await paginateCatalog({ page: 1, limit: 20, skip: 0 }, async () => 0, find)
+  assert.deepEqual([empty.items.length, empty.meta?.total], [0, 0])
+})
+
+const CATALOG_PAGES = ['catering', 'haji', 'hotels', 'packages', 'seasons', 'tour-packages', 'tourism-sites', 'visa', 'muthowif', 'transport', 'flight'].map(d => `${ADMIN}products/${d}/page.tsx`)
+const CATALOG_ROUTES = ['catering', 'haji', 'hotels', 'packages', 'seasons', 'tour-packages', 'tourism-sites', 'visa', 'muthowif', 'flight/routes', 'flight/schedules', 'transport/vehicles', 'transport/trips'].map(d => `app/api/v1/admin/products/${d}/route.ts`)
+
+t('PENJAGA SUMBER (katalog, Fase 3): halaman memakai CatalogList + CatalogActions (tanpa fetch/DataTable/window.confirm sendiri); API GET memakai readCatalogQuery + paginateCatalog dan tiap orderBy ber-tie-breaker id; CategoryManager berikon dan berpaginasi', () => {
+  for (const f of CATALOG_PAGES) {
+    const src = readFileSync(join(root, f), 'utf8')
+    assert.match(src, /<CatalogList/, f)
+    assert.match(src, /CatalogActions/, f)
+    assert.doesNotMatch(src, /<DataTable|window\.confirm|\bconfirm\(|<table|\.then\(r => r\.json\(\)\)\.then\(j => setList/, f)
+  }
+  assert.match(readFileSync(join(root, `${ADMIN}products/flight/page.tsx`), 'utf8'), /<CatalogList<FlightRoute> ns="r" endpoint="[^"]*flight\/routes"[\s\S]*<CatalogList<FlightSchedule> ns="s" endpoint="[^"]*flight\/schedules"/, 'rute dan jadwal sama-sama berpaginasi, halaman terpisah')
+  assert.match(readFileSync(join(root, `${ADMIN}products/transport/page.tsx`), 'utf8'), /ns="v"[\s\S]*ns="t"/, 'kendaraan dan trip: halaman terpisah')
+  for (const f of CATALOG_ROUTES) {
+    const src = readFileSync(join(root, f), 'utf8')
+    const get = src.slice(src.indexOf('export async function GET'), src.indexOf('export async function POST'))
+    assert.match(get, /readCatalogQuery\(/, f)
+    assert.match(get, /paginateCatalog\(/, f)
+    assert.match(get, /id: '(asc|desc)'/, `${f}: orderBy butuh tie-breaker id`)
+    assert.doesNotMatch(get, /contains: cq\.q|contains: q\b/, `${f}: pencarian wajib escapeLike`)
+  }
+  const cm = readFileSync(join(root, 'components/admin/vendor/CategoryManager.tsx'), 'utf8')
+  assert.match(cm, /ApiAction/); assert.match(cm, /<Pagination/); assert.doesNotMatch(cm, /confirmingDelete|window\.confirm/)
+})
+
+await Promise.all(pending)
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 process.exit(failed ? 1 : 0)

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 
 const createSchema = z.object({
@@ -10,13 +12,18 @@ const createSchema = z.object({
   isActive:    z.boolean().default(true),
 })
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireManager()
-    const routes = await prisma.flightRoute.findMany({
-      orderBy: [{ origin: 'asc' }, { destination: 'asc' }],
-    })
-    return NextResponse.json(ok(routes))
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const like = { contains: escapeLike(cq.q), mode: 'insensitive' as const }
+    const where = { ...activeFilter(cq.status), ...(cq.q ? { OR: [{ origin: like }, { destination: like }] } : {}) }
+    const { items: routes, meta } = await paginateCatalog(cq.list, () => prisma.flightRoute.count({ where }), range => prisma.flightRoute.findMany({
+      where,
+      orderBy: [{ origin: 'asc' }, { destination: 'asc' }, { id: 'asc' }],
+      ...range,
+    }))
+    return NextResponse.json(ok(routes, meta))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

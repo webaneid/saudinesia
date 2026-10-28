@@ -7,23 +7,38 @@ import { buildListHref, parseListParams } from '@/lib/admin/pagination'
 /**
  * Halaman & ukuran halaman dari URL (`?page=&limit=`) untuk list admin berbasis Client Component.
  * Pola yang sama dengan halaman server: bisa di-bookmark, bertahan setelah reload.
+ *
+ * `ns` (opsional) = awalan param untuk halaman dengan LEBIH DARI SATU tabel (mis. `v` → `vpage`, `vq`, `vstatus`); tiap tabel punya halaman dan filter sendiri.
  */
-export function useListPage() {
+export function useListPage(ns = '') {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const { page, limit } = parseListParams(searchParams)
+  const own = new URLSearchParams()
+  const rawPage = searchParams.get(`${ns}page`), rawLimit = searchParams.get(`${ns}limit`)
+  if (rawPage !== null) own.set('page', rawPage)
+  if (rawLimit !== null) own.set('limit', rawLimit)
+  const { page, limit } = parseListParams(own)
 
-  const setPage = useCallback((next: number) => {
-    const query: Record<string, string | number | undefined> = Object.fromEntries(searchParams.entries())
-    router.replace(buildListHref(pathname, { ...query, page: next }), { scroll: false })
-  }, [router, pathname, searchParams])
-
-  /** Ganti satu/lebih param filter (nilai kosong membuangnya) dan kembali ke halaman 1. */
-  const setParams = useCallback((patch: Record<string, string | undefined>) => {
+  const replace = useCallback((patch: Record<string, string | number | undefined>) => {
     const query: Record<string, string | number | undefined> = { ...Object.fromEntries(searchParams.entries()), ...patch }
-    router.replace(buildListHref(pathname, { ...query, page: 1 }), { scroll: false })
+    router.replace(buildListHref(pathname, query), { scroll: false })
   }, [router, pathname, searchParams])
 
-  return { page, limit, setPage, setParams }
+  const setPage = useCallback((next: number) => replace({ [`${ns}page`]: next === 1 ? undefined : next }), [replace, ns])
+
+  /** Ganti satu/lebih param filter (kunci TANPA awalan `ns`; nilai kosong membuangnya) dan kembali ke halaman 1. */
+  const setParams = useCallback((patch: Record<string, string | undefined>) => {
+    replace({ ...Object.fromEntries(Object.entries(patch).map(([k, v]) => [`${ns}${k}`, v])), [`${ns}page`]: undefined })
+  }, [replace, ns])
+
+  /** Nilai param filter milik tabel ini (kunci TANPA awalan). */
+  const get = (name: string): string => searchParams.get(`${ns}${name}`) ?? ''
+
+  /** Buang SEMUA filter milik tabel ini (halaman dan ukuran juga). */
+  const reset = useCallback((names: string[]) => {
+    replace(Object.fromEntries([...names, 'page', 'limit'].map(n => [`${ns}${n}`, undefined])))
+  }, [replace, ns])
+
+  return { page, limit, setPage, setParams, get, reset }
 }

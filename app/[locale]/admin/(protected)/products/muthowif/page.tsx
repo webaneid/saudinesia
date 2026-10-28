@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { useRouter, useParams } from 'next/navigation'
-import { Plus, Save, Pencil, Wallet } from 'lucide-react'
+import { useParams } from 'next/navigation'
+import { Plus, Save, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
-import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import type { Column } from '@/components/admin/data-table/DataTable'
+import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { Badge } from '@/components/admin/ui/Badge'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 
@@ -16,11 +17,8 @@ type Muthowif = { id: string; name: string; rating: number; dailyCapacity: numbe
 type Preview = { hppRupiah: number; sellPrice: number }
 
 export default function MuthowifPage() {
-  const router = useRouter()
   const { locale } = useParams() as { locale: string }
 
-  const [list, setList] = useState<Muthowif[]>([])
-  const [loading, setLoading] = useState(true)
 
   // HPP layanan muthowif — satu komponen flat, tidak per-orang, cache di MuthowifServicePrice.price
   // (docs/arsitektur-muthowif.md §10). Tidak ada vendor pihak ketiga sungguhan di sini (beda dari
@@ -36,12 +34,6 @@ export default function MuthowifPage() {
   const [savingPrice, setSavingPrice] = useState(false)
   const [priceSaved, setPriceSaved] = useState(false)
 
-  async function load() {
-    const r = await fetch('/api/v1/admin/products/muthowif')
-    const j = await r.json()
-    setList(j.data ?? [])
-    setLoading(false)
-  }
   async function loadPrice() {
     const sr = await fetch('/api/v1/admin/products/muthowif/service-price')
     const sj = await sr.json()
@@ -56,7 +48,7 @@ export default function MuthowifPage() {
       setHargaLayanan(cj.data.hargaLayanan ? String(cj.data.hargaLayanan) : '')
     }
   }
-  useEffect(() => { load(); loadPrice() }, [])
+  useEffect(() => { loadPrice() }, [])
 
   // Live preview harga jual — debounce 500ms, pola sama Flight/Transport cost editor.
   useEffect(() => {
@@ -84,20 +76,13 @@ export default function MuthowifPage() {
     setTimeout(() => setPriceSaved(false), 2000)
   }
 
-  const columns: Column<Muthowif>[] = [
-    { key: 'name', header: 'Nama', mobile: 'title', cell: m => <span className="text-[13px] font-medium">{m.name}</span> },
+  const base = `/${locale}/admin/products/muthowif`
+  const columns = (reload: () => void): Column<Muthowif>[] => [
+    { key: 'name', header: 'Nama', mobile: 'title', cell: m => <Link href={`${base}/${m.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{m.name}</Link> },
     { key: 'rating', header: 'Rating', cell: m => <span className="text-[12px] text-admin-gold-strong">★ {m.rating}</span> },
     { key: 'capacity', header: 'Kap/hari', align: 'right', cell: m => <span className="text-[12px] text-admin-muted">{m.dailyCapacity}</span> },
     { key: 'status', header: 'Status', cell: m => <Badge tone={m.isActive ? 'ok' : 'neutral'}>{m.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
-    {
-      key: 'actions', header: '', align: 'right',
-      cell: m => (
-        <button onClick={() => router.push(`/${locale}/admin/products/muthowif/${m.id}`)}
-          className="inline-flex items-center gap-1 text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
-          <Pencil className="h-3.5 w-3.5" /> Edit
-        </button>
-      ),
-    },
+    { key: 'actions', header: '', actions: true, cell: m => <CatalogActions editHref={`${base}/${m.id}`} url={`/api/v1/admin/products/muthowif/${m.id}`} subject={`muthowif ${m.name}`} active={m.isActive} onDone={reload} /> },
   ]
 
   return (
@@ -155,7 +140,7 @@ export default function MuthowifPage() {
 
       {serviceId && <PriceCard ownerType="muthowif" ownerId={serviceId} title="Harga layanan: modal, jual, untung" reloadKey={priceTick} onChanged={() => { void loadPrice() }} />}
 
-      <DataTable columns={columns} rows={list} getRowId={m => m.id} loading={loading} empty="Belum ada muthowif." rowClassName={m => (m.isActive ? undefined : 'opacity-50')} />
+      <CatalogList<Muthowif> endpoint="/api/v1/admin/products/muthowif" columns={columns} getRowId={m => m.id} status isActive={m => m.isActive} searchPlaceholder="Cari nama muthowif…" empty="Belum ada muthowif." />
     </div>
   )
 }

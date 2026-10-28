@@ -2,24 +2,30 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Loader2, Pencil, Plus, Power, Trash2, X } from 'lucide-react'
+import { Check, Loader2, Pencil, Plus, X } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ApiAction } from '@/components/admin/data-table/ApiAction'
+import { ActionButton, RowActions } from '@/components/admin/data-table/RowActions'
+import { buildPageMeta } from '@/lib/admin/pagination'
 
 export type CategoryRow = { id: string; slug: string; name: string; isActive: boolean; sortOrder: number; isSystem: boolean; vendorCount: number }
 type Notice = { text: string; error: boolean }
 
 const API = '/api/v1/admin/system/vendor-categories'
 
-/** Kelola kategori vendor (CRUD lengkap). Kategori bawaan sistem hanya bisa diganti nama/urutannya; yang dipakai vendor dinonaktifkan, bukan dihapus. */
+const PAGE_SIZE = 10
+
+/** Kelola kategori vendor (CRUD lengkap). Kategori bawaan sistem hanya bisa diganti nama/urutannya; yang dipakai vendor dinonaktifkan, bukan dihapus. Daftar kecil dari server → paginasi di klien. */
 export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
   const [newName, setNewName] = useState('')
   const [editing, setEditing] = useState<{ id: string; name: string; sortOrder: string } | null>(null)
-  const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
 
   async function call(url: string, method: string, body?: unknown): Promise<{ ok: boolean; data?: Record<string, unknown>; error?: string }> {
     setBusy(true); setNotice(null)
@@ -51,19 +57,6 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
     if (r.ok) { setEditing(null); setNotice({ text: 'Perubahan tersimpan.', error: false }); router.refresh() }
   }
 
-  async function setActive(c: CategoryRow, isActive: boolean) {
-    const r = await call(`${API}/${c.id}`, 'PUT', { isActive })
-    if (r.ok) { setNotice({ text: isActive ? 'Kategori diaktifkan kembali.' : 'Kategori dinonaktifkan.', error: false }); router.refresh() }
-  }
-
-  async function remove(c: CategoryRow) {
-    const r = await call(`${API}/${c.id}`, 'DELETE')
-    if (!r.ok) return
-    setConfirmingDelete(null)
-    setNotice({ text: r.data?.deleted ? 'Kategori dihapus.' : String(r.data?.message ?? 'Kategori dipakai sehingga dinonaktifkan.'), error: false })
-    router.refresh()
-  }
-
   const columns: Column<CategoryRow>[] = [
     {
       key: 'name', header: 'Kategori', mobile: 'title',
@@ -93,33 +86,22 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
       ),
     },
     {
-      key: 'actions', header: '',
+      key: 'actions', header: '', actions: true,
       cell: c => {
         if (editing?.id === c.id) {
           return (
-            <div className="flex gap-1">
-              <Button size="sm" disabled={busy} onClick={saveEdit}><Check className="size-4" /> Simpan</Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setEditing(null)}><X className="size-4" /> Batal</Button>
-            </div>
-          )
-        }
-        if (confirmingDelete === c.id) {
-          return (
-            <div className="flex flex-wrap items-center gap-1">
-              <span className="text-xs text-admin-ink">{c.vendorCount > 0 ? 'Dipakai vendor — akan dinonaktifkan.' : 'Hapus permanen?'}</span>
-              <Button size="sm" variant="danger" disabled={busy} onClick={() => remove(c)}>Ya</Button>
-              <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmingDelete(null)}>Batal</Button>
-            </div>
+            <RowActions>
+              <ActionButton icon={Check} label={`Simpan perubahan kategori ${c.name}`} disabled={busy} onClick={saveEdit} />
+              <ActionButton icon={X} label="Batal ubah" disabled={busy} onClick={() => setEditing(null)} />
+            </RowActions>
           )
         }
         return (
-          <div className="flex flex-wrap gap-1">
-            <Button size="sm" variant="outline" onClick={() => setEditing({ id: c.id, name: c.name, sortOrder: String(c.sortOrder) })}><Pencil className="size-4" /> Ubah</Button>
-            {!c.isSystem && (c.isActive
-              ? <Button size="sm" variant="outline" disabled={busy} onClick={() => setActive(c, false)}><Power className="size-4" /> Nonaktifkan</Button>
-              : <Button size="sm" variant="outline" disabled={busy} onClick={() => setActive(c, true)}><Power className="size-4" /> Aktifkan</Button>)}
-            {!c.isSystem && <Button size="sm" variant="danger" onClick={() => setConfirmingDelete(c.id)}><Trash2 className="size-4" /> Hapus</Button>}
-          </div>
+          <RowActions>
+            <ActionButton icon={Pencil} label={`Ubah kategori ${c.name}`} onClick={() => setEditing({ id: c.id, name: c.name, sortOrder: String(c.sortOrder) })} />
+            {!c.isSystem && <ApiAction kind="toggle" url={`${API}/${c.id}`} active={c.isActive} label={`${c.isActive ? 'Nonaktifkan' : 'Aktifkan'} kategori ${c.name}`} />}
+            {!c.isSystem && <ApiAction kind="delete" url={`${API}/${c.id}`} subject={`kategori ${c.name}`} note={c.vendorCount > 0 ? 'Kategori ini dipakai vendor — akan dinonaktifkan, bukan dihapus.' : undefined} />}
+          </RowActions>
         )
       },
     },
@@ -134,7 +116,11 @@ export function CategoryManager({ categories }: { categories: CategoryRow[] }) {
 
       {notice && <p role="status" className={`m-0 text-sm font-medium ${notice.error ? 'text-admin-danger' : 'text-admin-ok'}`}>{notice.text}</p>}
 
-      <DataTable columns={columns} rows={categories} getRowId={c => c.id} rowClassName={c => (c.isActive ? undefined : 'opacity-60')} empty="Belum ada kategori." />
+      {(() => {
+        const meta = buildPageMeta(categories.length, Math.min(page, Math.max(1, Math.ceil(categories.length / PAGE_SIZE))), PAGE_SIZE)
+        const rows = categories.slice((meta.page - 1) * PAGE_SIZE, meta.page * PAGE_SIZE)
+        return <DataTable columns={columns} rows={rows} getRowId={c => c.id} rowClassName={c => (c.isActive ? undefined : 'opacity-60')} empty="Belum ada kategori." footer={meta.total > 0 ? <Pagination {...meta} onPageChange={setPage} /> : undefined} />
+      })()}
     </div>
   )
 }

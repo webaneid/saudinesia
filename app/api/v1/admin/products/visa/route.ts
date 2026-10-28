@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
@@ -27,13 +29,18 @@ const createSchema = z.object({
   isActive:     z.boolean().default(true),
 }).strict()
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await requireManager()
-    const products = await prisma.visaProduct.findMany({
-      orderBy: [{ country: 'asc' }, { visaType: 'asc' }],
-    })
-    return NextResponse.json(ok(await withAdminPrices('visa', products, { includeCost: canViewCost(session.role) })))
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const like = { contains: escapeLike(cq.q), mode: 'insensitive' as const }
+    const where = { ...activeFilter(cq.status), ...(cq.q ? { OR: [{ name: like }, { country: like }, { visaType: like }] } : {}) }
+    const { items: products, meta } = await paginateCatalog(cq.list, () => prisma.visaProduct.count({ where }), range => prisma.visaProduct.findMany({
+      where,
+      orderBy: [{ country: 'asc' }, { visaType: 'asc' }, { id: 'asc' }],
+      ...range,
+    }))
+    return NextResponse.json(ok(await withAdminPrices('visa', products, { includeCost: canViewCost(session.role) }), meta))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

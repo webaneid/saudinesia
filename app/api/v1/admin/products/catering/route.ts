@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+import { escapeLike } from '@/lib/utils/search'
 import { cateringOptionCreateSchema } from '@/lib/validators/adminUpdates'
 import { emptyToNull } from '@/lib/validators/richText'
 import { setManualSell } from '@/lib/pricing/engine'
@@ -14,12 +16,14 @@ function authError(e: unknown): NextResponse | null {
     : null
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireManager()
-    const rows = await prisma.cateringOption.findMany()
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const where = { ...activeFilter(cq.status), ...(cq.q ? { name: { contains: escapeLike(cq.q), mode: 'insensitive' as const } } : {}) }
+    const { items: rows, meta } = await paginateCatalog(cq.list, () => prisma.cateringOption.count({ where }), range => prisma.cateringOption.findMany({ where, orderBy: [{ name: 'asc' }, { id: 'asc' }], ...range }))
     const prices = await cateringSeasonPrices(rows.map(r => r.id))
-    return NextResponse.json(ok(rows.map(r => ({ ...r, pricePerPersonRegular: prices.get(r.id)?.regular ?? 0, pricePerPersonRamadan: prices.get(r.id)?.ramadan ?? 0, pricePerPersonHajj: prices.get(r.id)?.hajj ?? 0 }))))
+    return NextResponse.json(ok(rows.map(r => ({ ...r, pricePerPersonRegular: prices.get(r.id)?.regular ?? 0, pricePerPersonRamadan: prices.get(r.id)?.ramadan ?? 0, pricePerPersonHajj: prices.get(r.id)?.hajj ?? 0 })), meta))
   } catch (e) {
     const a = authError(e); if (a) return a
     console.error('[admin/products/catering/GET]', e instanceof Error ? e.name : e)
