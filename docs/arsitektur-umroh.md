@@ -38,7 +38,7 @@ model Booking {
   tours         BookingTour[]
   services      BookingService[]
   haji          BookingHaji[]     // relasi ada di schema, TIDAK PERNAH diisi — lihat Gap #1
-  visa          BookingVisa[]     // relasi ada di schema, TIDAK PERNAH diisi (beda dari VisaApplication)
+  // visa: relasi `BookingVisa` (tak pernah diisi) DIHAPUS 2026-10-30 — visa = VisaApplication per jamaah
   payments      Payment[]
   refunds       Refund[]          // relasi ada di schema, TIDAK PERNAH diisi — lihat Gap #3
   notifications NotificationLog[]
@@ -208,7 +208,7 @@ Modul ini punya gap paling serius dari semua yang sudah diaudit — bukan sekada
 | 5 | Katering & Tour tidak punya kuota/kapasitas sama sekali — booking tak terbatas selalu diterima | `CateringOption`/`HeritageTour` di schema, tidak ada tabel kuota |
 | 6 | Status `active`/`completed` tidak punya trigger otomatis atau UI transisi yang ditemukan — hanya ada di enum | — |
 | 7 | Invoice PDF benar-benar belum dimulai — `lib/pdf/invoice.tsx` cuma `export {}` dengan komentar TODO, route `GET /api/v1/bookings/[id]/invoice` selalu `return ok(null)` | `lib/pdf/invoice.tsx`, `app/api/v1/bookings/[id]/invoice/route.ts` |
-| 8 | Group booking 0% — `app/[locale]/(pilgrim)/groups/page.tsx` hanya `<div>TODO</div>`, tidak ada API route. Model `Group`/`GroupMember` ada di schema tapi tidak dipakai kode manapun | `app/[locale]/(pilgrim)/groups/page.tsx` |
+| 8 | ~~Group booking 0%~~ **DIHAPUS 2026-10-30** (keputusan pemilik: booking engine akan dibuat baru) — halaman `/groups` (TODO), model `Group`/`GroupMember`, dan `Booking.groupId` dibuang (migrasi `20261102090000`, fail-closed) | — |
 | 9 | `generateBookingCode()` (`lib/utils/bookingCode.ts`) pakai `count()` + increment, dipanggil **di luar** `$transaction` booking (baris 44, sebelum `$transaction` dibuka di baris 47) — dua booking paralel secara teori bisa dapat kode sama; constraint unique di DB akan menolak salah satunya dengan error, bukan silent duplicate, tapi user kedua akan dapat pesan error generik alih-alih retry otomatis | `lib/utils/bookingCode.ts`, `app/api/v1/bookings/route.ts:44` |
 | 10 | Dead code: `app/api/v1/internal/autocancel/route.ts` dan `app/api/v1/internal/reminders/route.ts` — stub `return ok(null)`, tidak dipanggil siapa pun. Mekanisme nyata adalah `instrumentation.ts` yang menjalankan `startAutoCancelJob()`/`startPaymentReminderJob()` (node-cron in-process) saat server startup — sama pola dengan dead stub yang ditemukan di modul Transport (`admin/transport/route.ts`) | `app/api/v1/internal/autocancel/route.ts`, `app/api/v1/internal/reminders/route.ts` |
 

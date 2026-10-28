@@ -5,7 +5,7 @@ import { defineRouting } from 'next-intl/routing'
 export const routing = defineRouting({
   locales: ['id', 'en'],
   defaultLocale: 'id',
-  // Tidak ada pengalih bahasa di UI (LocaleSwitcher hanyalah stub), jadi cookie NEXT_LOCALE tak berguna: deteksi lewat Accept-Language tiap
+  // Tidak ada pengalih bahasa di UI (komponen LocaleSwitcher yang tak pernah dipasang sudah dihapus), jadi cookie NEXT_LOCALE tak berguna: deteksi lewat Accept-Language tiap
   // kunjungan. Aktifkan kembali (objek `{ maxAge }`) bila pengalih bahasa dibangun.
   localeCookie: false,
 })

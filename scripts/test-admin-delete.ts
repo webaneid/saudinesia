@@ -204,7 +204,7 @@ const EXPECTED_FK: Record<string, string[]> = {
   tourism_sites: ['tour_package_sites.tourismSiteId r'],
   tour_packages: ['booking_tour_packages.tourPackageId r', 'tour_package_hotel_options.tourPackageId c', 'tour_package_hotels.tourPackageId c', 'tour_package_sites.tourPackageId c'],
   packages: ['package_catering_options.packageId c', 'package_hotel_options.packageId c', 'package_visa_options.packageId c'],
-  visa_products: ['booking_visa.visaProductId r', 'package_visa_options.visaProductId r', 'packages.includedVisaProductId n', 'visa_applications.visaProductId n'],
+  visa_products: ['package_visa_options.visaProductId r', 'packages.includedVisaProductId n', 'visa_applications.visaProductId n'],
   hotels: ['hotel_price_periods.hotelId c', 'hotel_services.hotelId c'],
   hotel_room_schedules: [
     'booking_hotels.hotelRoomScheduleId r', 'booking_tour_packages.chosenHotelRoomScheduleId n', 'package_hotel_options.hotelRoomScheduleId r',

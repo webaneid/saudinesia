@@ -102,7 +102,7 @@ model BookingVisa {
 }
 ```
 
-**Catatan:** `BookingVisa` (item line-item pembelian produk visa di booking) punya `visaProductId` wajib, `VisaApplication` (proses dokumen per-jamaah) punya `visaProductId` nullable — tapi sejak Visa Step 1 (2026-07-17, Gap #1 §7 DITUTUP) field itu **sudah diisi** oleh `POST /api/v1/bookings` setiap kali booking dibuat.
+**Catatan (2026-10-30: model `BookingVisa` DIHAPUS — tak pernah diisi; tabel `booking_visa` dibuang lewat migrasi `20261102090000`):** `BookingVisa` (item line-item pembelian produk visa di booking) punya `visaProductId` wajib, `VisaApplication` (proses dokumen per-jamaah) punya `visaProductId` nullable — tapi sejak Visa Step 1 (2026-07-17, Gap #1 §7 DITUTUP) field itu **sudah diisi** oleh `POST /api/v1/bookings` setiap kali booking dibuat.
 
 ---
 

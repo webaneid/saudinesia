@@ -12,7 +12,7 @@ const COOKIE_NAME = 'snd-session'
 
 const intlMiddleware = createIntlMiddleware(routing)
 
-const PROTECTED       = ['/dashboard', '/bookings', '/groups', '/profile', '/lengkapi-data']
+const PROTECTED       = ['/dashboard', '/bookings', '/profile', '/lengkapi-data']
 const ADMIN_PATHS     = ['/admin']
 const PUBLIC_OVERRIDES = ['/admin/login']
 

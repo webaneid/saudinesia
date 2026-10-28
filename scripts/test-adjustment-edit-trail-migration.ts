@@ -1,5 +1,5 @@
 // Uji migrasi SEC-101 (prisma/migrations/20261101090000_adjustment_reason_edit_trail; docs/lessons-learned.md): jejak siapa+kapan edit catatan penyesuaian — baris lama NULL (tanpa backfill),
-// CHECK pasangan (keduanya ada atau kosong), dan DB hasil SEMUA migrasi = schema.prisma (uji drift terbaru berada di berkas ini).
+// CHECK pasangan (keduanya ada atau kosong), (uji drift terbaru kini di test-drop-group-booking-visa-migration).
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -91,7 +91,6 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
   return { name, ids, ...res }
 }
 
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 
@@ -123,13 +122,6 @@ await t('CHECK pasangan: pelaku tanpa waktu atau waktu tanpa pelaku ditolak; ked
   assert.notEqual(upd(`"reasonEditedAt" = NULL`).code, 0, 'menghapus satu sisi')
   assert.equal(upd(`"reasonEditedByUserId" = NULL, "reasonEditedAt" = NULL`).code, 0, 'keduanya kosong')
 })
-await t('tabel kosong aman; tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
-
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()
 const cleaner = new PrismaClient({ datasourceUrl: base.toString() })

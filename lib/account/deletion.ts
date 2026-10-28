@@ -28,7 +28,6 @@ export type ErasureCounts = {
   visaApplications: number
   notifications: number
   authTokens: number
-  groupMemberships: number
   address: number
 }
 
@@ -57,16 +56,15 @@ async function blockersFor(db: Db, userId: string, role: string, requestedAt: Da
 }
 
 async function countsFor(db: Db, userId: string, addressId: string | null): Promise<ErasureCounts> {
-  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens, groupMemberships] = await Promise.all([
+  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens] = await Promise.all([
     db.booking.count({ where: { userId } }),
     db.bookingPilgrim.count({ where: { booking: { userId } } }),
     db.document.count({ where: { pilgrim: { booking: { userId } } } }),
     db.visaApplication.count({ where: { pilgrim: { booking: { userId } } } }),
     db.notificationLog.count({ where: { userId } }),
     db.authToken.count({ where: { userId } }),
-    db.groupMember.count({ where: { userId } }),
   ])
-  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, groupMemberships, address: addressId ? 1 : 0 }
+  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, address: addressId ? 1 : 0 }
 }
 
 export type DeletionPreview =
@@ -177,7 +175,6 @@ export async function executeDeletion(
       await tx.costActual.updateMany({ where: { booking: { userId }, varianceNote: { not: null } }, data: { varianceNote: '[dihapus]' } })
       await tx.costActual.updateMany({ where: { booking: { userId }, voidReason: { not: null } }, data: { voidReason: '[dihapus]' } })
       await tx.costActual.updateMany({ where: { booking: { userId } }, data: { component: '[dihapus]' } }) // komponen = teks bebas staf (bisa memuat nama)
-      await tx.groupMember.updateMany({ where: { userId }, data: { userId: null, inviteToken: null } })
       // Baris log dipertahankan untuk audit pengiriman; penerima & isi pesan tidak.
       await tx.notificationLog.updateMany({ where: { userId }, data: { recipient: '[dihapus]', messagePreview: null, error: null } })
       await tx.authToken.deleteMany({ where: { OR: [{ userId }, { email: u.email }] } })

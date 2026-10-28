@@ -39,8 +39,6 @@ model User {
 
   address                   Address?                 @relation(fields: [addressId], references: [id])
   bookings                  Booking[]
-  ledGroups                 Group[]                  @relation("GroupLeader")
-  groupMemberships          GroupMember[]
   confirmedPayments         Payment[]                @relation("ConfirmedBy")
   approvedRefunds           Refund[]                 @relation("ApprovedBy")
   notifications             NotificationLog[]
@@ -455,7 +453,6 @@ model VisaProduct {
   // BARU (docs/arsitektur-visa.md §9.2) — belum dipakai wizard/booking, lihat gap di docs/arsitektur-visa.md §9.5
   requiredComponents Json @default("[]") // ["hotel","transport"] dst — komponen booking lain yang wajib untuk varian ini
 
-  bookingVisa        BookingVisa[]
   visaApplications   VisaApplication[]
   includedInPackages Package[] // paket umroh yang mengunci produk ini sbg visa "included" (docs/arsitektur-paket-umroh.md §4)
   packageOptions     PackageVisaOption[]
@@ -755,35 +752,7 @@ model TourPackageHotelOption {
   @@map("tour_package_hotel_options")
 }
 
-// ─── GROUPS ───────────────────────────────────────────────────
 
-model Group {
-  id           String   @id @default(uuid())
-  groupCode    String   @unique
-  groupName    String?
-  leaderUserId String
-  totalMembers Int
-  createdAt    DateTime @default(now())
-
-  leader   User          @relation("GroupLeader", fields: [leaderUserId], references: [id])
-  members  GroupMember[]
-  bookings Booking[]
-
-  @@map("groups")
-}
-
-model GroupMember {
-  id          String  @id @default(uuid())
-  groupId     String
-  userId      String?
-  inviteToken String? @unique
-  status      String  @default("invited")
-
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user  User? @relation(fields: [userId], references: [id])
-
-  @@map("group_members")
-}
 
 // ─── BOOKINGS ─────────────────────────────────────────────────
 
@@ -791,7 +760,6 @@ model Booking {
   id              String        @id @default(uuid())
   bookingCode     String        @unique
   userId          String
-  groupId         String?
   status          BookingStatus @default(awaiting_payment)
   departureDate   DateTime      @db.Date
   returnDate      DateTime      @db.Date
@@ -803,7 +771,6 @@ model Booking {
   updatedAt       DateTime      @updatedAt
 
   user  User   @relation(fields: [userId], references: [id])
-  group Group? @relation(fields: [groupId], references: [id])
 
   pilgrims      BookingPilgrim[]
   hotels        BookingHotel[]
@@ -814,7 +781,6 @@ model Booking {
   tourPackages  BookingTourPackage[]
   services      BookingService[]
   haji          BookingHaji[]
-  visa          BookingVisa[]
   priceSnapshots PriceSnapshot[]
   adjustments    BookingAdjustment[]
   costActuals    CostActual[]
@@ -1035,18 +1001,6 @@ model BookingHaji {
   @@map("booking_haji")
 }
 
-model BookingVisa {
-  id            String  @id @default(uuid())
-  bookingId     String
-  visaProductId String
-  numPersons    Int     @default(1)
-  totalPrice    Decimal @db.Decimal(14, 2)
-
-  booking     Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  visaProduct VisaProduct @relation(fields: [visaProductId], references: [id])
-
-  @@map("booking_visa")
-}
 
 // ─── PAYMENTS & REFUNDS ───────────────────────────────────────
 
