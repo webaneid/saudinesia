@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { escapeLike } from '@/lib/utils/search'
 
 export async function GET(req: Request) {
   try {
@@ -17,8 +18,8 @@ export async function GET(req: Request) {
           ? (status as import('@prisma/client').BookingStatus)
           : undefined,
         OR: q ? [
-          { bookingCode: { contains: q, mode: 'insensitive' } },
-          { user: { fullName: { contains: q, mode: 'insensitive' } } },
+          { bookingCode: { contains: escapeLike(q), mode: 'insensitive' } },
+          { user: { fullName: { contains: escapeLike(q), mode: 'insensitive' } } },
         ] : undefined,
       },
       orderBy: { createdAt: 'desc' },

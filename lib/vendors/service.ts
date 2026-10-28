@@ -2,6 +2,7 @@ import { Prisma, type Vendor, type VendorCategory, type Address } from '@prisma/
 import { prisma } from '@/lib/db'
 import { slugifyCategoryName, vendorNameKey } from '@/lib/constants/vendor'
 import { prepareAddressData } from '@/lib/address/prepare'
+import { escapeLike } from '@/lib/utils/search'
 import type { AddressInput } from '@/lib/validators/address'
 import type { VendorCreate, VendorUpdate } from '@/lib/validators/vendor'
 import { getVendorUsage, type VendorUsage } from './integrity'
@@ -44,7 +45,7 @@ function listWhere(query: Omit<VendorListQuery, 'skip' | 'take'>): Prisma.Vendor
     ...(query.status === 'active' ? { isActive: true } : query.status === 'inactive' ? { isActive: false } : {}),
     ...(query.category ? { categories: { some: { slug: query.category } } } : {}),
     ...(query.country ? { countryCode: query.country } : {}),
-    ...(q ? { OR: [{ name: { contains: q, mode: 'insensitive' } }, { contactName: { contains: q, mode: 'insensitive' } }, { email: { contains: q, mode: 'insensitive' } }] } : {}),
+    ...(q ? { OR: [{ name: { contains: escapeLike(q), mode: 'insensitive' } }, { contactName: { contains: escapeLike(q), mode: 'insensitive' } }, { email: { contains: escapeLike(q), mode: 'insensitive' } }] } : {}),
   }
 }
 

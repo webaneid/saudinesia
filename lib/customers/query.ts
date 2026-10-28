@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { paginate, type ListParams, type PageMeta } from '@/lib/admin/pagination'
 import { getCountryName } from '@/lib/constants/countries'
+import { escapeLike } from '@/lib/utils/search'
 
 // SATU pembaca daftar/detail Pelanggan untuk dashboard admin (docs/arsitektur-pelanggan.md). Pelanggan = `User` ber-`role = pilgrim`; staf tak pernah ikut.
 // `select` selalu eksplisit: `passwordHash`, `googleSub`, token, dan `sessionVersion` TIDAK PERNAH dibaca (dijaga scripts/test-customers.ts).
@@ -32,9 +33,6 @@ export type CustomerRow = {
 export const isDeletedAccount = (email: string): boolean => email.startsWith('deleted-') && email.endsWith('@deleted.invalid')
 
 const LIST_SELECT = { id: true, fullName: true, email: true, phone: true, whatsapp: true, whatsappVerifiedAt: true, emailVerifiedAt: true, isActive: true, createdAt: true } as const
-
-/** Prisma tidak meloloskan wildcard LIKE: "%" / "_" di kotak cari akan cocok dengan semua baris. Dijadikan literal (garis miring terbalik = escape bawaan PostgreSQL). */
-const escapeLike = (v: string): string => v.replace(/[\\%_]/g, '\\$&')
 
 export function customerWhere(f: CustomerFilters): Prisma.UserWhereInput {
   const q = (f.q ?? '').trim().slice(0, 100)
