@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Pencil, Plus, Save, Trash2, Wallet } from 'lucide-react'
 import { VendorCurrencyField } from './VendorCurrencyField'
+import { useConfirm } from '@/components/admin/ui/useConfirm'
 
 type CostRow = { id: string; costComponent: string; vendorId: string; vendorName: string; currency: string; cost: number; hppRupiah: number | null; sellPrice: number | null }
 type Preview = { hppRupiah: number; sellPrice: number }
@@ -31,6 +32,7 @@ type Props = {
  * komponen dihitung server. Memuat data sendiri dari `apiBase`.
  */
 export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged }: Props) {
+  const { ask, dialog } = useConfirm()
   const [costs, setCosts] = useState<CostRow[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -98,7 +100,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
   }
 
   async function remove(costId: string) {
-    if (!confirm('Hapus komponen biaya ini?')) return
+    if (!(await ask({ title: 'Hapus komponen biaya ini?', body: 'Komponen dihapus dari perhitungan HPP; harga jual dihitung ulang.' }))) return
     setError(null)
     const r = await fetch(`${apiBase}/${costId}`, { method: 'DELETE' })
     if (!r.ok) {
@@ -122,6 +124,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
 
   return (
     <div className="admin-form-panel space-y-4">
+      {dialog}
       <div className="flex items-center justify-between">
         <div>
           <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Komponen Biaya</p>

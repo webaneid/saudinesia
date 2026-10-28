@@ -17,6 +17,7 @@ import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/sh
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { useConfirm } from '@/components/admin/ui/useConfirm'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -59,6 +60,7 @@ function formatDate(d: string) {
 }
 
 export default function HotelDetailPage() {
+  const { ask, dialog } = useConfirm()
   const { id, locale } = useParams() as { id: string; locale: string }
 
   const [hotel, setHotel] = useState<Hotel | null>(null)
@@ -219,7 +221,7 @@ export default function HotelDetailPage() {
   }
 
   async function handleDeleteService(serviceId: string) {
-    if (!confirm('Hapus layanan ini?')) return
+    if (!(await ask({ title: 'Hapus layanan ini?', body: 'Layanan tambahan hotel ini dihapus dari daftar.' }))) return
     await fetch(`/api/v1/admin/products/hotels/${id}/services/${serviceId}`, { method: 'DELETE' })
     await loadServices()
   }
@@ -229,6 +231,8 @@ export default function HotelDetailPage() {
   }
 
   return (
+    <>
+    {dialog}
     <EditorShell
       backHref={`/${locale}/admin/products/hotels`}
       backLabel="Daftar Hotel"
@@ -427,6 +431,7 @@ export default function HotelDetailPage() {
         </>
       }
     />
+    </>
   )
 }
 

@@ -21,7 +21,7 @@ type ConfirmDialogProps = {
   onClose: () => void
 }
 
-/** Konfirmasi standar admin (pengganti `window.confirm`): satu dialog untuk hapus/nonaktifkan, galat server tampil di dalamnya. */
+/** Konfirmasi standar admin (pengganti dialog bawaan peramban): satu dialog untuk hapus/nonaktifkan, galat server tampil di dalamnya. */
 export function ConfirmDialog({ open, title, children, confirmLabel = 'Ya, lanjutkan', tone = 'primary', busy, error, result, onConfirm, onClose }: ConfirmDialogProps) {
   return (
     <Modal open={open} title={title} onClose={onClose}>
