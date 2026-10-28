@@ -7,7 +7,8 @@ import type { PriceOwnerType, PriceUnit, PriceView } from './types'
 
 // HARGA MANUAL (docs/arsitektur-harga-terpadu.md §2 I2/I6, §16): admin menetapkan harga jual sendiri; margin default hanyalah saran. Hidup di `price_points`
 // (manualSellIdr), diubah HANYA di sini, dan tiap perubahan tercatat di `price_changes`. Hitung-ulang tak pernah menimpanya (modal bergerak, jual tetap, untung ikut).
-// Menetapkan jual di bawah modal TIDAK diblokir ("bukan patokan utama") tetapi WAJIB bercatatan (§8.2); selisihnya muncul di Kesehatan Margin.
+// Menetapkan jual di bawah modal TIDAK diblokir dan tak mewajibkan apa pun (arahan 2026-10-28, §21: sistem hanya mengingatkan — peringatannya `lib/pricing/warnings.ts`); catatan alasan opsional,
+// selisihnya muncul di Kesehatan Margin.
 
 /** Masukan tak valid / aturan harga dilanggar → 400 di route. */
 export class PriceInputError extends Error {
@@ -16,7 +17,6 @@ export class PriceInputError extends Error {
 
 /** Batas atas harga jual/modal satuan (rupiah): menolak salah ketik (mis. tambahan nol) sebelum sampai ke katalog. Harus < 10^10 — kolom harga lama bertipe Decimal(12,2). */
 export const MAX_PRICE_IDR = 5_000_000_000
-export const MIN_NOTE_LENGTH = 3
 
 type Tx = Prisma.TransactionClient
 type Actor = { byUserId: string }
@@ -49,9 +49,6 @@ export async function setManualSell(input: PointKey & Actor & { sellIdr: number;
     const creatable = owner.creatableVariants.find(v => v.key === variantKey)
     if (!existing && !creatable) throw new PriceInputError('Rentang/varian harga ini belum ada — simpan tarif modalnya lebih dulu')
     const cost = num(existing?.costIdr)
-    if (cost != null && sell < cost && (note?.length ?? 0) < MIN_NOTE_LENGTH) {
-      throw new PriceInputError('Harga jual di bawah modal — isi catatan alasannya (mis. promo / negosiasi)')
-    }
     const oldSell = num(existing?.sellIdr)
     const data = { manualSellIdr: sell, sellIdr: sell, manualNote: note, manualBy: byUserId, manualAt: new Date() }
     const row = existing

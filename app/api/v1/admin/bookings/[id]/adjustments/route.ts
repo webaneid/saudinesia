@@ -18,7 +18,7 @@ export async function GET(_req: Request, { params }: Ctx) {
   }
 }
 
-// Diskon (negatif) / biaya tambahan (positif) pada total pesanan yang menunggu pembayaran. Catatan alasan wajib bila total akhir di bawah HPP awal.
+// Diskon (negatif) / biaya tambahan (positif) pada total pesanan yang menunggu pembayaran. Catatan opsional; di bawah HPP/rekomendasi hanya menghasilkan peringatan.
 export async function POST(req: Request, { params }: Ctx) {
   try {
     const session = await requireBookingAdjust()

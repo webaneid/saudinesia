@@ -1,5 +1,5 @@
 // Fase 7 harga terpadu (docs/arsitektur-harga-terpadu.md §20, 7A+7B): penyesuaian total pesanan (diskon/biaya tambahan) dan jumlah pembayaran terkonfirmasi, terhadap DATABASE SUNGGUHAN.
-// Dibuktikan: total = Σ snapshot tetap (satu baris `penyesuaian` per perubahan, tanpa UPDATE snapshot), catatan WAJIB bila total akhir < HPP awal (kode DAN CHECK DB), hanya saat menunggu
+// Dibuktikan: total = Σ snapshot tetap (satu baris `penyesuaian` per perubahan, tanpa UPDATE snapshot), di bawah HPP/rekomendasi hanya PERINGATAN (tak pernah menolak; catatan opsional), hanya saat menunggu
 // pembayaran, total akhir > 0, pembatalan lewat baris pembalik (sekali), perubahan paralel terkunci, label tampil di invoice tetapi catatan INTERNAL tak pernah bocor, laba laporan ikut berkurang,
 // serta aturan jumlah pembayaran dan penjaga sumber.
 //
@@ -8,7 +8,7 @@ import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { prisma } from '@/lib/db'
-import { AdjustmentError, adjustBookingTotal, listAdjustments, reverseAdjustment } from '@/lib/booking/adjustments'
+import { AdjustmentError, adjustBookingTotal, listAdjustments, reverseAdjustment, setBookingTotal, updateAdjustmentReason } from '@/lib/booking/adjustments'
 import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
 import { getProfitReport } from '@/lib/reports/profit'
 import { PaymentAmountError, resolveConfirmedAmount } from '@/lib/payments/confirmAmount'
@@ -66,17 +66,19 @@ await t('Fase 8A: baris snapshot penyesuaian membawa rekomendasi 0 (diskon/biaya
   assert.deepEqual(rows.map(r => Number(r.recommendedTotalIdr)), [0])
   assert.notEqual(rows[0]!.recommendedTotalIdr, null)
 })
-await t('DI BAWAH HPP: tanpa catatan ditolak (400, tak ada yang berubah); dengan catatan boleh dan belowCost tercatat; batas persis = HPP (tidak di bawah) tak butuh catatan', async () => {
+await t('DI BAWAH HPP (Fase 8): TIDAK ditolak walau tanpa catatan — belowCost tercatat, peringatan below_cost dikembalikan; catatan opsional tersimpan bila ada', async () => {
   const id = await mkBooking()
-  await rejectsAdj(() => adjustBookingTotal({ bookingId: id, amountIdr: -350_000, label: 'Nego', byUserId: staff.id }), 400, /catatan alasan wajib/) // 1.150.000 < HPP 1.200.000
-  await rejectsAdj(() => adjustBookingTotal({ bookingId: id, amountIdr: -350_000, label: 'Nego', reason: 'ab', byUserId: staff.id }), 400, /catatan alasan wajib/)
-  assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 })
-  const exact = await adjustBookingTotal({ bookingId: id, amountIdr: -300_000, label: 'Nego', byUserId: staff.id }) // 1.200.000 = HPP persis → tidak < HPP, tanpa catatan boleh
-  assert.equal(exact.belowCost, false)
+  const first = await adjustBookingTotal({ bookingId: id, amountIdr: -350_000, label: 'Nego', byUserId: staff.id }) // 1.150.000 < HPP 1.200.000, tanpa catatan
+  assert.deepEqual([first.totalAfter, first.belowCost, first.warningAfter.level, first.warningAfter.lossIdr, first.warningBefore.level], [1_150_000, true, 'below_cost', 50_000, 'ok'])
+  assert.deepEqual(await state(id), { total: 1_150_000, sum: 1_150_000, lines: 3 })
+  assert.equal((await listAdjustments(id))[0]!.reason, null)
   const id2 = await mkBooking()
-  const r = await adjustBookingTotal({ bookingId: id2, amountIdr: -400_000, label: 'Nego besar', reason: 'pelanggan loyal, kesepakatan manajer', byUserId: staff.id })
+  const exact = await adjustBookingTotal({ bookingId: id2, amountIdr: -300_000, label: 'Nego', byUserId: staff.id }) // 1.200.000 = HPP persis: tidak rugi, tapi di bawah rekomendasi 1.500.000
+  assert.deepEqual([exact.belowCost, exact.warningAfter.level, exact.warningAfter.shortfallVsRecommendedIdr], [false, 'below_recommended', 300_000])
+  const id3 = await mkBooking()
+  const r = await adjustBookingTotal({ bookingId: id3, amountIdr: -400_000, label: 'Nego besar', reason: 'pelanggan loyal, kesepakatan manajer', byUserId: staff.id })
   assert.deepEqual([r.totalAfter, r.belowCost], [1_100_000, true])
-  assert.equal((await listAdjustments(id2))[0]!.reason, 'pelanggan loyal, kesepakatan manajer')
+  assert.equal((await listAdjustments(id3))[0]!.reason, 'pelanggan loyal, kesepakatan manajer')
 })
 await t('CHECK DB (bukan hanya kode): belowCost tak konsisten dengan total/HPP, total tak = sebelum + jumlah, total akhir ≤ 0, jumlah 0 → semua ditolak', async () => {
   const id = await mkBooking()
@@ -243,14 +245,17 @@ await t('PARALEL: 6 konfirmasi serentak pada payment yang sama → TEPAT satu be
   assert.deepEqual([res.filter(r => r.kind === 'done').length, res.filter(r => r.kind === 'conflict').length], [1, 5])
   assert.deepEqual(await snap(a.id, a.pay).then(x => [x.booking, x.pay, x.amount]), ['confirmed', 'confirmed', 1_500_000])
 })
-await t('AUDIT L2: pembatalan yang menghasilkan total DI BAWAH HPP wajib catatan manusia (bukan catatan otomatis sistem); di atas HPP catatan otomatis boleh', async () => {
+await t('AUDIT L2 (Fase 8): pembatalan yang menghasilkan total DI BAWAH HPP tetap jalan — catatan manusia dipakai bila ada, selain itu catatan otomatis sistem', async () => {
   const id = await mkBooking()
   const surcharge = await adjustBookingTotal({ bookingId: id, amountIdr: 100_000, label: 'Biaya tambahan', byUserId: staff.id })   // 1.600.000
-  await adjustBookingTotal({ bookingId: id, amountIdr: -350_000, label: 'Diskon', byUserId: staff.id })                          // 1.250.000 ≥ HPP 1.200.000 → tanpa catatan
-  await rejectsAdj(() => reverseAdjustment({ bookingId: id, adjustmentId: surcharge.adjustmentId, byUserId: staff.id }), 400, /catatan alasan wajib/) // → 1.150.000 < HPP
-  assert.deepEqual(await state(id), { total: 1_250_000, sum: 1_250_000, lines: 4 })
-  const rev = await reverseAdjustment({ bookingId: id, adjustmentId: surcharge.adjustmentId, reason: 'biaya tambahan dibatalkan atas permintaan manajer', byUserId: staff.id })
-  assert.deepEqual([rev.totalAfter, rev.belowCost], [1_150_000, true])
+  await adjustBookingTotal({ bookingId: id, amountIdr: -350_000, label: 'Diskon', byUserId: staff.id })                          // 1.250.000 ≥ HPP 1.200.000
+  const rev = await reverseAdjustment({ bookingId: id, adjustmentId: surcharge.adjustmentId, byUserId: staff.id })               // → 1.150.000 < HPP: tidak ditolak
+  assert.deepEqual([rev.totalAfter, rev.belowCost, rev.warningAfter.level], [1_150_000, true, 'below_cost'])
+  assert.match((await listAdjustments(id)).find(x => x.reversesId)!.reason ?? '', /^Pembatalan penyesuaian/)
+  const human = await mkBooking(); const s2 = await adjustBookingTotal({ bookingId: human, amountIdr: 100_000, label: 'B', byUserId: staff.id })
+  await adjustBookingTotal({ bookingId: human, amountIdr: -350_000, label: 'D', byUserId: staff.id })
+  await reverseAdjustment({ bookingId: human, adjustmentId: s2.adjustmentId, reason: 'dibatalkan atas permintaan manajer', byUserId: staff.id })
+  assert.equal((await listAdjustments(human)).find(x => x.reversesId)!.reason, 'dibatalkan atas permintaan manajer')
   const ok2 = await mkBooking(); const d = await adjustBookingTotal({ bookingId: ok2, amountIdr: -100_000, label: 'D', byUserId: staff.id })
   await reverseAdjustment({ bookingId: ok2, adjustmentId: d.adjustmentId, byUserId: staff.id })
   assert.match((await listAdjustments(ok2)).find(x => x.reversesId)!.reason ?? '', /^Pembatalan penyesuaian/)
@@ -267,8 +272,73 @@ await t('AUDIT L1: label penyesuaian TIDAK memengaruhi laporan — diskon berlab
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 const root = new URL('..', import.meta.url).pathname
 const read = (f: string) => readFileSync(join(root, f), 'utf8')
+await t('ATUR TOTAL (Fase 8C): turun ke bawah rekomendasi → lunak; ke bawah HPP → rugi; keduanya DITERIMA tanpa catatan; label bawaan dari tanda; total = Σ snapshot selalu', async () => {
+  const id = await mkBooking() // HPP 1.200.000 · rekomendasi 1.500.000 · jual 1.500.000
+  const same = await prisma.bookingAdjustment.count({ where: { bookingId: id } })
+  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_500_000, byUserId: staff.id }), 400, /sudah sama/)
+  assert.equal(await prisma.bookingAdjustment.count({ where: { bookingId: id } }), same)
+  const soft = await setBookingTotal({ bookingId: id, totalIdr: 1_300_000, byUserId: staff.id })
+  assert.deepEqual([soft.totalBefore, soft.totalAfter, soft.warningAfter.level, soft.warningAfter.shortfallVsRecommendedIdr, soft.belowCost], [1_500_000, 1_300_000, 'below_recommended', 200_000, false])
+  assert.deepEqual(await state(id), { total: 1_300_000, sum: 1_300_000, lines: 3 })
+  const loss = await setBookingTotal({ bookingId: id, totalIdr: 1_000_000, label: 'Nego akhir', byUserId: staff.id })
+  assert.deepEqual([loss.totalBefore, loss.totalAfter, loss.warningBefore.level, loss.warningAfter.level, loss.warningAfter.lossIdr, loss.belowCost], [1_300_000, 1_000_000, 'below_recommended', 'below_cost', 200_000, true])
+  const up = await setBookingTotal({ bookingId: id, totalIdr: 1_800_000, byUserId: staff.id }) // "edit" = atur lagi: baris baru, label dari tanda (+)
+  assert.deepEqual([up.totalAfter, up.warningAfter.level], [1_800_000, 'ok'])
+  assert.deepEqual(await state(id), { total: 1_800_000, sum: 1_800_000, lines: 5 })
+  const hist = await listAdjustments(id)
+  assert.deepEqual(hist.map(h => [h.label, h.amountIdr]), [['Biaya tambahan', 800_000], ['Nego akhir', -300_000], ['Diskon', -200_000]])
+})
+await t('ATUR TOTAL: yang ditolak hanya total ≤ 0 / bukan angka (422/400, tak ada yang berubah), status selain menunggu pembayaran (409), pesanan tak ada (404); batas wajar', async () => {
+  const id = await mkBooking()
+  for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: bad, byUserId: staff.id }), 422, /lebih dari 0/)
+  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 9_000_000_000_000, byUserId: staff.id }), 400, /batas wajar/)
+  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_000_000, reason: 'x'.repeat(501), byUserId: staff.id }), 400, /maksimal 500/)
+  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_000_000, label: 'L'.repeat(121), byUserId: staff.id }), 400, /Label/)
+  assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 })
+  const review = await mkBooking('payment_review')
+  await rejectsAdj(() => setBookingTotal({ bookingId: review, totalIdr: 1_000_000, byUserId: staff.id }), 409, /menunggu pembayaran/)
+  await rejectsAdj(() => setBookingTotal({ bookingId: '00000000-0000-0000-0000-000000000000', totalIdr: 1_000_000, byUserId: staff.id }), 404, /tidak ditemukan/)
+})
+await t('ATUR TOTAL: dua orang mengatur bersamaan dari total yang sama → keduanya berhasil berurutan (selisih dihitung dari total terkini di dalam kunci), Σ snapshot = total akhir = salah satu nilai yang diminta; baris booking dikunci (diuji deterministik)', async () => {
+  const id = await mkBooking()
+  const res = await Promise.allSettled([1_400_000, 1_100_000, 1_700_000, 900_000].map(t2 => setBookingTotal({ bookingId: id, totalIdr: t2, byUserId: staff.id })))
+  assert.ok(res.every(r => r.status === 'fulfilled'), JSON.stringify(res.filter(r => r.status === 'rejected')))
+  const st = await state(id)
+  assert.equal(st.total, st.sum)
+  assert.ok([1_400_000, 1_100_000, 1_700_000, 900_000].includes(st.total))
+  assert.equal(st.lines, 2 + 4)
+  // deterministik: selama ada pemegang kunci baris booking, pengatur total menunggu (tidak membaca total basi)
+  const id2 = await mkBooking()
+  let release!: () => void
+  const held = new Promise<void>(r => { release = r })
+  const holder = prisma.$transaction(async tx => { await tx.$queryRaw`SELECT "id" FROM "bookings" WHERE "id" = ${id2} FOR SHARE`; await held }, { timeout: 20_000 })
+  await new Promise(r => setTimeout(r, 300))
+  let done = false
+  const pending = setBookingTotal({ bookingId: id2, totalIdr: 1_000_000, byUserId: staff.id }).then(() => { done = true })
+  await new Promise(r => setTimeout(r, 600))
+  assert.equal(done, false, 'harus menunggu kunci')
+  release(); await holder; await pending
+  assert.deepEqual(await state(id2), { total: 1_000_000, sum: 1_000_000, lines: 3 })
+})
+await t('EDIT CATATAN (Fase 8C): hanya `reason` yang berubah (label, jumlah, total, snapshot utuh); kosong menghapus; >500 → 400; penyesuaian milik pesanan lain / tak ada → 404; boleh walau pesanan tak lagi menunggu pembayaran', async () => {
+  const id = await mkBooking()
+  const r = await adjustBookingTotal({ bookingId: id, amountIdr: -100_000, label: 'Diskon rombongan', reason: 'awal', byUserId: staff.id })
+  const snapBefore = await prisma.priceSnapshot.findMany({ where: { bookingId: id }, orderBy: { lineKey: 'asc' } })
+  assert.deepEqual(await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: '  nego dengan Bpk. Ahmad  ' }), { id: r.adjustmentId, reason: 'nego dengan Bpk. Ahmad' })
+  const row = (await listAdjustments(id))[0]!
+  assert.deepEqual([row.label, row.amountIdr, row.totalBefore, row.totalAfter, row.reason], ['Diskon rombongan', -100_000, 1_500_000, 1_400_000, 'nego dengan Bpk. Ahmad'])
+  assert.deepEqual(await prisma.priceSnapshot.findMany({ where: { bookingId: id }, orderBy: { lineKey: 'asc' } }), snapBefore, 'snapshot tak tersentuh')
+  assert.deepEqual(await state(id), { total: 1_400_000, sum: 1_400_000, lines: 3 })
+  assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: '   ' })).reason, null)
+  await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'x'.repeat(501) }), 400, /maksimal 500/)
+  const other = await mkBooking()
+  await rejectsAdj(() => updateAdjustmentReason({ bookingId: other, adjustmentId: r.adjustmentId, reason: 'x' }), 404, /tidak ditemukan/)
+  await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: '00000000-0000-0000-0000-000000000000', reason: 'x' }), 404, /tidak ditemukan/)
+  await prisma.booking.update({ where: { id }, data: { status: 'confirmed' } })
+  assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'dicatat ulang setelah lunas' })).reason, 'dicatat ulang setelah lunas')
+})
 await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar memakai resolveConfirmedAmount + skema .strict(); hanya lib/booking/adjustments.ts (+ pembersihan UU PDP) menulis booking_adjustments; catatan internal tak ada di invoice', () => {
-  for (const f of ['app/api/v1/admin/bookings/[id]/adjustments/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/reverse/route.ts']) {
+  for (const f of ['app/api/v1/admin/bookings/[id]/adjustments/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/reverse/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/route.ts', 'app/api/v1/admin/bookings/[id]/total/route.ts', 'app/api/v1/admin/bookings/[id]/pricing/route.ts']) {
     const src = read(f)
     assert.match(src, /requireBookingAdjust\(\)|requirePricingView\(\)/, f); assert.doesNotMatch(src, /requireManager|requireSuperAdmin|requireAdmin\(/, f)
     assert.doesNotMatch(src, /priceSnapshot|bookingAdjustment/, `${f}: route tak menyentuh tabel langsung`)
