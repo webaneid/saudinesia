@@ -64,7 +64,6 @@ export const createBookingSchema = z.object({
   returnDate:     z.string().date(),
   season:         z.enum(['regular', 'ramadan', 'hajj']),
   bookingType:    z.enum(['individual', 'group']),
-  groupName:      z.string().optional(),
   // .max(500) DIHAPUS (docs/arsitektur-booking.md §1.6.2/Keputusan #9) — manifest tidak
   // dibatasi aturan bisnis, analogi booking kereta/pesawat: satu orang bisa booking untuk
   // siapa saja, jumlah tidak wajar dibatasi angka sembarang. Batas teknis wajar (bukan bisnis)

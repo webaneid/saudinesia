@@ -432,7 +432,7 @@ dikerjakan, sengaja dikeluarkan dari scope — lihat §7.2)
 Step 7 — Invoice PDF profesional [x] SELESAI 2026-07-25
   - **lib/pdf/invoiceData.ts** (baru) — `buildInvoiceData(booking)`, satu tempat normalisasi 7
     relasi per-tipe existing (Opsi B — hotels/transports/muthowif/catering/tourPackages/haji +
-    visa dari `pilgrims[].visaApplication`, BUKAN `booking.visa`/`BookingVisa` yang tidak pernah
+    visa dari `pilgrims[].visaApplication`, BUKAN `booking.visa`/`BookingVisa` (model ini DIHAPUS 2026-10-30) yang tidak pernah
     dipakai kode manapun) jadi bentuk seragam `{label, description, qty, unitPrice, amount}[]`.
   - **lib/pdf/invoice.tsx** — implementasi nyata menggantikan stub, `@react-pdf/renderer`
     (di-upgrade v3.4.4→v4.5.1, lihat §8 Keputusan #15 — v3.x tidak kompatibel React 19). Satu

@@ -115,13 +115,12 @@ export function deleteVisaProduct(id: string): Promise<DeleteOutcome> {
   return run({
     table: 'visa_products', id, mediaType: 'visa',
     count: async db => {
-      const [bookings, applications, packageOptions, packagesIncluding] = await Promise.all([
-        db.bookingVisa.count({ where: { visaProductId: id } }),
+      const [applications, packageOptions, packagesIncluding] = await Promise.all([
         db.visaApplication.count({ where: { visaProductId: id } }), // FK SET NULL: pengajuan lama akan kehilangan produknya
         db.packageVisaOption.count({ where: { visaProductId: id } }),
         db.package.count({ where: { includedVisaProductId: id } }), // FK SET NULL: paket akan kehilangan visa "included"
       ])
-      return bookings + applications + packageOptions + packagesIncluding
+      return applications + packageOptions + packagesIncluding
     },
     drop: async tx => { await dropPolymorphic(tx, 'visa', [id]); await tx.visaProduct.delete({ where: { id } }) },
     deactivate: () => prisma.visaProduct.update({ where: { id }, data: { isActive: false } }),

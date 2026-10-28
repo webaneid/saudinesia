@@ -72,7 +72,7 @@ await t(`${HOSTILE.length} jalur bermusuhan: bila dialihkan, SELALU ke origin ya
 console.log('== gerbang auth kasar ==')
 
 await t('rute jamaah tanpa cookie → login jamaah; /admin tanpa cookie → login admin; /admin/login publik; rute publik & /api dilewati', async () => {
-  for (const p of ['/id/dashboard', '/id/bookings/checkout/visa', '/id/groups', '/id/profile', '/id/lengkapi-data', '/en/dashboard']) {
+  for (const p of ['/id/dashboard', '/id/bookings/checkout/visa', '/id/bookings', '/id/profile', '/id/lengkapi-data', '/en/dashboard']) {
     const r = await run(p); assert.equal(r.status, 307, p); assert.equal(r.redirect?.pathname, `/${p.split('/')[1]}/login`, p)
   }
   for (const p of ['/id/admin', '/id/admin/bookings', '/en/admin/system/users']) {
@@ -95,8 +95,8 @@ console.log('== gerbang vs kanonikalisasi (S-NI01) ==')
 
 // next-intl mendekode/membersihkan path lalu me-REWRITE ke bentuk kanonik; gerbang harus melihat bentuk yang sama.
 const ADMIN_VARIANTS = ['/id/%61dmin', '/id//admin', '/id/%09admin', '/id/%0aadmin', '/id/\\admin', '/ID/admin', '/Id/admin/bookings', '/id///admin/bookings', '/en//admin', '/id/%2561dmin', '/id/%5cadmin', '/id/%61dmin/%62ookings']
-const USER_VARIANTS = ['/id//dashboard', '/id/%64ashboard', '/id/%2564ashboard', '/ID/dashboard', '/id/%09dashboard', '/en///bookings/checkout/visa', '/id/%70rofile', '/id/\\groups']
-const isProtectedTarget = (p: string) => /^\/(id|en)\/(admin(?!\/login(\/|$))|dashboard|bookings|groups|profile|lengkapi-data)(\/|$)/.test(p)
+const USER_VARIANTS = ['/id//dashboard', '/id/%64ashboard', '/id/%2564ashboard', '/ID/dashboard', '/id/%09dashboard', '/en///bookings/checkout/visa', '/id/%70rofile', '/id/\\bookings']
+const isProtectedTarget = (p: string) => /^\/(id|en)\/(admin(?!\/login(\/|$))|dashboard|bookings|profile|lengkapi-data)(\/|$)/.test(p)
 
 await t(`${ADMIN_VARIANTS.length} varian encoding/slash/huruf pada /admin TANPA cookie → login admin (bukan rewrite ke halaman admin); kontrol positif: bentuk polos juga`, async () => {
   assert.equal((await run('/id/admin')).redirect?.pathname, '/id/admin/login', 'kontrol positif')
@@ -172,7 +172,7 @@ console.log('== matcher ==')
 // Sintaks matcher Next = path-to-regexp; untuk bentuk `/((?!...).*)` cukup memakai grup regex-nya langsung.
 const matches = (path: string) => config.matcher.some((m) => new RegExp(`^${m}$`).test(path))
 await t('matcher TIDAK melepas rute terlindungi/locale dan melepas aset (_next, berkas ber-titik); /api boleh masuk atau tidak', () => {
-  for (const p of ['/', '/id', '/en', '/id/dashboard', '/id/admin', '/id/admin/login', '/id/bookings/checkout/visa', '/id/groups', '/id/profile', '/id/lengkapi-data', '/hotels']) {
+  for (const p of ['/', '/id', '/en', '/id/dashboard', '/id/admin', '/id/admin/login', '/id/bookings/checkout/visa', '/id/bookings', '/id/profile', '/id/lengkapi-data', '/hotels']) {
     assert.ok(matches(p), `harus dicocokkan matcher: ${p}`)
   }
   for (const p of ['/_next/static/chunks/app.js', '/favicon.ico', '/robots.txt', '/images/logo.png']) assert.ok(!matches(p), `harus dilepas matcher: ${p}`)

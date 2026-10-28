@@ -29,7 +29,7 @@ type Preview = {
   user: { fullName: string; email: string }
   eligible: boolean
   blockers: string[]
-  willErase: { bookings: number; pilgrims: number; documents: number; visaApplications: number; notifications: number; authTokens: number; groupMemberships: number; address: number }
+  willErase: { bookings: number; pilgrims: number; documents: number; visaApplications: number; notifications: number; authTokens: number; address: number }
 }
 
 const STATUS_LABEL: Record<DeletionRequest['status'], string> = {

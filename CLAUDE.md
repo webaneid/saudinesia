@@ -117,7 +117,7 @@ app/[locale]/
   (pilgrim)/
     dashboard/
     bookings/checkout/        # checkout pendek per-produk (visa/, transport/) — wizard 7-langkah lama DIHAPUS 2026-07-25
-    groups/
+    # (Group Booking, halaman /bookings & /groups yang hanya TODO, dan tabel groups/group_members/booking_visa DIHAPUS 2026-10-30 — booking engine akan dibuat baru)
   admin/                      # UNIFIED admin dashboard — role-based sidebar
     bookings/                 # [admin|manager|superadmin]
     payments/                 # [admin|manager|superadmin]
@@ -133,7 +133,7 @@ app/[locale]/
   api/v1/                     # all Route Handlers
 components/
   ui/                         # shadcn/ui primitives
-  booking/                    # WizardShell, HotelPicker, DocumentUploader, PriceSidebar…
+  booking/                    # ManifestFieldsForm + form checkout per-produk (Visa/Transport) — sisa wizard lama (PilgrimForm, DocumentUploader) DIHAPUS 2026-10-30
   admin/
     pricing/                  # CostComponentsPanel + VendorCurrencyField — Komponen Biaya universal (Paket Umroh, Paket Ziarah, Haji)
   shared/                     # layout, header, locale switcher
