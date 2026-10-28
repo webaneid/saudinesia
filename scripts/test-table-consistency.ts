@@ -71,10 +71,8 @@ const UNPAGINATED_PAGES: Record<string, string> = {
   'app/[locale]/(public)/visa/page.tsx': 'katalog kartu kurasi',
 }
 
-/** Satu-satunya `<table>` di luar DataTable bersama. */
-const RAW_TABLE_EXCEPTIONS: Record<string, string> = {
-  'components/campaigns/CampaignTable.tsx': 'prototipe dasbor donasi statis di /campaigns — di luar produk; diusulkan dihapus (docs/arsitektur-tabel.md §7)',
-}
+/** `<table>` di luar DataTable bersama: sengaja KOSONG (prototipe /campaigns dihapus 2026-10-30) — entri baru butuh alasan kuat. */
+const RAW_TABLE_EXCEPTIONS: Record<string, string> = {}
 
 for (const [name, table] of Object.entries({ UNPAGINATED_TABLES, READ_ONLY_TABLES, UNBOUNDED_ADMIN_GET, UNPAGINATED_PAGES, RAW_TABLE_EXCEPTIONS })) {
   t(`pengecualian ${name}: tiap entri beralasan dan berkasnya ada`, () => {
@@ -145,7 +143,7 @@ t('API ADMIN (temuan otomatis): setiap route GET dengan `findMany` memakai pagin
 })
 
 t('HALAMAN SERVER (temuan otomatis): `findMany` pada halaman memakai paginasi/`take`, kecuali katalog kartu kurasi yang terdaftar — jumlahnya PERSIS', () => {
-  const pages = SOURCES.filter(f => /\/page\.tsx$/.test(f) && f.startsWith('app/[locale]/') && !/\/\(campaign\)\//.test(f))
+  const pages = SOURCES.filter(f => /\/page\.tsx$/.test(f) && f.startsWith('app/[locale]/'))
   const unbounded = pages.filter(f => { const s = read(f); return /findMany\(/.test(s) && !/take:|\.\.\.range|paginate\(/.test(s) }).sort()
   assert.deepEqual(unbounded, Object.keys(UNPAGINATED_PAGES).sort(), 'halaman baru memuat semua baris — paginasi atau daftarkan beralasan')
 })

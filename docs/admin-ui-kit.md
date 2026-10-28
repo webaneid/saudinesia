@@ -67,3 +67,7 @@ Halaman edit produk lain (`hotels/[id]`, `packages/[id]`, dst.) belum memakainya
 ## Pembaruan 2026-10-30 — tabel/filter/aksi/paginasi diseragamkan
 
 Pil filter (`FilterPills`), aksi bertulis-tangan, dan paginasi lama digantikan satu kit: `FilterBar` + `FilterSelect` (dropdown autocomplete), `RowActions` (aksi berikon), `Pagination` (panah + angka, ringkas di HP), `ConfirmDialog`. Rancangan, audit, dan fase: `docs/arsitektur-tabel.md`. Halaman yang belum bermigrasi masih memakai pola lama sampai fasenya.
+
+## Pembaruan 2026-10-30 — jembatan warna legacy dibersihkan
+
+Prototipe `/campaigns` (dasbor donasi statis, di luar produk) dihapus bersama token Tailwind khusus miliknya: `canvas`, `ink`, `ink2`, `line`, `mint`, `gold` (tanpa awalan `admin-`) dan bayangan `card`/`soft`. Tak ada pemakai lain (dicek dengan pencarian kelas); catatan "jembatan warna legacy" di atas (`campaigns/`) sudah tidak berlaku. Token `admin-*` tidak berubah.
