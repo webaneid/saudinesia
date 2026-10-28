@@ -3,7 +3,10 @@ import { prisma } from '@/lib/db'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 
 type Props = {
@@ -18,7 +21,7 @@ type PoolRow = { date: Date; pendingCount: number; bookedCount: number }
 
 const availTone = (avail: number) => (avail < 5 ? 'text-admin-danger' : 'text-admin-ok')
 
-const hotelColumns: Column<HotelQuotaRow>[] = [
+const hotelColumns = (locale: string): Column<HotelQuotaRow>[] => [
   { key: 'hotel', header: 'Hotel', mobile: 'title', cell: q => <span className="text-[13px] font-medium">{q.period.hotel.name}</span> },
   { key: 'type', header: 'Tipe', cell: q => <span className="text-[12px] capitalize text-admin-muted">{q.roomType.name}</span> },
   { key: 'total', header: 'Total', align: 'right', cell: q => <span className="tabular-nums text-admin-ink/80">{q.totalQuota}</span> },
@@ -31,6 +34,10 @@ const hotelColumns: Column<HotelQuotaRow>[] = [
       return <span className={`font-bold tabular-nums ${availTone(avail)}`}>{avail}</span>
     },
   },
+  {
+    key: 'actions', header: '', actions: true,
+    cell: q => <RowActions><ActionLink kind="view" href={`/${locale}/admin/products/hotels/${q.period.hotel.id}`} label={`Lihat hotel ${q.period.hotel.name}`} /></RowActions>,
+  },
 ]
 
 export default async function AdminQuotas({ params, searchParams }: Props) {
@@ -42,11 +49,16 @@ export default async function AdminQuotas({ params, searchParams }: Props) {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + POOL_WINDOW_DAYS)
 
+  const hotelOptions = await prisma.hotel.findMany({ orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { id: true, name: true } })
+  const hotelId = hotelOptions.some(h => h.id === sp.hotel) ? (sp.hotel as string) : undefined
+  const scheduleWhere: Prisma.HotelRoomScheduleWhereInput = hotelId ? { period: { hotelId } } : {}
+
   const [hotelPage, capacitySum, poolRows] = await Promise.all([
     paginate<HotelQuotaRow>(
       list,
-      () => prisma.hotelRoomSchedule.count(),
+      () => prisma.hotelRoomSchedule.count({ where: scheduleWhere }),
       range => prisma.hotelRoomSchedule.findMany({
+        where: scheduleWhere,
         include: { period: { include: { hotel: true } }, roomType: true },
         // id = tie-breaker: banyak jadwal berbagi periodStart yang sama, halaman harus stabil
         orderBy: [{ period: { periodStart: 'asc' } }, { id: 'asc' }],
@@ -84,8 +96,9 @@ export default async function AdminQuotas({ params, searchParams }: Props) {
     },
   ]
 
-  const hrefFor = (page: number) =>
-    buildListHref(`/${locale}/admin/quotas`, { page, limit: sp.limit === undefined ? undefined : list.limit })
+  const base = `/${locale}/admin/quotas`
+  const limitParam = sp.limit === undefined ? undefined : String(list.limit)
+  const hrefFor = (page: number) => buildListHref(base, { hotel: hotelId, page, limit: limitParam })
 
   return (
     <div className="space-y-7">
@@ -94,8 +107,11 @@ export default async function AdminQuotas({ params, searchParams }: Props) {
       {/* Hotel quota */}
       <div className="space-y-3">
         <p className="admin-section">Hotel</p>
+        <FilterBar active={Boolean(hotelId)} resetHref={buildListHref(base, { limit: limitParam })}>
+          <FilterSelect label="Hotel" value={hotelId ?? ''} options={hotelOptions.map(h => ({ value: h.id, label: h.name }))} nav={{ base, param: 'hotel', query: { limit: limitParam } }} />
+        </FilterBar>
         <DataTable
-          columns={hotelColumns}
+          columns={hotelColumns(locale)}
           rows={hotels}
           getRowId={q => q.id}
           empty="Belum ada data quota."

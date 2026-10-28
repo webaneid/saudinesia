@@ -15,20 +15,27 @@ type ConfirmDialogProps = {
   busy?: boolean
   /** Galat dari server — ditampilkan apa adanya, dialog tetap terbuka. */
   error?: string | null
+  /** Hasil (mis. "dinonaktifkan karena dirujuk"): bila ada, dialog menampilkannya dengan satu tombol Tutup. */
+  result?: string | null
   onConfirm: () => void
   onClose: () => void
 }
 
 /** Konfirmasi standar admin (pengganti `window.confirm`): satu dialog untuk hapus/nonaktifkan, galat server tampil di dalamnya. */
-export function ConfirmDialog({ open, title, children, confirmLabel = 'Ya, lanjutkan', tone = 'primary', busy, error, onConfirm, onClose }: ConfirmDialogProps) {
+export function ConfirmDialog({ open, title, children, confirmLabel = 'Ya, lanjutkan', tone = 'primary', busy, error, result, onConfirm, onClose }: ConfirmDialogProps) {
   return (
     <Modal open={open} title={title} onClose={onClose}>
       <div className="space-y-4">
-        {children && <div className="text-sm text-admin-muted">{children}</div>}
+        {children && !result && <div className="text-sm text-admin-muted">{children}</div>}
         {error && <p role="alert" className="m-0 text-sm font-medium text-admin-danger">{error}</p>}
+        {result && <p role="status" className="m-0 text-sm font-medium text-admin-ink">{result}</p>}
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Batal</Button>
-          <Button variant={tone === 'danger' ? 'danger' : 'primary'} size="sm" onClick={onConfirm} loading={busy}>{confirmLabel}</Button>
+          {result ? <Button size="sm" onClick={onClose}>Tutup</Button> : (
+            <>
+              <Button variant="ghost" size="sm" onClick={onClose} disabled={busy}>Batal</Button>
+              <Button variant={tone === 'danger' ? 'danger' : 'primary'} size="sm" onClick={onConfirm} loading={busy}>{confirmLabel}</Button>
+            </>
+          )}
         </div>
       </div>
     </Modal>

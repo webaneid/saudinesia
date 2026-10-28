@@ -7,7 +7,12 @@ import { Download, LineChart } from 'lucide-react'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { cn, formatRupiah } from '@/lib/utils'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
+import { PeriodFilter } from '@/components/admin/data-table/PeriodFilter'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
+import { periodPresets } from '@/lib/admin/period'
 import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
@@ -35,20 +40,6 @@ const ITEM_LABEL: Record<string, string> = {
 }
 const STATUS_LABEL: Record<string, string> = {
   awaiting_payment: 'Menunggu bayar', payment_review: 'Verifikasi bayar', confirmed: 'Dikonfirmasi', active: 'Berjalan', completed: 'Selesai', cancelled: 'Batal',
-}
-
-const wibDate = (d: Date): string => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
-const addDays = (iso: string, n: number): string => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
-function presets(): Array<{ key: string; label: string; from: string; to: string }> {
-  const today = wibDate(new Date())
-  const month = today.slice(0, 8)
-  const lastMonthEnd = addDays(`${month}01`, -1)
-  return [
-    { key: 'month', label: 'Bulan ini', from: `${month}01`, to: today },
-    { key: 'prev', label: 'Bulan lalu', from: `${lastMonthEnd.slice(0, 8)}01`, to: lastMonthEnd },
-    { key: '90', label: '90 hari', from: addDays(today, -89), to: today },
-    { key: 'year', label: 'Tahun ini', from: `${today.slice(0, 5)}01-01`, to: today },
-  ]
 }
 
 const Rp = ({ v }: { v: number }) => <span className="tabular-nums">{formatRupiah(v)}</span>
@@ -85,7 +76,7 @@ export default function ProfitReportPage() {
   const pathname = usePathname()
   const search = useSearchParams()
   const { page, limit, setPage } = useListPage()
-  const def = useMemo(() => presets()[0]!, [])
+  const def = useMemo(() => periodPresets()[0]!, [])
   const from = search.get('from') ?? def.from
   const to = search.get('to') ?? def.to
   const scope = search.get('scope') === 'with_pending' ? 'with_pending' : 'recognized'
@@ -120,6 +111,7 @@ export default function ProfitReportPage() {
     { key: 'status', header: 'Status', hideBelowLg: true, cell: r => <Badge tone={r.status === 'cancelled' ? 'danger' : r.status === 'awaiting_payment' || r.status === 'payment_review' ? 'warning' : 'accent'}>{STATUS_LABEL[r.status] ?? r.status}</Badge> },
     ...figureColumns<BookingRow>(),
     { key: 'real', header: 'Terealisasi', align: 'right', hideBelowLg: true, cell: r => <span className="tabular-nums text-admin-ink/80">{Math.round(r.realizedRatio * 100)}%</span> },
+    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.id}`} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
   ]
 
   return (
@@ -131,21 +123,10 @@ export default function ProfitReportPage() {
         actions={<><Link href={`/${locale}/admin/reports/variance`} className="admin-btn-sm">Selisih HPP vs Aktual</Link><a href={`/api/v1/admin/reports/profit/export?${qs()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {presets().map(p => (
-          <button key={p.key} type="button" onClick={() => go({ from: p.from, to: p.to, page: '1' })}
-            className={cn('rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors', from === p.from && to === p.to ? 'border-admin-accent bg-admin-accent text-white' : 'border-admin-line bg-white text-admin-muted hover:bg-admin-spot')}>
-            {p.label}
-          </button>
-        ))}
-        <input type="date" aria-label="Dari tanggal" className="admin-inp w-40" value={from} max={to} onChange={e => e.target.value && go({ from: e.target.value, page: '1' })} />
-        <span className="text-xs text-admin-muted">s/d</span>
-        <input type="date" aria-label="Sampai tanggal" className="admin-inp w-40" value={to} min={from} onChange={e => e.target.value && go({ to: e.target.value, page: '1' })} />
-        <label className="ml-auto flex items-center gap-2 text-xs font-medium text-admin-muted">
-          <input type="checkbox" checked={scope === 'with_pending'} onChange={e => go({ scope: e.target.checked ? 'with_pending' : 'recognized', page: '1' })} />
-          Termasuk yang belum dibayar
-        </label>
-      </div>
+      <FilterBar active={from !== def.from || to !== def.to || scope === 'with_pending' || onlyLoss} resetHref={pathname}>
+        <PeriodFilter from={from} to={to} onChange={r => go({ from: r.from, to: r.to, page: '1' })} />
+        <FilterSelect label="Penjualan" allLabel="Sudah dibayar" value={scope === 'with_pending' ? 'with_pending' : ''} options={[{ value: 'with_pending', label: 'Termasuk yang belum dibayar' }]} onChange={v => go({ scope: v || 'recognized', page: '1' })} />
+      </FilterBar>
 
       {error && <p role="alert" className="text-sm font-medium text-admin-danger">{error}</p>}
 

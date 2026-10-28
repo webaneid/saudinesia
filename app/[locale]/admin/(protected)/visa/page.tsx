@@ -8,7 +8,11 @@ import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
-import { FilterPills } from '@/components/admin/data-table/FilterPills'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
+import { SearchForm } from '@/components/admin/data-table/SearchForm'
+import { escapeLike } from '@/lib/utils/search'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 
@@ -33,7 +37,11 @@ export default async function AdminVisa({ params, searchParams }: Props) {
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
   const status = isVisaStatus(rawStatus) ? rawStatus : undefined
 
-  const where: Prisma.VisaApplicationWhereInput = status ? { status } : {}
+  const q = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 100)
+  const where: Prisma.VisaApplicationWhereInput = {
+    ...(status ? { status } : {}),
+    ...(q ? { pilgrim: { booking: { bookingCode: { contains: escapeLike(q), mode: 'insensitive' } } } } : {}),
+  }
 
   const { items: applications, meta } = await paginate<VisaRow>(
     list,
@@ -67,8 +75,9 @@ export default async function AdminVisa({ params, searchParams }: Props) {
   }
 
   const base = `/${locale}/admin/visa`
+  const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) =>
-    buildListHref(base, { status, limit: sp.limit === undefined ? undefined : list.limit, ...over })
+    buildListHref(base, { q: q || undefined, status, limit: limitParam, ...over })
 
   const columns: Column<VisaRow>[] = [
     { key: 'name', header: 'Jamaah', mobile: 'title', cell: a => <span className="text-[13px] font-medium">{displayName(a)}</span> },
@@ -86,17 +95,20 @@ export default async function AdminVisa({ params, searchParams }: Props) {
       key: 'status', header: 'Status',
       cell: a => <Badge tone={VISA_TONE[a.status] ?? 'neutral'}>{VISA_STATUS[a.status as keyof typeof VISA_STATUS]?.label ?? a.status}</Badge>,
     },
+    {
+      key: 'actions', header: '', actions: true,
+      cell: a => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${a.pilgrim.booking.id}`} label={`Kelola visa booking ${a.pilgrim.booking.bookingCode}`} /></RowActions>,
+    },
   ]
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Manajemen Visa" />
+      <PageHeader title="Manajemen Visa" description="Cari berdasarkan kode booking." />
 
-      <FilterPills
-        options={Object.entries(VISA_STATUS).map(([value, v]) => ({ value, label: v.label }))}
-        current={status ?? ''}
-        hrefFor={value => hrefFor({ status: value || undefined, page: 1 })}
-      />
+      <FilterBar active={Boolean(q || status)} resetHref={buildListHref(base, { limit: limitParam })}>
+        <SearchForm action={base} q={q} placeholder="Cari kode booking…" preserve={{ status, limit: limitParam === undefined ? undefined : String(limitParam) }} clearHref={hrefFor({ q: undefined, page: 1 })} />
+        <FilterSelect label="Status" value={status ?? ''} options={Object.entries(VISA_STATUS).map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: { q: q || undefined, limit: limitParam === undefined ? undefined : String(limitParam) } }} />
+      </FilterBar>
 
       <DataTable
         columns={columns}

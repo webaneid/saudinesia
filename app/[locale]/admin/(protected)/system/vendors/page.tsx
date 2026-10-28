@@ -12,7 +12,10 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
-import { FilterPills } from '@/components/admin/data-table/FilterPills'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
+import { ApiAction } from '@/components/admin/data-table/ApiAction'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 
@@ -93,7 +96,20 @@ export default async function VendorsPage({ params, searchParams }: Props) {
         </div>
       ),
     },
+    {
+      key: 'actions', header: '', actions: true,
+      cell: v => (
+        <RowActions>
+          <ActionLink kind="edit" href={`${base}/${v.id}`} label={`Edit vendor ${v.name}`} />
+          {/* vendor sistem tak pernah dihapus/dinonaktifkan (lib/vendors/service.ts) */}
+          {!v.systemKey && <ApiAction kind="toggle" url={`/api/v1/admin/system/vendors/${v.id}`} active={v.isActive} label={`${v.isActive ? 'Nonaktifkan' : 'Aktifkan'} vendor ${v.name}`} />}
+          {!v.systemKey && <ApiAction kind="delete" url={`/api/v1/admin/system/vendors/${v.id}`} subject={`vendor ${v.name}`} note="Vendor yang masih dirujuk harga/biaya akan dinonaktifkan, bukan dihapus." />}
+        </RowActions>
+      ),
+    },
   ]
+
+  const navQuery = { q: q || undefined, category, country, status, limit: limitParam === undefined ? undefined : String(limitParam) }
 
   return (
     <div className="space-y-5">
@@ -108,32 +124,16 @@ export default async function VendorsPage({ params, searchParams }: Props) {
         }
       />
 
-      <SearchForm
-        action={base}
-        q={q}
-        placeholder="Cari nama vendor / PIC / email…"
-        preserve={{ category, country, status, limit: limitParam === undefined ? undefined : String(limitParam) }}
-        clearHref={hrefFor({ q: undefined, page: 1 })}
-      />
-
-      <FilterPills
-        options={categories.filter(c => c.isActive || c.slug === category).map(c => ({ value: c.slug, label: c.name }))}
-        current={category ?? ''}
-        hrefFor={value => hrefFor({ category: value || undefined, page: 1 })}
-      />
-      <FilterPills options={STATUS_OPTIONS} current={status ?? ''} hrefFor={value => hrefFor({ status: value || undefined, page: 1 })} />
-
-      <form action={base} method="get" className="flex flex-wrap items-center gap-2">
-        {q && <input type="hidden" name="q" value={q} />}
-        {category && <input type="hidden" name="category" value={category} />}
-        {status && <input type="hidden" name="status" value={status} />}
-        <label htmlFor="vendor-filter-country" className="text-xs font-semibold text-admin-muted">Negara</label>
-        <select id="vendor-filter-country" name="country" defaultValue={country ?? ''} className="admin-select max-w-56">
-          <option value="">Semua negara</option>
-          {COUNTRIES.map(c => <option key={c.code} value={c.code}>{c.name}</option>)}
-        </select>
-        <Button type="submit" variant="outline" size="sm">Terapkan</Button>
-      </form>
+      <FilterBar active={Boolean(q || category || country || status)} resetHref={buildListHref(base, { limit: limitParam })}>
+        <SearchForm
+          action={base} q={q} placeholder="Cari nama vendor / PIC / email…"
+          preserve={{ category, country, status, limit: limitParam === undefined ? undefined : String(limitParam) }}
+          clearHref={hrefFor({ q: undefined, page: 1 })}
+        />
+        <FilterSelect label="Kategori" value={category ?? ''} options={categories.filter(c => c.isActive || c.slug === category).map(c => ({ value: c.slug, label: c.name }))} nav={{ base, param: 'category', query: navQuery }} />
+        <FilterSelect label="Negara" value={country ?? ''} options={COUNTRIES.map(c => ({ value: c.code, label: c.name }))} nav={{ base, param: 'country', query: navQuery }} />
+        <FilterSelect label="Status" value={status ?? ''} options={STATUS_OPTIONS} nav={{ base, param: 'status', query: navQuery }} />
+      </FilterBar>
 
       <DataTable
         columns={columns}

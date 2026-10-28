@@ -1,7 +1,7 @@
 // Kit tabel seragam (docs/arsitektur-tabel.md): jendela nomor halaman (tabel nilai dihitung tangan), autocomplete filter, tautan filter, dan render nyata komponen server-safe
 // (Pagination, DataTable dengan kolom aksi, RowActions). Interaksi klien (FilterSelect, ApiAction) dibuktikan di browser + penjaga sumber; Tak membutuhkan database.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -9,6 +9,7 @@ import { Pagination, pageWindow } from '@/components/admin/data-table/Pagination
 import { DataTable } from '@/components/admin/data-table/DataTable'
 import { ACTION_ICONS, ACTION_LABELS, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { filterHref, filterOptions } from '@/lib/admin/filter'
+import { matchPreset, periodPresets, wibDate } from '@/lib/admin/period'
 
 let failed = 0
 function t(name: string, fn: () => void) {
@@ -100,18 +101,61 @@ t('DataTable (render nyata): kolom `actions` berjudul "Aksi", rata kanan, lebar 
   assert.ok(!renderToStaticMarkup(createElement(DataTable<Row>, { columns: cols, rows: [{ id: '1', name: 'Ahmad' }], getRowId: r => r.id, loading: true })).includes('Ahmad'))
 })
 
-t('PENJAGA SUMBER (halaman yang sudah bermigrasi): filter lewat FilterBar/FilterSelect, tanpa FilterPills; aksi lewat RowActions; tanpa window.confirm', () => {
-  const MIGRATED = ['app/[locale]/admin/(protected)/customers/page.tsx', 'app/[locale]/admin/(protected)/bookings/page.tsx', 'app/[locale]/admin/(protected)/system/users/page.tsx']
+t('periodPresets (tabel nilai dihitung tangan, WIB): bulan ini, bulan lalu, 90 hari, tahun ini; pergantian hari WIB; matchPreset', () => {
+  const p = periodPresets(new Date('2026-10-29T12:00:00Z')) // WIB 19:00, hari yang sama
+  assert.deepEqual(p.map(x => [x.key, x.from, x.to]), [
+    ['month', '2026-10-01', '2026-10-29'], ['prev', '2026-09-01', '2026-09-30'], ['90', '2026-08-01', '2026-10-29'], ['year', '2026-01-01', '2026-10-29'],
+  ])
+  // 20:00 UTC tanggal 31 Des = 03:00 WIB tanggal 1 Jan: periode ikut hari WIB, bukan UTC
+  assert.equal(wibDate(new Date('2026-12-31T20:00:00Z')), '2027-01-01')
+  const ny = periodPresets(new Date('2026-12-31T20:00:00Z'))
+  assert.deepEqual(ny.map(x => [x.from, x.to]), [['2027-01-01', '2027-01-01'], ['2026-12-01', '2026-12-31'], ['2026-10-04', '2027-01-01'], ['2027-01-01', '2027-01-01']])
+  assert.equal(matchPreset(p, '2026-09-01', '2026-09-30'), 'prev')
+  assert.equal(matchPreset(p, '2026-09-02', '2026-09-30'), '', 'rentang kustom')
+})
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const f of readdirSync(dir)) {
+    if (f === 'node_modules' || f === '.next' || f.startsWith('.')) continue
+    const p = join(dir, f)
+    if (statSync(p).isDirectory()) walk(p, out); else if (/\.(ts|tsx)$/.test(f)) out.push(p)
+  }
+  return out
+}
+const ADMIN = 'app/[locale]/admin/(protected)/'
+// Halaman yang sudah memakai kit penuh (Fase 1–2). Tambahkan halaman baru di sini tiap fase.
+const MIGRATED = ['customers', 'bookings', 'system/users', 'visa', 'payments', 'quotas', 'margin', 'reports', 'reports/variance', 'system/vendors', 'system/deletion-requests', 'notifications'].map(d => `${ADMIN}${d}/page.tsx`)
+// Log baca-saja tanpa aksi per baris: satu-satunya halaman tanpa kolom aksi.
+const NO_ACTIONS = new Set([`${ADMIN}notifications/page.tsx`])
+
+t('PENJAGA SUMBER (halaman bermigrasi): tak ada FilterPills/window.confirm/<table> mentah; tiap daftar memakai DataTable + RowActions (kolom `actions`) kecuali log baca-saja; filter lewat FilterSelect', () => {
+  assert.ok(!walk(join(root, 'app')).concat(walk(join(root, 'components'))).some(f => /FilterPills/.test(readFileSync(f, 'utf8'))), 'FilterPills sudah dipensiunkan')
   for (const f of MIGRATED) {
     const src = readFileSync(join(root, f), 'utf8')
-    assert.doesNotMatch(src, /FilterPills/, f)
-    assert.doesNotMatch(src, /window\.confirm|\bconfirm\(/, f)
-    assert.match(src, /RowActions/, f)
-    assert.match(src, /actions: true/, f)
+    assert.doesNotMatch(src, /FilterPills|window\.confirm|\bconfirm\(|<table/, f)
+    assert.match(src, /DataTable/, f)
+    if (!NO_ACTIONS.has(f)) { assert.match(src, /RowActions/, f); assert.match(src, /actions: true/, f) }
   }
-  for (const f of MIGRATED.slice(0, 2)) assert.match(readFileSync(join(root, f), 'utf8'), /<FilterBar[\s\S]*<FilterSelect/, f)
-  // komponen klien memakai props data biasa dari halaman server (tak ada fungsi yang dilempar server→klien)
-  for (const f of MIGRATED.slice(0, 2)) assert.doesNotMatch(readFileSync(join(root, f), 'utf8').match(/<FilterSelect[^>]*>/g)?.join('') ?? '', /hrefFor=|onChange=/, `${f}: FilterSelect di halaman server memakai nav, bukan fungsi`)
+  // halaman yang punya filter memakai FilterBar + FilterSelect
+  for (const f of MIGRATED.filter(x => !/system\/users/.test(x))) assert.match(readFileSync(join(root, f), 'utf8'), /<FilterBar[\s\S]*<FilterSelect|PeriodFilter/, f)
+  // halaman server memakai `nav` (props data biasa), bukan fungsi, untuk FilterSelect
+  for (const f of MIGRATED) {
+    const src = readFileSync(join(root, f), 'utf8')
+    if (/'use client'/.test(src)) continue
+    assert.doesNotMatch(src.match(/<FilterSelect[^>]*>/g)?.join('') ?? '', /hrefFor=|onChange=/, `${f}: FilterSelect di halaman server memakai nav`)
+  }
+})
+
+t('PENJAGA SUMBER: Pembayaran tak lagi membuat daftar sendiri; filter status permintaan hapus akun tak memercayai nilai mentah; PeriodFilter dipakai kedua laporan (tak ada salinan preset)', () => {
+  const pay = readFileSync(join(root, `${ADMIN}payments/page.tsx`), 'utf8')
+  assert.doesNotMatch(pay, /bookings\.map\(/)
+  const api = readFileSync(join(root, 'app/api/v1/admin/deletion-requests/route.ts'), 'utf8')
+  assert.match(api, /STATUSES as readonly string\[\]\)\.includes/)
+  for (const f of ['reports', 'reports/variance']) {
+    const src = readFileSync(join(root, `${ADMIN}${f}/page.tsx`), 'utf8')
+    assert.match(src, /<PeriodFilter/, f)
+    assert.doesNotMatch(src, /const presets|function presets|wibDate = /, `${f}: preset periode satu tempat (lib/admin/period.ts)`)
+  }
 })
 
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
