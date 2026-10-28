@@ -2,12 +2,15 @@
 
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
-import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { HeartPulse } from 'lucide-react'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { formatRupiah } from '@/lib/utils'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge, type BadgeTone } from '@/components/admin/ui/Badge'
@@ -30,7 +33,7 @@ const ISSUE: Record<Issue, { label: string; tone: BadgeTone }> = {
   no_cost: { label: 'Modal kosong', tone: 'neutral' }, unpriced: { label: 'Belum berharga', tone: 'warning' },
 }
 const TYPES: Array<{ value: string; label: string }> = [
-  { value: '', label: 'Semua jenis' }, { value: 'visa', label: 'Visa' }, { value: 'flight', label: 'Pesawat' }, { value: 'hotel', label: 'Hotel' }, { value: 'transport', label: 'Transport' },
+  { value: 'visa', label: 'Visa' }, { value: 'flight', label: 'Pesawat' }, { value: 'hotel', label: 'Hotel' }, { value: 'transport', label: 'Transport' },
   { value: 'muthowif', label: 'Muthowif' }, { value: 'package', label: 'Paket Umroh' }, { value: 'tour_package', label: 'Paket Ziarah' }, { value: 'haji', label: 'Haji' },
   { value: 'catering', label: 'Katering' }, { value: 'hotel_service', label: 'Layanan Hotel' },
 ]
@@ -43,10 +46,8 @@ const FILTERS: Array<{ value: string; label: string; count: (c: Counts) => numbe
 
 export default function MarginHealthPage() {
   const { locale } = useParams() as { locale: string }
-  const router = useRouter()
-  const pathname = usePathname()
   const search = useSearchParams()
-  const { page, limit, setPage } = useListPage()
+  const { page, limit, setPage, setParams } = useListPage()
   const filter = search.get('filter') ?? 'issues'
   const type = search.get('type') ?? ''
   const [rows, setRows] = useState<Row[]>([])
@@ -68,11 +69,6 @@ export default function MarginHealthPage() {
   }, [filter, type, page, limit])
   useEffect(() => { void load() }, [load])
 
-  const hrefFor = (next: { filter?: string; type?: string }) => {
-    const qs = new URLSearchParams({ filter: next.filter ?? filter, ...((next.type ?? type) ? { type: next.type ?? type } : {}) })
-    return `${pathname}?${qs}`
-  }
-
   const columns: Column<Row>[] = [
     {
       key: 'name', header: 'Produk', mobile: 'title',
@@ -93,6 +89,7 @@ export default function MarginHealthPage() {
     },
     { key: 'mode', header: 'Mode', hideBelowLg: true, cell: r => <Badge tone={r.mode === 'manual' ? 'warning' : 'accent'}>{r.mode === 'manual' ? 'Manual' : 'Otomatis'}</Badge> },
     { key: 'issues', header: 'Masalah', cell: r => r.issues.length === 0 ? <span className="text-[11px] text-admin-muted">Sehat</span> : <div className="flex flex-wrap gap-1">{r.issues.map(i => <Badge key={i} tone={ISSUE[i].tone}>{ISSUE[i].label}</Badge>)}</div> },
+    { key: 'actions', header: '', actions: true, cell: r => r.href ? <RowActions><ActionLink kind="edit" href={`/${locale}${r.href}`} label={`Atur harga ${r.label}`} /></RowActions> : null },
   ]
 
   return (
@@ -103,23 +100,14 @@ export default function MarginHealthPage() {
         description={`Harga yang rugi, margin tipis${warn > 0 ? ` (di bawah ${warn}%)` : ' (ambang belum diatur di Pengaturan)'}, modal belum lengkap, atau belum berharga. Tidak memblokir apa pun — hanya menampakkan.`}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        {FILTERS.map(f => (
-          <Link
-            key={f.value} href={hrefFor({ filter: f.value })} aria-current={filter === f.value ? 'true' : undefined}
-            className={cn('rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors',
-              filter === f.value ? 'border-admin-accent bg-admin-accent text-white' : 'border-admin-line bg-white text-admin-muted hover:bg-admin-spot')}
-          >
-            {f.label}{counts ? ` · ${f.count(counts)}` : ''}
-          </Link>
-        ))}
-        <select
-          aria-label="Jenis produk" className="admin-select ml-auto w-44" value={type}
-          onChange={e => router.replace(hrefFor({ type: e.target.value }), { scroll: false })}
-        >
-          {TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
-      </div>
+      <FilterBar active={filter !== 'issues' || Boolean(type)} resetHref={`/${locale}/admin/margin`}>
+        <FilterSelect
+          label="Tampilkan" allLabel={`Perlu perhatian${counts ? ` · ${FILTERS[0]!.count(counts)}` : ''}`} value={filter === 'issues' ? '' : filter}
+          options={FILTERS.filter(f => f.value !== 'issues').map(f => ({ value: f.value, label: `${f.label}${counts ? ` · ${f.count(counts)}` : ''}` }))}
+          onChange={v => setParams({ filter: v || undefined })}
+        />
+        <FilterSelect label="Jenis" allLabel="Semua jenis" value={type} options={TYPES} onChange={v => setParams({ type: v || undefined })} />
+      </FilterBar>
 
       {error && <p role="alert" className="text-sm font-medium text-admin-danger">{error}</p>}
       <DataTable

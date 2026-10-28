@@ -1,13 +1,19 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useParams, useSearchParams } from 'next/navigation'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { DELETION_REQUEST_TONE } from '@/lib/admin/statusTone'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ActionButton, RowActions } from '@/components/admin/data-table/RowActions'
 import { useListPage } from '@/components/admin/data-table/useListPage'
 import { Badge } from '@/components/admin/ui/Badge'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { Modal } from '@/components/admin/ui/Modal'
+import { ShieldCheck } from 'lucide-react'
 
 type DeletionRequest = {
   id: string
@@ -34,7 +40,9 @@ const STATUS_LABEL: Record<DeletionRequest['status'], string> = {
 }
 
 export default function DeletionRequestsPage() {
-  const { page, limit, setPage } = useListPage()
+  const { locale } = useParams() as { locale: string }
+  const { page, limit, setPage, setParams } = useListPage()
+  const statusFilter = (useSearchParams().get('status') ?? '') as DeletionRequest['status'] | ''
   const [requests, setRequests] = useState<DeletionRequest[]>([])
   const [meta, setMeta] = useState<PageMeta | null>(null)
   const [loading, setLoading] = useState(true)
@@ -49,14 +57,14 @@ export default function DeletionRequestsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const r = await fetch(`/api/v1/admin/deletion-requests?page=${page}&limit=${limit}`)
+      const r = await fetch(`/api/v1/admin/deletion-requests?page=${page}&limit=${limit}${statusFilter ? `&status=${statusFilter}` : ''}`)
       const j = await r.json()
       setRequests(j.data ?? [])
       setMeta(j.meta ?? null)
     } finally {
       setLoading(false)
     }
-  }, [page, limit])
+  }, [page, limit, statusFilter])
   useEffect(() => { load() }, [load])
 
   function closePanel() {
@@ -113,51 +121,10 @@ export default function DeletionRequestsPage() {
     { key: 'status', header: 'Status', cell: req => <Badge tone={DELETION_REQUEST_TONE[req.status] ?? 'neutral'}>{STATUS_LABEL[req.status]}</Badge> },
     { key: 'by', header: 'Diproses Oleh', cell: req => <span className="text-[12px] text-admin-muted">{req.processedBy?.fullName ?? '—'}</span> },
     {
-      key: 'actions', header: '', align: 'right',
-      cell: req => (
-        <>
-          {req.status === 'pending' && (
-            processingId === req.id ? (
-              <div className="ml-auto max-w-sm space-y-2 text-left">
-                {previewError && <p className="m-0 text-[12px] text-admin-danger">{previewError}</p>}
-                {!preview && !previewError && <p className="m-0 text-[12px] text-admin-muted">Memuat pratinjau…</p>}
-                {preview && (
-                  <>
-                    <p className="m-0 text-[12px] text-admin-muted">
-                      Yang akan dihapus/dianonimkan permanen: {preview.willErase.bookings} booking (angka &amp; kode tetap disimpan), {preview.willErase.pilgrims} data jamaah,
-                      {' '}{preview.willErase.documents} dokumen (berkas ikut dihapus), {preview.willErase.notifications} log notifikasi, {preview.willErase.address} alamat, profil &amp; kontak.
-                    </p>
-                    {preview.blockers.map(b => <p key={b} className="m-0 text-[12px] text-admin-danger">{b}</p>)}
-                    {preview.eligible && (
-                      <input
-                        className="admin-inp w-full" placeholder={`Ketik ${preview.user.email} untuk konfirmasi`}
-                        value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)}
-                      />
-                    )}
-                  </>
-                )}
-                <input
-                  className="admin-inp w-full" placeholder="Catatan (opsional)"
-                  value={noteDraft} onChange={e => setNoteDraft(e.target.value)}
-                />
-                {actionError && <p className="m-0 text-[12px] text-admin-danger">{actionError}</p>}
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button
-                    onClick={() => handleProcess(req.id, 'completed')}
-                    disabled={busy || !preview?.eligible || confirmEmail.trim().toLowerCase() !== preview.user.email.toLowerCase()}
-                    className="admin-btn-sm disabled:opacity-50"
-                  >Hapus &amp; Anonimkan</button>
-                  <button onClick={() => handleProcess(req.id, 'rejected')} disabled={busy} className="admin-badge-red">Tolak</button>
-                  <button onClick={closePanel} className="admin-btn-ghost text-sm">Batal</button>
-                </div>
-              </div>
-            ) : (
-              <button onClick={() => openPanel(req.id)} className="admin-btn-sm">Proses</button>
-            )
-          )}
-          {req.status !== 'pending' && req.note && <p className="m-0 ml-auto max-w-xs text-[11px] text-admin-muted">{req.note}</p>}
-        </>
-      ),
+      key: 'actions', header: '', actions: true,
+      cell: req => req.status === 'pending'
+        ? <RowActions><ActionButton icon={ShieldCheck} label={`Proses permintaan hapus akun ${req.user.email}`} onClick={() => openPanel(req.id)} /></RowActions>
+        : req.note ? <span className="inline-block max-w-xs text-left text-[11px] text-admin-muted">{req.note}</span> : null,
     },
   ]
 
@@ -167,6 +134,41 @@ export default function DeletionRequestsPage() {
         title="Permintaan Hapus Akun"
         description="UU PDP — hak subjek data. Data pribadi dihapus/dianonimkan permanen; catatan booking/pembayaran (angka & kode) tetap disimpan untuk kewajiban hukum/pajak. Akun dengan booking berjalan atau refund belum tuntas tidak bisa diproses."
       />
+      <FilterBar active={Boolean(statusFilter)} resetHref={`/${locale}/admin/system/deletion-requests`}>
+        <FilterSelect label="Status" value={statusFilter} options={(Object.keys(STATUS_LABEL) as Array<DeletionRequest['status']>).map(v => ({ value: v, label: STATUS_LABEL[v] }))} onChange={v => setParams({ status: v || undefined })} />
+      </FilterBar>
+
+      <Modal open={processingId !== null} title="Proses permintaan hapus akun" onClose={closePanel}>
+        <div className="space-y-3">
+          {previewError && <p className="m-0 text-[13px] text-admin-danger">{previewError}</p>}
+          {!preview && !previewError && <p className="m-0 text-[13px] text-admin-muted">Memuat pratinjau…</p>}
+          {preview && (
+            <>
+              <p className="m-0 text-[13px] font-semibold">{preview.user.fullName} · {preview.user.email}</p>
+              <p className="m-0 text-[13px] text-admin-muted">
+                Yang akan dihapus/dianonimkan permanen: {preview.willErase.bookings} booking (angka &amp; kode tetap disimpan), {preview.willErase.pilgrims} data jamaah,
+                {' '}{preview.willErase.documents} dokumen (berkas ikut dihapus), {preview.willErase.notifications} log notifikasi, {preview.willErase.address} alamat, profil &amp; kontak.
+              </p>
+              {preview.blockers.map(b => <p key={b} className="m-0 text-[13px] text-admin-danger">{b}</p>)}
+              {preview.eligible && (
+                <input className="admin-inp w-full" placeholder={`Ketik ${preview.user.email} untuk konfirmasi`} value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} />
+              )}
+            </>
+          )}
+          <input className="admin-inp w-full" placeholder="Catatan (opsional)" value={noteDraft} onChange={e => setNoteDraft(e.target.value)} />
+          {actionError && <p role="alert" className="m-0 text-[13px] text-admin-danger">{actionError}</p>}
+          <div className="flex flex-wrap justify-end gap-2">
+            <button onClick={closePanel} className="admin-btn-ghost text-sm">Batal</button>
+            <button onClick={() => processingId && handleProcess(processingId, 'rejected')} disabled={busy} className="admin-badge-red">Tolak</button>
+            <button
+              onClick={() => processingId && handleProcess(processingId, 'completed')}
+              disabled={busy || !preview?.eligible || confirmEmail.trim().toLowerCase() !== preview.user.email.toLowerCase()}
+              className="admin-btn-sm disabled:opacity-50"
+            >Hapus &amp; Anonimkan</button>
+          </div>
+        </div>
+      </Modal>
+
       <DataTable
         columns={columns}
         rows={requests}

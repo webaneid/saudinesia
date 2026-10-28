@@ -19,5 +19,11 @@ export function useListPage() {
     router.replace(buildListHref(pathname, { ...query, page: next }), { scroll: false })
   }, [router, pathname, searchParams])
 
-  return { page, limit, setPage }
+  /** Ganti satu/lebih param filter (nilai kosong membuangnya) dan kembali ke halaman 1. */
+  const setParams = useCallback((patch: Record<string, string | undefined>) => {
+    const query: Record<string, string | number | undefined> = { ...Object.fromEntries(searchParams.entries()), ...patch }
+    router.replace(buildListHref(pathname, { ...query, page: 1 }), { scroll: false })
+  }, [router, pathname, searchParams])
+
+  return { page, limit, setPage, setParams }
 }

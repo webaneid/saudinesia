@@ -4,14 +4,21 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { paginate, parseListParams } from '@/lib/admin/pagination'
 
+const STATUSES = ['pending', 'completed', 'rejected', 'withdrawn'] as const
+
 export async function GET(req: Request) {
   try {
     await requireSuperAdmin()
-    const list = parseListParams(new URL(req.url).searchParams)
+    const params = new URL(req.url).searchParams
+    const list = parseListParams(params)
+    const raw = params.get('status')
+    const status = (STATUSES as readonly string[]).includes(raw ?? '') ? (raw as (typeof STATUSES)[number]) : undefined // nilai asing = tanpa filter (bukan 500)
+    const where = status ? { status } : {}
     const { items, meta } = await paginate(
       list,
-      () => prisma.accountDeletionRequest.count(),
+      () => prisma.accountDeletionRequest.count({ where }),
       range => prisma.accountDeletionRequest.findMany({
+        where,
         include: {
           user: { select: { fullName: true, email: true } },
           processedBy: { select: { fullName: true } },

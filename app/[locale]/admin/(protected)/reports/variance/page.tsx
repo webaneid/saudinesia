@@ -7,7 +7,12 @@ import { Scale } from 'lucide-react'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { cn, formatRupiah } from '@/lib/utils'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
+import { PeriodFilter } from '@/components/admin/data-table/PeriodFilter'
 import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
+import { periodPresets } from '@/lib/admin/period'
 import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
@@ -29,15 +34,6 @@ type Report = {
 }
 const ITEM_LABEL: Record<string, string> = { hotel: 'Hotel', transport: 'Transport', muthowif: 'Muthowif', catering: 'Katering', tourPackage: 'Paket Ziarah', haji: 'Haji', visa: 'Visa', booking: 'Penyesuaian' }
 
-const wibDate = (d: Date): string => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
-const addDays = (iso: string, n: number): string => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
-function presets() {
-  const today = wibDate(new Date()); const month = today.slice(0, 8); const lastEnd = addDays(`${month}01`, -1)
-  return [
-    { key: 'month', label: 'Bulan ini', from: `${month}01`, to: today }, { key: 'prev', label: 'Bulan lalu', from: `${lastEnd.slice(0, 8)}01`, to: lastEnd },
-    { key: '90', label: '90 hari', from: addDays(today, -89), to: today }, { key: 'year', label: 'Tahun ini', from: `${today.slice(0, 5)}01-01`, to: today },
-  ]
-}
 const Var = ({ v }: { v: number }) => <span className={cn('font-semibold tabular-nums', v > 0 ? 'text-admin-danger' : v < 0 ? 'text-admin-ok' : 'text-admin-muted')}>{v > 0 ? '+' : ''}{formatRupiah(v)}</span>
 function Stat({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: 'ok' | 'danger' }) {
   return (
@@ -61,7 +57,7 @@ export default function VariancePage() {
   const pathname = usePathname()
   const search = useSearchParams()
   const { page, limit, setPage } = useListPage()
-  const def = useMemo(() => presets()[0]!, [])
+  const def = useMemo(() => periodPresets()[0]!, [])
   const from = search.get('from') ?? def.from
   const to = search.get('to') ?? def.to
   const only = search.get('only') === 'variance'
@@ -97,6 +93,7 @@ export default function VariancePage() {
     { key: 'act', header: 'Aktual', align: 'right', cell: r => <span className="tabular-nums">{formatRupiah(r.actualIdr)}</span> },
     { key: 'var', header: 'Selisih', align: 'right', cell: r => r.settled ? <Var v={r.varianceIdr} /> : <span className="text-admin-muted">—</span> },
     { key: 'note', header: 'Catatan', hideBelowLg: true, cell: r => <span className="text-[11px] text-admin-muted">{r.notes ?? ''}</span> },
+    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.bookingId}`} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
   ]
 
   return (
@@ -107,19 +104,11 @@ export default function VariancePage() {
         description="Di mana modal rencana meleset dari uang yang benar-benar keluar ke vendor. Selisih hanya dari baris yang dinyatakan lunas."
         actions={<Link href={`/${locale}/admin/reports`} className="admin-btn-sm">Laporan Untung</Link>}
       />
-      <div className="flex flex-wrap items-center gap-2">
-        {presets().map(p => (
-          <button key={p.key} type="button" onClick={() => go({ from: p.from, to: p.to, page: '1' })}
-            className={cn('rounded-xl border px-3 py-1.5 text-xs font-semibold transition-colors', from === p.from && to === p.to ? 'border-admin-accent bg-admin-accent text-white' : 'border-admin-line bg-white text-admin-muted hover:bg-admin-spot')}>{p.label}</button>
-        ))}
-        <input type="date" aria-label="Dari tanggal" className="admin-inp w-40" value={from} max={to} onChange={e => e.target.value && go({ from: e.target.value, page: '1' })} />
-        <span className="text-xs text-admin-muted">s/d</span>
-        <input type="date" aria-label="Sampai tanggal" className="admin-inp w-40" value={to} min={from} onChange={e => e.target.value && go({ to: e.target.value, page: '1' })} />
-        <label className="ml-auto flex items-center gap-2 text-xs font-medium text-admin-muted">
-          <input type="checkbox" checked={only} onChange={e => { const q = new URLSearchParams({ from, to, page: '1' }); if (e.target.checked) q.set('only', 'variance'); router.replace(`${pathname}?${q}`, { scroll: false }) }} />
-          Hanya yang selisih
-        </label>
-      </div>
+      <FilterBar active={from !== def.from || to !== def.to || only} resetHref={pathname}>
+        <PeriodFilter from={from} to={to} onChange={r => go({ from: r.from, to: r.to, page: '1' })} />
+        <FilterSelect label="Baris" allLabel="Semua baris" value={only ? 'variance' : ''} options={[{ value: 'variance', label: 'Hanya yang selisih' }]} onChange={v => { const q = new URLSearchParams({ from, to, page: '1' }); if (v) q.set('only', 'variance'); router.replace(`${pathname}?${q}`, { scroll: false }) }} />
+      </FilterBar>
+
       {error && <p role="alert" className="text-sm font-medium text-admin-danger">{error}</p>}
 
       {s && (
