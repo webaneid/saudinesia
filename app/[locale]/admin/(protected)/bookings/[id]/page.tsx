@@ -15,7 +15,7 @@ import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/get
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canRecordCost } from '@/lib/pricing/policy'
-import { AdjustmentsPanel } from './AdjustmentsPanel'
+import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
@@ -190,8 +190,8 @@ export default async function AdminBookingDetail({ params }: Props) {
         )}
       </div>
 
-      {/* Harga: penyesuaian total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
-      <AdjustmentsPanel bookingId={id} status={booking.status} totalAmount={Number(booking.totalAmount)} />
+      {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
+      <BookingPriceCard bookingId={id} status={booking.status} />
       {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
 
       {/* Dokumen per jamaah */}

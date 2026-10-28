@@ -337,6 +337,15 @@ await t('EDIT CATATAN (Fase 8C): hanya `reason` yang berubah (label, jumlah, tot
   await prisma.booking.update({ where: { id }, data: { status: 'confirmed' } })
   assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'dicatat ulang setelah lunas' })).reason, 'dicatat ulang setelah lunas')
 })
+await t('I5 (Fase 8): angka internal (HPP/rekomendasi/peringatan) hanya di jalur admin — tak ada di API jamaah, halaman jamaah, invoice, notifikasi, maupun skema respons publik', () => {
+  const walk = (dir: string, out: string[] = []): string[] => { for (const f of readdirSync(dir)) { if (f === 'node_modules' || f === '.next' || f.startsWith('.')) continue; const p = join(dir, f); if (statSync(p).isDirectory()) walk(p, out); else if (/\.(ts|tsx)$/.test(f)) out.push(p) } return out }
+  const internal = /bookingPriceSummary|evaluatePricing|lib\/pricing\/warnings|recommendedTotalIdr|warningAfter|warningBefore|costKnownIdr/
+  const publicFiles = [
+    ...walk(join(root, 'app/api/v1/bookings')), ...walk(join(root, 'app/[locale]/(pilgrim)')), ...walk(join(root, 'app/[locale]/(public)')),
+    ...walk(join(root, 'lib/pdf')), ...walk(join(root, 'lib/notifications')), ...walk(join(root, 'lib/validators')).filter(f => !/adjustments\.ts$/.test(f)),
+  ]
+  assert.deepEqual(publicFiles.filter(f => internal.test(readFileSync(f, 'utf8'))).map(f => f.slice(root.length)), [])
+})
 await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar memakai resolveConfirmedAmount + skema .strict(); hanya lib/booking/adjustments.ts (+ pembersihan UU PDP) menulis booking_adjustments; catatan internal tak ada di invoice', () => {
   for (const f of ['app/api/v1/admin/bookings/[id]/adjustments/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/reverse/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/route.ts', 'app/api/v1/admin/bookings/[id]/total/route.ts', 'app/api/v1/admin/bookings/[id]/pricing/route.ts']) {
     const src = read(f)

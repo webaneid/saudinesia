@@ -140,7 +140,9 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
   }
 
   const belowCost = point?.costIdr != null && Number(sell) > 0 && Number(sell) < point.costIdr
-  const needsNote = belowCost && note.trim().length < 3
+  // Peringatan saat mengetik — HANYA mengingatkan, tidak pernah mematikan tombol Simpan (docs/arsitektur-harga-terpadu.md §21)
+  const typed = Number(sell)
+  const belowAuto = !belowCost && point?.autoSellIdr != null && !manualOnly && typed > 0 && typed < point.autoSellIdr
   const loss = point != null && point.profitIdr != null && point.profitIdr < 0
   const thin = point != null && !loss && point.marginPct != null && rule.warnBelowPercent > 0 && point.marginPct < rule.warnBelowPercent
   const incomplete = point != null && point.costIdr == null
@@ -196,15 +198,17 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
             )}
           </div>
           <label className="block text-[11px] font-semibold text-admin-muted">
-            Catatan {belowCost ? <span className="text-admin-danger">(wajib: harga di bawah modal)</span> : '(opsional)'}
+            Catatan (opsional{belowCost ? ', disarankan: jelaskan alasan harga di bawah modal' : ''})
             <input className="admin-inp mt-1" maxLength={500} value={note} onChange={e => setNote(e.target.value)} placeholder="mis. promo musim, negosiasi grup" />
           </label>
           {point?.autoSellIdr != null && !manualOnly && (
             <button type="button" className="text-[11px] font-semibold text-admin-accent underline" onClick={() => setSell(String(point.autoSellIdr))}>Pakai harga otomatis ({formatRupiah(point.autoSellIdr)})</button>
           )}
+          {belowCost && <Warn>Di bawah modal ({formatRupiah(point!.costIdr!)}) — rugi {formatRupiah(point!.costIdr! - typed)} per satuan. Peringatan internal; tetap bisa disimpan.</Warn>}
+          {belowAuto && <Warn>Di bawah harga otomatis ({formatRupiah(point!.autoSellIdr!)}) — lebih rendah dari rekomendasi. Peringatan internal; tetap bisa disimpan.</Warn>}
           {error && <p className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
           <div className="flex flex-wrap gap-2">
-            <Button size="sm" onClick={save} loading={busy} disabled={needsNote}><Check className="size-4" /> Simpan harga</Button>
+            <Button size="sm" onClick={save} loading={busy}><Check className="size-4" /> Simpan harga</Button>
             <Button size="sm" variant="ghost" onClick={() => setEditing(false)} disabled={busy}>Batal</Button>
           </div>
         </div>
