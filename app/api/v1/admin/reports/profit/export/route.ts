@@ -22,7 +22,7 @@ export async function GET(req: Request) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Parameter tidak valid'), { status: 400 })
     const def = defaultPeriod()
     const params = { from: parsed.data.from ?? def.from, to: parsed.data.to ?? def.to, scope: parsed.data.scope }
-    const { rows } = await getBookingProfitRows(params, 1, MAX_ROWS)
+    const { rows } = await getBookingProfitRows(params, 1, MAX_ROWS, parsed.data.onlyLoss === '1')
     const head = ['kode_booking', 'tanggal_pesan', 'status', 'total', 'dibayar', 'refund', 'penjualan', 'modal_diketahui', 'jual_tanpa_modal', 'untung', 'margin_pct', 'cakupan_modal_pct', 'terealisasi_jual', 'terealisasi_untung']
     const lines = [head.join(',')]
     for (const r of rows) {

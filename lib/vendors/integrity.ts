@@ -25,16 +25,18 @@ export type VendorUsage = {
   costs: number
   preferred: number                   // PreferredVendor
   snapshots: number                   // PriceSnapshot.vendorIds (riwayat harga beku; membuat vendor tak boleh dihapus keras)
+  costActuals: number                 // CostActual (pengeluaran aktual ke vendor; FK Restrict)
   total: number
 }
 
 export async function getVendorUsage(vendorId: string): Promise<VendorUsage> {
-  const [grouped, preferred, snapshots] = await Promise.all([
+  const [grouped, preferred, snapshots, costActuals] = await Promise.all([
     prisma.productCost.groupBy({ by: ['productType'], where: { vendorId }, _count: { _all: true } }),
     prisma.preferredVendor.count({ where: { vendorId } }),
     prisma.priceSnapshot.count({ where: { vendorIds: { array_contains: [vendorId] } } }),
+    prisma.costActual.count({ where: { vendorId } }),
   ])
   const costsByType = Object.fromEntries(grouped.map(g => [g.productType, g._count._all]))
   const costs = grouped.reduce((sum, g) => sum + g._count._all, 0)
-  return { costsByType, costs, preferred, snapshots, total: costs + preferred + snapshots }
+  return { costsByType, costs, preferred, snapshots, costActuals, total: costs + preferred + snapshots + costActuals }
 }

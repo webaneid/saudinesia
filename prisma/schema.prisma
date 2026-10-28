@@ -816,6 +816,8 @@ model Booking {
   haji          BookingHaji[]
   visa          BookingVisa[]
   priceSnapshots PriceSnapshot[]
+  adjustments    BookingAdjustment[]
+  costActuals    CostActual[]
   payments      Payment[]
   refunds       Refund[]
   notifications NotificationLog[]
@@ -1158,6 +1160,7 @@ model Vendor {
   categories VendorCategory[] // many-to-many implisit; minimal 1 (divalidasi API)
   costs      ProductCost[]
   preferred  PreferredVendor[]
+  costActuals CostActual[]
 
   @@unique([nameKey, countryCode])
   @@map("vendors")
@@ -1445,9 +1448,66 @@ model PriceSnapshot {
   vendorIds    Json     @default("[]")
   takenAt      DateTime @default(now())
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  costActuals CostActual[]
 
   @@unique([itemType, itemId, lineKey])
   @@index([bookingId])
   @@map("price_snapshots")
+}
+
+/// Diskon / biaya tambahan di TOTAL pesanan (docs/arsitektur-harga-terpadu.md §20). Ditulis HANYA oleh lib/booking/adjustments.ts bersama SATU baris snapshot `penyesuaian`
+/// (itemType booking, itemId = id baris ini) dan pembaruan Booking.totalAmount dalam satu transaksi terkunci. `label` tampil di invoice; `reason` INTERNAL (tak pernah ke jamaah).
+/// Dibatalkan lewat baris pembalik (`reversesId`) — tak ada UPDATE/DELETE.
+model BookingAdjustment {
+  id           String   @id @default(uuid())
+  bookingId    String
+  amountIdr    Decimal  @db.Decimal(14, 2) // bertanda: negatif = diskon, positif = biaya tambahan
+  label        String
+  reason       String?
+  totalBefore  Decimal  @db.Decimal(14, 2)
+  totalAfter   Decimal  @db.Decimal(14, 2)
+  costKnownIdr Decimal  @db.Decimal(14, 2) // HPP awal yang diketahui saat dibuat (Σ modal baris bermodal)
+  belowCost    Boolean // total akhir < HPP awal → reason wajib (dijaga CHECK DB)
+  reversesId   String?  @unique
+  byUserId     String // staf
+  createdAt    DateTime @default(now())
+
+  booking    Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  reverses   BookingAdjustment? @relation("AdjustmentReversal", fields: [reversesId], references: [id], onDelete: Restrict)
+  reversedBy BookingAdjustment? @relation("AdjustmentReversal")
+
+  @@index([bookingId])
+  @@map("booking_adjustments")
+}
+
+/// Uang yang BENAR-BENAR keluar ke vendor (docs/arsitektur-harga-terpadu.md §20). Dibandingkan dengan modal rencana (price_snapshots.totalCostIdr) untuk melihat di mana HPP meleset.
+/// Ditulis HANYA oleh lib/costs/actuals.ts. Batal = voidedAt (bukan hapus keras).
+model CostActual {
+  id           String    @id @default(uuid())
+  bookingId    String
+  snapshotId   String? // baris rencana yang dibayar (null = tanpa rujukan baris → selisih tak dihitung)
+  vendorId     String
+  component    String
+  currency     String    @db.VarChar(3)
+  amount       Decimal   @db.Decimal(14, 2) // dalam mata uang asli
+  amountIdr    Decimal   @db.Decimal(14, 2) // rupiah yang benar-benar keluar (dibekukan saat dicatat)
+  paidAt       DateTime  @db.Date
+  isSettled    Boolean   @default(false) // pembayaran TERAKHIR untuk baris/komponen ini
+  varianceNote String?
+  recordedBy   String // staf
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  voidedAt     DateTime?
+  voidedBy     String?
+  voidReason   String?
+
+  booking  Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  snapshot PriceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+  vendor   Vendor         @relation(fields: [vendorId], references: [id])
+
+  @@index([bookingId])
+  @@index([snapshotId])
+  @@index([vendorId])
+  @@map("cost_actuals")
 }

@@ -171,6 +171,12 @@ export async function executeDeletion(
       await tx.bookingTransport.updateMany({ where: { booking: { userId } }, data: { pickupDetail: null, dropoffDetail: null } })
       await tx.payment.updateMany({ where: { booking: { userId } }, data: { notes: null } })
       await tx.refund.updateMany({ where: { booking: { userId } }, data: { notes: null } })
+      // Catatan staf pada penyesuaian total dan pengeluaran vendor (Fase 7) bisa menyebut nama pemesan → diganti penanda (≥ 3 karakter agar CHECK catatan-wajib tetap terpenuhi).
+      // `label` penyesuaian tampil di invoice dan dibekukan di snapshot (trigger menolak UPDATE) — karena itu UI melarang data pribadi di label.
+      await tx.bookingAdjustment.updateMany({ where: { booking: { userId }, reason: { not: null } }, data: { reason: '[dihapus]' } })
+      await tx.costActual.updateMany({ where: { booking: { userId }, varianceNote: { not: null } }, data: { varianceNote: '[dihapus]' } })
+      await tx.costActual.updateMany({ where: { booking: { userId }, voidReason: { not: null } }, data: { voidReason: '[dihapus]' } })
+      await tx.costActual.updateMany({ where: { booking: { userId } }, data: { component: '[dihapus]' } }) // komponen = teks bebas staf (bisa memuat nama)
       await tx.groupMember.updateMany({ where: { userId }, data: { userId: null, inviteToken: null } })
       // Baris log dipertahankan untuk audit pengiriman; penerima & isi pesan tidak.
       await tx.notificationLog.updateMany({ where: { userId }, data: { recipient: '[dihapus]', messagePreview: null, error: null } })

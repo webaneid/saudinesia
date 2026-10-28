@@ -14,12 +14,15 @@ import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { canRecordCost } from '@/lib/pricing/policy'
+import { AdjustmentsPanel } from './AdjustmentsPanel'
+import { CostActualsPanel } from './CostActualsPanel'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
 export default async function AdminBookingDetail({ params }: Props) {
   const { locale, id } = await params
-  await requireAdminPage(locale)
+  const session = await requireAdminPage(locale)
   const { banks, businessName } = getPaymentConfig()
 
   const booking = await prisma.booking.findUnique({
@@ -105,7 +108,7 @@ export default async function AdminBookingDetail({ params }: Props) {
 
       {/* Payment confirmation */}
       {(booking.status === 'payment_review' || booking.status === 'awaiting_payment') && payment && (
-        <PaymentActions bookingId={id} paymentId={payment.id} buktiPath={payment.buktiTransferPath} />
+        <PaymentActions bookingId={id} paymentId={payment.id} buktiPath={payment.buktiTransferPath} totalAmount={Number(booking.totalAmount)} />
       )}
 
       {/* Services summary */}
@@ -186,6 +189,10 @@ export default async function AdminBookingDetail({ params }: Props) {
           </div>
         )}
       </div>
+
+      {/* Harga: penyesuaian total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
+      <AdjustmentsPanel bookingId={id} status={booking.status} totalAmount={Number(booking.totalAmount)} />
+      {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
 
       {/* Dokumen per jamaah */}
       {booking.pilgrims.length > 0 && (

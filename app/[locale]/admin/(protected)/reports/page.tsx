@@ -21,7 +21,7 @@ type Figures = {
 }
 type Report = {
   params: { from: string; to: string; scope: 'recognized' | 'with_pending' }
-  summary: Figures & { bookings: number; paidIdr: number; refundedIdr: number }
+  summary: Figures & { bookings: number; paidIdr: number; refundedIdr: number; lossBookings: number }
   cancelledRetained: { bookings: number; retainedIdr: number }
   byProduct: Array<Figures & { itemType: string }>
   byVendor: Array<Figures & { label: string; kind: 'vendor' | 'multi' | 'none' }>
@@ -89,12 +89,13 @@ export default function ProfitReportPage() {
   const from = search.get('from') ?? def.from
   const to = search.get('to') ?? def.to
   const scope = search.get('scope') === 'with_pending' ? 'with_pending' : 'recognized'
+  const onlyLoss = search.get('loss') === '1'
   const [data, setData] = useState<Report | null>(null)
   const [meta, setMeta] = useState<PageMeta | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const qs = useCallback((extra: Record<string, string> = {}) => new URLSearchParams({ from, to, scope, ...extra }), [from, to, scope])
+  const qs = useCallback((extra: Record<string, string> = {}) => new URLSearchParams({ from, to, scope, ...(onlyLoss ? { onlyLoss: '1' } : {}), ...extra }), [from, to, scope, onlyLoss])
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
@@ -106,7 +107,7 @@ export default function ProfitReportPage() {
   }, [qs, page, limit])
   useEffect(() => { void load() }, [load])
 
-  const go = (next: Record<string, string>) => router.replace(`${pathname}?${new URLSearchParams({ from, to, scope, ...next })}`, { scroll: false })
+  const go = (next: Record<string, string>) => router.replace(`${pathname}?${new URLSearchParams({ from, to, scope, ...(onlyLoss ? { loss: '1' } : {}), ...next })}`, { scroll: false })
   const s = data?.summary
 
   const bookingColumns: Column<BookingRow>[] = [
@@ -127,7 +128,7 @@ export default function ProfitReportPage() {
         icon={LineChart}
         title="Laporan Untung"
         description="Dihitung dari harga yang dibekukan saat dipesan — tidak bergeser oleh kurs atau harga sesudahnya. Untung hanya dari baris yang modalnya diketahui."
-        actions={<a href={`/api/v1/admin/reports/profit/export?${qs()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a>}
+        actions={<><Link href={`/${locale}/admin/reports/variance`} className="admin-btn-sm">Selisih HPP vs Aktual</Link><a href={`/api/v1/admin/reports/profit/export?${qs()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>}
       />
 
       <div className="flex flex-wrap items-center gap-2">
@@ -159,6 +160,12 @@ export default function ProfitReportPage() {
           {s.sellUnknownCostIdr > 0 && (
             <p className="m-0 rounded-xl border border-admin-gold/40 bg-admin-gold/10 px-3 py-2 text-xs text-admin-ink">
               {formatRupiah(s.sellUnknownCostIdr)} penjualan belum diketahui modalnya, sehingga untungnya tidak termasuk di atas (modal kosong di editor produk, atau data pesanan lama).
+            </p>
+          )}
+          {s.lossBookings > 0 && (
+            <p className="m-0 rounded-xl border border-admin-danger/30 bg-admin-danger/5 px-3 py-2 text-xs text-admin-ink">
+              {s.lossBookings} pesanan di bawah HPP (untung teridentifikasi negatif — mis. diskon melampaui margin).{' '}
+              <button type="button" className="font-semibold underline" onClick={() => go({ loss: onlyLoss ? '0' : '1', page: '1' })}>{onlyLoss ? 'Tampilkan semua pesanan' : 'Tampilkan hanya yang rugi'}</button>
             </p>
           )}
           {data.cancelledRetained.bookings > 0 && (

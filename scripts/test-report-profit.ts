@@ -57,13 +57,16 @@ await mk('B8', '2090-03-31T16:00:00Z', 'active', [{ itemType: 'transport', sell:
 await mk('B9', '2090-05-10T03:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 1_000_000, cost: 800_000, vendors: [v1.id] }], [{ amount: 1_500_000, status: 'confirmed' }])          // dibayar berlebih → rasio dijepit 1
 await mk('B10', '2090-05-11T03:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 1_000_000, cost: 800_000, vendors: [v1.id] }], [{ amount: 500_000, status: 'confirmed' }], [{ amount: 700_000, status: 'approved' }]) // refund > bayar → rasio dijepit 0
 
+await mk('B11', '2090-06-10T03:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 700_000, cost: 800_000, vendors: [v1.id] }, { itemType: 'catering', sell: 300_000, cost: null }]) // di bawah HPP (diskon melampaui margin)
+await mk('B12', '2090-06-11T03:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 900_000, cost: 800_000, vendors: [v1.id] }])
+
 const mar: ReportParams = { from: '2090-03-01', to: '2090-03-31', scope: 'recognized' }
 
 await t('MARET (diakui): ringkasan — penjualan, modal diketahui, jual tanpa modal, untung, margin, cakupan, terealisasi, uang masuk/keluar', async () => {
   const r = await getProfitReport(mar)
   // B1 + B3 + B6 + B8 (B2 = April, B4 menunggu bayar, B5 batal, B7 = Februari)
   assert.deepEqual(r.summary, {
-    bookings: 4, paidIdr: 8_200_000, refundedIdr: 250_000,
+    bookings: 4, paidIdr: 8_200_000, refundedIdr: 250_000, lossBookings: 0,
     sellIdr: 8_700_000, costKnownIdr: 7_050_000, sellUnknownCostIdr: 400_000, profitIdr: 1_250_000, marginPct: 15.1, costCoveragePct: 95.4,
     realizedSellIdr: 7_950_000, realizedProfitIdr: 1_200_000,
   })
@@ -77,7 +80,7 @@ await t('batas periode menurut WIB: 31 Mar 23:00 WIB masuk Maret; 1 Apr 01:00 WI
 })
 await t('APRIL: jual tanpa modal dilaporkan terpisah, untung hanya dari baris bermodal, terealisasi = rasio dibayar 50%', async () => {
   const r = await getProfitReport({ from: '2090-04-01', to: '2090-04-30', scope: 'recognized' })
-  assert.deepEqual(r.summary, { bookings: 1, paidIdr: 1_300_000, refundedIdr: 0, sellIdr: 2_600_000, costKnownIdr: 1_500_000, sellUnknownCostIdr: 600_000, profitIdr: 500_000, marginPct: 25, costCoveragePct: 76.9, realizedSellIdr: 1_300_000, realizedProfitIdr: 250_000 })
+  assert.deepEqual(r.summary, { bookings: 1, paidIdr: 1_300_000, refundedIdr: 0, lossBookings: 0, sellIdr: 2_600_000, costKnownIdr: 1_500_000, sellUnknownCostIdr: 600_000, profitIdr: 500_000, marginPct: 25, costCoveragePct: 76.9, realizedSellIdr: 1_300_000, realizedProfitIdr: 250_000 })
 })
 await t('cakupan: menunggu bayar hanya bila diminta; batal TIDAK pernah masuk penjualan/untung', async () => {
   const r = await getProfitReport({ ...mar, scope: 'with_pending' })
@@ -111,6 +114,15 @@ await t('rasio terealisasi dijepit 0..1: dibayar berlebih → 1; refund lebih be
   assert.deepEqual([may.summary.realizedSellIdr, may.summary.realizedProfitIdr], [1_000_000, 200_000])
   const rows = (await getBookingProfitRows(mar, 1, 50)).rows
   assert.equal(rows.find(r => r.bookingCode.endsWith('-B8'))!.realizedRatio, 0, 'hanya pending/rejected → belum terealisasi')
+})
+await t('PESANAN DI BAWAH HPP (7D): dihitung di ringkasan dan dapat disaring; untung teridentifikasi negatif; jual tanpa modal tak menutupi kerugian', async () => {
+  const jun: ReportParams = { from: '2090-06-01', to: '2090-06-30', scope: 'recognized' }
+  const r = await getProfitReport(jun)
+  assert.deepEqual([r.summary.bookings, r.summary.lossBookings, r.summary.profitIdr, r.summary.sellUnknownCostIdr], [2, 1, 0, 300_000]) // −100.000 (B11) + 100.000 (B12)
+  const only = await getBookingProfitRows(jun, 1, 50, true)
+  assert.deepEqual([only.total, only.rows.map(x => x.bookingCode.slice(tag.length + 1)), only.rows[0]!.profitIdr], [1, ['B11'], -100_000])
+  assert.equal((await getBookingProfitRows(jun, 1, 50)).total, 2)
+  assert.equal((await getProfitReport(mar)).summary.lossBookings, 0)
 })
 await t('daftar booking: terbaru dulu, angka per booking benar, berhalaman (total tetap)', async () => {
   const p1 = await getBookingProfitRows(mar, 1, 2), p2 = await getBookingProfitRows(mar, 2, 2)

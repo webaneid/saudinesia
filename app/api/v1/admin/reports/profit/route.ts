@@ -15,7 +15,7 @@ export async function GET(req: Request) {
     const q = parsed.data
     const def = defaultPeriod()
     const params = { from: q.from ?? def.from, to: q.to ?? def.to, scope: q.scope }
-    const [report, list] = await Promise.all([getProfitReport(params), getBookingProfitRows(params, q.page, q.limit)])
+    const [report, list] = await Promise.all([getProfitReport(params), getBookingProfitRows(params, q.page, q.limit, q.onlyLoss === '1')])
     return NextResponse.json(ok({ ...report, bookings: list.rows }, { total: list.total, page: q.page, limit: q.limit, totalPages: Math.max(1, Math.ceil(list.total / q.limit)) }))
   } catch (e) {
     if (e instanceof ReportInputError) return NextResponse.json(err(e.message), { status: 400 })
