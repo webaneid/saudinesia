@@ -4,14 +4,21 @@ import { ArrowLeft } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
 import { BOOKING_TONE } from '@/lib/admin/statusTone'
-import { getCustomer } from '@/lib/customers/query'
+import { CUSTOMER_BOOKINGS_PAGE_SIZE, getCustomer } from '@/lib/customers/query'
+import { buildListHref, parseListParams } from '@/lib/admin/pagination'
+import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { Pagination } from '@/components/admin/data-table/Pagination'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Card } from '@/components/admin/ui/Card'
 
 // Detail Pelanggan (docs/arsitektur-pelanggan.md §3) — hanya lihat. Akun non-pilgrim (staf) → 404.
 
-type Props = { params: Promise<{ locale: string; id: string }> }
+type Props = {
+  params: Promise<{ locale: string; id: string }>
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}
 
 const dt = (d: Date) => d.toLocaleDateString('id-ID', { dateStyle: 'medium' })
 
@@ -24,17 +31,27 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   )
 }
 
-export default async function AdminCustomerDetail({ params }: Props) {
+export default async function AdminCustomerDetail({ params, searchParams }: Props) {
   const { locale, id } = await params
   await requireAdminPage(locale)
-  const c = await getCustomer(id)
+  const list = parseListParams(await searchParams, CUSTOMER_BOOKINGS_PAGE_SIZE)
+  const c = await getCustomer(id, list)
   if (!c) notFound()
-  const list = `/${locale}/admin/customers`
+  const listHref = `/${locale}/admin/customers`
+
+  const bookingColumns: Column<(typeof c.bookings)[number]>[] = [
+    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
+    { key: 'ordered', header: 'Dipesan', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{dt(b.createdAt)}</span> },
+    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[12px] text-admin-muted">{dt(b.departureDate)}</span> },
+    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(b.totalAmount)}</span> },
+    { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge> },
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+  ]
 
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center gap-3">
-        <Link href={list} aria-label="Kembali ke daftar pelanggan" className="inline-flex size-9 items-center justify-center rounded-xl border border-admin-line bg-white text-admin-muted hover:text-admin-ink"><ArrowLeft className="size-4" /></Link>
+        <Link href={listHref} aria-label="Kembali ke daftar pelanggan" className="inline-flex size-9 items-center justify-center rounded-xl border border-admin-line bg-white text-admin-muted hover:text-admin-ink"><ArrowLeft className="size-4" /></Link>
         <div>
           <h1 className="m-0 text-xl font-extrabold tracking-tight">{c.deleted ? 'Akun dihapus' : c.fullName}</h1>
           <p className="m-0 text-xs text-admin-muted">Terdaftar {dt(c.createdAt)}</p>
@@ -65,25 +82,13 @@ export default async function AdminCustomerDetail({ params }: Props) {
         <Card className="p-4"><p className="m-0 text-[11px] font-semibold text-admin-muted">Menunggu / ditolak</p><p className="m-0 text-lg font-bold tabular-nums">{c.payments.pendingCount} / {c.payments.rejectedCount}</p><p className="m-0 text-[11px] text-admin-muted">pembayaran</p></Card>
       </div>
 
-      <Card className="space-y-3 p-5">
+      <div className="space-y-3">
         <h2 className="m-0 text-sm font-bold text-admin-ink">Pesanan</h2>
-        {c.bookings.length === 0 ? <p className="m-0 text-sm text-admin-muted">Belum pernah memesan.</p> : (
-          <ul className="m-0 list-none divide-y divide-admin-line p-0">
-            {c.bookings.map(b => (
-              <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <div>
-                  <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link>
-                  <p className="m-0 text-[11px] text-admin-muted">Dipesan {dt(b.createdAt)} · berangkat {dt(b.departureDate)}</p>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-[12px] font-medium tabular-nums">{formatRupiah(b.totalAmount)}</span>
-                  <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Card>
+        <DataTable
+          columns={bookingColumns} rows={c.bookings} getRowId={b => b.id} empty="Belum pernah memesan."
+          footer={c.bookingsMeta.total > 0 ? <Pagination {...c.bookingsMeta} hrefFor={page => buildListHref(`/${locale}/admin/customers/${c.id}`, { page, limit: list.limit === CUSTOMER_BOOKINGS_PAGE_SIZE ? undefined : list.limit })} /> : undefined}
+        />
+      </div>
     </div>
   )
 }

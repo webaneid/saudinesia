@@ -218,6 +218,34 @@ t('PENJAGA SUMBER (katalog, Fase 3): halaman memakai CatalogList + CatalogAction
   assert.match(cm, /ApiAction/); assert.match(cm, /<Pagination/); assert.doesNotMatch(cm, /confirmingDelete|window\.confirm/)
 })
 
+const PUBLIC_PAGES = ['app/[locale]/(public)/flight/page.tsx', 'app/[locale]/(public)/hotels/[id]/page.tsx', 'app/[locale]/(pilgrim)/dashboard/page.tsx']
+
+t('PENJAGA SUMBER (Fase 4): satu-satunya <table> adalah DataTable bersama (+ prototipe /campaigns yang terdaftar sebagai pengecualian); halaman publik/jamaah memakai kit BERSAMA; batas admin ↔ jamaah/publik terjaga', () => {
+  const all = [...walk(join(root, 'app')), ...walk(join(root, 'components'))]
+  const tables = all.filter(f => /<table|<thead/.test(readFileSync(f, 'utf8'))).map(f => f.slice(root.length + 1)).sort()
+  assert.deepEqual(tables, ['components/campaigns/CampaignTable.tsx', 'components/shared/data-table/DataTable.tsx'], '<table> baru wajib lewat DataTable bersama')
+  for (const f of PUBLIC_PAGES) {
+    const src = readFileSync(join(root, f), 'utf8')
+    assert.match(src, /@\/components\/shared\/data-table\/DataTable/, f)
+    assert.match(src, /@\/components\/shared\/data-table\/Pagination/, f)
+    assert.match(src, /<DataTable\b/, f)
+    assert.match(src, /<Pagination\b/, f)
+    assert.doesNotMatch(src, /<table|<thead/, f)
+  }
+  // kit generik hidup di shared; folder admin hanya meneruskan (re-export) untuk berkas yang dipindah
+  for (const k of ['DataTable', 'Pagination', 'FilterBar', 'FilterSelect', 'SearchForm', 'RowActions']) {
+    assert.equal(readFileSync(join(root, `components/admin/data-table/${k}.tsx`), 'utf8').trim(), `export * from '@/components/shared/data-table/${k}'`)
+    assert.ok(readFileSync(join(root, `components/shared/data-table/${k}.tsx`), 'utf8').length > 200, k)
+  }
+  // area jamaah/publik/auth/bersama tak boleh mengimpor folder admin (CLAUDE.md) — kit bersama tak menarik apa pun dari admin
+  const NON_ADMIN = [
+    ...walk(join(root, 'app/[locale]/(pilgrim)')), ...walk(join(root, 'app/[locale]/(public)')), ...walk(join(root, 'app/[locale]/(auth)')),
+    ...walk(join(root, 'components/shared')), ...walk(join(root, 'components/booking')), ...walk(join(root, 'lib/table')),
+  ]
+  const bad = NON_ADMIN.filter(f => /from '@\/(components|lib)\/admin\//.test(readFileSync(f, 'utf8'))).map(f => f.slice(root.length + 1))
+  assert.deepEqual(bad, [], 'impor silang admin ↔ jamaah/publik')
+})
+
 await Promise.all(pending)
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 process.exit(failed ? 1 : 0)
