@@ -210,6 +210,18 @@ Detail dan alasan: `docs/admin-ui-kit.md`. Aturan praktis untuk setiap halaman a
 
 ---
 
+## Tabel & daftar (docs/arsitektur-tabel.md)
+
+Satu kit untuk SEMUA daftar (admin, jamaah, publik) di `components/shared/data-table/` (folder `components/admin/data-table/` hanya meneruskannya). **Jangan membuat `<table>`, kotak filter, tombol aksi, atau paginasi sendiri** — dijaga `scripts/test-table-consistency.ts` (menemukan pelanggaran sendiri; pengecualian hanya lewat daftar beralasan di berkas itu).
+
+- **Tabel:** `DataTable` (tabel di ≥ md, kartu bertumpuk di HP). Daftar yang bisa tumbuh WAJIB berpaginasi server-side (`parseListParams` + `paginate` dari `lib/table/pagination.ts`, `orderBy` ber-tie-breaker `id`) dengan `Pagination` (panah, `1 2 3 … n-2 n-1 n`, ringkas di HP). Pengecualian hanya ringkasan turunan berukuran tetap (agregat, 5 baris terbaru) dan daftar bersarang milik satu induk — terdaftar beralasan di tes.
+- **Filter:** dropdown dengan autocomplete — `FilterSelect` di dalam `FilterBar` (+ `SearchForm`/`SearchInput`, `PeriodFilter` untuk laporan). Dilarang pil/tab sebagai filter data (tab hanya memisahkan bagian halaman) dan `<select>` polos di halaman berfilter. State di URL (bisa di-bookmark); mengubah filter kembali ke halaman 1; param asing diabaikan (daftar putih, bukan 500).
+- **Aksi baris:** kolom `actions: true` berisi `RowActions` — HANYA ikon + `aria-label`: Lihat `FileSearch`, Edit `Pencil`, Hapus `Trash2`, Aktifkan `Eye`, Nonaktifkan `EyeOff` (ikon = aksi, status = `Badge`; satu tempat: `ACTION_ICONS`). Hanya aksi yang didukung modul. Hapus/ubah status lewat `ApiAction` (hapus-aman: dirujuk → dinonaktifkan, pesan server tampil) dan konfirmasi lewat `ConfirmDialog`/`useConfirm` — **dilarang `window.confirm`**.
+- **Daftar katalog admin:** `CatalogList` + `CatalogActions` atas API `GET` dengan paginasi OPT-IN (`readCatalogQuery`/`paginateCatalog` di `lib/admin/catalogQuery.ts`: tanpa `page`/`limit` = semua baris, karena picker di halaman edit memakai URL yang sama; `q` lewat `escapeLike`). Halaman bertabel ganda memakai awalan param (`useListPage(ns)`).
+- **Batas area:** kit bersama tak boleh mengimpor `components|lib/admin`; area jamaah/publik/auth tak boleh mengimpor folder admin.
+
+---
+
 ## i18n (next-intl 4)
 
 - The locale list lives ONLY in `i18n/routing.ts` (`defineRouting`); never re-declare `['id','en']` elsewhere. Validate any locale taken from a URL/param with `hasLocale(routing.locales, x)` before using it (e.g. the dynamic import of `i18n/messages/<locale>.json`)

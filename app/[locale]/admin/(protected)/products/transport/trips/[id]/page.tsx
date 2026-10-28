@@ -6,6 +6,7 @@ import { ArrowLeft, Save, Plus, Trash2, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { useConfirm } from '@/components/admin/ui/useConfirm'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -148,6 +149,7 @@ function PricingRow({ pricing, onChanged }: {
 }
 
 export default function TripEditPage({ params }: Props) {
+  const { ask, dialog } = useConfirm()
   const router = useRouter()
   const [id, setId]         = useState('')
   const [locale, setLocale] = useState('id')
@@ -219,7 +221,7 @@ export default function TripEditPage({ params }: Props) {
   }
 
   async function handleDeleteTrip() {
-    if (!confirm(`Hapus trip "${trip?.name}"? Semua pricing yang terkait juga akan dihapus.`)) return
+    if (!(await ask({ title: `Hapus trip "${trip?.name}"?`, body: 'Semua harga kendaraan yang terkait juga akan dihapus. Trip yang sudah dipakai booking dinonaktifkan, bukan dihapus.' }))) return
     await fetch(`/api/v1/admin/products/transport/trips/${id}`, { method: 'DELETE' })
     router.push(`/${locale}/admin/products/transport`)
   }
@@ -232,6 +234,7 @@ export default function TripEditPage({ params }: Props) {
 
   return (
     <div className="space-y-6 max-w-4xl">
+      {dialog}
       <div className="flex items-center gap-3">
         <button onClick={() => router.push(`/${locale}/admin/products/transport`)}
           className="text-admin-muted/70 hover:text-admin-ink transition-colors">
