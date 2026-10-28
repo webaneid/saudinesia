@@ -7,7 +7,9 @@ import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
-import { FilterPills } from '@/components/admin/data-table/FilterPills'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 
@@ -71,23 +73,29 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
         </div>
       ),
     },
+    {
+      key: 'actions', header: '', actions: true,
+      cell: c => c.deleted ? null : <RowActions><ActionLink kind="view" href={`/${locale}/admin/customers/${c.id}`} label={`Lihat pelanggan ${c.fullName}`} /></RowActions>,
+    },
   ]
+
+  const navQuery = { q: filters.q || undefined, active: filters.active, email: filters.email, bookings: filters.bookings, limit: sp.limit === undefined ? undefined : String(list.limit) }
+  const anyFilter = Boolean(filters.q || filters.active || filters.email || filters.bookings)
 
   return (
     <div className="space-y-5">
       <PageHeader icon={UserCheck} title="Pelanggan" description="Akun yang mendaftar dan memesan. Cari berdasarkan nama, email, atau nomor HP/WhatsApp." />
 
-      <SearchForm
-        action={base} q={filters.q ?? ''} placeholder="Cari nama / email / nomor…"
-        preserve={{ active: filters.active, email: filters.email, bookings: filters.bookings, limit: sp.limit === undefined ? undefined : String(list.limit) }}
-        clearHref={hrefFor({ q: undefined, page: 1 })}
-      />
-
-      <div className="space-y-2">
-        <FilterPills options={[{ value: 'active', label: 'Aktif' }, { value: 'inactive', label: 'Nonaktif' }]} current={filters.active ?? ''} hrefFor={v => hrefFor({ active: v || undefined, page: 1 })} />
-        <FilterPills options={[{ value: 'verified', label: 'Email terverifikasi' }, { value: 'unverified', label: 'Email belum verifikasi' }]} current={filters.email ?? ''} hrefFor={v => hrefFor({ email: v || undefined, page: 1 })} />
-        <FilterPills options={[{ value: 'with', label: 'Pernah memesan' }, { value: 'without', label: 'Belum pernah memesan' }]} current={filters.bookings ?? ''} hrefFor={v => hrefFor({ bookings: v || undefined, page: 1 })} />
-      </div>
+      <FilterBar active={anyFilter} resetHref={buildListHref(base, { limit: navQuery.limit })}>
+        <SearchForm
+          action={base} q={filters.q ?? ''} placeholder="Cari nama / email / nomor…"
+          preserve={{ active: filters.active, email: filters.email, bookings: filters.bookings, limit: navQuery.limit }}
+          clearHref={hrefFor({ q: undefined, page: 1 })}
+        />
+        <FilterSelect label="Status" value={filters.active ?? ''} options={[{ value: 'active', label: 'Aktif' }, { value: 'inactive', label: 'Nonaktif' }]} nav={{ base, param: 'active', query: navQuery }} />
+        <FilterSelect label="Email" value={filters.email ?? ''} options={[{ value: 'verified', label: 'Terverifikasi' }, { value: 'unverified', label: 'Belum verifikasi' }]} nav={{ base, param: 'email', query: navQuery }} />
+        <FilterSelect label="Pesanan" value={filters.bookings ?? ''} options={[{ value: 'with', label: 'Pernah memesan' }, { value: 'without', label: 'Belum pernah memesan' }]} nav={{ base, param: 'bookings', query: navQuery }} />
+      </FilterBar>
 
       <DataTable
         columns={columns} rows={items} getRowId={c => c.id} empty="Tidak ada pelanggan ditemukan."

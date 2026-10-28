@@ -9,7 +9,9 @@ import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
-import { FilterPills } from '@/components/admin/data-table/FilterPills'
+import { FilterBar } from '@/components/admin/data-table/FilterBar'
+import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
+import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
@@ -89,25 +91,27 @@ export default async function AdminBookings({ params, searchParams }: Props) {
       key: 'status', header: 'Status',
       cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge>,
     },
+    {
+      key: 'actions', header: '', actions: true,
+      cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions>,
+    },
   ]
+
+  const limitParam = sp.limit === undefined ? undefined : String(list.limit)
+  const navQuery = { q: q || undefined, status, limit: limitParam }
 
   return (
     <div className="space-y-5">
       <PageHeader title="Daftar Booking" description="Cari berdasarkan kode booking atau nama pemesan." />
 
-      <SearchForm
-        action={base}
-        q={q}
-        placeholder="Cari kode booking / nama…"
-        preserve={{ status, limit: sp.limit === undefined ? undefined : String(list.limit) }}
-        clearHref={hrefFor({ q: undefined, page: 1 })}
-      />
-
-      <FilterPills
-        options={Object.entries(BOOKING_STATUS).map(([value, v]) => ({ value, label: v.label }))}
-        current={status ?? ''}
-        hrefFor={value => hrefFor({ status: value || undefined, page: 1 })}
-      />
+      <FilterBar active={Boolean(q || status)} resetHref={buildListHref(base, { limit: limitParam })}>
+        <SearchForm
+          action={base} q={q} placeholder="Cari kode booking / nama…"
+          preserve={{ status, limit: limitParam }}
+          clearHref={hrefFor({ q: undefined, page: 1 })}
+        />
+        <FilterSelect label="Status" value={status ?? ''} options={Object.entries(BOOKING_STATUS).map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: navQuery }} />
+      </FilterBar>
 
       <DataTable
         columns={columns}

@@ -3,13 +3,16 @@
 import Link from 'next/link'
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'next/navigation'
-import { Plus } from 'lucide-react'
+import { LockOpen, MessageCircleOff, Plus } from 'lucide-react'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { useListPage } from '@/components/admin/data-table/useListPage'
 import { Badge } from '@/components/admin/ui/Badge'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
+import { ConfirmDialog } from '@/components/admin/ui/ConfirmDialog'
+import { ApiAction } from '@/components/admin/data-table/ApiAction'
+import { ActionButton, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 
 type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null; whatsappVerifiedAt: string | null }
 
@@ -20,6 +23,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const { locale } = useParams() as { locale: string }
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null)
+  const [releasing, setReleasing] = useState<User | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -49,10 +53,10 @@ export default function UsersPage() {
   }
   // SEC-43: lepas verifikasi WhatsApp (nomor daur ulang/disalahgunakan). Nomor kontak tetap; akun hanya berhenti menerima WhatsApp.
   async function releaseWhatsapp(u: User) {
-    if (!window.confirm(`Lepas verifikasi WhatsApp akun ${u.email}? Notifikasi WhatsApp berhenti sampai nomor dibuktikan lagi (email tetap).`)) return
     setNotice(null)
     const r = await fetch(`/api/v1/admin/system/users/${u.id}/whatsapp`, { method: 'DELETE' })
     setNotice({ text: r.ok ? 'Verifikasi WhatsApp akun ini sudah dilepas.' : 'Verifikasi WhatsApp gagal dilepas.', error: !r.ok })
+    setReleasing(null)
     await load()
   }
   // SEC-14: korban lockout (30 gagal/jam, atau 3 email/10 mnt) dibebaskan superadmin tanpa menunggu jendela habis.
@@ -61,7 +65,6 @@ export default function UsersPage() {
     const r = await fetch(`/api/v1/admin/system/users/${id}/reset-limits`, { method: 'POST' })
     setNotice({ text: r.ok ? 'Pembatasan login dan email akun ini sudah dibuka.' : 'Pembatasan gagal dibuka.', error: !r.ok })
   }
-  const toggleActive = (id: string, isActive: boolean) => updateUser(id, { isActive: !isActive })
   const changeRole = (id: string, role: string) => updateUser(id, { role })
 
   const columns: Column<User>[] = [
@@ -80,21 +83,14 @@ export default function UsersPage() {
     },
     { key: 'status', header: 'Status', cell: u => <Badge tone={u.isActive ? 'ok' : 'neutral'}>{u.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },
     {
-      key: 'actions', header: '', align: 'right',
+      key: 'actions', header: '', actions: true,
       cell: u => (
-        <div className="flex items-center justify-end gap-3">
-          {u.whatsappVerifiedAt && (
-            <button onClick={() => releaseWhatsapp(u)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
-              Lepas WhatsApp
-            </button>
-          )}
-          <button onClick={() => resetLimits(u.id)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
-            Buka pembatasan
-          </button>
-          <button onClick={() => toggleActive(u.id, u.isActive)} className="text-[12px] text-admin-muted transition-colors hover:text-admin-ink">
-            {u.isActive ? 'Nonaktifkan' : 'Aktifkan'}
-          </button>
-        </div>
+        <RowActions>
+          <ActionLink kind="edit" href={`/${locale}/admin/system/users/${u.id}`} label={`Edit ${u.email}`} />
+          {u.whatsappVerifiedAt && <ActionButton icon={MessageCircleOff} label={`Lepas verifikasi WhatsApp ${u.email}`} onClick={() => setReleasing(u)} />}
+          <ActionButton icon={LockOpen} label={`Buka pembatasan login ${u.email}`} onClick={() => resetLimits(u.id)} />
+          <ApiAction kind="toggle" url={`/api/v1/admin/system/users/${u.id}`} active={u.isActive} label={`${u.isActive ? 'Nonaktifkan' : 'Aktifkan'} ${u.email}`} onDone={load} />
+        </RowActions>
       ),
     },
   ]
@@ -107,6 +103,13 @@ export default function UsersPage() {
       />
 
       {notice && <p role={notice.error ? 'alert' : 'status'} className={`m-0 text-[13px] font-medium ${notice.error ? 'text-admin-danger' : 'text-admin-ink'}`}>{notice.text}</p>}
+
+      <ConfirmDialog
+        open={releasing !== null} title="Lepas verifikasi WhatsApp?" tone="danger" confirmLabel="Ya, lepas"
+        onClose={() => setReleasing(null)} onConfirm={() => releasing && releaseWhatsapp(releasing)}
+      >
+        Akun {releasing?.email} berhenti menerima notifikasi WhatsApp sampai nomornya dibuktikan lagi. Email tetap terkirim.
+      </ConfirmDialog>
 
       <DataTable
         columns={columns}

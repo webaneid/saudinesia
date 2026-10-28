@@ -63,3 +63,7 @@ Dua primitif baru di `components/admin/ui/`, lahir dari redesain halaman edit Vi
 - `Tabs` (+ `tabId`/`tabPanelId`) — bilah tab bergaris bawah, panah kiri/kanan berpindah tab, bisa digeser di HP. Pola pemakaian: render semua panel dan sembunyikan dengan atribut `hidden` (bukan unmount) supaya isian yang belum disimpan tidak hilang saat pindah tab.
 Halaman edit produk lain (`hotels/[id]`, `packages/[id]`, dst.) belum memakainya.
 
+
+## Pembaruan 2026-10-30 — tabel/filter/aksi/paginasi diseragamkan
+
+Pil filter (`FilterPills`), aksi bertulis-tangan, dan paginasi lama digantikan satu kit: `FilterBar` + `FilterSelect` (dropdown autocomplete), `RowActions` (aksi berikon), `Pagination` (panah + angka, ringkas di HP), `ConfirmDialog`. Rancangan, audit, dan fase: `docs/arsitektur-tabel.md`. Halaman yang belum bermigrasi masih memakai pola lama sampai fasenya.

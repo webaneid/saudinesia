@@ -10,14 +10,23 @@ type PaginationProps = PageMeta & {
   onPageChange?: (page: number) => void
 }
 
-/** Nomor halaman yang ditampilkan: pertama, terakhir, dan sekitar halaman aktif — sisanya elipsis. */
+/** Halaman di tiap ujung yang selalu tampil: "1 2 3 … 20 21 22". */
+const EDGE = 3
+
+/**
+ * Nomor halaman yang ditampilkan (docs/arsitektur-tabel.md §2.5): tiga halaman di tiap ujung + halaman aktif ±1; celah SATU halaman diisi dengan angkanya
+ * (bukan elipsis yang menyembunyikan satu angka), celah lebih besar jadi elipsis. Contoh 22 halaman, aktif 10: 1 2 3 … 9 10 11 … 20 21 22.
+ */
 export function pageWindow(page: number, totalPages: number): (number | 'gap')[] {
-  const keep = new Set([1, totalPages, page - 1, page, page + 1].filter(p => p >= 1 && p <= totalPages))
-  const sorted = [...keep].sort((a, b) => a - b)
+  const keep = new Set<number>()
+  for (let i = 1; i <= EDGE; i++) { keep.add(i); keep.add(totalPages - i + 1) }
+  for (const p of [page - 1, page, page + 1]) keep.add(p)
+  const sorted = [...keep].filter(p => p >= 1 && p <= totalPages).sort((x, y) => x - y)
   const out: (number | 'gap')[] = []
   sorted.forEach((p, i) => {
     const prev = sorted[i - 1]
-    if (prev !== undefined && p - prev > 1) out.push('gap')
+    if (prev !== undefined && p - prev === 2) out.push(prev + 1)
+    else if (prev !== undefined && p - prev > 2) out.push('gap')
     out.push(p)
   })
   return out
@@ -61,10 +70,12 @@ export function Pagination({ page, limit, total, totalPages, hrefFor, onPageChan
       {totalPages > 1 && (
         <nav aria-label="Paginasi" className="flex items-center gap-1.5">
           <Cell {...nav} target={page - 1} label="Halaman sebelumnya" disabled={page <= 1}><ChevronLeft className="size-4" /></Cell>
+          {/* HP: ringkas "5 / 22"; layar ≥ sm: deretan angka */}
+          <span className="px-2 text-sm font-semibold tabular-nums text-admin-ink sm:hidden">{page} / {totalPages}</span>
           {pageWindow(page, totalPages).map((p, i) =>
             p === 'gap'
-              ? <span key={`gap-${i}`} className="px-1 text-admin-muted">…</span>
-              : <Cell key={p} {...nav} target={p} label={`Halaman ${p}`} active={p === page}>{p}</Cell>,
+              ? <span key={`gap-${i}`} className="hidden px-1 text-admin-muted sm:inline">…</span>
+              : <span key={p} className="hidden sm:inline-flex"><Cell {...nav} target={p} label={`Halaman ${p}`} active={p === page}>{p}</Cell></span>,
           )}
           <Cell {...nav} target={page + 1} label="Halaman berikutnya" disabled={page >= totalPages}><ChevronRight className="size-4" /></Cell>
         </nav>
