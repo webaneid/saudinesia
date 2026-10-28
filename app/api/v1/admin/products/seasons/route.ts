@@ -2,13 +2,16 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
 import { seasonCreateSchema } from '@/lib/validators/adminUpdates'
 import { isAuthError } from '@/lib/admin/errors'
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireManager()
-    return NextResponse.json(ok(await prisma.season.findMany({ orderBy: { startDate: 'asc' } })))
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const { items, meta } = await paginateCatalog(cq.list, () => prisma.season.count(), range => prisma.season.findMany({ orderBy: [{ startDate: 'asc' }, { id: 'asc' }], ...range }))
+    return NextResponse.json(ok(items, meta))
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
     console.error('[admin/products/seasons/GET]', e instanceof Error ? e.name : e)

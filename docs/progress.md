@@ -838,3 +838,4 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] SEC-103 — wildcard LIKE (`%`, `_`) di pencarian admin dijadikan literal lewat `lib/utils/search.ts#escapeLike` (booking, desa, vendor, pelanggan) + penjaga sumber — selesai 2026-10-30.
 - [x] Tabel seragam — Fase 1 (kit: FilterSelect/FilterBar, RowActions/ApiAction/ConfirmDialog, Pagination baru; percontohan Pelanggan, Booking, Pengguna) selesai 2026-10-30; Fase 2–5 menunggu (`docs/arsitektur-tabel.md`).
 - [x] Tabel seragam — Fase 2 (visa, pembayaran, quota, notifikasi, margin, laporan, selisih HPP, vendor, permintaan hapus akun; `FilterPills` dihapus; `PeriodFilter` bersama) selesai 2026-10-30.
+- [x] Tabel seragam — Fase 3 (13 daftar katalog: API paginasi opt-in + filter, `CatalogList`/`CatalogActions`, aksi Edit/Aktif/Hapus berikon, `CategoryManager`) selesai 2026-10-30.

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+import { escapeLike } from '@/lib/utils/search'
 import { getFlightAirlineNames } from '@/lib/pricing/flightAirlines'
 import { z } from 'zod'
 import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
@@ -19,16 +21,22 @@ const createSchema = z.object({
   message: 'Tanggal akhir periode harus sama atau setelah tanggal mulai', path: ['departureTo'],
 })
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireManager()
-    const schedules = await withSellPrice('flight', await prisma.flightSchedule.findMany({
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const like = { contains: escapeLike(cq.q), mode: 'insensitive' as const }
+    const where = { ...activeFilter(cq.status), ...(cq.q ? { route: { OR: [{ origin: like }, { destination: like }] } } : {}) }
+    const { items: found, meta } = await paginateCatalog(cq.list, () => prisma.flightSchedule.count({ where }), range => prisma.flightSchedule.findMany({
+      where,
       include: { route: true },
-      orderBy: { departureFrom: 'asc' },
+      orderBy: [{ departureFrom: 'asc' }, { id: 'asc' }],
+      ...range,
     }))
+    const schedules = await withSellPrice('flight', found)
     const airlineByScheduleId = await getFlightAirlineNames(schedules.map(s => s.id))
     return NextResponse.json(ok(
-      schedules.map(s => ({ ...s, airlineName: airlineByScheduleId.get(s.id) ?? null }))
+      schedules.map(s => ({ ...s, airlineName: airlineByScheduleId.get(s.id) ?? null })), meta
     ))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

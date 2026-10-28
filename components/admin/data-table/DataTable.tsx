@@ -43,8 +43,9 @@ export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.
 
   return (
     <div className="kartu overflow-hidden">
-      {/* Tabel (>= md) */}
-      <table className="hidden w-full text-left text-sm md:table">
+      {/* Tabel (>= md); bila lebih lebar dari wadahnya (panel sempit) menggulir ke samping — kolom aksi tak pernah terpotong */}
+      <div className="hidden overflow-x-auto md:block">
+      <table className="w-full text-left text-sm">
         <thead className="border-b border-admin-line bg-admin-spot/40">
           <tr>
             {columns.map(c => (
@@ -80,6 +81,7 @@ export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.
               ))}
         </tbody>
       </table>
+      </div>
 
       {/* Kartu (HP) */}
       <ul className="m-0 list-none divide-y divide-admin-line p-0 md:hidden">

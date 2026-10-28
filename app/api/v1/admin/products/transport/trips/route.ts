@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
 
@@ -15,20 +17,25 @@ const createSchema = z.object({
   isActive:    z.boolean().default(true),
 })
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     await requireManager()
-    const trips = await prisma.transportTrip.findMany({
-      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const like = { contains: escapeLike(cq.q), mode: 'insensitive' as const }
+    const where = { ...activeFilter(cq.status), ...(cq.q ? { OR: [{ name: like }, { origin: like }, { destination: like }] } : {}) }
+    const { items: trips, meta } = await paginateCatalog(cq.list, () => prisma.transportTrip.count({ where }), range => prisma.transportTrip.findMany({
+      where,
+      orderBy: [{ category: 'asc' }, { name: 'asc' }, { id: 'asc' }],
       include: {
         pricing: {
           include: { vehicle: { select: { id: true, name: true, vehicleType: true, capacity: true } } },
         },
       },
-    })
+      ...range,
+    }))
     // harga jual tiap kendaraan dari titik harga (kolom `price` sudah dihapus — harga terpadu Fase 5)
     const prices = await sellPrices('transport', trips.flatMap(t => t.pricing.map(p => p.id)))
-    return NextResponse.json(ok(trips.map(t => ({ ...t, pricing: t.pricing.map(p => ({ ...p, price: prices.get(p.id) ?? 0 })) }))))
+    return NextResponse.json(ok(trips.map(t => ({ ...t, pricing: t.pricing.map(p => ({ ...p, price: prices.get(p.id) ?? 0 })) })), meta))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { isAuthError } from '@/lib/admin/errors'
@@ -22,12 +24,13 @@ const createSchema = z.object({
   isActive:    z.boolean().default(true),
 })
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const session = await requireManager()
-    return NextResponse.json(ok(await withAdminPrices('package', await prisma.package.findMany({
-      orderBy: { createdAt: 'desc' },
-    }), { includeCost: canViewCost(session.role) })))
+    const cq = readCatalogQuery(new URL(req.url).searchParams)
+    const where = { ...activeFilter(cq.status), ...(cq.q ? { name: { contains: escapeLike(cq.q), mode: 'insensitive' as const } } : {}) }
+    const { items, meta } = await paginateCatalog(cq.list, () => prisma.package.count({ where }), range => prisma.package.findMany({ where, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], ...range }))
+    return NextResponse.json(ok(await withAdminPrices('package', items, { includeCost: canViewCost(session.role) }), meta))
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
     console.error('[admin/products/packages/GET]', e instanceof Error ? e.name : e)
