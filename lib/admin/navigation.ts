@@ -1,7 +1,7 @@
 import {
   LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale,
+  Users, UserCheck, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -12,6 +12,7 @@ export type NavGroup = { label: string; items: NavItem[] }
 const OPERASIONAL: NavItem[] = [
   { path: '/admin',               icon: LayoutDashboard, label: 'Overview' },
   { path: '/admin/bookings',      icon: BookOpen,        label: 'Booking' },
+  { path: '/admin/customers',     icon: UserCheck,       label: 'Pelanggan' },
   { path: '/admin/payments',      icon: CreditCard,      label: 'Pembayaran' },
   { path: '/admin/visa',          icon: FileText,        label: 'Visa Status' },
   { path: '/admin/quotas',        icon: BarChart3,       label: 'Quota' },
@@ -55,6 +56,7 @@ export function getAdminNavigation({ isManager, isSuperAdmin }: { isManager: boo
 export const LABEL_SEGMEN: Record<string, string> = {
   admin: 'Admin',
   bookings: 'Booking',
+  customers: 'Pelanggan',
   payments: 'Pembayaran',
   visa: 'Visa',
   quotas: 'Quota',
