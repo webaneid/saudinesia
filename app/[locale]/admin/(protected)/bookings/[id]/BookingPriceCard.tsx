@@ -15,6 +15,7 @@ type Summary = PricingInput
 type Adj = {
   id: string; amountIdr: number; label: string; reason: string | null; totalBefore: number; totalAfter: number; belowCost: boolean
   reversesId: string | null; reversed: boolean; byName: string | null; createdAt: string
+  reasonEditedByName: string | null; reasonEditedAt: string | null
 }
 const rp = (n: number) => formatRupiah(n)
 
@@ -133,7 +134,8 @@ export function BookingPriceCard({ bookingId, status }: { bookingId: string; sta
                   </div>
                 ) : (
                   <p className="m-0 text-admin-muted">
-                    {a.reason ? <>Catatan: {a.reason}</> : <span className="italic">Tanpa catatan</span>}{' '}
+                    {a.reason ? <>Catatan: {a.reason}</> : <span className="italic">Tanpa catatan</span>}
+                    {a.reasonEditedAt && <span className="text-[11px]"> (diubah oleh {a.reasonEditedByName ?? 'staf'}, {new Date(a.reasonEditedAt).toLocaleString('id-ID')})</span>}{' '}
                     <button type="button" className="font-semibold text-admin-accent underline" onClick={() => { setEditId(a.id); setEditText(a.reason ?? '') }}>{a.reason ? 'Ubah catatan' : 'Tambah catatan'}</button>
                   </p>
                 )}
