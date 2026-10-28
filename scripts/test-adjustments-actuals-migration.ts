@@ -1,5 +1,5 @@
 // Uji migrasi Fase 7 (prisma/migrations/20261030090000_adjustments_cost_actuals; docs/arsitektur-harga-terpadu.md §20): perbaikan data jumlah pembayaran (terkonfirmasi bernilai 0 → total booking;
-// pending/ditolak/yang sudah berjumlah tak disentuh), tabel penyesuaian + pengeluaran aktual, dan DB hasil SEMUA migrasi = schema.prisma (uji drift terbaru berada di berkas ini).
+// pending/ditolak/yang sudah berjumlah tak disentuh), tabel penyesuaian + pengeluaran aktual, (uji drift terbaru kini di test-snapshot-recommended-migration).
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -91,7 +91,6 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
   return { name, ids, ...res }
 }
 
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 async function world(db: PrismaClient) {
@@ -127,13 +126,6 @@ await t('tabel baru ada dengan aturan DB: penyesuaian (jumlah ≠ 0, total akhir
   assert.deepEqual(fks.map(x => [x.n, x.d]), [['booking_adjustments_bookingId_fkey', 'c'], ['booking_adjustments_reversesId_fkey', 'r'], ['cost_actuals_bookingId_fkey', 'c'], ['cost_actuals_snapshotId_fkey', 'n'], ['cost_actuals_vendorId_fkey', 'r']])
   assert.equal(Number((await q1(r.name, `select count(*)::int as n from pg_indexes where indexname = 'booking_adjustments_reversesId_key'`))[0]!.n), 1)
 })
-await t('tabel kosong aman; tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
-
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()
 const cleaner = new PrismaClient({ datasourceUrl: base.toString() })

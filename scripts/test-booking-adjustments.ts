@@ -59,6 +59,13 @@ await t('biaya tambahan (positif) menaikkan total; Σ snapshot tetap sama dengan
   await adjustBookingTotal({ bookingId: id, amountIdr: 250_000, label: 'Biaya pengiriman dokumen', byUserId: staff.id })
   assert.deepEqual(await state(id), { total: 1_750_000, sum: 1_750_000, lines: 3 })
 })
+await t('Fase 8A: baris snapshot penyesuaian membawa rekomendasi 0 (diskon/biaya tambahan bukan bagian rekomendasi), bukan NULL', async () => {
+  const id = await mkBooking()
+  await adjustBookingTotal({ bookingId: id, amountIdr: -100_000, label: 'Diskon', byUserId: staff.id })
+  const rows = await prisma.priceSnapshot.findMany({ where: { bookingId: id, lineKey: 'penyesuaian' } })
+  assert.deepEqual(rows.map(r => Number(r.recommendedTotalIdr)), [0])
+  assert.notEqual(rows[0]!.recommendedTotalIdr, null)
+})
 await t('DI BAWAH HPP: tanpa catatan ditolak (400, tak ada yang berubah); dengan catatan boleh dan belowCost tercatat; batas persis = HPP (tidak di bawah) tak butuh catatan', async () => {
   const id = await mkBooking()
   await rejectsAdj(() => adjustBookingTotal({ bookingId: id, amountIdr: -350_000, label: 'Nego', byUserId: staff.id }), 400, /catatan alasan wajib/) // 1.150.000 < HPP 1.200.000
@@ -71,10 +78,11 @@ await t('DI BAWAH HPP: tanpa catatan ditolak (400, tak ada yang berubah); dengan
   assert.deepEqual([r.totalAfter, r.belowCost], [1_100_000, true])
   assert.equal((await listAdjustments(id2))[0]!.reason, 'pelanggan loyal, kesepakatan manajer')
 })
-await t('CHECK DB (bukan hanya kode): belowCost tanpa catatan, belowCost tak konsisten dengan total/HPP, total tak = sebelum + jumlah, total akhir ≤ 0, jumlah 0 → semua ditolak', async () => {
+await t('CHECK DB (bukan hanya kode): belowCost tak konsisten dengan total/HPP, total tak = sebelum + jumlah, total akhir ≤ 0, jumlah 0 → semua ditolak', async () => {
   const id = await mkBooking()
   const ins = (cols: Record<string, string>) => prisma.$executeRawUnsafe(`INSERT INTO booking_adjustments (id, "bookingId", "amountIdr", label, reason, "totalBefore", "totalAfter", "costKnownIdr", "belowCost", "byUserId") VALUES ('${tag}-chk${++n}', '${id}', ${cols.amount}, 'L', ${cols.reason}, ${cols.before}, ${cols.after}, ${cols.cost}, ${cols.below}, 'x')`)
-  await assert.rejects(() => ins({ amount: '-400000', reason: 'NULL', before: '1500000', after: '1100000', cost: '1200000', below: 'true' }), /below_cost_needs_reason|check/i)
+  await ins({ amount: '-400000', reason: 'NULL', before: '1500000', after: '1100000', cost: '1200000', below: 'true' }) // Fase 8A: di bawah HPP tanpa catatan TIDAK lagi ditolak DB (peringatan, bukan larangan)
+  await prisma.bookingAdjustment.deleteMany({ where: { bookingId: id } })
   await assert.rejects(() => ins({ amount: '-100000', reason: "'x ok ok'", before: '1500000', after: '1400000', cost: '1200000', below: 'true' }), /below_cost_consistent|check/i)
   await assert.rejects(() => ins({ amount: '-100000', reason: 'NULL', before: '1500000', after: '1300000', cost: '1200000', below: 'false' }), /total_consistent|check/i)
   await assert.rejects(() => ins({ amount: '-1500000', reason: "'alasan jelas'", before: '1500000', after: '0', cost: '1200000', below: 'true' }), /total_after_positive|check/i)
