@@ -47,11 +47,13 @@ async function apply(input: ApplyInput): Promise<AdjustResult> {
     // "Atur total" = selisih terhadap total TERKINI yang dibaca di dalam kunci (bukan total yang dilihat admin saat membuka halaman).
     const amount = input.targetTotalIdr !== undefined ? round2(round2(input.targetTotalIdr) - totalBefore) : round2(input.amountIdr!)
     if (amount === 0) throw new AdjustmentError(400, input.targetTotalIdr !== undefined ? 'Total harga jual sudah sama — tidak ada yang diubah' : 'Jumlah penyesuaian tidak valid')
-    if (Math.abs(amount) > MAX_PRICE_IDR) throw new AdjustmentError(400, 'Jumlah penyesuaian melebihi batas wajar')
+    if (!Number.isFinite(amount)) throw new AdjustmentError(400, 'Total tidak valid')
     const label = (input.label?.trim()) || (amount < 0 ? 'Diskon' : 'Biaya tambahan')
 
     const totalAfter = round2(totalBefore + amount)
     if (!(totalAfter > 0)) throw new AdjustmentError(422, 'Total akhir harus lebih dari 0 — batalkan pesanan bila memang tak berbayar')
+    // Batas atas total (sama dengan batas jumlah pembayaran, lib/payments/confirmAmount.ts): total di atasnya tak dapat dikonfirmasi. Menurunkan total tetap boleh walau pesanan sudah di atas batas.
+    if (totalAfter > MAX_PRICE_IDR && totalAfter > totalBefore) throw new AdjustmentError(400, `Total melebihi batas wajar (${MAX_PRICE_IDR.toLocaleString('id-ID')}) — periksa kembali angkanya`)
     const costKnown = round2(before.costKnownIdr)
     const belowCost = totalAfter < costKnown // dicatat untuk audit/laporan rugi — BUKAN syarat apa pun
     const reason = reasonText ?? input.fallbackReason ?? null

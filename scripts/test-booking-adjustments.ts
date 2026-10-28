@@ -291,10 +291,14 @@ await t('ATUR TOTAL (Fase 8C): turun ke bawah rekomendasi → lunak; ke bawah HP
 await t('ATUR TOTAL: yang ditolak hanya total ≤ 0 / bukan angka (422/400, tak ada yang berubah), status selain menunggu pembayaran (409), pesanan tak ada (404); batas wajar', async () => {
   const id = await mkBooking()
   for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: bad, byUserId: staff.id }), 422, /lebih dari 0/)
-  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 9_000_000_000_000, byUserId: staff.id }), 400, /batas wajar/)
+  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 9_000_000_000_000, byUserId: staff.id }), 400, /Total melebihi batas wajar/)
+  await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 5_000_000_001, byUserId: staff.id }), 400, /Total melebihi batas wajar/)
+  await rejectsAdj(() => adjustBookingTotal({ bookingId: id, amountIdr: 4_999_999_999, label: 'Naik', byUserId: staff.id }), 400, /Total melebihi batas wajar/) // 1,5 jt + 4,99 miliar > 5 miliar
+  assert.equal((await setBookingTotal({ bookingId: id, totalIdr: 5_000_000_000, byUserId: staff.id })).totalAfter, 5_000_000_000, 'tepat di batas boleh')
+  assert.equal((await setBookingTotal({ bookingId: id, totalIdr: 1_500_000, byUserId: staff.id })).totalAfter, 1_500_000, 'menurunkan selalu boleh')
   await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_000_000, reason: 'x'.repeat(501), byUserId: staff.id }), 400, /maksimal 500/)
   await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_000_000, label: 'L'.repeat(121), byUserId: staff.id }), 400, /Label/)
-  assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 })
+  assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 + 2 })
   const review = await mkBooking('payment_review')
   await rejectsAdj(() => setBookingTotal({ bookingId: review, totalIdr: 1_000_000, byUserId: staff.id }), 409, /menunggu pembayaran/)
   await rejectsAdj(() => setBookingTotal({ bookingId: '00000000-0000-0000-0000-000000000000', totalIdr: 1_000_000, byUserId: staff.id }), 404, /tidak ditemukan/)
