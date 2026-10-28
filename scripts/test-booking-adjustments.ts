@@ -24,6 +24,7 @@ async function t(name: string, fn: () => Promise<void> | void) {
 const tag = `adj${Date.now()}`
 const user = await prisma.user.create({ data: { email: `${tag}@example.test`, passwordHash: 'x', fullName: 'Uji Penyesuaian', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
 const staff = await prisma.user.create({ data: { email: `${tag}-staff@example.test`, passwordHash: 'x', fullName: 'Admin Uji', role: 'admin', isActive: true, emailVerifiedAt: new Date() } })
+const staff2 = await prisma.user.create({ data: { email: `${tag}-staff2@example.test`, passwordHash: 'x', fullName: 'Admin Dua', role: 'admin', isActive: true, emailVerifiedAt: new Date() } })
 const bookings: string[] = []
 let n = 0
 
@@ -324,22 +325,46 @@ await t('ATUR TOTAL: dua orang mengatur bersamaan dari total yang sama → kedua
   release(); await holder; await pending
   assert.deepEqual(await state(id2), { total: 1_000_000, sum: 1_000_000, lines: 3 })
 })
-await t('EDIT CATATAN (Fase 8C): hanya `reason` yang berubah (label, jumlah, total, snapshot utuh); kosong menghapus; >500 → 400; penyesuaian milik pesanan lain / tak ada → 404; boleh walau pesanan tak lagi menunggu pembayaran', async () => {
+await t('EDIT CATATAN (Fase 8C + SEC-101): hanya `reason` yang berubah (label, jumlah, total, snapshot utuh) dan SIAPA + KAPAN tercatat; kosong menghapus; >500 → 400; milik pesanan lain / tak ada → 404; boleh walau pesanan tak lagi menunggu pembayaran', async () => {
   const id = await mkBooking()
   const r = await adjustBookingTotal({ bookingId: id, amountIdr: -100_000, label: 'Diskon rombongan', reason: 'awal', byUserId: staff.id })
   const snapBefore = await prisma.priceSnapshot.findMany({ where: { bookingId: id }, orderBy: { lineKey: 'asc' } })
-  assert.deepEqual(await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: '  nego dengan Bpk. Ahmad  ' }), { id: r.adjustmentId, reason: 'nego dengan Bpk. Ahmad' })
+  const created = (await listAdjustments(id))[0]!
+  assert.deepEqual([created.reasonEditedByName, created.reasonEditedAt], [null, null], 'baru dibuat: belum pernah diedit')
+  const before = Date.now()
+  assert.deepEqual(await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: '  nego dengan Bpk. Ahmad  ', byUserId: staff2.id }), { id: r.adjustmentId, reason: 'nego dengan Bpk. Ahmad', changed: true })
   const row = (await listAdjustments(id))[0]!
-  assert.deepEqual([row.label, row.amountIdr, row.totalBefore, row.totalAfter, row.reason], ['Diskon rombongan', -100_000, 1_500_000, 1_400_000, 'nego dengan Bpk. Ahmad'])
+  assert.deepEqual([row.label, row.amountIdr, row.totalBefore, row.totalAfter, row.reason, row.byUserId, row.reasonEditedByName], ['Diskon rombongan', -100_000, 1_500_000, 1_400_000, 'nego dengan Bpk. Ahmad', staff.id, 'Admin Dua'], 'pembuat tetap, editor tercatat terpisah')
+  assert.ok(Date.parse(row.reasonEditedAt!) >= before - 1000 && Date.parse(row.reasonEditedAt!) <= Date.now() + 1000)
   assert.deepEqual(await prisma.priceSnapshot.findMany({ where: { bookingId: id }, orderBy: { lineKey: 'asc' } }), snapBefore, 'snapshot tak tersentuh')
   assert.deepEqual(await state(id), { total: 1_400_000, sum: 1_400_000, lines: 3 })
-  assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: '   ' })).reason, null)
-  await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'x'.repeat(501) }), 400, /maksimal 500/)
+  // catatan yang sama (setelah trim) tidak menggeser jejak
+  const same = await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'nego dengan Bpk. Ahmad ', byUserId: staff.id })
+  assert.equal(same.changed, false)
+  const after = (await listAdjustments(id))[0]!
+  assert.deepEqual([after.reasonEditedByName, after.reasonEditedAt], [row.reasonEditedByName, row.reasonEditedAt], 'tak berubah → jejak tak bergeser')
+  // kosong menghapus catatan dan tetap tercatat sebagai edit oleh pelakunya
+  assert.deepEqual(await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: '   ', byUserId: staff.id }), { id: r.adjustmentId, reason: null, changed: true })
+  assert.equal((await listAdjustments(id))[0]!.reasonEditedByName, 'Admin Uji')
+  await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'x'.repeat(501), byUserId: staff.id }), 400, /maksimal 500/)
   const other = await mkBooking()
-  await rejectsAdj(() => updateAdjustmentReason({ bookingId: other, adjustmentId: r.adjustmentId, reason: 'x' }), 404, /tidak ditemukan/)
-  await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: '00000000-0000-0000-0000-000000000000', reason: 'x' }), 404, /tidak ditemukan/)
+  await rejectsAdj(() => updateAdjustmentReason({ bookingId: other, adjustmentId: r.adjustmentId, reason: 'x', byUserId: staff.id }), 404, /tidak ditemukan/)
+  await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: '00000000-0000-0000-0000-000000000000', reason: 'x', byUserId: staff.id }), 404, /tidak ditemukan/)
   await prisma.booking.update({ where: { id }, data: { status: 'confirmed' } })
-  assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'dicatat ulang setelah lunas' })).reason, 'dicatat ulang setelah lunas')
+  assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'dicatat ulang setelah lunas', byUserId: staff.id })).reason, 'dicatat ulang setelah lunas')
+})
+await t('EDIT CATATAN: dua editor bersamaan → keduanya berhasil berurutan, jejak = editor TERAKHIR yang benar-benar menulis (pasangan pelaku+waktu tak pernah campur); DB menolak pasangan tak lengkap', async () => {
+  const id = await mkBooking()
+  const r = await adjustBookingTotal({ bookingId: id, amountIdr: -100_000, label: 'D', reason: 'awal', byUserId: staff.id })
+  const res = await Promise.allSettled([
+    updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'versi A', byUserId: staff.id }),
+    updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'versi B', byUserId: staff2.id }),
+  ])
+  assert.ok(res.every(x => x.status === 'fulfilled'))
+  const row = await prisma.bookingAdjustment.findUniqueOrThrow({ where: { id: r.adjustmentId } })
+  assert.ok((row.reason === 'versi A' && row.reasonEditedByUserId === staff.id) || (row.reason === 'versi B' && row.reasonEditedByUserId === staff2.id), `jejak harus milik penulis terakhir: ${row.reason}/${row.reasonEditedByUserId}`)
+  await assert.rejects(() => prisma.$executeRawUnsafe(`UPDATE booking_adjustments SET "reasonEditedByUserId" = NULL WHERE id = '${r.adjustmentId}'`), /reason_edit_paired|check/i)
+  await assert.rejects(() => prisma.$executeRawUnsafe(`UPDATE booking_adjustments SET "reasonEditedAt" = NULL WHERE id = '${r.adjustmentId}'`), /reason_edit_paired|check/i)
 })
 await t('I5 (Fase 8): angka internal (HPP/rekomendasi/peringatan) hanya di jalur admin — tak ada di API jamaah, halaman jamaah, invoice, notifikasi, maupun skema respons publik', () => {
   const walk = (dir: string, out: string[] = []): string[] => { for (const f of readdirSync(dir)) { if (f === 'node_modules' || f === '.next' || f.startsWith('.')) continue; const p = join(dir, f); if (statSync(p).isDirectory()) walk(p, out); else if (/\.(ts|tsx)$/.test(f)) out.push(p) } return out }
@@ -370,7 +395,7 @@ await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar mema
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await prisma.payment.deleteMany({ where: { bookingId: { in: bookings } } })
 await prisma.booking.deleteMany({ where: { id: { in: bookings } } }) // cascade: snapshot + penyesuaian
-await prisma.user.deleteMany({ where: { id: { in: [user.id, staff.id] } } })
+await prisma.user.deleteMany({ where: { id: { in: [user.id, staff.id, staff2.id] } } })
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 await prisma.$disconnect()
 process.exit(failed ? 1 : 0)

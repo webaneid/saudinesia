@@ -87,13 +87,21 @@ export function setBookingTotal(input: { bookingId: string; totalIdr: number; la
   return apply({ bookingId: input.bookingId, targetTotalIdr: input.totalIdr, label: input.label?.trim() || undefined, reason: input.reason, byUserId: input.byUserId })
 }
 
-/** Ubah HANYA catatan alasan (internal) satu penyesuaian. Label/jumlah beku di snapshot dan invoice — mengubahnya = batalkan lalu buat baru. Boleh kapan saja (tak menyentuh angka). */
-export async function updateAdjustmentReason(input: { bookingId: string; adjustmentId: string; reason: string | null | undefined }): Promise<{ id: string; reason: string | null }> {
+/**
+ * Ubah HANYA catatan alasan (internal) satu penyesuaian. Label/jumlah beku di snapshot dan invoice — mengubahnya = batalkan lalu buat baru. Boleh kapan saja (tak menyentuh angka).
+ * Setiap perubahan NYATA mencatat siapa dan kapan (`reasonEditedByUserId`/`reasonEditedAt`, SEC-101); mengirim catatan yang sama tidak mengubah apa pun (jejak tak tergeser).
+ */
+export async function updateAdjustmentReason(input: { bookingId: string; adjustmentId: string; reason: string | null | undefined; byUserId: string }): Promise<{ id: string; reason: string | null; changed: boolean }> {
   const reason = input.reason?.trim() || null
   if (reason && reason.length > MAX_REASON_LENGTH) throw new AdjustmentError(400, `Catatan maksimal ${MAX_REASON_LENGTH} karakter`)
-  const res = await prisma.bookingAdjustment.updateMany({ where: { id: input.adjustmentId, bookingId: input.bookingId }, data: { reason } })
-  if (res.count === 0) throw new AdjustmentError(404, 'Penyesuaian tidak ditemukan')
-  return { id: input.adjustmentId, reason }
+  return prisma.$transaction(async tx => {
+    // Kunci baris: dua edit paralel tak boleh sama-sama menganggap "berubah" lalu saling menimpa jejak.
+    const rows = await tx.$queryRaw<Array<{ reason: string | null }>>(Prisma.sql`SELECT "reason" FROM "booking_adjustments" WHERE "id" = ${input.adjustmentId} AND "bookingId" = ${input.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
+    if (rows.length === 0) throw new AdjustmentError(404, 'Penyesuaian tidak ditemukan')
+    if ((rows[0]!.reason ?? null) === reason) return { id: input.adjustmentId, reason, changed: false }
+    await tx.bookingAdjustment.update({ where: { id: input.adjustmentId }, data: { reason, reasonEditedByUserId: input.byUserId, reasonEditedAt: new Date() } })
+    return { id: input.adjustmentId, reason, changed: true }
+  })
 }
 
 /** Batalkan satu penyesuaian dengan baris pembalik (jumlah berlawanan). Satu penyesuaian hanya dapat dibatalkan sekali; pembatalan tak dapat dibatalkan lagi. */
@@ -116,15 +124,18 @@ export async function reverseAdjustment(input: { bookingId: string; adjustmentId
 export type AdjustmentView = {
   id: string; amountIdr: number; label: string; reason: string | null; totalBefore: number; totalAfter: number; belowCost: boolean
   reversesId: string | null; reversed: boolean; byUserId: string; byName: string | null; createdAt: string
+  /** Edit catatan terakhir (SEC-101); null = tak pernah diedit. */
+  reasonEditedByName: string | null; reasonEditedAt: string | null
 }
 
 /** Riwayat penyesuaian satu pesanan (terbaru dulu) — INTERNAL admin (memuat `reason`). */
 export async function listAdjustments(bookingId: string): Promise<AdjustmentView[]> {
   const rows = await prisma.bookingAdjustment.findMany({ where: { bookingId }, include: { reversedBy: { select: { id: true } } }, orderBy: [{ createdAt: 'desc' }, { id: 'asc' }] })
-  const users = await prisma.user.findMany({ where: { id: { in: [...new Set(rows.map(r => r.byUserId))] } }, select: { id: true, fullName: true } })
+  const users = await prisma.user.findMany({ where: { id: { in: [...new Set(rows.flatMap(r => (r.reasonEditedByUserId ? [r.byUserId, r.reasonEditedByUserId] : [r.byUserId])))] } }, select: { id: true, fullName: true } })
   const names = new Map(users.map(u => [u.id, u.fullName]))
   return rows.map(r => ({
     id: r.id, amountIdr: Number(r.amountIdr), label: r.label, reason: r.reason, totalBefore: Number(r.totalBefore), totalAfter: Number(r.totalAfter), belowCost: r.belowCost,
     reversesId: r.reversesId, reversed: r.reversedBy !== null, byUserId: r.byUserId, byName: names.get(r.byUserId) ?? null, createdAt: r.createdAt.toISOString(),
+    reasonEditedByName: r.reasonEditedByUserId ? (names.get(r.reasonEditedByUserId) ?? 'staf') : null, reasonEditedAt: r.reasonEditedAt ? r.reasonEditedAt.toISOString() : null,
   }))
 }

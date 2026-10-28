@@ -592,6 +592,7 @@ await t('tiap kolom userId pada skema punya perlakuan eksplisit di penghapusan (
     'GroupMember.userId': 'groupMember.updateMany',
     'NotificationLog.userId': 'notificationLog.updateMany',
     'BookingAdjustment.byUserId': 'dipertahankan (jejak audit penyesuaian harga oleh STAF; catatan `reason` pesanan jamaah dibersihkan — lihat bookingAdjustment.updateMany)',
+    'BookingAdjustment.reasonEditedByUserId': 'dipertahankan (jejak audit edit catatan oleh STAF; isi catatan jamaah dibersihkan — bookingAdjustment.updateMany)',
     'PriceChange.byUserId': 'dipertahankan (jejak audit harga oleh STAF; jalur UU PDP hanya untuk jamaah — blockersFor menolak akun bukan jamaah)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')

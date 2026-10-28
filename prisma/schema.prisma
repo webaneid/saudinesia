@@ -1467,6 +1467,9 @@ model BookingAdjustment {
   amountIdr    Decimal  @db.Decimal(14, 2) // bertanda: negatif = diskon, positif = biaya tambahan
   label        String
   reason       String?
+  /// Jejak edit catatan (SEC-101): staf + waktu edit TERAKHIR; NULL = belum pernah diedit sejak dibuat. Berpasangan (CHECK DB). Hanya diisi lib/booking/adjustments.ts#updateAdjustmentReason.
+  reasonEditedByUserId String? // staf (tanpa FK, sama dengan byUserId)
+  reasonEditedAt       DateTime?
   totalBefore  Decimal  @db.Decimal(14, 2)
   totalAfter   Decimal  @db.Decimal(14, 2)
   costKnownIdr Decimal  @db.Decimal(14, 2) // HPP awal yang diketahui saat dibuat (Σ modal baris bermodal)

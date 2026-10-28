@@ -14,10 +14,8 @@ export async function PATCH(req: Request, { params }: Ctx) {
     const { id, adjId } = await params
     const parsed = adjustmentReasonSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const result = await updateAdjustmentReason({ bookingId: id, adjustmentId: adjId, reason: parsed.data.reason })
-    // Jejak siapa/kapan (kolom editor belum ada, SEC-101): cukup pelaku + sasaran + panjang — isi catatan tak pernah dilog (bisa memuat nama).
-    console.info(`[admin/adjustment-note] actor=${session.userId} booking=${id} adjustment=${adjId} length=${result.reason?.length ?? 0}`)
-    return NextResponse.json(ok(result))
+    const result = await updateAdjustmentReason({ bookingId: id, adjustmentId: adjId, reason: parsed.data.reason, byUserId: session.userId })
+    return NextResponse.json(ok(result)) // siapa/kapan tersimpan di baris (SEC-101); isi catatan tak pernah dilog (bisa memuat nama)
   } catch (e) {
     if (e instanceof AdjustmentError) return NextResponse.json(err(e.message), { status: e.status })
     return authFailureResponse(e, 'admin/bookings/adjustments/PATCH')
