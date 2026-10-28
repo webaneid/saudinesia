@@ -18,7 +18,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         catering:   { include: { cateringOption: true } },
         tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
         pilgrims:   { include: { visaApplication: true, documents: true } }, // modal/jejak beku ada di price_snapshots (tak pernah di-include untuk pilgrim — I5)
-        payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
+        // select eksplisit: `notes` (catatan staf) dan `confirmedById` TIDAK boleh sampai ke jamaah (Fase 7: catatan jumlah pembayaran bersifat internal)
+        payments:   { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, status: true, amount: true, method: true, buktiTransferUploadedAt: true, confirmedAt: true, createdAt: true } },
       },
     })
     if (!booking) return NextResponse.json(err('Booking tidak ditemukan'), { status: 404 })

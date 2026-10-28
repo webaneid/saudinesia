@@ -54,7 +54,7 @@ function fakeDeps(opts: { failKeys?: boolean } = {}) {
 type Seeded = {
   userId: string; email: string; number: string; googleSub: string; addressId: string
   bookingId: string; pilgrimId: string; docKeys: string[]; requestId: string
-  paymentId: string; refundId: string; transportId: string; consentIds: string[]; groupMemberId: string; crossPilgrimId: string
+  paymentId: string; refundId: string; adjustmentId: string; costActualId: string; vendorCostId: string; transportId: string; consentIds: string[]; groupMemberId: string; crossPilgrimId: string
 }
 
 const createdUsers: string[] = []
@@ -100,6 +100,10 @@ async function seed(opts: { bookingStatus?: 'completed' | 'cancelled' | 'active'
   await prisma.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaType: 'umrah', notes: 'paspor kedua atas nama istri', rejectionReason: 'foto buram, hubungi 0812-RAHASIA' } })
   const payment = await prisma.payment.create({ data: { bookingId: booking.id, amount: new Decimal(12_500_000), method: 'transfer', status: 'confirmed', buktiTransferPath: `payments/${uniq()}/bukti.jpg`, notes: 'nama pengirim beda: Ahmad 0812-RAHASIA' } })
   const refund = await prisma.refund.create({ data: { bookingId: booking.id, amount: new Decimal(500_000), reason: 'selisih', notes: 'transfer ke rekening istri BCA 123456', status: opts.refundStatus ?? 'paid' } })
+  // Fase 7: catatan staf yang menyebut nama pemesan (penyesuaian total + pengeluaran vendor) harus dibersihkan saat akun dihapus
+  const adjustment = await prisma.bookingAdjustment.create({ data: { bookingId: booking.id, amountIdr: new Decimal(-100_000), label: 'Diskon', reason: 'nego dengan Budi Santoso 0812-RAHASIA', totalBefore: new Decimal(12_600_000), totalAfter: new Decimal(12_500_000), costKnownIdr: new Decimal(0), belowCost: false, byUserId: 'staf-uji' } })
+  const vendorForCost = await prisma.vendor.create({ data: { name: `Vendor Hapus ${uniq()}`, nameKey: `vendor hapus ${uniq()}`, countryCode: 'SA' } })
+  const costActual = await prisma.costActual.create({ data: { bookingId: booking.id, vendorId: vendorForCost.id, component: 'k', currency: 'IDR', amount: new Decimal(1000), amountIdr: new Decimal(1000), paidAt: new Date('2026-01-05'), varianceNote: 'dibayar tunai oleh Budi Santoso', voidReason: 'salah input — Budi', voidedAt: new Date(), voidedBy: 'staf-uji', recordedBy: 'staf-uji' } })
   const transport = await prisma.bookingTransport.create({ data: { bookingId: booking.id, transportQuotaId: await quota(), travelDate: new Date('2026-01-10'), unitPrice: new Decimal(100), totalPrice: new Decimal(100), pickupDetail: 'Hotel Anjung kamar 1204, tel 0812-RAHASIA', dropoffDetail: 'Rumah Pak Haji' } })
 
   await prisma.notificationLog.createMany({ data: [
@@ -126,7 +130,7 @@ async function seed(opts: { bookingStatus?: 'completed' | 'cancelled' | 'active'
   const request = await prisma.accountDeletionRequest.create({ data: { userId: user.id, requestedAt: new Date(Date.now() - (opts.freshRequest ? 1 : MIN_WAIT_HOURS + 28) * 3_600_000) } })
   return {
     userId: user.id, email, number, googleSub, addressId: address.id, bookingId: booking.id, pilgrimId: pilgrim.id, docKeys, requestId: request.id,
-    paymentId: payment.id, refundId: refund.id, transportId: transport.id, consentIds: user.consentLogs.map((c) => c.id), groupMemberId: member.id, crossPilgrimId: otherBooking.pilgrims[0]!.id,
+    paymentId: payment.id, refundId: refund.id, adjustmentId: adjustment.id, costActualId: costActual.id, vendorCostId: vendorForCost.id, transportId: transport.id, consentIds: user.consentLogs.map((c) => c.id), groupMemberId: member.id, crossPilgrimId: otherBooking.pilgrims[0]!.id,
   }
 }
 
@@ -210,6 +214,10 @@ await t('anonimisasi lengkap: tiap kolom PII hilang / diacak; ringkasan tercatat
   assert.equal(tr.pickupDetail, null); assert.equal(tr.dropoffDetail, null)
   assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: s.paymentId } })).notes, null)
   assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: s.refundId } })).notes, null)
+  const adj = await prisma.bookingAdjustment.findUniqueOrThrow({ where: { id: s.adjustmentId } })
+  assert.deepEqual([adj.reason, adj.label, Number(adj.amountIdr)], ['[dihapus]', 'Diskon', -100_000], 'catatan staf dibersihkan; angka dan label (invoice) tetap')
+  const ca = await prisma.costActual.findUniqueOrThrow({ where: { id: s.costActualId } })
+  assert.deepEqual([ca.varianceNote, ca.voidReason, ca.component, Number(ca.amountIdr)], ['[dihapus]', '[dihapus]', '[dihapus]', 1000])
   // log notifikasi: baris tetap, PII tidak
   const logs = await prisma.notificationLog.findMany({ where: { userId: s.userId } })
   assert.equal(logs.length, 2)
@@ -583,11 +591,12 @@ await t('tiap kolom userId pada skema punya perlakuan eksplisit di penghapusan (
     'Group.leaderUserId': 'dipertahankan (struktur grup); groupName belum dibuat oleh kode mana pun (INFO-7)',
     'GroupMember.userId': 'groupMember.updateMany',
     'NotificationLog.userId': 'notificationLog.updateMany',
+    'BookingAdjustment.byUserId': 'dipertahankan (jejak audit penyesuaian harga oleh STAF; catatan `reason` pesanan jamaah dibersihkan — lihat bookingAdjustment.updateMany)',
     'PriceChange.byUserId': 'dipertahankan (jejak audit harga oleh STAF; jalur UU PDP hanya untuk jamaah — blockersFor menolak akun bukan jamaah)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')
-  for (const must of ['authToken.deleteMany', 'notificationLog.updateMany', 'groupMember.updateMany', 'document.deleteMany', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany']) assert.ok(src.includes(must), must)
+  for (const must of ['bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'groupMember.updateMany', 'document.deleteMany', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany']) assert.ok(src.includes(must), must)
   // Kolom teks bebas yang diketahui pada baris yang DIPERTAHANKAN harus dibersihkan (DEL-01).
   for (const col of ['pickupDetail', 'dropoffDetail']) assert.ok(src.includes(col), col)
   assert.ok(/notes: null/.test(src))
@@ -599,7 +608,8 @@ const bookingIds = (await prisma.booking.findMany({ where: { userId: { in: ids }
 await prisma.payment.deleteMany({ where: { bookingId: { in: bookingIds } } })
 await prisma.refund.deleteMany({ where: { bookingId: { in: bookingIds } } })
 await prisma.notificationLog.deleteMany({ where: { userId: { in: ids } } })
-await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } })
+await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } }) // cascade: snapshot, penyesuaian, pengeluaran aktual
+await prisma.vendor.deleteMany({ where: { name: { startsWith: 'Vendor Hapus ' } } })
 if (chain.pricing) { await prisma.transportQuota.deleteMany({ where: { pricingId: chain.pricing } }); await prisma.transportPricing.delete({ where: { id: chain.pricing } }); await prisma.transportTrip.delete({ where: { id: chain.trip! } }); await prisma.transportVehicle.delete({ where: { id: chain.vehicle! } }) }
 await prisma.groupMember.deleteMany({ where: { OR: [{ userId: { in: ids } }, { group: { leaderUserId: { in: ids } } }] } })
 await prisma.group.deleteMany({ where: { leaderUserId: { in: ids } } })

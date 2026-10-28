@@ -167,3 +167,23 @@ export async function writeSnapshots(db: Db, bookingId: string, items: readonly 
   if (rows.length > 0) await db.priceSnapshot.createMany({ data: rows })
   return totalCents / 100
 }
+
+// ── penyesuaian tingkat-booking (docs/arsitektur-harga-terpadu.md §20) ─────────────────────────────────────────────────────────────────────────────────
+
+/** Tulis SATU baris `penyesuaian` tingkat-booking (diskon negatif / biaya tambahan positif; modal 0 — modal ada di baris komponen). Dipanggil HANYA oleh lib/booking/adjustments.ts. */
+export async function writeAdjustmentLine(db: Db, o: { bookingId: string; adjustmentId: string; label: string; amountIdr: number }): Promise<void> {
+  const amount = cents(o.amountIdr) / 100
+  await db.priceSnapshot.create({
+    data: {
+      bookingId: o.bookingId, itemType: 'booking', itemId: o.adjustmentId, lineKey: 'penyesuaian', variantKey: '',
+      itemLabel: o.label, itemDetail: '', itemQty: 1, description: o.label, qty: 1, unit: 'item',
+      unitCostIdr: null, unitSellIdr: amount, totalCostIdr: null, totalSellIdr: amount, mode: 'manual',
+    },
+  })
+}
+
+/** Σ jual semua baris snapshot booking + Σ modal baris yang modalnya diketahui (HPP awal). */
+export async function bookingSnapshotTotals(db: Db, bookingId: string): Promise<{ sellIdr: number; costKnownIdr: number }> {
+  const agg = await db.priceSnapshot.aggregate({ where: { bookingId }, _sum: { totalSellIdr: true, totalCostIdr: true } })
+  return { sellIdr: Number(agg._sum.totalSellIdr ?? 0), costKnownIdr: Number(agg._sum.totalCostIdr ?? 0) }
+}

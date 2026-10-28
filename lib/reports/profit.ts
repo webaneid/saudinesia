@@ -9,7 +9,8 @@ import { prisma } from '@/lib/db'
 //  - Dasar periode = tanggal PESANAN menurut WIB. Cakupan "recognized" = confirmed|active|completed; "with_pending" menambah awaiting_payment|payment_review. `cancelled` tak pernah masuk
 //    penjualan/untung (uang yang ditahan dari pembatalan dilaporkan terpisah).
 //  - Untung = Σ jual − Σ modal HANYA dari baris yang modalnya diketahui; jual tanpa modal dilaporkan terpisah (`sellUnknownCost`) dan menjadi "cakupan modal".
-//    Baris `penyesuaian*` (selisih harga manual/diskon) bermodal 0 — modalnya ada di baris komponen — kecuali sisa data lama ("Penyesuaian data lama": modal tak diketahui).
+//    Baris `penyesuaian*` (selisih harga manual/diskon) bermodal 0 — modalnya ada di baris komponen. Pengecualian: sisa data lama (migrasi Fase 4: itemType booking yang itemId-nya BUKAN baris `booking_adjustments`) = modal tak diketahui —
+//    dibedakan dari struktur, bukan dari label teks bebas yang bisa diketik staf.
 //  - Terealisasi per booking = jual × rasio, rasio = clamp((Σ payment confirmed − Σ refund approved|paid) ÷ total, 0..1).
 
 export class ReportInputError extends Error {
@@ -25,7 +26,6 @@ const STATUSES: Record<ReportScope, string[]> = {
 }
 const MAX_RANGE_DAYS = 366 * 5
 const DAY_MS = 86_400_000
-const LEGACY_ADJUSTMENT_LABEL = 'Penyesuaian data lama' // booking sebelum snapshot (migrasi Fase 4) — selisih total lama, modal tak diketahui
 
 const money = (x: number | null | undefined): number => Math.round((x ?? 0) * 100) / 100
 
@@ -57,7 +57,7 @@ function base(p: ReportParams) {
     ), l AS (
       SELECT b."id" AS booking_id, b."createdAt" AS created_at, s."itemType" AS item_type, s."vendorIds" AS vendor_ids, s."totalSellIdr"::float8 AS sell,
         CASE WHEN s."totalCostIdr" IS NOT NULL THEN s."totalCostIdr"::float8
-             WHEN s."lineKey" LIKE 'penyesuaian%' AND s."itemLabel" <> ${LEGACY_ADJUSTMENT_LABEL} THEN 0::float8
+             WHEN s."lineKey" LIKE 'penyesuaian%' AND (s."itemType" <> 'booking' OR EXISTS (SELECT 1 FROM "booking_adjustments" ba WHERE ba."id" = s."itemId")) THEN 0::float8
         END AS cost,
         CASE WHEN b.total > 0 THEN LEAST(1, GREATEST(0, (b.paid - b.refunded) / b.total)) ELSE 0 END AS ratio
       FROM "price_snapshots" s JOIN b ON b."id" = s."bookingId"
@@ -72,6 +72,10 @@ const AGG = Prisma.sql`
   COALESCE(SUM(sell) FILTER (WHERE cost IS NULL), 0)::float8 AS sell_unknown,
   COALESCE(SUM(sell * ratio), 0)::float8 AS realized_sell,
   COALESCE(SUM((sell - cost) * ratio) FILTER (WHERE cost IS NOT NULL), 0)::float8 AS realized_profit`
+
+/** Untung teridentifikasi sebuah booking negatif (jual baris bermodal < modalnya). Dipakai di HAVING atas kolom `l` (atau `l.` pada kueri per-booking). */
+const LOSS = Prisma.sql`COALESCE(SUM(sell) FILTER (WHERE cost IS NOT NULL), 0) - COALESCE(SUM(cost), 0) < -0.004`
+const LOSS_L = Prisma.sql`COALESCE(SUM(l.sell) FILTER (WHERE l.cost IS NOT NULL), 0) - COALESCE(SUM(l.cost), 0) < -0.004`
 
 type Agg = { sell: number; cost: number; sell_known: number; sell_unknown: number; realized_sell: number; realized_profit: number }
 export type Figures = {
@@ -102,7 +106,7 @@ const figures = (a: Agg): Figures => {
 
 export type ProfitReport = {
   params: ReportParams
-  summary: Figures & { bookings: number; paidIdr: number; refundedIdr: number }
+  summary: Figures & { bookings: number; paidIdr: number; refundedIdr: number; /** Pesanan yang untung teridentifikasinya negatif (di bawah HPP — mis. diskon melampaui margin). */ lossBookings: number }
   /** Uang ditahan dari booking yang dibatalkan pada periode yang sama (bayar terkonfirmasi − refund disetujui/dibayar, tak negatif). */
   cancelledRetained: { bookings: number; retainedIdr: number }
   byProduct: Array<Figures & { itemType: string }>
@@ -116,7 +120,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
   const b = base(p)
   const run = <T,>(tail: Prisma.Sql) => prisma.$queryRaw<T[]>(Prisma.sql`${b} ${tail}`)
   const bounds = periodBounds(p.from, p.to)
-  const [sum, cash, byProduct, byVendor, byMonth, cancelled] = await Promise.all([
+  const [sum, cash, byProduct, byVendor, byMonth, cancelled, loss] = await Promise.all([
     run<Agg>(Prisma.sql`SELECT ${AGG} FROM l`),
     run<{ bookings: number; paid: number; refunded: number }>(Prisma.sql`SELECT COUNT(*)::int AS bookings, COALESCE(SUM(paid), 0)::float8 AS paid, COALESCE(SUM(refunded), 0)::float8 AS refunded FROM b`),
     run<Agg & { item_type: string }>(Prisma.sql`SELECT item_type, ${AGG} FROM l GROUP BY item_type ORDER BY SUM(sell) DESC, item_type`),
@@ -130,6 +134,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
                COALESCE((SELECT SUM(rf."amount") FROM "refunds" rf WHERE rf."bookingId" = bk."id" AND rf."status" IN ('approved', 'paid')), 0)::float8 AS refunded
         FROM "bookings" bk WHERE bk."createdAt" >= ${utcText(bounds.fromTs)}::timestamp AND bk."createdAt" < ${utcText(bounds.toTs)}::timestamp AND bk."status"::text = 'cancelled') x
       WHERE x.paid > 0`),
+    run<{ n: number }>(Prisma.sql`SELECT COUNT(*)::int AS n FROM (SELECT booking_id FROM l GROUP BY booking_id HAVING ${LOSS}) x`),
   ])
 
   const vendorIds = byVendor.map(r => r.bucket).filter(k => !k.startsWith('__'))
@@ -138,7 +143,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
 
   return {
     params: p,
-    summary: { ...figures(sum[0]!), bookings: cash[0]!.bookings, paidIdr: money(cash[0]!.paid), refundedIdr: money(cash[0]!.refunded) },
+    summary: { ...figures(sum[0]!), bookings: cash[0]!.bookings, paidIdr: money(cash[0]!.paid), refundedIdr: money(cash[0]!.refunded), lossBookings: loss[0]!.n },
     cancelledRetained: { bookings: cancelled[0]!.bookings, retainedIdr: money(cancelled[0]!.retained) },
     byProduct: byProduct.map(r => ({ itemType: r.item_type, ...figures(r) })),
     byVendor: byVendor.map(r => r.bucket === '__multi'
@@ -151,9 +156,10 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
 }
 
 /** Daftar booking (terbaru dulu) dengan angka masing-masing; berhalaman. `limit` ≤ 10.000 (ekspor). */
-export async function getBookingProfitRows(p: ReportParams, page: number, limit: number): Promise<{ rows: BookingProfitRow[]; total: number }> {
+export async function getBookingProfitRows(p: ReportParams, page: number, limit: number, onlyLoss = false): Promise<{ rows: BookingProfitRow[]; total: number }> {
   if (!Number.isInteger(page) || page < 1 || !Number.isInteger(limit) || limit < 1 || limit > 10_000) throw new ReportInputError('Halaman/batas tidak valid')
   const b = base(p)
+  const having = onlyLoss ? Prisma.sql`HAVING ${LOSS_L}` : Prisma.empty
   const [rows, count] = await Promise.all([
     prisma.$queryRaw<Array<Agg & { id: string; booking_code: string; created_at: Date; status: string; total: number; paid: number; refunded: number; ratio: number }>>(Prisma.sql`
       ${b}
@@ -164,9 +170,12 @@ export async function getBookingProfitRows(p: ReportParams, page: number, limit:
         COALESCE(SUM(l.sell * l.ratio), 0)::float8 AS realized_sell, COALESCE(SUM((l.sell - l.cost) * l.ratio) FILTER (WHERE l.cost IS NOT NULL), 0)::float8 AS realized_profit
       FROM b LEFT JOIN l ON l.booking_id = b."id"
       GROUP BY b."id", b."bookingCode", b."createdAt", b.status, b.total, b.paid, b.refunded
+      ${having}
       ORDER BY b."createdAt" DESC, b."id"
       LIMIT ${limit} OFFSET ${(page - 1) * limit}`),
-    prisma.$queryRaw<Array<{ n: number }>>(Prisma.sql`${b} SELECT COUNT(*)::int AS n FROM b`),
+    onlyLoss
+      ? prisma.$queryRaw<Array<{ n: number }>>(Prisma.sql`${b} SELECT COUNT(*)::int AS n FROM (SELECT booking_id FROM l GROUP BY booking_id HAVING ${LOSS}) x`)
+      : prisma.$queryRaw<Array<{ n: number }>>(Prisma.sql`${b} SELECT COUNT(*)::int AS n FROM b`),
   ])
   return {
     total: count[0]!.n,

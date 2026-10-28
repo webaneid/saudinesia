@@ -71,6 +71,7 @@ await t('F4: satu pemilih vendor — tak ada jalur lama (settings/vendors, quick
   assert.deepEqual(adHoc, [], 'dropdown vendor buatan sendiri (pakai VendorPicker)')
   const users = files.filter(f => /<VendorPicker\b/.test(read(f))).map(f => f.replace(/\\/g, '/')).sort()
   assert.deepEqual(users, [
+    'app/[locale]/admin/(protected)/bookings/[id]/CostActualsPanel.tsx', // pengeluaran aktual vendor (Fase 7)
     'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx',
     'app/[locale]/admin/(protected)/products/hotels/[id]/page.tsx',
     'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx',

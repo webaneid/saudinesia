@@ -1,5 +1,5 @@
 // Uji migrasi rename margin aturan (prisma/migrations/20261029100000_pricing_rule_default_margin; docs/arsitektur-harga-terpadu.md §18, Fase 5).
-// Dibuktikan: `minMarginPercent` → `defaultMarginPercent` TANPA mengubah nilai/kunci/CHECK, dan DB hasil SEMUA migrasi = schema.prisma (uji drift terbaru berada di berkas ini).
+// Dibuktikan: `minMarginPercent` → `defaultMarginPercent` TANPA mengubah nilai/kunci/CHECK,.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -91,7 +91,6 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
   return { name, ids, ...res }
 }
 
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const rules = (name: string) => query(name, `select "productType" as t, "defaultMarginPercent"::float as m, "roundingIncrement" as r, "warnBelowPercent"::float as w from pricing_rules order by "productType"`)
 
 console.log('== skenario ==')
@@ -108,12 +107,7 @@ await t('tabel kosong aman', async () => {
   const r = await scenario('')
   assert.equal(r.code, 0, r.out.slice(-300)); assert.equal((await rules(r.name)).length, 0)
 })
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenario('')
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
+// Uji drift skema ada di migrasi TERBARU (scripts/test-adjustments-actuals-migration.ts) — di sini skema sudah lebih maju.
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

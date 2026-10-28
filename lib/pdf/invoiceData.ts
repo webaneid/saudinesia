@@ -98,7 +98,9 @@ export async function buildInvoiceData(booking: InvoiceBooking): Promise<Invoice
     throw new Error(`Invoice ${booking.bookingCode}: Σ snapshot harga (${subtotal}) ≠ total booking (${totalAmount})`)
   }
   const confirmedPayment = booking.payments.find(p => p.status === 'confirmed')
-  const balanceDue = confirmedPayment ? 0 : totalAmount
+  // sisa tagihan dari jumlah pembayaran TERKONFIRMASI sebenarnya (bukan sekadar ada/tidaknya pembayaran) — jumlah kurang tak pernah tampil lunas
+  const paid = booking.payments.filter(p => p.status === 'confirmed').reduce((sum, p) => sum + Number(p.amount), 0)
+  const balanceDue = Math.max(0, Math.round((totalAmount - paid) * 100) / 100)
 
   return {
     invoiceNumber: `INV-${booking.bookingCode}`,

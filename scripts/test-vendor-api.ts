@@ -105,7 +105,7 @@ await t('GET [id]: superadmin memuat pemakaian; manager/tanpa login → 403; id 
   const v = await mk('Detail')
   await prisma.productCost.create({ data: { productType: 'haji', productId: randomUUID(), vendorId: v.id, costComponent: 'k', currency: 'IDR', costTiers: [] } })
   const r = await json(await su.vendorGET(get(), ctx(v.id)))
-  assert.equal(r.status, 200); assert.deepEqual(r.body.data.usage, { costsByType: { haji: 1 }, costs: 1, preferred: 0, snapshots: 0, total: 1 })
+  assert.equal(r.status, 200); assert.deepEqual(r.body.data.usage, { costsByType: { haji: 1 }, costs: 1, preferred: 0, snapshots: 0, costActuals: 0, total: 1 })
   assert.equal((await json(await mg.vendorGET(get(), ctx(v.id)))).status, 403)
   assert.equal((await json(await anon.vendorGET(get(), ctx(v.id)))).status, 403)
   assert.equal((await json(await su.vendorGET(get(), ctx(randomUUID())))).status, 404)
