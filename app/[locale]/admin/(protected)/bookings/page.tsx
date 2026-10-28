@@ -2,6 +2,7 @@ import Link from 'next/link'
 import type { BookingStatus, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
+import { escapeLike } from '@/lib/utils/search'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
 import { BOOKING_TONE } from '@/lib/admin/statusTone'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
@@ -38,8 +39,8 @@ export default async function AdminBookings({ params, searchParams }: Props) {
   const where: Prisma.BookingWhereInput = {
     status,
     OR: q ? [
-      { bookingCode: { contains: q, mode: 'insensitive' } },
-      { user: { fullName: { contains: q, mode: 'insensitive' } } },
+      { bookingCode: { contains: escapeLike(q), mode: 'insensitive' } },
+      { user: { fullName: { contains: escapeLike(q), mode: 'insensitive' } } },
     ] : undefined,
   }
 

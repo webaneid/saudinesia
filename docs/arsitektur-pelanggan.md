@@ -23,7 +23,7 @@
 ## 4. Bukti (as-built 2026-10-29)
 - `scripts/test-customers.ts` (DB nyata): hanya role pilgrim (staf tak muncul), akun terhapus ditandai, pencarian nama/email/nomor lokal (0812… ↔ 62812…)/WhatsApp, wildcard `%`/`_`/injeksi diperlakukan literal, filter aktif/email/pesanan, agregat (total dibayar hanya `confirmed`), halaman stabil & dijepit, detail non-pilgrim → null, serialisasi tak memuat rahasia, alamat domestik/internasional, penjaga sumber (halaman memanggil `requireAdminPage` lebih dulu dan tak menyentuh Prisma; menu untuk semua admin). 8 mutasi tertangkap semua.
 - Server dev + Chrome: menu Operasional → Pelanggan, daftar, pencarian "0812-3456" + filter, detail dengan pesanan; staf → 404; tanpa sesi → 307 ke login; parameter rusak → 200.
-- Temuan: Prisma `contains` tidak meloloskan wildcard LIKE (SEC-103, pre-existing di 4 pencarian lain — Pelanggan sudah aman); semua admin melihat data pribadi tanpa log akses (SEC-104, keputusan pemilik).
+- Temuan: Prisma `contains` tidak meloloskan wildcard LIKE (SEC-103 — Pelanggan aman sejak awal; 4 pencarian lain diperbaiki 2026-10-30, `escapeLike` kini di `lib/utils/search.ts`); semua admin melihat data pribadi tanpa log akses (SEC-104, keputusan pemilik).
 
 ## 5. Di luar fase ini / catatan evaluasi
 Pencarian jamaah (paspor/KTP) lintas pesanan; ekspor CSV; penyuntingan oleh admin; log akses data pribadi (siapa melihat pelanggan mana) — dipertimbangkan bila diwajibkan peninjauan hukum UU PDP.

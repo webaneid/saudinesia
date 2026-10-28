@@ -2985,3 +2985,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** Sejak catatan-wajib dicabut (Fase 8) catatan menjadi satu-satunya penjelasan manusia atas diskon rugi; tanpa jejak ia bisa ditulis ulang diam-diam. Pemilik memilih opsi 1 (jejak edit terakhir) — paling kecil dan cukup.
 **Alternatives considered:** Tabel riwayat catatan append-only (semua versi; lebih kuat, ditunda — bisa ditambah bila peninjauan UU PDP/audit menuntut); hanya log server (tidak permanen).
 **Security check:** self-review (satu kolom + satu fungsi): pelaku dari sesi server (bukan body), skema `.strict()` tetap, guard `requireBookingAdjust` tetap, tak ada isi catatan di log, kolom jejak staf terdaftar di pemindai UU PDP (`test-deletion`). Tes: migrasi pra-DB + CHECK + drift, edit/jejak/idempoten/paralel, 4 mutasi tertangkap.
+
+## 2026-10-30 — SEC-103: wildcard LIKE di pencarian teks
+**Decision:** `escapeLike` menjadi util bersama `lib/utils/search.ts`; semua `contains:` dengan masukan pengguna (daftar booking halaman + API admin, desa/kelurahan publik, vendor, pelanggan) wajib melewatinya. Dijaga tes sumber: `contains:` baru tanpa `escapeLike` membuat `test-search-escape` merah.
+**Rationale:** Prisma `contains` meneruskan `%`/`_` apa adanya ke ILIKE sehingga mengetik "%" mencocokkan semua baris. Dampaknya hanya pencarian yang melebar (nilai tetap ber-parameter), tetapi perilakunya mengejutkan dan satu aturan murah menutup seluruh kelasnya.
+**Alternatives considered:** Memperbaiki per situs tanpa penjaga (ditolak: pencarian baru akan mengulang); mengganti ke pencarian teks penuh (di luar kebutuhan).
+**Security check:** self-review (satu util + 5 situs, tanpa migrasi/route baru); recheck menemukan tepat 4 situs lama sesuai register + Pelanggan; `startsWith` pada kode booking memakai string tetap (bukan masukan pengguna). Tes: perilaku nyata di DB (vendor), tabel nilai, penjaga sumber, 5 mutasi tertangkap.

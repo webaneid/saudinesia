@@ -835,3 +835,4 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 
 - [x] Pelanggan — menu Operasional → Pelanggan (daftar akun pemesan ber-pencarian/filter/jumlah pesanan/total dibayar + detail dengan pesanan, hanya lihat, semua peran admin) — selesai 2026-10-29 (`docs/arsitektur-pelanggan.md`). Pencarian jamaah lintas pesanan, ekspor, log akses data pribadi: belum.
 - [x] SEC-101 — jejak siapa+kapan edit catatan penyesuaian (kolom `reasonEditedByUserId`/`reasonEditedAt`, migrasi `20261101090000`) — selesai 2026-10-30.
+- [x] SEC-103 — wildcard LIKE (`%`, `_`) di pencarian admin dijadikan literal lewat `lib/utils/search.ts#escapeLike` (booking, desa, vendor, pelanggan) + penjaga sumber — selesai 2026-10-30.
