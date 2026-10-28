@@ -16,7 +16,7 @@ export function resolveConfirmedAmount(totalAmount: number, input: { amount?: nu
   if (amount > MAX_PRICE_IDR) throw new PaymentAmountError('Jumlah pembayaran melebihi batas wajar')
   const rounded = Math.round(amount * 100) / 100
   const total = Math.round(totalAmount * 100) / 100
-  if (rounded < total) throw new PaymentAmountError('Jumlah kurang dari total pesanan — tidak dapat dikonfirmasi. Tolak pembayaran dan minta pelunasan, atau sesuaikan total (diskon bercatatan) sebelum pembayaran.')
+  if (rounded < total) throw new PaymentAmountError('Jumlah kurang dari total pesanan — tidak dapat dikonfirmasi. Tolak pembayaran dan minta pelunasan, atau atur ulang total harga jual sebelum pembayaran.')
   if (rounded > total && (input.notes?.trim().length ?? 0) < MIN_PAYMENT_NOTE_LENGTH) {
     throw new PaymentAmountError('Jumlah yang dikonfirmasi lebih dari total pesanan — isi catatan (minimal 3 karakter)')
   }

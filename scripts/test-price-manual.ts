@@ -1,5 +1,5 @@
 // Fase 3 harga terpadu (docs/arsitektur-harga-terpadu.md §16): harga jual MANUAL, jejak audit, modal manual (pemilik manual-only), Kesehatan Margin, policy peran.
-// Terhadap DATABASE SUNGGUHAN. Dibuktikan: manual menang atas otomatis dan bertahan dari hitung-ulang (juga yang PARALEL), jual < modal wajib bercatatan, batas nilai,
+// Terhadap DATABASE SUNGGUHAN. Dibuktikan: manual menang atas otomatis dan bertahan dari hitung-ulang (juga yang PARALEL), jual < modal DITERIMA tanpa catatan (hanya peringatan, Fase 8), batas nilai,
 // kembali ke otomatis, tiap perubahan tercatat (siapa/dari→ke/catatan), Visa per tier (+prune), katering tiga musim + booking memakainya,
 // Kesehatan Margin menandai rugi/tipis/modal kosong/belum berharga dengan hitungan benar dan berhalaman, dan penjaga sumber (penulis harga manual & jejak hanya mesin).
 //
@@ -63,13 +63,14 @@ await t('harga manual menang atas otomatis, mencatat siapa/kapan/catatan, dan be
   await prisma.pricingRule.update({ where: { productType: GLOBAL_RULE_KEY }, data: { defaultMarginPercent: 20 } })
 })
 
-await t('jual DI BAWAH modal wajib bercatatan (tidak diblokir bila ada); modal tidak diketahui → tanpa syarat; tanpa titik → dibuat (jual tanpa modal)', async () => {
+await t('jual DI BAWAH modal TIDAK diblokir dan tak wajib catatan (Fase 8: sistem hanya mengingatkan); catatan opsional tersimpan; modal tidak diketahui → tanpa syarat; tanpa titik → dibuat (jual tanpa modal)', async () => {
   const h = await newSchedule(2_000_000)
-  await rejects(() => setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_800_000, byUserId: who }), /catatan/i)
-  await rejects(() => setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_800_000, note: '  ', byUserId: who }), /catatan/i)
-  await rejects(() => setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_800_000, note: 'x', byUserId: who }), /catatan/i)
-  const v = await setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_800_000, note: 'negosiasi grup besar', byUserId: who })
-  assert.deepEqual([v.sellIdr, v.profitIdr], [1_800_000, -200_000])
+  const bare = await setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_800_000, byUserId: who }) // di bawah modal 2.000.000, tanpa catatan
+  assert.deepEqual([bare.sellIdr, bare.profitIdr, bare.mode], [1_800_000, -200_000, 'manual'])
+  assert.equal((await listPriceChanges('hotel', h.schedule.id))[0]!.note, null)
+  const v = await setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_700_000, note: 'negosiasi grup besar', byUserId: who })
+  assert.deepEqual([v.sellIdr, v.profitIdr], [1_700_000, -300_000])
+  assert.equal((await listPriceChanges('hotel', h.schedule.id))[0]!.note, 'negosiasi grup besar')
   const nocost = await newSchedule()
   assert.equal(await getPricePoint('hotel', nocost.schedule.id), null)
   const v2 = await setManualSell({ ownerType: 'hotel', ownerId: nocost.schedule.id, sellIdr: 500_000, byUserId: who })

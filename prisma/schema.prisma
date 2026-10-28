@@ -1443,6 +1443,8 @@ model PriceSnapshot {
   unitSellIdr  Decimal  @db.Decimal(14, 2)
   totalCostIdr Decimal? @db.Decimal(14, 2)
   totalSellIdr Decimal  @db.Decimal(14, 2)
+  /// Rekomendasi: total harga OTOMATIS baris ini (HPP + margin bawaan saat dipesan), terlepas dari harga manual. NULL = baris lama; baris `penyesuaian` tingkat-booking = 0.
+  recommendedTotalIdr Decimal? @db.Decimal(14, 2)
   mode         String // auto | manual
   fxRateIds    Json     @default("[]")
   vendorIds    Json     @default("[]")
@@ -1468,7 +1470,7 @@ model BookingAdjustment {
   totalBefore  Decimal  @db.Decimal(14, 2)
   totalAfter   Decimal  @db.Decimal(14, 2)
   costKnownIdr Decimal  @db.Decimal(14, 2) // HPP awal yang diketahui saat dibuat (Σ modal baris bermodal)
-  belowCost    Boolean // total akhir < HPP awal → reason wajib (dijaga CHECK DB)
+  belowCost    Boolean // total akhir < HPP awal — PERINGATAN internal, tidak memblokir (Fase 8); konsistensi dengan total/HPP dijaga CHECK DB
   reversesId   String?  @unique
   byUserId     String // staf
   createdAt    DateTime @default(now())

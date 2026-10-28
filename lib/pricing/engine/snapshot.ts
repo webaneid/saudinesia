@@ -16,6 +16,8 @@ export type TakenPoint = {
   variantKey: string
   unit: PriceUnit
   sellIdr: number
+  /** Harga OTOMATIS titik (HPP + margin bawaan); null pada pemilik manual-only. Dibekukan sebagai rekomendasi (Fase 8). */
+  autoSellIdr: number | null
   costIdr: number | null
   mode: 'auto' | 'manual'
   fxRateIds: string[]
@@ -30,7 +32,7 @@ export async function readPoint(db: Db, ownerType: PriceOwnerType, ownerId: stri
   if (!p) return null
   return {
     ownerType, ownerId, variantKey, unit: p.unit as PriceUnit,
-    sellIdr: Number(p.sellIdr), costIdr: p.costIdr == null ? null : Number(p.costIdr),
+    sellIdr: Number(p.sellIdr), autoSellIdr: p.autoSellIdr == null ? null : Number(p.autoSellIdr), costIdr: p.costIdr == null ? null : Number(p.costIdr),
     mode: p.manualSellIdr != null ? 'manual' : 'auto',
     fxRateIds: strings(p.fxRateIds), vendorIds: strings(p.vendorIds),
   }
@@ -72,6 +74,8 @@ export type SnapshotLine = {
   unit: string
   unitCostIdr: number | null
   unitSellIdr: number
+  /** Rekomendasi per satuan (harga otomatis). Kosong = sama dengan `unitSellIdr` (tak ada saran lain selain harga yang ditawarkan sistem). */
+  recommendedUnitSellIdr?: number | null
   mode: 'auto' | 'manual'
   ref: { ownerType: PriceOwnerType; ownerId: string; variantKey: string } | null
   fxRateIds: string[]
@@ -84,13 +88,15 @@ const lineCents = (unit: number, qty: number): number => Math.round(cents(unit) 
 
 export const lineTotalSell = (l: SnapshotLine): number => lineCents(l.unitSellIdr, l.qty) / 100
 export const lineTotalCost = (l: SnapshotLine): number | null => (l.unitCostIdr == null ? null : lineCents(l.unitCostIdr, l.qty) / 100)
+/** Rekomendasi baris (rupiah): harga otomatis × jumlah; tanpa saran khusus = jual baris itu sendiri. */
+export const lineTotalRecommended = (l: SnapshotLine): number => lineCents(l.recommendedUnitSellIdr ?? l.unitSellIdr, l.qty) / 100
 /** Σ jual baris (rupiah). */
 export const sumSell = (lines: readonly SnapshotLine[]): number => lines.reduce((s, l) => s + lineCents(l.unitSellIdr, l.qty), 0) / 100
 
 export function lineFromPoint(p: TakenPoint, o: { lineKey?: string; description: string; qty: number; unit?: string }): SnapshotLine {
   return {
     lineKey: o.lineKey ?? 'main', description: o.description, qty: o.qty, unit: o.unit ?? p.unit,
-    unitCostIdr: p.costIdr, unitSellIdr: p.sellIdr, mode: p.mode,
+    unitCostIdr: p.costIdr, unitSellIdr: p.sellIdr, recommendedUnitSellIdr: p.autoSellIdr != null && p.autoSellIdr > 0 ? p.autoSellIdr : p.sellIdr, mode: p.mode,
     ref: { ownerType: p.ownerType, ownerId: p.ownerId, variantKey: p.variantKey },
     fxRateIds: p.fxRateIds, vendorIds: p.vendorIds,
   }
@@ -127,9 +133,12 @@ export async function compositeLines(db: Db, o: { ownerType: 'tour_package' | 'h
   const gapCents = targetCents - Math.round(sumSell(lines) * 100)
   if (gapCents !== 0) {
     const only = lines.length === 0
+    // Rekomendasi total paket = harga OTOMATIS titik × pengali; baris selisih membawa sisanya (nol bila otomatis, selisih manual bila ditimpa) sehingga Σ rekomendasi baris = rekomendasi paket.
+    const recTargetCents = cents(point.autoSellIdr != null && point.autoSellIdr > 0 ? point.autoSellIdr : point.sellIdr) * o.multiplier
+    const recGapCents = recTargetCents - lines.reduce((s, l) => s + Math.round(lineTotalRecommended(l) * 100), 0)
     lines.push({
       lineKey: only ? 'main' : 'penyesuaian', description: only ? o.label : 'Penyesuaian harga paket', qty: o.multiplier, unit: 'package',
-      unitCostIdr: null, unitSellIdr: gapCents / 100 / o.multiplier, mode: point.mode,
+      unitCostIdr: null, unitSellIdr: gapCents / 100 / o.multiplier, recommendedUnitSellIdr: recGapCents / 100 / o.multiplier, mode: point.mode,
       ref: { ownerType: o.ownerType, ownerId: o.ownerId, variantKey: '' }, fxRateIds: [], vendorIds: [],
     })
   }
@@ -159,7 +168,7 @@ export async function writeSnapshots(db: Db, bookingId: string, items: readonly 
         description: l.description, qty: l.qty, unit: l.unit,
         // satuan disimpan sudah dibulatkan ke sen — total dihitung dari nilai yang SAMA yang tersimpan (CHECK DB: total = ROUND(satuan × jumlah, 2))
         unitCostIdr: l.unitCostIdr == null ? null : cents(l.unitCostIdr) / 100, unitSellIdr: cents(l.unitSellIdr) / 100,
-        totalCostIdr: lineTotalCost(l), totalSellIdr: sell,
+        totalCostIdr: lineTotalCost(l), totalSellIdr: sell, recommendedTotalIdr: lineTotalRecommended(l),
         mode: l.mode, fxRateIds: l.fxRateIds, vendorIds: l.vendorIds,
       })
     }
@@ -177,7 +186,7 @@ export async function writeAdjustmentLine(db: Db, o: { bookingId: string; adjust
     data: {
       bookingId: o.bookingId, itemType: 'booking', itemId: o.adjustmentId, lineKey: 'penyesuaian', variantKey: '',
       itemLabel: o.label, itemDetail: '', itemQty: 1, description: o.label, qty: 1, unit: 'item',
-      unitCostIdr: null, unitSellIdr: amount, totalCostIdr: null, totalSellIdr: amount, mode: 'manual',
+      unitCostIdr: null, unitSellIdr: amount, totalCostIdr: null, totalSellIdr: amount, recommendedTotalIdr: 0, mode: 'manual', // diskon/biaya tambahan bukan bagian rekomendasi
     },
   })
 }
@@ -186,4 +195,39 @@ export async function writeAdjustmentLine(db: Db, o: { bookingId: string; adjust
 export async function bookingSnapshotTotals(db: Db, bookingId: string): Promise<{ sellIdr: number; costKnownIdr: number }> {
   const agg = await db.priceSnapshot.aggregate({ where: { bookingId }, _sum: { totalSellIdr: true, totalCostIdr: true } })
   return { sellIdr: Number(agg._sum.totalSellIdr ?? 0), costKnownIdr: Number(agg._sum.totalCostIdr ?? 0) }
+}
+
+export type BookingPriceSummary = {
+  /** Σ modal baris bermodal (HPP awal yang diketahui). */
+  costKnownIdr: number
+  /** Baris asli tanpa modal (selisih paket `penyesuaian` bukan baris tanpa modal: modalnya memang 0 — hanya selisih margin). */
+  costUnknownLines: number
+  /** Σ rekomendasi baris asli (di luar penyesuaian total pesanan). */
+  recommendedIdr: number
+  /** Baris LAMA manual tanpa rekomendasi beku: tidak ditebak, dilaporkan. */
+  recommendedUnknownLines: number
+  /** Harga jual total = Σ semua baris (invarian I4: sama dengan `Booking.totalAmount`). */
+  sellIdr: number
+}
+
+/**
+ * Tiga total pesanan (HPP · rekomendasi · jual) dari snapshot beku — SATU pembaca, supaya rumusnya tak bercabang (docs/arsitektur-harga-terpadu.md §21.2).
+ * Rekomendasi per baris = nilai beku; baris lama (NULL) otomatis = jualnya, baris lama manual = tidak diketahui. Penyesuaian total pesanan (`itemType='booking'`) bukan bagian rekomendasi.
+ */
+export async function bookingPriceSummary(db: Db, bookingId: string): Promise<BookingPriceSummary> {
+  const rows = await db.priceSnapshot.findMany({
+    where: { bookingId },
+    select: { itemType: true, lineKey: true, mode: true, totalCostIdr: true, totalSellIdr: true, recommendedTotalIdr: true },
+  })
+  let sell = 0, cost = 0, rec = 0, costUnknown = 0, recUnknown = 0
+  for (const r of rows) {
+    sell += cents(Number(r.totalSellIdr))
+    if (r.totalCostIdr != null) cost += cents(Number(r.totalCostIdr))
+    if (r.itemType === 'booking') continue // diskon/biaya tambahan tingkat pesanan: bukan modal, bukan rekomendasi
+    if (r.totalCostIdr == null && r.lineKey !== 'penyesuaian') costUnknown++
+    if (r.recommendedTotalIdr != null) rec += cents(Number(r.recommendedTotalIdr))
+    else if (r.mode === 'auto') rec += cents(Number(r.totalSellIdr))
+    else recUnknown++
+  }
+  return { costKnownIdr: cost / 100, costUnknownLines: costUnknown, recommendedIdr: rec / 100, recommendedUnknownLines: recUnknown, sellIdr: sell / 100 }
 }
