@@ -12,7 +12,8 @@ import { prisma } from '@/lib/db'
 import { repriceOwner, setManualSell, getPricePoint, sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
-import { lineFromPoint } from '@/lib/pricing/engine/snapshot'
+import { lineFromPoint, bookingPriceSummary } from '@/lib/pricing/engine/snapshot'
+import { evaluatePricing } from '@/lib/pricing/warnings'
 import { writeBookingItems, type TourPackageResolved } from '@/lib/booking/lineItems'
 import { ItemNotBookableError } from '@/lib/booking/errors'
 import { detectSeason } from '@/lib/utils/season'
@@ -221,6 +222,44 @@ await t('CHECK DB rekomendasi: negatif ditolak kecuali baris penyesuaian; NULL (
   await assert.rejects(() => ins('main', '-1'), /recommended_non_negative|check/i)
   try { await ins('main', 'NULL'); await ins('penyesuaian', '-5'); await ins('komponen:z', '0') } finally {
     await prisma.$executeRawUnsafe(`DELETE FROM price_snapshots WHERE "bookingId" = '${b.id}' AND "itemType" = 'x'`) // baris uji ini tak boleh merusak invarian total = Σ snapshot
+  }
+})
+await t('RINGKASAN pesanan (Fase 8B): hotel otomatis → HPP 2.000.000 · rekomendasi = jual 2.400.000; hotel manual 1.100.000/malam → rekomendasi tetap 2.400.000, jual 2.200.000 (below_recommended); manual 900.000/malam → jual 1.800.000 < HPP (below_cost)', async () => {
+  const h = await newSchedule(1_000_000)
+  const stay = () => book([{ itemType: 'hotel', hotelRoomScheduleId: h.schedule.id, checkIn: '2090-06-01', checkOut: '2090-06-03', nights: 2, numRooms: 1 }])
+  const a = await stay()
+  assert.deepEqual(await bookingPriceSummary(prisma, a.id), { costKnownIdr: 2_000_000, costUnknownLines: 0, recommendedIdr: 2_400_000, recommendedUnknownLines: 0, sellIdr: 2_400_000 })
+  await setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 1_100_000, note: 'promo', byUserId: who })
+  const b = await stay()
+  const sum2 = await bookingPriceSummary(prisma, b.id)
+  assert.deepEqual(sum2, { costKnownIdr: 2_000_000, costUnknownLines: 0, recommendedIdr: 2_400_000, recommendedUnknownLines: 0, sellIdr: 2_200_000 })
+  assert.equal(evaluatePricing(sum2).level, 'below_recommended')
+  await setManualSell({ ownerType: 'hotel', ownerId: h.schedule.id, sellIdr: 900_000, note: 'obral', byUserId: who })
+  const sum3 = await bookingPriceSummary(prisma, (await stay()).id)
+  assert.deepEqual([sum3.sellIdr, sum3.recommendedIdr, evaluatePricing(sum3).level, evaluatePricing(sum3).lossIdr], [1_800_000, 2_400_000, 'below_cost', 200_000])
+})
+await t('RINGKASAN: paket Haji bertitik manual → baris selisih `penyesuaian` BUKAN "tanpa modal" dan tak menambah rekomendasi (HPP 6.180.000 · rek 7.500.000 · jual 8.100.000, tak ada peringatan)', async () => {
+  await setManualSell({ ownerType: 'haji', ownerId: haji.id, sellIdr: 2_700_000, byUserId: who })
+  try {
+    const b = await book([{ itemType: 'haji', hajiProductId: haji.id, numPersons: 3 }])
+    const s = await bookingPriceSummary(prisma, b.id)
+    assert.deepEqual(s, { costKnownIdr: 6_180_000, costUnknownLines: 0, recommendedIdr: 7_500_000, recommendedUnknownLines: 0, sellIdr: 8_100_000 })
+    assert.equal(evaluatePricing(s).level, 'ok')
+  } finally {
+    await prisma.pricePoint.updateMany({ where: { ownerType: 'haji', ownerId: haji.id }, data: { manualSellIdr: null, manualBy: null, manualAt: null, manualNote: null, sellIdr: 2_500_000 } })
+  }
+})
+await t('RINGKASAN: katering manual-only → 1 baris tanpa modal (HPP tak lengkap), rekomendasi = jual; baris LAMA (rekomendasi NULL): otomatis dihitung = jualnya, manual = tak diketahui (tak ditebak); penyesuaian total pesanan tak ikut', async () => {
+  const b = await book([{ itemType: 'catering', cateringOptionId: catering.id, startDate: '2090-06-01', endDate: '2090-06-04', numDays: 3, numPeople: 5 }])
+  assert.deepEqual(await bookingPriceSummary(prisma, b.id), { costKnownIdr: 0, costUnknownLines: 1, recommendedIdr: 2_250_000, recommendedUnknownLines: 0, sellIdr: 2_250_000 })
+  const ins = (key: string, type: string, mode: string, sell: number, cost: string, lineKey = 'main') => prisma.$executeRawUnsafe(`INSERT INTO price_snapshots (id, "bookingId", "itemType", "itemId", "lineKey", "itemLabel", "itemQty", description, qty, unit, "unitSellIdr", "totalSellIdr", "unitCostIdr", "totalCostIdr", "recommendedTotalIdr", mode) VALUES ('${tag}-sm${key}', '${b.id}', '${type}', '${tag}-sm${key}', '${lineKey}', 'L', 1, 'D', 1, 'item', ${sell}, ${sell}, ${cost}, ${cost}, NULL, '${mode}')`)
+  try {
+    await ins('a', 'x', 'auto', 100_000, '60000')   // lama otomatis: rekomendasi = jual
+    await ins('m', 'y', 'manual', 50_000, 'NULL')   // lama manual: tak diketahui; tanpa modal
+    await ins('b', 'booking', 'manual', -30_000, 'NULL', 'penyesuaian') // penyesuaian total pesanan: bukan modal/rekomendasi
+    assert.deepEqual(await bookingPriceSummary(prisma, b.id), { costKnownIdr: 60_000, costUnknownLines: 2, recommendedIdr: 2_350_000, recommendedUnknownLines: 1, sellIdr: 2_370_000 })
+  } finally {
+    await prisma.$executeRawUnsafe(`DELETE FROM price_snapshots WHERE "bookingId" = '${b.id}' AND "itemType" IN ('x', 'y', 'booking')`)
   }
 })
 await t('Haji belum berharga (titik 0 / tak ada) → ItemNotBookableError; tak ada yang tertulis', async () => {
