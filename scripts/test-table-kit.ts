@@ -220,10 +220,10 @@ t('PENJAGA SUMBER (katalog, Fase 3): halaman memakai CatalogList + CatalogAction
 
 const PUBLIC_PAGES = ['app/[locale]/(public)/flight/page.tsx', 'app/[locale]/(public)/hotels/[id]/page.tsx', 'app/[locale]/(pilgrim)/dashboard/page.tsx']
 
-t('PENJAGA SUMBER (Fase 4): satu-satunya <table> adalah DataTable bersama (+ prototipe /campaigns yang terdaftar sebagai pengecualian); halaman publik/jamaah memakai kit BERSAMA; batas admin ↔ jamaah/publik terjaga', () => {
+t('PENJAGA SUMBER (Fase 4): satu-satunya <table> adalah DataTable bersama ; halaman publik/jamaah memakai kit BERSAMA; batas admin ↔ jamaah/publik terjaga', () => {
   const all = [...walk(join(root, 'app')), ...walk(join(root, 'components'))]
   const tables = all.filter(f => /<table|<thead/.test(readFileSync(f, 'utf8'))).map(f => f.slice(root.length + 1)).sort()
-  assert.deepEqual(tables, ['components/campaigns/CampaignTable.tsx', 'components/shared/data-table/DataTable.tsx'], '<table> baru wajib lewat DataTable bersama')
+  assert.deepEqual(tables, ['components/shared/data-table/DataTable.tsx'], '<table> baru wajib lewat DataTable bersama')
   for (const f of PUBLIC_PAGES) {
     const src = readFileSync(join(root, f), 'utf8')
     assert.match(src, /@\/components\/shared\/data-table\/DataTable/, f)
