@@ -5,8 +5,8 @@ export type ComboOption = {
   label: string
   /** Teks pendamping di sisi kanan daftar (kode telepon, harga, kota…). Ikut dicari. */
   hint?: string
-  /** Penanda di depan label (mis. emoji bendera). Tidak ikut dicari. */
-  prefix?: string
+  /** Kode negara ISO 3166-1 alpha-2: bendera SVG di depan label (`Flag`). Tidak ikut dicari (pakai `keywords: kode` bila perlu). */
+  flag?: string
   /** Teks ringkas untuk kotak terpilih bila label terlalu panjang (mis. "+62"). Bawaan: label. */
   short?: string
   /** Kata kunci tambahan yang ikut dicari tetapi tidak tampil (mis. kode ISO). */

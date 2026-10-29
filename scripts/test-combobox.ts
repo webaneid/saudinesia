@@ -6,6 +6,10 @@ import { join } from 'node:path'
 import { matchOptions, normalizeSearch, type ComboOption } from '@/lib/ui/combobox'
 import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
 import { COUNTRIES } from '@/lib/constants/countries'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { existsSync } from 'node:fs'
+import { Flag } from '@/components/shared/Flag'
 
 let failed = 0
 function t(name: string, fn: () => void) {
@@ -43,12 +47,12 @@ t('matchOptions (tabel nilai): kosong = semua urutan asal; diawali > awal kata >
   assert.deepEqual(ids('JAWA  '), ['a', 'b', 'c'], 'tak peka huruf, spasi pinggir diabaikan')
 })
 
-t('matchOptions: kode panggilan ("+966", "966", "96") dan kode ISO ikut dicari; tanda "+" tak mengubah hasil; prefix (bendera) TIDAK dicari', () => {
+t('matchOptions: kode panggilan ("+966", "966", "96") dan kode ISO ikut dicari; tanda "+" tak mengubah hasil; kode bendera (`flag`) TIDAK dicari', () => {
   const list: ComboOption[] = [
-    opt('SA', 'Arab Saudi', { hint: '+966', keywords: 'SA', prefix: '🇸🇦' }),
-    opt('IQ', 'Irak', { hint: '+964', keywords: 'IQ', prefix: '🇮🇶' }),
-    opt('US', 'Amerika Serikat', { hint: '+1', keywords: 'US', prefix: '🇺🇸' }),
-    opt('ID', 'Indonesia', { hint: '+62', keywords: 'ID', prefix: '🇮🇩' }),
+    opt('SA', 'Arab Saudi', { hint: '+966', keywords: 'SA', flag: 'SA' }),
+    opt('IQ', 'Irak', { hint: '+964', keywords: 'IQ', flag: 'IQ' }),
+    opt('US', 'Amerika Serikat', { hint: '+1', keywords: 'US', flag: 'US' }),
+    opt('ID', 'Indonesia', { hint: '+62', keywords: 'ID', flag: 'ID' }),
   ]
   const ids = (q: string) => matchOptions(list, q).map(o => o.id)
   assert.deepEqual(ids('+966'), ['SA'])
@@ -56,13 +60,13 @@ t('matchOptions: kode panggilan ("+966", "966", "96") dan kode ISO ikut dicari; 
   assert.deepEqual(ids('+96'), ['SA', 'IQ'], 'urutan asal untuk skor sama')
   assert.deepEqual(ids('us'), ['US'], 'kode ISO')
   assert.deepEqual(ids('id'), ['ID'], 'kode ISO "ID" (tanpa "Indonesia" yang diawali "in")')
-  assert.deepEqual(ids('🇸🇦'), [], 'penanda visual tidak dicari')
+  assert.deepEqual(matchOptions([opt('X', 'Nama', { flag: 'ZZ' })], 'zz'), [], 'kode bendera tidak dicari kecuali ada di keywords')
   assert.deepEqual(ids('arab'), ['SA'])
 })
 
 t('daftar negara nyata: semua negara punya bendera + kode ISO; "Indonesia" dicari lewat "indo", "62" menemukan Indonesia, "saudi" menemukan Arab Saudi', () => {
   assert.equal(COUNTRY_OPTIONS.length, COUNTRIES.length)
-  assert.ok(COUNTRY_OPTIONS.every(o => o.prefix && o.prefix.length >= 4 && o.keywords === o.id), 'tiap opsi: bendera (dua penunjuk wilayah) + kunci ISO')
+  assert.ok(COUNTRY_OPTIONS.every(o => o.flag === o.id && o.keywords === o.id), 'tiap opsi: kode bendera + kunci ISO')
   assert.equal(matchOptions(COUNTRY_OPTIONS, 'indo')[0]?.id, 'ID')
   assert.equal(matchOptions(COUNTRY_OPTIONS, 'saudi')[0]?.id, 'SA')
   const withDial: ComboOption[] = COUNTRIES.map(c => ({ id: c.code, label: c.name, hint: `+${c.dialCode}`, keywords: c.code }))
@@ -120,6 +124,28 @@ t('Fase 3: kotak cari otomatis hanya untuk daftar > 7 pilihan atau onSearch; enu
     assert.doesNotMatch(src, /CURRENCIES\.map|currencies\.map/, `${f}: tak boleh membuat opsi mata uang sendiri`)
   }
   for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
+})
+
+t('bendera SVG (Windows tak menggambar emoji bendera): tiap negara punya berkas, berkas aman dan kecil, sinkron dengan paket sumber, LICENSE ikut, emoji bendera tak dipakai lagi', () => {
+  const missing = COUNTRIES.filter(c => !existsSync(join(root, `public/flags/${c.code}.svg`))).map(c => c.code)
+  assert.deepEqual(missing, [], 'jalankan `bun scripts/sync-flags.ts`')
+  for (const c of COUNTRIES) {
+    const svg = read(`public/flags/${c.code}.svg`)
+    assert.match(svg, /^<svg[^>]*xmlns="http:\/\/www\.w3\.org\/2000\/svg"/, c.code)
+    assert.doesNotMatch(svg, /<script|<foreignObject|\son[a-z]+\s*=|javascript:|<image|<use[^>]*href=["']https?:|<style/i, `${c.code}: SVG tak boleh memuat skrip/sumber luar`)
+    assert.ok(svg.length < 20_000, `${c.code}: terlalu besar (${svg.length})`)
+    assert.equal(svg, read(`node_modules/country-flag-icons/3x2/${c.code}.svg`), `${c.code}: tak sinkron dengan paket (sync ulang)`)
+  }
+  assert.match(read('public/flags/LICENSE'), /MIT/)
+  const html = renderToStaticMarkup(createElement(Flag, { code: 'id' }))
+  assert.match(html, /<img src="\/flags\/ID\.svg" alt="" aria-hidden="true"[^>]*loading="lazy"/, 'dekoratif, huruf besar, malas-muat')
+  assert.ok(!existsSync(join(root, 'lib/utils/flag.ts')), 'util emoji bendera sudah dihapus')
+  const emojiFlag = /[\u{1F1E6}-\u{1F1FF}]{2}/u
+  const offenders = walk('app').concat(walk('components'), walk('lib')).filter(f => emojiFlag.test(read(f)))
+  assert.deepEqual(offenders, [], 'emoji bendera tak boleh dipakai (Windows menampilkannya sebagai huruf)')
+  const comp2 = read('components/shared/AutocompleteSelect.tsx')
+  assert.match(comp2, /<Flag code=\{selected\.flag\} \/>/)
+  assert.match(comp2, /<Flag code=\{o\.flag\} \/>/)
 })
 
 if (failed) { console.log(`\n${failed} GAGAL`); process.exit(1) }

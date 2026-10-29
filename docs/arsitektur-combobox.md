@@ -31,7 +31,7 @@ Dropdown pencarian di formulir WAJIB lewat `AutocompleteSelect` (atau pembungkus
 
 ## 4. Keterbatasan yang diketahui
 
-- Bendera memakai emoji regional-indicator: Windows tidak menggambarnya (tampil dua huruf). Mengganti dengan gambar bendera = ketergantungan/aset baru — belum diputuskan.
+- (Bendera emoji dihapus — lihat §4d.)
 - Baris `VendorPicker` di panel Komponen Biaya sempit (tombol "Vendor Baru" + mata uang berbagi baris) sehingga kotak vendor terpotong ("Pilih ve…"); daftarnya sendiri sudah baik.
 
 ## 4b. Fase 2 (as-built, 2026-10-30)
@@ -50,6 +50,14 @@ Dropdown pencarian di formulir WAJIB lewat `AutocompleteSelect` (atau pembungkus
 - **Baris Vendor + Mata uang** (`VendorCurrencyField`, `VendorField` di tier visa) kini bertumpuk: vendor satu baris penuh (tombol "Vendor Baru" tak lagi menyempitkan kotak sampai "Pilih ve…"), mata uang di bawahnya.
 - **Aturan keras:** `scripts/test-combobox.ts` menolak `<select>` apa pun di `app/` dan `components/` (kecuali implementasi combobox). Kelas CSS `admin-select`/`admin-select-xs` yang tak lagi dipakai dihapus.
 - **Bukti browser:** filter publik Dari (daftar tanpa kotak cari, fokus di daftar, ↓+Enter memilih), kolom Role di tabel Pengguna (muat di baris, sorotan awal = Admin yang terpilih; tidak diubah), kotak Komponen Biaya (vendor satu baris penuh, mata uang membuka ke atas dengan IDR/SAR/USD/EUR + nama).
+
+## 4d. Bendera SVG (as-built, 2026-10-30)
+
+- **Masalah:** Windows (Segoe UI Emoji) tidak punya glyph bendera — emoji 🇮🇩 tampil sebagai dua huruf "ID". Keputusan pemilik: pakai gambar.
+- **Aset:** 195 SVG rasio 3:2 (±1–3 KB masing-masing) di `public/flags/<ISO>.svg` + `LICENSE` (MIT, `country-flag-icons` karya catamphetamine). Disalin oleh `bun scripts/sync-flags.ts` dari paket yang dipasang sebagai **devDependency** — produksi tidak bergantung pada paket (hanya berkas statis; `Dockerfile` sudah menyalin `public/`, matcher middleware melewatkan jalur bertitik). Script gagal keras bila ada negara tanpa bendera; jalankan ulang bila `COUNTRIES` berubah.
+- **Komponen:** `components/shared/Flag.tsx` (`<img>` dekoratif `alt=""`, `loading="lazy"`, 20×14 px bersudut tipis + garis tipis agar bendera putih tetap terlihat). `ComboOption.prefix` (string emoji) diganti `flag` (kode ISO); `AutocompleteSelect` merender `Flag` di kotak terpilih dan di tiap pilihan. `lib/utils/flag.ts` dihapus.
+- **Penjaga (`test-combobox`):** tiap negara punya berkas; SVG aman (tanpa `<script>`, `<foreignObject>`, `on*=`, `<image>`/`<use>` ke luar, `<style>`) dan < 20 KB; identik dengan paket sumber (tanpa drift); `LICENSE` ada; `Flag` dirender sebagai `<img … alt="" aria-hidden … loading="lazy">`; tak ada emoji bendera di `app/`, `components/`, `lib/`.
+- **Bukti:** `/flags/ID.svg` → 200 `image/svg+xml` di dev; daftar kode negara di formulir Tambah Pelanggan menampilkan bendera sebagai gambar (macOS — pada Windows hasilnya sama karena bukan font). Belum diuji di mesin Windows sungguhan.
 
 ## 5. Audit modul lain — hasil
 

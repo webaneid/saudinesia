@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useSta
 import { createPortal } from 'react-dom'
 import { Check, ChevronsUpDown, Loader2, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Flag } from '@/components/shared/Flag'
 import { matchOptions, type ComboOption } from '@/lib/ui/combobox'
 
 export type AutocompleteOption = ComboOption
@@ -159,7 +160,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
           disabled && 'cursor-not-allowed opacity-50',
         )}
       >
-        {selected?.prefix && <span aria-hidden className="shrink-0 text-base leading-none">{selected.prefix}</span>}
+        {selected?.flag && <Flag code={selected.flag} />}
         <span className={cn('min-w-0 flex-1 truncate', !selected && 'text-muted-foreground')}>{selected ? (selected.short ?? selected.label) : placeholder}</span>
         {loading && <Loader2 aria-hidden className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
         {showClear && (
@@ -207,7 +208,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
                 onMouseEnter={() => setCursor(i)} onMouseDown={e => { e.preventDefault(); choose(o) }}
                 className={cn('flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm', i === cursor && 'bg-accent', o.id === value && 'font-medium text-primary')}
               >
-                {o.prefix && <span aria-hidden className="shrink-0 text-base leading-none">{o.prefix}</span>}
+                {o.flag && <Flag code={o.flag} />}
                 <span className="min-w-0 flex-1 truncate">{o.label}</span>
                 {o.hint && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{o.hint}</span>}
                 <Check aria-hidden className={cn('size-4 shrink-0', o.id === value ? 'opacity-100' : 'opacity-0')} />
