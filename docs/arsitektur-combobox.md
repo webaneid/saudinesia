@@ -1,6 +1,6 @@
 # Arsitektur — Combobox (dropdown pencarian) seragam
 
-> **Status: Fase 1 SELESAI (2026-10-30).** Fase 2–3 menunggu keputusan pemilik (§5). Pemicu: pemilik menunjukkan daftar kode negara di formulir Tambah Pelanggan yang "buruk sekali" dan meminta komponen sejenis dicek dan dibuat bagus dan elegan.
+> **Status: Fase 1 dan Fase 2 SELESAI (2026-10-30).** Fase 3 menunggu (§5). Pemicu: pemilik menunjukkan daftar kode negara di formulir Tambah Pelanggan yang "buruk sekali" dan meminta komponen sejenis dicek dan dibuat bagus dan elegan.
 
 ## 1. Temuan audit (kode aktual, 2026-10-30)
 
@@ -32,14 +32,21 @@ Dropdown pencarian di formulir WAJIB lewat `AutocompleteSelect` (atau pembungkus
 ## 4. Keterbatasan yang diketahui
 
 - Bendera memakai emoji regional-indicator: Windows tidak menggambarnya (tampil dua huruf). Mengganti dengan gambar bendera = ketergantungan/aset baru — belum diputuskan.
-- Panel `absolute` (bukan portal): terpotong bila nenek-moyangnya `overflow: hidden`. Belum ada kasus; portal akan memutus ruang lingkup `--primary` admin (`.admin-canvas`).
 - Baris `VendorPicker` di panel Komponen Biaya sempit (tombol "Vendor Baru" + mata uang berbagi baris) sehingga kotak vendor terpotong ("Pilih ve…"); daftarnya sendiri sudah baik.
 
-## 5. Audit modul lain — rencana (menunggu keputusan)
+## 4b. Fase 2 (as-built, 2026-10-30)
+
+- **Portal.** Fase 1 memasang daftar `absolute` di dalam kotak; di editor Paket (kotak `MetaBox` ber-`overflow-hidden`) daftar terpotong tepi kartu — ditemukan saat verifikasi browser. Daftar kini dipasang lewat `createPortal` ke `document.body` dengan `position: fixed`, dihitung dari kotak terpilih (`reposition`: buka ke atas bila ruang bawah sempit, tinggi daftar menyesuaikan sisa ruang, bergeser ke kiri bila meluap, ikut saat gulir/ubah ukuran). Warna merek admin ikut lewat kelas `brand-scope` (variabel `--primary`/`--ring` dipisah dari `.admin-canvas`). Fokus ke kotak cari menunggu daftar terpasang (sebelum diposisikan ia `visibility: hidden` dan tak bisa difokuskan — Enter sempat menutup daftar tanpa memilih).
+- **`components/shared/ChoiceSelect.tsx`**: pengganti `<select>` untuk daftar data — nilai string ('' = kosong) seperti `<select>`, jadi state halaman tak berubah; `AutocompleteSelect` mendapat `ariaLabel`.
+- **22 `<select>` dimigrasi**: Paket Umroh (hotel Makkah/Madinah included + opsi, kendaraan, trip, visa included + opsi, penerbangan, rute tiket, katering included + opsi — 12), Paket Ziarah (situs, kendaraan, trip, hotel included + opsi — 5), kendaraan di trip transport, rute jadwal penerbangan (baru + edit), roster muthowif, baris rencana pengeluaran. Harga/kota/kapasitas pindah ke `hint` di kanan dan ikut dicari. Perilaku `onChange` tak berubah (mis. pilihan visa kini terkendali dari `includedVisaProductId` — dulu `defaultValue=""` sehingga tak menampilkan yang terkunci).
+- **Penjaga:** `test-combobox` menemukan sendiri `<select>` polos berpilihan kosong ("— pilih —", `value=""`) di seluruh `app/`+`components/` (satu pengecualian tercatat: filter publik `TransportSearch`, Fase 3).
+- **Bukti browser:** pemilih rute penerbangan (daftar terbaca, Enter memilih, fokus di kotak cari), pilihan hotel di kotak Paket tak lagi terpotong, daftar provinsi pada viewport 420 px tinggi membuka ke atas dengan tinggi menyesuaikan. Dev DB tak punya jadwal hotel/kendaraan, sehingga daftar itu hanya dibuktikan "Tidak ada hasil"; format opsi dibuktikan tipe + tes sumber.
+
+## 5. Audit modul lain — rencana (Fase 3 menunggu)
 
 `<select>` polos: **49 pemakaian di 27 berkas**, dua jenis:
 
-- **Daftar data yang bertumbuh (±25)** — hotel+tipe kamar (×6 di `packages/[id]`, `tour-packages/[id]`), trip/kendaraan, situs wisata, produk visa, jadwal penerbangan/rute, menu katering, roster muthowif (`MuthowifAssignPanel`), baris rencana (`CostActualsPanel`). Daftar panjang tanpa pencarian, label gabungan ("Hotel — Tipe (Kota) — Rp/mlm"). → **Fase 2:** `AutocompleteSelect` dengan `hint` (harga/kota di kanan).
+- **Daftar data yang bertumbuh (±25) — SELESAI Fase 2 (§4b)** — hotel+tipe kamar (×6 di `packages/[id]`, `tour-packages/[id]`), trip/kendaraan, situs wisata, produk visa, jadwal penerbangan/rute, menu katering, roster muthowif (`MuthowifAssignPanel`), baris rencana (`CostActualsPanel`). Daftar panjang tanpa pencarian, label gabungan ("Hotel — Tipe (Kota) — Rp/mlm"). → **Fase 2:** `AutocompleteSelect` dengan `hint` (harga/kota di kanan).
 - **Enum pendek (±24)** — kota, musim, role, board type, menu, jenis haji, tipe kendaraan, mata uang (7 tempat), serta `TransportSearch`/`TransportCheckoutForm`/`UploadModal` di sisi publik/jamaah. Native `<select>` wajar untuk ≤ 7 pilihan, tetapi tampilannya beda dari combobox. → **Fase 3:** mode tanpa kotak cari (`searchable` otomatis mati bila ≤ 7 pilihan) supaya tampilan seragam; termasuk merapikan baris `VendorPicker`/`VendorCurrencyField`.
 
 Fase 2 dan 3 mengubah ±27 halaman editor produk; dikerjakan terpisah dan bertahap (tiap fase: tsc, build, tes, browser, PR), sesuai arahan pemilik "step by step".

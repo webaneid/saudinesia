@@ -13,6 +13,7 @@ import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -472,10 +473,8 @@ export default function PackageBuilderPage({ params }: Props) {
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMakkahSchedule.period.hotel.name} — {pkg.includedHotelMakkahSchedule.roomType.name}</span> — {pkg.includedHotelMakkahNights} malam × {pkg.includedHotelMakkahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMakkahPrice))} = {rupiah(pkg.includedHotelMakkahNights * pkg.includedHotelMakkahNumRooms * Number(pkg.includedHotelMakkahPrice))}</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
-              <select className="admin-select md:col-span-2" value={hmForm.scheduleId} onChange={e => setHmForm(f => ({ ...f, scheduleId: e.target.value }))}>
-                <option value="">— pilih hotel + tipe kamar —</option>
-                {makkahSchedules.map(s => <option key={s.id} value={s.id}>{s.hotelName} — {s.roomTypeName} ({rupiah(s.price)}/mlm)</option>)}
-              </select>
+              <ChoiceSelect className="md:col-span-2" placeholder="— pilih hotel + tipe kamar —" value={hmForm.scheduleId} onChange={v => setHmForm(f => ({ ...f, scheduleId: v }))}
+                options={makkahSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Malam" value={hmForm.nights} onChange={e => setHmForm(f => ({ ...f, nights: e.target.value }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Kamar" value={hmForm.numRooms} onChange={e => setHmForm(f => ({ ...f, numRooms: e.target.value }))} />
             </div>
@@ -499,10 +498,8 @@ export default function PackageBuilderPage({ params }: Props) {
               {pkg.hotelOptions.filter(o => o.slot === 'makkah').length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi hotel Makkah ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
-              <select className="admin-select flex-1" value={addHmOption.scheduleId} onChange={e => setAddHmOption(f => ({ ...f, scheduleId: e.target.value }))}>
-                <option value="">— pilih hotel + tipe kamar untuk ditawarkan —</option>
-                {availableHmOptionSchedules.map(s => <option key={s.id} value={s.id}>{s.hotelName} — {s.roomTypeName} ({rupiah(s.price)}/mlm)</option>)}
-              </select>
+              <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih hotel + tipe kamar untuk ditawarkan —" value={addHmOption.scheduleId} onChange={v => setAddHmOption(f => ({ ...f, scheduleId: v }))}
+                options={availableHmOptionSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp w-24" type="number" min={1} placeholder="Malam" value={addHmOption.nights} onChange={e => setAddHmOption(f => ({ ...f, nights: e.target.value }))} />
               <button onClick={() => handleAddHotelOption('makkah')} disabled={!addHmOption.scheduleId} className="admin-btn-sm disabled:opacity-50 shrink-0 flex items-center gap-1">
                 <Plus className="h-3.5 w-3.5" /> Tambah
@@ -523,10 +520,8 @@ export default function PackageBuilderPage({ params }: Props) {
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMadinahSchedule.period.hotel.name} — {pkg.includedHotelMadinahSchedule.roomType.name}</span> — {pkg.includedHotelMadinahNights} malam × {pkg.includedHotelMadinahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMadinahPrice))} = {rupiah(pkg.includedHotelMadinahNights * pkg.includedHotelMadinahNumRooms * Number(pkg.includedHotelMadinahPrice))}</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
-              <select className="admin-select md:col-span-2" value={hdForm.scheduleId} onChange={e => setHdForm(f => ({ ...f, scheduleId: e.target.value }))}>
-                <option value="">— pilih hotel + tipe kamar —</option>
-                {madinahSchedules.map(s => <option key={s.id} value={s.id}>{s.hotelName} — {s.roomTypeName} ({rupiah(s.price)}/mlm)</option>)}
-              </select>
+              <ChoiceSelect className="md:col-span-2" placeholder="— pilih hotel + tipe kamar —" value={hdForm.scheduleId} onChange={v => setHdForm(f => ({ ...f, scheduleId: v }))}
+                options={madinahSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Malam" value={hdForm.nights} onChange={e => setHdForm(f => ({ ...f, nights: e.target.value }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Kamar" value={hdForm.numRooms} onChange={e => setHdForm(f => ({ ...f, numRooms: e.target.value }))} />
             </div>
@@ -550,10 +545,8 @@ export default function PackageBuilderPage({ params }: Props) {
               {pkg.hotelOptions.filter(o => o.slot === 'madinah').length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi hotel Madinah ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
-              <select className="admin-select flex-1" value={addHdOption.scheduleId} onChange={e => setAddHdOption(f => ({ ...f, scheduleId: e.target.value }))}>
-                <option value="">— pilih hotel + tipe kamar untuk ditawarkan —</option>
-                {availableHdOptionSchedules.map(s => <option key={s.id} value={s.id}>{s.hotelName} — {s.roomTypeName} ({rupiah(s.price)}/mlm)</option>)}
-              </select>
+              <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih hotel + tipe kamar untuk ditawarkan —" value={addHdOption.scheduleId} onChange={v => setAddHdOption(f => ({ ...f, scheduleId: v }))}
+                options={availableHdOptionSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp w-24" type="number" min={1} placeholder="Malam" value={addHdOption.nights} onChange={e => setAddHdOption(f => ({ ...f, nights: e.target.value }))} />
               <button onClick={() => handleAddHotelOption('madinah')} disabled={!addHdOption.scheduleId} className="admin-btn-sm disabled:opacity-50 shrink-0 flex items-center gap-1">
                 <Plus className="h-3.5 w-3.5" /> Tambah
@@ -570,12 +563,8 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.transportMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga kendaraan ini MASUK ke Harga Jual Paket — pilgrim tidak memilih kendaraan saat booking.</p>
-            <select className="admin-select" value={includedPricingChoice} onChange={e => handleSetIncludedPricing(e.target.value)}>
-              <option value="">— pilih kendaraan —</option>
-              {allPricingFlat.map(p => (
-                <option key={p.id} value={`${p.tripId}::${p.id}`}>{p.tripName} — {p.vehicle.name} ({rupiah(Number(p.price))})</option>
-              ))}
-            </select>
+            <ChoiceSelect placeholder="— pilih kendaraan —" value={includedPricingChoice} onChange={handleSetIncludedPricing}
+              options={allPricingFlat.map(p => ({ id: `${p.tripId}::${p.id}`, label: `${p.tripName} — ${p.vehicle.name}`, hint: rupiah(Number(p.price)) }))} />
             {pkg.includedTransportPricing && pkg.includedTransportPrice != null && (
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedTransportPricing.vehicle.name}</span> — {rupiah(Number(pkg.includedTransportPrice))} (harga referensi awal, bisa diedit lewat Komponen Biaya kalau perlu penyesuaian)</p>
             )}
@@ -585,10 +574,8 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.transportMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga kendaraan TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
-            <select className="admin-select" value={userChoiceTripId} onChange={e => handleSetUserChoiceTrip(e.target.value)}>
-              <option value="">— pilih trip sumber opsi kendaraan —</option>
-              {allTrips.filter(t => t.isActive).map(t => <option key={t.id} value={t.id}>{t.name} ({t.origin} → {t.destination})</option>)}
-            </select>
+            <ChoiceSelect placeholder="— pilih trip sumber opsi kendaraan —" value={userChoiceTripId} onChange={handleSetUserChoiceTrip}
+              options={allTrips.filter(t => t.isActive).map(t => ({ id: t.id, label: t.name, hint: `${t.origin} → ${t.destination}` }))} />
           </div>
         )}
       </MetaBox>
@@ -616,10 +603,8 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.visaMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga visa ini MASUK ke Harga Jual Paket.</p>
-            <select className="admin-select" defaultValue="" onChange={e => handleSetIncludedVisa(e.target.value)}>
-              <option value="">— pilih produk visa —</option>
-              {allVisaProducts.map(v => <option key={v.id} value={v.id}>{v.name} ({v.visaType}) — {rupiah(Number(v.price))}</option>)}
-            </select>
+            <ChoiceSelect placeholder="— pilih produk visa —" value={pkg.includedVisaProductId ?? ''} onChange={handleSetIncludedVisa} clearable={false}
+              options={allVisaProducts.map(v => ({ id: v.id, label: `${v.name} (${v.visaType})`, hint: rupiah(Number(v.price)) }))} />
             {pkg.includedVisaProduct && pkg.includedVisaPrice != null && (
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedVisaProduct.name}</span> — {rupiah(Number(pkg.includedVisaPrice))}</p>
             )}
@@ -642,10 +627,8 @@ export default function PackageBuilderPage({ params }: Props) {
               {pkg.visaOptions.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi visa ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
-              <select className="admin-select flex-1" value={addVisaOptionId} onChange={e => setAddVisaOptionId(e.target.value)}>
-                <option value="">— pilih produk visa untuk ditawarkan —</option>
-                {availableVisaOptions.map(v => <option key={v.id} value={v.id}>{v.name} ({v.visaType})</option>)}
-              </select>
+              <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih produk visa untuk ditawarkan —" value={addVisaOptionId} onChange={setAddVisaOptionId}
+                options={availableVisaOptions.map(v => ({ id: v.id, label: v.name, hint: v.visaType }))} />
               <button onClick={handleAddVisaOption} disabled={!addVisaOptionId} className="admin-btn-sm disabled:opacity-50 shrink-0 flex items-center gap-1">
                 <Plus className="h-3.5 w-3.5" /> Tambah
               </button>
@@ -661,12 +644,8 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.flightMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga tiket ini MASUK ke Harga Jual Paket.</p>
-            <select className="admin-select" value={includedFlightChoice} onChange={e => handleSetIncludedFlight(e.target.value)}>
-              <option value="">— pilih jadwal penerbangan —</option>
-              {allFlightSchedules.map(s => (
-                <option key={s.id} value={`${s.route.id}::${s.id}`}>{s.route.origin} → {s.route.destination} ({rupiah(Number(s.price))})</option>
-              ))}
-            </select>
+            <ChoiceSelect placeholder="— pilih jadwal penerbangan —" value={includedFlightChoice} onChange={handleSetIncludedFlight}
+              options={allFlightSchedules.map(s => ({ id: `${s.route.id}::${s.id}`, label: `${s.route.origin} → ${s.route.destination}`, hint: rupiah(Number(s.price)) }))} />
             {pkg.includedFlightSchedule && pkg.includedFlightPrice != null && (
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedFlightSchedule.route.origin} → {pkg.includedFlightSchedule.route.destination}</span> — {rupiah(Number(pkg.includedFlightPrice))}</p>
             )}
@@ -676,10 +655,8 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.flightMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga tiket TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
-            <select className="admin-select" value={userChoiceFlightRouteId} onChange={e => handleSetUserChoiceFlightRoute(e.target.value)}>
-              <option value="">— pilih rute sumber opsi tiket —</option>
-              {uniqueFlightRoutes.map(r => <option key={r.id} value={r.id}>{r.origin} → {r.destination}</option>)}
-            </select>
+            <ChoiceSelect placeholder="— pilih rute sumber opsi tiket —" value={userChoiceFlightRouteId} onChange={handleSetUserChoiceFlightRoute}
+              options={uniqueFlightRoutes.map(r => ({ id: r.id, label: `${r.origin} → ${r.destination}` }))} />
           </div>
         )}
       </MetaBox>
@@ -695,10 +672,8 @@ export default function PackageBuilderPage({ params }: Props) {
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedCateringOption.name}</span> — {pkg.includedCateringNumPeople} orang × {pkg.includedCateringNumDays} hari = {rupiah(Number(pkg.includedCateringPrice))}</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
-              <select className="admin-select md:col-span-2" value={cateringForm.optionId} onChange={e => setCateringForm(f => ({ ...f, optionId: e.target.value }))}>
-                <option value="">— pilih menu katering —</option>
-                {allCateringOptions.map(c => <option key={c.id} value={c.id}>{c.name} ({rupiah(Number(c.pricePerPersonRegular))}/orang/hari)</option>)}
-              </select>
+              <ChoiceSelect className="md:col-span-2" placeholder="— pilih menu katering —" value={cateringForm.optionId} onChange={v => setCateringForm(f => ({ ...f, optionId: v }))}
+                options={allCateringOptions.map(c => ({ id: c.id, label: c.name, hint: `${rupiah(Number(c.pricePerPersonRegular))}/orang/hari` }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Orang" value={cateringForm.numPeople} onChange={e => setCateringForm(f => ({ ...f, numPeople: e.target.value }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Hari" value={cateringForm.numDays} onChange={e => setCateringForm(f => ({ ...f, numDays: e.target.value }))} />
             </div>
@@ -722,10 +697,8 @@ export default function PackageBuilderPage({ params }: Props) {
               {pkg.cateringOptions.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi katering ditawarkan.</p>}
             </div>
             <div className="grid md:grid-cols-4 gap-2">
-              <select className="admin-select md:col-span-2" value={addCateringOption.optionId} onChange={e => setAddCateringOption(f => ({ ...f, optionId: e.target.value }))}>
-                <option value="">— pilih menu untuk ditawarkan —</option>
-                {availableCateringOptions.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
+              <ChoiceSelect className="md:col-span-2" placeholder="— pilih menu untuk ditawarkan —" value={addCateringOption.optionId} onChange={v => setAddCateringOption(f => ({ ...f, optionId: v }))}
+                options={availableCateringOptions.map(c => ({ id: c.id, label: c.name }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Orang" value={addCateringOption.numPeople} onChange={e => setAddCateringOption(f => ({ ...f, numPeople: e.target.value }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Hari" value={addCateringOption.numDays} onChange={e => setAddCateringOption(f => ({ ...f, numDays: e.target.value }))} />
             </div>

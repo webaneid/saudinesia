@@ -54,8 +54,10 @@
   }
 
   /* Komponen bersama (AddressPicker, ContactPicker, AutocompleteSelect) memakai token shadcn `primary`/`ring`
-     (biru). Di dalam area admin diarahkan ke hijau brand (#04543e); pilgrim & publik tetap biru. */
-  .admin-canvas {
+     (biru). Di dalam area admin diarahkan ke hijau brand (#04543e); pilgrim & publik tetap biru. `brand-scope` = hanya variabel itu, untuk
+     elemen yang dipasang lewat portal di luar `.admin-canvas` (daftar AutocompleteSelect). */
+  .admin-canvas,
+  .brand-scope {
     --primary: 164 91% 17%;
     --ring: 164 91% 17%;
   }

@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -160,9 +161,8 @@ export default function FlightEditPage({ params }: Props) {
         <div className="grid md:grid-cols-2 gap-3">
           <div className="md:col-span-2">
             <p className="text-xs text-admin-muted mb-1">Rute</p>
-            <select className="admin-inp" value={form.routeId} onChange={e => setForm(f => ({ ...f, routeId: e.target.value }))}>
-              {routes.map(r => <option key={r.id} value={r.id}>{r.origin} → {r.destination}</option>)}
-            </select>
+            <ChoiceSelect placeholder="Pilih rute…" value={form.routeId} onChange={v => setForm(f => ({ ...f, routeId: v }))} clearable={false}
+              options={routes.map(r => ({ id: r.id, label: `${r.origin} → ${r.destination}` }))} />
             <p className="text-[11px] text-admin-muted/70 mt-1">Rute baru dikelola dari halaman daftar jadwal.</p>
           </div>
           <div>

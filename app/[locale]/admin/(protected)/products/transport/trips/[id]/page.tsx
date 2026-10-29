@@ -7,6 +7,7 @@ import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -303,12 +304,8 @@ export default function TripEditPage({ params }: Props) {
           </div>
           {availableVehicles.length > 0 && (
             <div className="flex items-center gap-2">
-              <select className="admin-select text-sm" value={addVehicleId} onChange={e => setAddVehicleId(e.target.value)}>
-                <option value="">— pilih kendaraan —</option>
-                {availableVehicles.map(v => (
-                  <option key={v.id} value={v.id}>{v.name} ({v.capacity} org)</option>
-                ))}
-              </select>
+              <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih kendaraan —" value={addVehicleId} onChange={setAddVehicleId}
+                options={availableVehicles.map(v => ({ id: v.id, label: v.name, hint: `${v.capacity} org` }))} />
               <button onClick={handleAddPricing} disabled={!addVehicleId || addingPricing}
                 className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
                 <Plus className="h-3.5 w-3.5" />

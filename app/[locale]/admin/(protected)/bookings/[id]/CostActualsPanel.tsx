@@ -5,6 +5,7 @@ import { Wallet, Undo2 } from 'lucide-react'
 import { ActionButton, RowActions } from '@/components/admin/data-table/RowActions'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 // Pengeluaran aktual ke vendor vs modal rencana (docs/arsitektur-harga-terpadu.md §20, 7C). Catatan penyebab selisih wajib bila lunas ≠ rencana atau sudah melebihi rencana
 // (server yang memutuskan; pesan galatnya ditampilkan apa adanya). "Hapus" = BATALKAN dengan alasan (riwayat tetap).
@@ -118,10 +119,8 @@ export function CostActualsPanel({ bookingId }: { bookingId: string }) {
       <div className="space-y-2 border-t border-admin-line pt-3">
         <p className="m-0 text-[12px] font-semibold text-admin-ink">Catat pengeluaran</p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-          <select aria-label="Baris rencana" className="admin-select" value={snapshotId} onChange={e => pick(e.target.value)}>
-            <option value="">Tanpa rujukan baris rencana</option>
-            {data?.lines.map(l => <option key={l.snapshotId} value={l.snapshotId}>{l.label} (rencana {rp(l.planIdr)})</option>)}
-          </select>
+          <ChoiceSelect ariaLabel="Baris rencana" placeholder="Tanpa rujukan baris rencana" value={snapshotId} onChange={pick}
+            options={(data?.lines ?? []).map(l => ({ id: l.snapshotId, label: l.label, hint: `rencana ${rp(l.planIdr)}` }))} />
           <input aria-label="Komponen" className="admin-inp" maxLength={120} placeholder="Untuk apa (komponen)" value={component} onChange={e => setComponent(e.target.value)} />
         </div>
         <VendorPicker value={vendorId} onChange={setVendorId} context="costComponent" label="Vendor yang dibayar" />
