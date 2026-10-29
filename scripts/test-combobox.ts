@@ -71,10 +71,13 @@ t('daftar negara nyata: semua negara punya bendera + kode ISO; "Indonesia" dicar
 })
 
 const comp = read('components/shared/AutocompleteSelect.tsx')
-t('penjaga sumber komponen: latar daftar PADAT (bg-background), tanpa token `popover` yang tak ada di Tailwind, ARIA combobox/listbox, Esc/Tab/panah/Home/End, buka ke atas, rata kanan', () => {
-  assert.match(comp, /bg-background shadow-xl/, 'panel berlatar padat')
+t('penjaga sumber komponen: latar daftar PADAT (bg-background), lewat portal, tanpa token `popover` yang tak ada di Tailwind, ARIA combobox/listbox, Esc/Tab/panah/Home/End, buka ke atas, rata kanan', () => {
+  assert.match(comp, /fixed z-50[^']*bg-background[^']*shadow-xl/, 'panel berlatar padat, fixed di atas segalanya')
+  assert.match(comp, /createPortal\([\s\S]*document\.body/, 'lewat portal: tak terpotong overflow-hidden induk')
+  assert.match(comp, /inAdmin && 'brand-scope'/, 'warna merek admin ikut ke portal')
+  assert.match(read('app/globals.css'), /\.admin-canvas,\s*\.brand-scope \{\s*--primary/, 'brand-scope membawa variabel merek')
   for (const f of walk('app').concat(walk('components'))) assert.doesNotMatch(read(f), /\b(bg|text|border|ring)-popover\b/, `${f}: kelas popover tak didefinisikan → latar transparan`)
-  for (const needle of ['role="combobox"', 'role="listbox"', 'role="option"', 'aria-activedescendant', 'aria-selected', "e.key === 'Escape'", "e.key === 'Tab'", "e.key === 'Home'", "e.key === 'End'", 'scrollIntoView', 'openUp', 'alignRight', 'matchOptions']) assert.ok(comp.includes(needle), needle)
+  for (const needle of ['role="combobox"', 'role="listbox"', 'role="option"', 'aria-activedescendant', 'aria-selected', "e.key === 'Escape'", "e.key === 'Tab'", "e.key === 'Home'", "e.key === 'End'", 'scrollIntoView', 'createPortal', 'reposition', 'if (open && placed) inputRef.current?.focus()', "'scroll'", 'window.innerHeight', 'matchOptions']) assert.ok(comp.includes(needle), needle)
   assert.doesNotMatch(comp, /\.toLowerCase\(\)\.includes/, 'pencarian hanya lewat matchOptions (satu aturan)')
 })
 
@@ -89,6 +92,20 @@ t('satu definisi kode negara telepon: ContactPicker dan kolom telepon manifest m
   }
   assert.ok(!walk('components').concat(walk('app')).some(f => /COUNTRY_CODE_OPTIONS/.test(read(f))), 'tak ada sisa COUNTRY_CODE_OPTIONS')
   for (const f of ['components/shared/AddressPicker.tsx', 'components/admin/vendor/VendorForm.tsx']) assert.match(read(f), /from '@\/lib\/ui\/countryOptions'/, `${f}: opsi negara bersama`)
+})
+
+t('Fase 2: tak ada `<select>` polos berpilihan kosong ("— pilih —", value="") di formulir — daftar data yang bertumbuh memakai ChoiceSelect; pengecualian hanya yang tercatat (Fase 3)', () => {
+  const Fase3 = new Set(['components/shared/TransportSearch.tsx']) // filter publik "Semua …" — menunggu Fase 3
+  const bad: string[] = []
+  for (const f of walk('app').concat(walk('components'))) {
+    if (Fase3.has(f)) continue
+    for (const m of read(f).matchAll(/<select\b[\s\S]*?<\/select>/g)) if (/<option value=(""|\{""\})|—\s*pilih/i.test(m[0])) bad.push(f)
+  }
+  assert.deepEqual([...new Set(bad)], [], 'ganti dengan <ChoiceSelect> (components/shared/ChoiceSelect.tsx)')
+  const mods = ['packages/[id]/page.tsx', 'tour-packages/[id]/page.tsx', 'transport/trips/[id]/page.tsx', 'flight/new/page.tsx', 'flight/[id]/page.tsx']
+  for (const m of mods) assert.match(read(`app/[locale]/admin/(protected)/products/${m}`), /<ChoiceSelect/, m)
+  for (const m of ['MuthowifAssignPanel', 'CostActualsPanel']) assert.match(read(`app/[locale]/admin/(protected)/bookings/[id]/${m}.tsx`), /<ChoiceSelect/, m)
+  assert.match(read('components/shared/ChoiceSelect.tsx'), /value=\{value \|\| null\} onChange=\{id => onChange\(id \?\? ''\)\}/, 'adaptor string ↔ null')
 })
 
 if (failed) { console.log(`\n${failed} GAGAL`); process.exit(1) }

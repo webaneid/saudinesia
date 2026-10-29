@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Check, ChevronsUpDown, Loader2, Search, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { matchOptions, type ComboOption } from '@/lib/ui/combobox'
@@ -20,6 +21,8 @@ type Props = {
   searchPlaceholder?: string
   /** Kelas tambahan untuk kotak terpilih (mis. lebar). */
   className?: string
+  /** Nama aksesibel kotak (bila tak ada label terlihat di dekatnya). */
+  ariaLabel?: string
   // Kalau diisi, komponen TIDAK memfilter `options` sendiri (asumsi pemanggil sudah mengembalikan
   // hasil yang relevan dari server, mis. lewat endpoint pencarian) — dipakai untuk daftar besar
   // yang tidak realistis dimuat semua sekaligus. Kalau kosong (default), filter dilakukan lokal
@@ -27,15 +30,19 @@ type Props = {
   onSearch?: (query: string) => void
 }
 
-const LIST_MAX_PX = 288 // tinggi daftar (max-h-72) — dipakai menentukan buka ke atas/bawah
-const GAP_PX = 8
+const LIST_MAX_PX = 288 // tinggi daftar maksimum
+const SEARCH_ROW_PX = 53 // tinggi baris kotak cari (+ garis)
+const GAP_PX = 8 // jarak ke tepi layar / ke kotak
+
+type Placement = { top?: number; bottom?: number; left: number; minWidth: number; listMax: number }
 
 // Combobox pencarian generik (docs/arsitektur-combobox.md) — satu-satunya dropdown pencarian untuk form (kontak, alamat, vendor, manifest).
 // Kotak terpilih = tombol setinggi `Input`; daftar = popover berlatar PADAT (tidak transparan) berisi kotak cari + pilihan
-// dengan ikon/penanda di depan, teks pendamping di kanan, centang pada yang terpilih. Daftar selalu selebar isinya (min selebar
-// kotak), membuka ke atas bila ruang di bawah sempit, dan rata kanan bila meluap layar. Dua mode: filter lokal atau
+// dengan ikon/penanda di depan, teks pendamping di kanan, centang pada yang terpilih. Daftar dipasang lewat portal (`position: fixed` di atas segalanya)
+// sehingga tidak pernah terpotong kartu/panel `overflow-hidden` induknya; selalu selebar isinya (min selebar kotak), membuka ke atas bila
+// ruang di bawah sempit (tinggi daftar menyesuaikan sisa ruang), dan bergeser ke kiri bila meluap layar. Warna merek admin dibawa lewat `brand-scope`. Dua mode: filter lokal atau
 // pencarian server-side (`onSearch`). Navigasi keyboard penuh (panah/Home/End/Enter/Esc/Tab) dengan pola ARIA combobox + listbox.
-export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pilih…', disabled, loading, clearable = true, searchPlaceholder = 'Ketik untuk mencari…', className, onSearch }: Props) {
+export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pilih…', disabled, loading, clearable = true, searchPlaceholder = 'Ketik untuk mencari…', className, ariaLabel, onSearch }: Props) {
   const uid = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -45,8 +52,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [cursor, setCursor] = useState(0)
-  const [openUp, setOpenUp] = useState(false)
-  const [alignRight, setAlignRight] = useState(false)
+  const [place, setPlace] = useState<Placement | null>(null)
 
   const selected = options.find(o => o.id === value) ?? null
   const shown = useMemo(() => (onSearch ? options : matchOptions(options, query)), [options, query, onSearch])
@@ -58,22 +64,44 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
 
   useEffect(() => { setCursor(0) }, [shown])
 
-  // Buka ke atas bila ruang bawah sempit dan atas lebih lega — dihitung SEBELUM paint supaya tidak berkedip.
+  // Posisi daftar dihitung dari kotak terpilih SEBELUM paint (tak berkedip) dan diperbarui saat layar/gulir/ukuran berubah.
+  const reposition = useCallback(() => {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const rect = trigger.getBoundingClientRect()
+    const below = window.innerHeight - rect.bottom - GAP_PX * 2
+    const above = rect.top - GAP_PX * 2
+    const up = below < LIST_MAX_PX / 2 && above > below
+    const room = (up ? above : below) - SEARCH_ROW_PX
+    const panelWidth = panelRef.current?.offsetWidth ?? rect.width
+    const left = Math.max(GAP_PX, Math.min(rect.left, window.innerWidth - GAP_PX - panelWidth))
+    setPlace({
+      ...(up ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+      left, minWidth: rect.width, listMax: Math.max(120, Math.min(LIST_MAX_PX, room)),
+    })
+  }, [])
   useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return
-    const rect = triggerRef.current.getBoundingClientRect()
-    setOpenUp(window.innerHeight - rect.bottom < LIST_MAX_PX + 72 && rect.top > window.innerHeight - rect.bottom)
-  }, [open])
-  useLayoutEffect(() => {
-    if (!open || !triggerRef.current || !panelRef.current) return
-    const left = triggerRef.current.getBoundingClientRect().left
-    setAlignRight(left + panelRef.current.offsetWidth > window.innerWidth - GAP_PX)
-  }, [open, shown])
-
+    if (!open) { setPlace(null); return }
+    reposition()
+  }, [open, shown, reposition])
   useEffect(() => {
     if (!open) return
-    inputRef.current?.focus()
-    const onDown = (e: MouseEvent) => { if (rootRef.current && !rootRef.current.contains(e.target as Node)) close(false) }
+    const onMove = (e: Event) => { if (!(e.target instanceof Node && panelRef.current?.contains(e.target))) reposition() }
+    window.addEventListener('scroll', onMove, true)
+    window.addEventListener('resize', reposition)
+    return () => { window.removeEventListener('scroll', onMove, true); window.removeEventListener('resize', reposition) }
+  }, [open, reposition])
+
+  // Fokus ke kotak cari hanya setelah daftar terpasang dan terlihat (sebelum diposisikan ia `visibility: hidden` dan tak bisa difokuskan).
+  const placed = place !== null
+  useEffect(() => { if (open && placed) inputRef.current?.focus() }, [open, placed])
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as Node
+      if (rootRef.current?.contains(t) || panelRef.current?.contains(t)) return
+      close(false)
+    }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
   }, [open, close])
@@ -110,11 +138,12 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
 
   const listId = `${uid}-list`
   const showClear = clearable && selected && !disabled && !loading
+  const inAdmin = open && !!triggerRef.current?.closest('.admin-canvas')
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
       <button
-        ref={triggerRef} type="button" role="combobox" aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined}
+        ref={triggerRef} type="button" role="combobox" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined}
         disabled={disabled} onClick={() => (open ? close(false) : setOpen(true))} onKeyDown={onTriggerKey}
         className={cn(
           'flex h-10 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm ring-offset-background transition-colors',
@@ -139,25 +168,25 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
         <ChevronsUpDown aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
       </button>
 
-      {open && !disabled && (
+      {open && !disabled && createPortal(
         <div
           ref={panelRef}
+          style={place ? { top: place.top, bottom: place.bottom, left: place.left, minWidth: place.minWidth } : { visibility: 'hidden' }}
           className={cn(
-            'absolute z-50 w-max min-w-full max-w-[min(26rem,calc(100vw-2rem))] overflow-hidden rounded-xl border border-input bg-background shadow-xl',
-            openUp ? 'bottom-full mb-1' : 'top-full mt-1',
-            alignRight ? 'right-0' : 'left-0',
+            'fixed z-50 w-max max-w-[min(26rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-input bg-background text-foreground shadow-xl',
+            inAdmin && 'brand-scope',
           )}
         >
           <div className="relative border-b border-input p-2">
             <Search aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
-              ref={inputRef} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={placeholder}
+              ref={inputRef} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={ariaLabel ?? placeholder}
               aria-activedescendant={shown[cursor] ? `${uid}-o${cursor}` : undefined}
               value={query} onChange={e => onQueryChange(e.target.value)} onKeyDown={onInputKey} placeholder={searchPlaceholder} autoComplete="off"
               className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             />
           </div>
-          <ul id={listId} ref={listRef} role="listbox" className="m-0 max-h-72 list-none overflow-y-auto p-1">
+          <ul id={listId} ref={listRef} role="listbox" style={{ maxHeight: place?.listMax ?? LIST_MAX_PX }} className="m-0 list-none overflow-y-auto p-1">
             {shown.length === 0 && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted-foreground">{loading ? 'Memuat…' : 'Tidak ada hasil.'}</li>}
             {shown.map((o, i) => (
               <li
@@ -172,7 +201,8 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
               </li>
             ))}
           </ul>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

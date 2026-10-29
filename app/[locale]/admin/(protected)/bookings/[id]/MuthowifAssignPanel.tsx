@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { UserRound } from 'lucide-react'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type RosterItem = { id: string; name: string; dailyCapacity: number }
 
@@ -40,10 +41,8 @@ export function MuthowifAssignPanel({ bookingId }: { bookingId: string }) {
       </p>
       {error && <p className="text-[12px] text-admin-danger">{error}</p>}
       <div className="flex gap-2">
-        <select className="admin-select flex-1 text-sm" value={selected} onChange={e => setSelected(e.target.value)}>
-          <option value="">— pilih muthowif —</option>
-          {roster.map(r => <option key={r.id} value={r.id}>{r.name} (kap. {r.dailyCapacity}/hari)</option>)}
-        </select>
+        <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih muthowif —" value={selected} onChange={setSelected}
+          options={roster.map(r => ({ id: r.id, label: r.name, hint: `kap. ${r.dailyCapacity}/hari` }))} />
         <button onClick={handleAssign} disabled={!selected || loading}
           className="admin-btn-sm disabled:opacity-50 shrink-0">
           {loading ? 'Menyimpan...' : 'Assign'}

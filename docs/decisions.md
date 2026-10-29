@@ -3045,3 +3045,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** Pemilik menemukan daftar kode negara "buruk sekali". Akar masalah: kelas `bg-popover` memakai token yang tak ada di Tailwind (daftar transparan), lebar daftar = lebar kotak sempit, dan label gabungan. Audit menemukan 8 masalah (docs/arsitektur-combobox.md §1) dan definisi ganda.
 **Alternatives considered:** Pustaka combobox (ditolak: dependensi baru untuk satu komponen, ruang lingkup CSS token); portal ke body (ditolak: memutus `.admin-canvas`); langsung mengganti 49 `<select>` (ditolak: terlalu lebar untuk satu PR — Fase 2/3 terpisah).
 **Security check:** perubahan hanya komponen klien murni (tanpa route, auth, upload, skema, dependensi baru); `bun audit` bersih; `test-combobox` + penjaga sumber; tak ada data pribadi baru.
+
+## 2026-10-30 — Combobox seragam (Fase 2)
+**Decision:** 22 `<select>` pilihan-data di editor admin diganti `ChoiceSelect` (pembungkus `AutocompleteSelect`; nilai string '' = kosong), harga/kota/kapasitas jadi `hint`. Daftar `AutocompleteSelect` dipasang lewat portal (`fixed`, di `document.body`) dan membawa warna merek admin lewat kelas `brand-scope`.
+**Rationale:** Daftar pilihan hotel/kendaraan/visa tumbuh dan tak bisa dicari; verifikasi browser menunjukkan daftar absolut Fase 1 terpotong kartu `overflow-hidden` di editor Paket, sehingga portal wajib. Variabel `--primary` dipisah ke `.brand-scope` agar tak menyeret latar `.admin-canvas`.
+**Alternatives considered:** Portal tanpa membawa warna merek (ditolak: sorotan jadi biru); menghapus `overflow-hidden` kartu (ditolak: efek samping di semua editor); `chooser` terpisah per halaman (ditolak: duplikasi).
+**Security check:** hanya komponen klien (tanpa route/auth/skema/dependensi); `bun audit` bersih; tes sumber + 13 mutasi (termasuk select kosong baru, adaptor nilai).

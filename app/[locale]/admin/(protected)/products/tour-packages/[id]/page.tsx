@@ -14,6 +14,7 @@ import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -378,10 +379,8 @@ export default function TourPackageBuilderPage({ params }: Props) {
           {pkg.sites.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada situs ditambahkan.</p>}
         </div>
         <div className="flex gap-2 pt-1">
-          <select className="admin-select flex-1" value={addSiteId} onChange={e => setAddSiteId(e.target.value)}>
-            <option value="">— pilih situs untuk ditambahkan —</option>
-            {availableSites.map(s => <option key={s.id} value={s.id}>{s.name} ({s.city})</option>)}
-          </select>
+          <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih situs untuk ditambahkan —" value={addSiteId} onChange={setAddSiteId}
+            options={availableSites.map(s => ({ id: s.id, label: s.name, hint: s.city ?? undefined }))} />
           <button onClick={handleAddSite} disabled={savingSite || !addSiteId} className="admin-btn-sm disabled:opacity-50 shrink-0 flex items-center gap-1">
             <Plus className="h-3.5 w-3.5" /> Tambah
           </button>
@@ -395,12 +394,8 @@ export default function TourPackageBuilderPage({ params }: Props) {
         {pkg.transportMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga kendaraan ini MASUK ke Harga Jual Paket — pilgrim tidak memilih kendaraan saat booking.</p>
-            <select className="admin-select" value={includedPricingChoice} onChange={e => handleSetIncludedPricing(e.target.value)} disabled={savingTransportMode}>
-              <option value="">— pilih kendaraan —</option>
-              {allPricingFlat.map(p => (
-                <option key={p.id} value={`${p.tripId}::${p.id}`}>{p.tripName} — {p.vehicle.name} ({rupiah(Number(p.price))})</option>
-              ))}
-            </select>
+            <ChoiceSelect placeholder="— pilih kendaraan —" value={includedPricingChoice} onChange={handleSetIncludedPricing} disabled={savingTransportMode}
+              options={allPricingFlat.map(p => ({ id: `${p.tripId}::${p.id}`, label: `${p.tripName} — ${p.vehicle.name}`, hint: rupiah(Number(p.price)) }))} />
             {pkg.includedTransportPricing && pkg.includedTransportPrice != null && (
               <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedTransportPricing.vehicle.name}</span> — {rupiah(Number(pkg.includedTransportPrice))} (harga referensi awal, bisa diedit lewat Komponen Biaya kalau perlu penyesuaian)</p>
             )}
@@ -410,12 +405,8 @@ export default function TourPackageBuilderPage({ params }: Props) {
         {pkg.transportMode === 'user_choice' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-warning bg-admin-warning/10 rounded px-2 py-1 w-fit">Harga kendaraan TIDAK masuk Harga Jual Paket — pilgrim pilih &amp; bayar sendiri saat booking.</p>
-            <select className="admin-select" value={userChoiceTripId} onChange={e => handleSetUserChoiceTrip(e.target.value)} disabled={savingTransportMode}>
-              <option value="">— pilih trip sumber opsi kendaraan —</option>
-              {allTrips.filter(t => t.isActive).map(t => (
-                <option key={t.id} value={t.id}>{t.name} ({t.origin} → {t.destination})</option>
-              ))}
-            </select>
+            <ChoiceSelect placeholder="— pilih trip sumber opsi kendaraan —" value={userChoiceTripId} onChange={handleSetUserChoiceTrip} disabled={savingTransportMode}
+              options={allTrips.filter(t => t.isActive).map(t => ({ id: t.id, label: t.name, hint: `${t.origin} → ${t.destination}` }))} />
           </div>
         )}
       </MetaBox>
@@ -471,12 +462,8 @@ export default function TourPackageBuilderPage({ params }: Props) {
               {pkg.hotels.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada hotel ditambahkan.</p>}
             </div>
             <div className="grid md:grid-cols-4 gap-2 pt-1">
-              <select className="admin-select md:col-span-2" value={addHotelScheduleId} onChange={e => setAddHotelScheduleId(e.target.value)}>
-                <option value="">— pilih hotel + tipe kamar —</option>
-                {allHotelSchedules.map(s => (
-                  <option key={s.id} value={s.id}>{s.hotelName} — {s.roomTypeName} ({s.city}) — {rupiah(s.price)}/mlm</option>
-                ))}
-              </select>
+              <ChoiceSelect className="md:col-span-2" placeholder="— pilih hotel + tipe kamar —" value={addHotelScheduleId} onChange={setAddHotelScheduleId}
+                options={allHotelSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${s.city} · ${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Malam" value={addHotelNights} onChange={e => setAddHotelNights(e.target.value)} />
               <input className="admin-inp" type="number" min={1} placeholder="Kamar" value={addHotelRooms} onChange={e => setAddHotelRooms(e.target.value)} />
               <button onClick={handleAddHotel} disabled={savingHotel || !addHotelScheduleId} className="admin-btn-sm disabled:opacity-50 shrink-0 flex items-center gap-1 md:col-span-4 w-fit">
@@ -502,12 +489,8 @@ export default function TourPackageBuilderPage({ params }: Props) {
               {pkg.hotelOptions.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada opsi hotel ditawarkan.</p>}
             </div>
             <div className="flex gap-2 pt-1">
-              <select className="admin-select flex-1" value={addHotelOptionScheduleId} onChange={e => setAddHotelOptionScheduleId(e.target.value)}>
-                <option value="">— pilih hotel + tipe kamar untuk ditawarkan —</option>
-                {availableHotelOptionSchedules.map(s => (
-                  <option key={s.id} value={s.id}>{s.hotelName} — {s.roomTypeName} ({s.city}) — {rupiah(s.price)}/mlm</option>
-                ))}
-              </select>
+              <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih hotel + tipe kamar untuk ditawarkan —" value={addHotelOptionScheduleId} onChange={setAddHotelOptionScheduleId}
+                options={availableHotelOptionSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${s.city} · ${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp w-24" type="number" min={1} placeholder="Malam" value={addHotelOptionNights} onChange={e => setAddHotelOptionNights(e.target.value)} />
               <button onClick={handleAddHotelOption} disabled={savingHotelOption || !addHotelOptionScheduleId} className="admin-btn-sm disabled:opacity-50 shrink-0 flex items-center gap-1">
                 <Plus className="h-3.5 w-3.5" /> Tambah

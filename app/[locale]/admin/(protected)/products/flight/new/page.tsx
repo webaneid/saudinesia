@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { Plane } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
 
@@ -34,10 +35,8 @@ export default function NewFlightSchedulePage() {
         <div className="grid gap-3 md:grid-cols-2">
           <div className="md:col-span-2">
             <p className="mb-1 text-xs text-admin-muted">Rute</p>
-            <select className="admin-inp" value={form.routeId} onChange={set('routeId')}>
-              <option value="">Pilih rute…</option>
-              {(routes ?? []).map(r => <option key={r.id} value={r.id}>{r.origin} → {r.destination}</option>)}
-            </select>
+            <ChoiceSelect placeholder="Pilih rute…" value={form.routeId} onChange={v => setForm(f => ({ ...f, routeId: v }))}
+              options={(routes ?? []).map(r => ({ id: r.id, label: `${r.origin} → ${r.destination}` }))} />
           </div>
           <div><p className="mb-1 text-xs text-admin-muted">Periode Mulai</p><input type="date" className="admin-inp" value={form.departureFrom} onChange={set('departureFrom')} /></div>
           <div><p className="mb-1 text-xs text-admin-muted">Periode Akhir</p><input type="date" className="admin-inp" value={form.departureTo} onChange={set('departureTo')} /></div>
