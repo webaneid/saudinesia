@@ -3,9 +3,7 @@
 import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
-import { COUNTRIES } from '@/lib/constants/countries'
-import { isoToFlagEmoji } from '@/lib/utils/flag'
+import { CountryCodeSelect } from '@/components/shared/CountryCodeSelect'
 import { splitE164 } from '@/lib/utils/phone'
 
 export type ContactValue = {
@@ -42,11 +40,6 @@ function isWhatsappSameAsPhone(v: ContactValue): boolean {
   return v.whatsappCountryCode === v.phoneCountryCode && v.whatsapp === v.phone
 }
 
-const COUNTRY_CODE_OPTIONS: AutocompleteOption[] = COUNTRIES.map(c => ({
-  id: c.code,
-  label: `${isoToFlagEmoji(c.code)} +${c.dialCode} ${c.name}`,
-}))
-
 type Props = {
   value: ContactValue
   onChange: (v: ContactValue) => void
@@ -62,8 +55,7 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
   const [unlocked, setUnlocked] = useState(false)
   const sameAsPhone = unlocked ? false : isWhatsappSameAsPhone(value)
 
-  function setPhoneCountryCode(code: string | null) {
-    const next = code ?? 'ID'
+  function setPhoneCountryCode(next: string) {
     onChange(sameAsPhone
       ? { ...value, phoneCountryCode: next, whatsappCountryCode: next, whatsapp: value.phone }
       : { ...value, phoneCountryCode: next })
@@ -84,8 +76,8 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
     }
   }
 
-  function setWhatsappCountryCode(code: string | null) {
-    onChange({ ...value, whatsappCountryCode: code ?? 'ID' })
+  function setWhatsappCountryCode(code: string) {
+    onChange({ ...value, whatsappCountryCode: code })
   }
 
   function setWhatsapp(whatsapp: string) {
@@ -97,14 +89,7 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
       <div className="space-y-2">
         <Label>Nomor HP</Label>
         <div className="flex gap-2">
-          <div className="w-36 shrink-0">
-            <AutocompleteSelect
-              options={COUNTRY_CODE_OPTIONS}
-              value={value.phoneCountryCode}
-              onChange={setPhoneCountryCode}
-              placeholder="Kode negara"
-            />
-          </div>
+          <CountryCodeSelect value={value.phoneCountryCode} onChange={setPhoneCountryCode} />
           <Input type="tel" placeholder="8xx xxxx xxxx" className="flex-1"
             value={value.phone} onChange={e => setPhone(e.target.value)} />
         </div>
@@ -113,15 +98,7 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
       <div className="space-y-2">
         <Label>Nomor WhatsApp</Label>
         <div className="flex gap-2">
-          <div className="w-36 shrink-0">
-            <AutocompleteSelect
-              options={COUNTRY_CODE_OPTIONS}
-              value={value.whatsappCountryCode}
-              onChange={setWhatsappCountryCode}
-              placeholder="Kode negara"
-              disabled={sameAsPhone}
-            />
-          </div>
+          <CountryCodeSelect value={value.whatsappCountryCode} onChange={setWhatsappCountryCode} disabled={sameAsPhone} />
           <Input type="tel" placeholder="8xx xxxx xxxx" className="flex-1"
             value={value.whatsapp} onChange={e => setWhatsapp(e.target.value)}
             disabled={sameAsPhone} />

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { AutocompleteSelect, type AutocompleteOption } from './AutocompleteSelect'
+import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { COUNTRIES } from '@/lib/constants/countries'
 
 export type AddressValue = {
   type: 'domestic' | 'international'
@@ -27,7 +27,6 @@ export const EMPTY_ADDRESS: AddressValue = {
 
 type WilayahRow = { id: string; name: string }
 
-const COUNTRY_OPTIONS: AutocompleteOption[] = COUNTRIES.map(c => ({ id: c.code, label: c.name }))
 
 type Props = {
   value: AddressValue

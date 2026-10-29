@@ -3,18 +3,17 @@
 import { useMemo, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
 import { AutocompleteSelect } from '@/components/shared/AutocompleteSelect'
+import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
 import { AddressPicker } from '@/components/shared/AddressPicker'
 import { ContactPicker } from '@/components/shared/ContactPicker'
 import { Button } from '@/components/admin/ui/Button'
 import { FormField } from '@/components/admin/ui/FormField'
-import { COUNTRIES } from '@/lib/constants/countries'
 import { cn } from '@/lib/utils'
 import {
   EMPTY_VENDOR_FORM, formStateToBody, vendorToFormState,
   type VendorCategoryOption, type VendorFormState, type VendorRecord,
 } from './types'
 
-const COUNTRY_OPTIONS = COUNTRIES.map(c => ({ id: c.code, label: c.name }))
 
 type Props = {
   /** Ada = ubah vendor itu (PUT); tidak ada = buat baru (POST). */
