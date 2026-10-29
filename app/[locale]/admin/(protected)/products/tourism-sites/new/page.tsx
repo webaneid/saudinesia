@@ -6,6 +6,7 @@ import { MapPin } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export default function NewTourismSitePage() {
   const { locale } = useParams() as { locale: string }
@@ -24,7 +25,7 @@ export default function NewTourismSitePage() {
         <div className="md:col-span-2"><p className="mb-1 text-xs text-admin-muted">Nama</p><input className="admin-inp" autoFocus value={form.name} onChange={set('name')} placeholder="Jabal Nur (Gua Hira)" /></div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Kota</p>
-          <select className="admin-select" value={form.city} onChange={set('city')}><option value="makkah">Makkah</option><option value="madinah">Madinah</option><option value="jeddah">Jeddah</option></select>
+          <ChoiceSelect ariaLabel="Kota" value={form.city} onChange={v => setForm(f => ({ ...f, city: v }))} clearable={false} options={[{ id: 'makkah', label: 'Makkah' }, { id: 'madinah', label: 'Madinah' }, { id: 'jeddah', label: 'Jeddah' }]} />
         </div>
         <div><p className="mb-1 text-xs text-admin-muted">Link Google Maps (opsional)</p><input className="admin-inp" value={form.gmapsUrl} onChange={set('gmapsUrl')} placeholder="https://maps.google.com/..." /></div>
         <div className="min-w-0 md:col-span-2">

@@ -10,6 +10,7 @@ import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { Badge } from '@/components/admin/ui/Badge'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { CurrencySelect } from '@/components/shared/CurrencySelect'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -111,9 +112,7 @@ export default function MuthowifPage() {
           </p>
           <div className="flex items-center gap-2">
             <p className="admin-inp flex-1 bg-admin-spot/50 text-admin-ink/80">{vendorName}</p>
-            <select className="admin-inp w-20 shrink-0" value={currency} onChange={e => setCurrency(e.target.value)}>
-              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
           </div>
         </div>
 

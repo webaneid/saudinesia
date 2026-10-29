@@ -13,6 +13,7 @@ import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type HajiDetail = {
   id: string; name: string; description: string | null; hajiType: string; year: number
@@ -100,7 +101,7 @@ export default function HajiEditPage() {
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="md:col-span-2"><p className="mb-1 text-xs text-admin-muted">Nama Produk</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Jenis Haji</p><select className="admin-select" value={form.hajiType} onChange={set('hajiType')}>{HAJI_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+        <div><p className="mb-1 text-xs text-admin-muted">Jenis Haji</p><ChoiceSelect ariaLabel="Jenis haji" value={form.hajiType} onChange={v => setForm(f => f && { ...f, hajiType: v })} clearable={false} options={HAJI_TYPES.map(t => ({ id: t.value, label: t.label }))} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Tahun</p><input type="number" className="admin-inp" value={form.year} onChange={set('year')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Tanggal Berangkat</p><input type="date" className="admin-inp" value={form.departureDate} onChange={set('departureDate')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Tanggal Kembali</p><input type="date" className="admin-inp" value={form.returnDate} onChange={set('returnDate')} /></div>

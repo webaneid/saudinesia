@@ -7,6 +7,7 @@ import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export default function NewHotelPage() {
   const { locale } = useParams() as { locale: string }
@@ -27,7 +28,7 @@ export default function NewHotelPage() {
         <div><p className="mb-1 text-xs text-admin-muted">Nama Hotel</p><input className="admin-inp" autoFocus value={form.name} onChange={set('name')} placeholder="Nama lengkap hotel" /></div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Kota</p>
-          <select className="admin-select" value={form.city} onChange={set('city')}><option value="makkah">Makkah</option><option value="madinah">Madinah</option></select>
+          <ChoiceSelect ariaLabel="Kota" value={form.city} onChange={v => setForm(f => ({ ...f, city: v }))} clearable={false} options={[{ id: 'makkah', label: 'Makkah' }, { id: 'madinah', label: 'Madinah' }]} />
         </div>
         <div><p className="mb-1 text-xs text-admin-muted">Bintang</p><input type="number" min={1} max={5} className="admin-inp" value={form.stars} onChange={set('stars')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Jarak ke Haram (meter)</p><input type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} /></div>

@@ -13,6 +13,7 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { ConfirmDialog } from '@/components/admin/ui/ConfirmDialog'
 import { ApiAction } from '@/components/admin/data-table/ApiAction'
 import { ActionButton, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null; whatsappVerifiedAt: string | null }
 
@@ -73,12 +74,7 @@ export default function UsersPage() {
     {
       key: 'role', header: 'Role',
       cell: u => (
-        <select value={u.role} onChange={e => changeRole(u.id, e.target.value)} aria-label={`Role ${u.email}`} className="admin-select-xs">
-          <option value="pilgrim">Pilgrim</option>
-          <option value="admin">Admin</option>
-          <option value="manager">Manager</option>
-          <option value="superadmin">Superadmin</option>
-        </select>
+        <ChoiceSelect size="sm" className="w-32" ariaLabel={`Role ${u.email}`} value={u.role} onChange={v => changeRole(u.id, v)} clearable={false} options={[{ id: 'pilgrim', label: 'Pilgrim' }, { id: 'admin', label: 'Admin' }, { id: 'manager', label: 'Manager' }, { id: 'superadmin', label: 'Superadmin' }]} />
       ),
     },
     { key: 'status', header: 'Status', cell: u => <Badge tone={u.isActive ? 'ok' : 'neutral'}>{u.isActive ? 'Aktif' : 'Nonaktif'}</Badge> },

@@ -9,6 +9,7 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type Catering = { id: string; name: string; boardType: string; menuStyle: string; description: string | null; isActive: boolean }
 
@@ -46,8 +47,8 @@ export default function EditCateringPage() {
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div className="md:col-span-2"><p className="mb-1 text-xs text-admin-muted">Nama Paket</p><input className="admin-inp" value={form.name} onChange={set('name')} /></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Board Type</p><select className="admin-select" value={form.boardType} onChange={set('boardType')}><option value="full_board">Full Board</option><option value="half_board">Half Board</option></select></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Menu</p><select className="admin-select" value={form.menuStyle} onChange={set('menuStyle')}><option value="asian">Asia</option><option value="arabic">Arab</option><option value="western">Barat</option></select></div>
+        <div><p className="mb-1 text-xs text-admin-muted">Board Type</p><ChoiceSelect ariaLabel="Board type" value={form.boardType} onChange={v => setForm(f => f && { ...f, boardType: v })} clearable={false} options={[{ id: 'full_board', label: 'Full Board' }, { id: 'half_board', label: 'Half Board' }]} /></div>
+        <div><p className="mb-1 text-xs text-admin-muted">Menu</p><ChoiceSelect ariaLabel="Menu" value={form.menuStyle} onChange={v => setForm(f => f && { ...f, menuStyle: v })} clearable={false} options={[{ id: 'asian', label: 'Asia' }, { id: 'arabic', label: 'Arab' }, { id: 'western', label: 'Barat' }]} /></div>
         <div className="min-w-0 md:col-span-2">
           <p className="mb-1 text-xs text-admin-muted">Deskripsi</p>
           <RichTextEditor id={`catering-edit-${id}`} title="Deskripsi paket katering" value={form.description} onChange={description => { e.clearMessages(); setForm(p => p && ({ ...p, description })) }} placeholder="Menu harian, jam makan, dan catatan khusus (alergi, porsi)…" />
