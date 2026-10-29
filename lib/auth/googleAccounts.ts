@@ -42,6 +42,8 @@ export async function resolveGoogleLogin(identity: GoogleIdentity): Promise<Goog
     // Password lama dibuang → sesi lama akun itu (bisa milik pihak yang memasang akun lebih dulu) ikut dicabut (SEC-18).
     data: { googleSub: identity.sub, ...(legacyUnverified ? { emailVerifiedAt: new Date(), passwordHash, sessionVersion: { increment: 1 } } : {}) },
   })
+  // Akun buatan admin diaktifkan lewat Google: tautan undangan/reset yang masih beredar tak boleh hidup sampai kedaluwarsa (undangan berumur 7 hari).
+  if (linked.count > 0 && legacyUnverified) await prisma.authToken.deleteMany({ where: { userId: byEmail.id, type: 'password_reset', usedAt: null } })
   if (linked.count === 0) {
     const again = await prisma.user.findUnique({ where: { id: byEmail.id }, select: { googleSub: true } })
     if (again?.googleSub !== identity.sub) return { kind: 'refused', reason: 'conflict' }

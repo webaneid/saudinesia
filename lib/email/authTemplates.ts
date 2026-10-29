@@ -3,7 +3,7 @@ import { renderEmail, type EmailContent } from '@/lib/email/templates'
 // Email auth (docs/arsitektur-auth.md §3.2). Tautan membawa token di query string; path dibangun dari APP_URL oleh renderEmail,
 // jadi tanpa APP_URL (di luar development) tombol tidak ada — pemanggil (authEmail.ts) menolak mengirim email tanpa tautan.
 
-export type AuthEmailKind = 'registration' | 'already_registered' | 'password_reset'
+export type AuthEmailKind = 'registration' | 'already_registered' | 'password_reset' | 'account_invitation'
 
 export type AuthEmailContext = { name: string; locale: string; token?: string; whatsappMasked?: string }
 
@@ -34,6 +34,18 @@ export function authEmailContent(kind: AuthEmailKind, ctx: AuthEmailContext): Em
         ],
         cta: { label: 'Masuk', path: `/${ctx.locale}/login` },
         footnote: 'Bukan Anda? Abaikan email ini — akun Anda tidak berubah.',
+      })
+    case 'account_invitation':
+      return renderEmail({
+        subject: 'Akun Saudinesia Anda sudah dibuatkan',
+        preheader: 'Klik tombol untuk membuat password dan mengaktifkan akun. Berlaku 7 hari.',
+        heading: 'Aktifkan akun Saudinesia Anda',
+        paragraphs: [
+          `Halo ${ctx.name}, tim Saudinesia telah membuatkan akun untuk Anda dengan alamat email ini.`,
+          'Klik tombol di bawah untuk memilih password dan mengaktifkan akun. Tautan berlaku 7 hari dan hanya bisa dipakai sekali. Setelah masuk, Anda diminta memeriksa data kontak dan menyetujui kebijakan privasi.',
+        ],
+        cta: { label: 'Buat password & aktifkan akun', path: `/${ctx.locale}/reset-password${q}` },
+        footnote: 'Tidak merasa meminta akun ini? Abaikan email ini — akun tidak dapat dipakai tanpa password yang hanya bisa Anda buat lewat tautan.',
       })
     case 'password_reset':
       return renderEmail({

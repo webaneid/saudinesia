@@ -24,6 +24,7 @@ const MODULES: Array<{ list: string; news: string[] }> = [
   { list: 'products/flight', news: ['products/flight/new', 'products/flight/routes/new'] },
   { list: 'products/transport', news: ['products/transport/vehicles/new', 'products/transport/trips/new'] },
   { list: 'system/users', news: ['system/users/new'] },
+  { list: 'customers', news: ['customers/new'] },
 ]
 
 await t('setiap modul: halaman /new berbasis CreatePage + useCreateEntity; daftar menaut ke /new, tanpa panel sebaris', () => {

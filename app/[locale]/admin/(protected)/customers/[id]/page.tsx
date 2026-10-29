@@ -9,6 +9,7 @@ import { buildListHref, parseListParams } from '@/lib/admin/pagination'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
+import { ResendInviteButton } from './ResendInviteButton'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Card } from '@/components/admin/ui/Card'
@@ -34,7 +35,9 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export default async function AdminCustomerDetail({ params, searchParams }: Props) {
   const { locale, id } = await params
   await requireAdminPage(locale)
-  const list = parseListParams(await searchParams, CUSTOMER_BOOKINGS_PAGE_SIZE)
+  const sp = await searchParams
+  const list = parseListParams(sp, CUSTOMER_BOOKINGS_PAGE_SIZE)
+  const inviteFlag = typeof sp.invite === 'string' ? sp.invite : undefined
   const c = await getCustomer(id, list)
   if (!c) notFound()
   const listHref = `/${locale}/admin/customers`
@@ -58,6 +61,23 @@ export default async function AdminCustomerDetail({ params, searchParams }: Prop
         </div>
         <Badge tone={c.isActive ? 'ok' : 'neutral'}>{c.isActive ? 'Aktif' : 'Nonaktif'}</Badge>
       </div>
+
+      {inviteFlag && (
+        <p role="status" className="m-0 rounded-xl border border-admin-line bg-white px-3 py-2 text-[13px] text-admin-ink">
+          {inviteFlag === 'sent' && <>Pelanggan ditambahkan. Email undangan dikirim ke <b>{c.email}</b> — berlaku 7 hari.</>}
+          {inviteFlag === 'skipped' && 'Pelanggan ditambahkan, tetapi email undangan belum terkirim (layanan email belum dikonfigurasi atau dibatasi). Kirim dari tombol di bawah.'}
+          {inviteFlag === 'failed' && 'Pelanggan ditambahkan, tetapi email undangan gagal dikirim. Kirim ulang dari tombol di bawah.'}
+          {inviteFlag === 'none' && 'Pelanggan ditambahkan tanpa undangan. Kirim undangan aktivasi saat siap, dari tombol di bawah.'}
+          {!['sent', 'skipped', 'failed', 'none'].includes(inviteFlag) && 'Pelanggan ditambahkan.'}
+        </p>
+      )}
+      {!c.deleted && !c.emailVerified && c.isActive && (
+        <Card className="space-y-2 p-4">
+          <p className="m-0 text-[13px] font-semibold text-admin-ink">Akun belum diaktifkan</p>
+          <p className="m-0 text-[12px] text-admin-muted">Pelanggan belum membuat password, sehingga belum bisa masuk. Undangan berisi tautan membuat password (berlaku 7 hari; tautan lama hangus saat undangan baru dikirim).</p>
+          <ResendInviteButton customerId={c.id} />
+        </Card>
+      )}
 
       {c.deleted ? (
         <Card className="p-5 text-sm text-admin-muted">Akun ini sudah dihapus sesuai permintaan pemiliknya (UU PDP). Data pribadi sudah dianonimkan; catatan pesanan dan pembayaran (angka dan kode) tetap disimpan.</Card>

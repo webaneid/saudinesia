@@ -24,7 +24,7 @@ const tokenSchema = z.string().regex(TOKEN_PATTERN, 'Tautan tidak valid')
 // (docs/arsitektur-auth.md §3.2) — menutup pre-hijacking.
 // Nama masuk ke email resmi Saudinesia yang dikirim ke pemilik email (bisa orang lain): tanpa karakter kontrol (baris palsu di
 // versi teks) dan tanpa pola tautan/alamat (celah phishing lewat domain pengirim tepercaya).
-const fullNameSchema = z
+export const fullNameSchema = z
   .string()
   .trim()
   .min(2, 'Nama minimal 2 karakter')
@@ -90,7 +90,7 @@ export const profileSchema = z
 
 // Telepon + WhatsApp akun. `whatsappConsent` hanya wajib bila akun belum pernah menyetujui (dicek server — lib/auth/contact.ts).
 export const contactSchema = z
-  .object({ phone: e164Schema, whatsapp: e164Schema, whatsappConsent: z.boolean().optional() })
+  .object({ phone: e164Schema, whatsapp: e164Schema, whatsappConsent: z.boolean().optional(), /** wajib true bila akun belum punya catatan persetujuan Kebijakan Privasi (akun buatan admin) */ privacyConsent: z.boolean().optional() })
   .strict()
 
 export type RegisterInput = z.infer<typeof registerSchema>

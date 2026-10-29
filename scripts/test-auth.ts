@@ -268,10 +268,12 @@ await t('updateContact.changed: pengisian pertama BUKAN perubahan; nomor yang su
   assert.deepEqual(await updateContact(u.id, { phone: '966551234567', whatsapp: '6289999999999' }), { ok: true, changed: true })
 })
 
-await t('requireContactForBooking: jamaah tanpa kontak ditolak; lengkap lolos; staf tak terkena; akun tak ada ditolak', async () => {
+await t('requireContactForBooking: jamaah tanpa kontak ATAU tanpa persetujuan ditolak; lengkap + persetujuan lolos; staf tak terkena; akun tak ada ditolak', async () => {
   const none = await makeUser(email())
   const onlyPhone = await makeUser(email(), { phone: '6281234567890' })
-  const full = await makeUser(email(), { phone: '6281234567890', whatsapp: '6281234567890' })
+  const full = await makeUser(email(), { phone: '6281234567890', whatsapp: '6281234567890', consentLogs: { create: [{ type: 'privacy_policy', version: 'v' }, { type: 'whatsapp_notifications', version: 'v' }] } })
+  const noConsent = await makeUser(email(), { phone: '6281234567890', whatsapp: '6281234567890' }) // kontak lengkap TAPI belum menyetujui (mis. akun buatan admin)
+  assert.equal(await requireContactForBooking(noConsent.id, 'pilgrim'), false, 'tanpa persetujuan privasi + WhatsApp: ditolak')
   assert.equal(await requireContactForBooking(none.id, 'pilgrim'), false)
   assert.equal(await requireContactForBooking(onlyPhone.id, 'pilgrim'), false)
   assert.equal(await requireContactForBooking(full.id, 'pilgrim'), true)

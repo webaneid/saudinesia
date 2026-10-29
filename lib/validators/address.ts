@@ -4,8 +4,8 @@ import { z } from 'zod'
 // provinceId..villageId, internasional pakai countryCode/city/stateRegion).
 export const addressSchema = z.object({
   type:        z.enum(['domestic', 'international']),
-  fullAddress: z.string().min(1, 'Alamat lengkap wajib diisi'),
-  postalCode:  z.string().nullish(),
+  fullAddress: z.string().min(1, 'Alamat lengkap wajib diisi').max(500, 'Alamat terlalu panjang'),
+  postalCode:  z.string().max(20, 'Kode pos terlalu panjang').nullish(),
 
   // AddressPicker (form terkontrol) selalu mengirim null untuk field yang belum dipilih,
   // bukan undefined — schema harus terima keduanya.
@@ -15,8 +15,8 @@ export const addressSchema = z.object({
   villageId:  z.string().min(1).nullish(),
 
   countryCode: z.string().length(2).nullish(),
-  city:        z.string().nullish(),
-  stateRegion: z.string().nullish(),
+  city:        z.string().max(100, 'Nama kota terlalu panjang').nullish(),
+  stateRegion: z.string().max(100, 'Nama provinsi/wilayah terlalu panjang').nullish(),
 }).superRefine((data, ctx) => {
   if (data.type === 'domestic' && !data.provinceId) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Provinsi wajib diisi untuk alamat domestik', path: ['provinceId'] })
