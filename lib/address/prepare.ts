@@ -12,6 +12,7 @@ type PrepareResult =
 export async function prepareAddressData(input: AddressInput): Promise<PrepareResult> {
   if (input.type === 'domestic') {
     const { provinceId, regencyId, districtId, villageId } = input
+    if (provinceId && !(await prisma.addressProvince.findUnique({ where: { id: provinceId }, select: { id: true } }))) return { ok: false, message: 'Provinsi tidak dikenal' }
     if (regencyId) {
       const regency = await prisma.addressRegency.findUnique({ where: { id: regencyId } })
       if (!regency || regency.provinceId !== provinceId) return { ok: false, message: 'Kab/Kota tidak sesuai dengan Provinsi yang dipilih' }

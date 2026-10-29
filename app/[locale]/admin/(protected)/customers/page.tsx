@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { UserCheck } from 'lucide-react'
+import { Plus, UserCheck } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { buildListHref, parseListParams } from '@/lib/admin/pagination'
 import { ACTIVE_FILTERS, BOOKING_FILTERS, EMAIL_FILTERS, listCustomers, type CustomerFilters, type CustomerRow } from '@/lib/customers/query'
@@ -84,7 +84,10 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-5">
-      <PageHeader icon={UserCheck} title="Pelanggan" description="Akun yang mendaftar dan memesan. Cari berdasarkan nama, email, atau nomor HP/WhatsApp." />
+      <PageHeader
+        icon={UserCheck} title="Pelanggan" description="Akun yang mendaftar dan memesan. Cari berdasarkan nama, email, atau nomor HP/WhatsApp."
+        actions={<Link href={`/${locale}/admin/customers/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Pelanggan</Link>}
+      />
 
       <FilterBar active={anyFilter} resetHref={buildListHref(base, { limit: navQuery.limit })}>
         <SearchForm

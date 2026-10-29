@@ -30,6 +30,8 @@ export const LIMITS = {
   webhookCancelSender: { limit: 5, windowSec: 3600 },  // pesan BATAL (lepas verifikasi) per nomor PENGIRIM — pelepasan terlalu sering = penyalahgunaan
   webhookSender:      { limit: 10, windowSec: 3600 },  // pesan verifikasi per nomor PENGIRIM — membatasi tebakan kode per nomor
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
+  customerCreateAdmin: { limit: 60, windowSec: 3600 }, // akun pelanggan baru dari panel admin, per admin (tiap akun bisa memicu satu email undangan)
+  customerInviteAdmin: { limit: 30, windowSec: 3600 }, // email undangan (baru/kirim ulang) per admin — pagar di atas batas per alamat
 } as const satisfies Record<string, { limit: number; windowSec: number }>
 
 const MAX_ID_LENGTH = 128

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireSession } from '@/lib/auth/session'
-import { updateContact } from '@/lib/auth/contact'
+import { getOnboardingState, updateContact } from '@/lib/auth/contact'
 import { contactSchema } from '@/lib/validators/auth'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { notify } from '@/lib/notifications/notify'
@@ -16,7 +16,12 @@ export async function PUT(request: Request) {
     const parsed = contactSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
 
-    const result = await updateContact(session.userId, parsed.data)
+    // Akun buatan admin lahir tanpa persetujuan Kebijakan Privasi: pemilik harus memberikannya sendiri di langkah ini (dicek SEBELUM menyimpan apa pun).
+    const { privacyConsent } = parsed.data
+    const state = await getOnboardingState(session.userId)
+    if (state && !state.privacyConsent && privacyConsent !== true) return NextResponse.json(err('Anda harus menyetujui Kebijakan Privasi.'), { status: 400 })
+
+    const result = await updateContact(session.userId, parsed.data) // privasi dicatat di dalam transaksi yang sama (atomik)
     if (!result.ok) {
       return result.reason === 'consent_required'
         ? NextResponse.json(err('Anda harus menyetujui pemberitahuan WhatsApp.'), { status: 400 })

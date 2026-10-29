@@ -20,9 +20,12 @@ export function hashToken(raw: string): string {
   return createHash('sha256').update(raw).digest('hex')
 }
 
+/** Undangan akun buatan staf (docs/arsitektur-pelanggan.md §6): tautan "buat password" yang lebih lama daripada reset biasa karena penerimanya belum menunggu email. */
+export const INVITATION_TTL_MS = 7 * 24 * 60 * 60 * 1000
+
 type IssueInput =
   | { type: 'registration'; email: string; payload: Prisma.InputJsonValue }
-  | { type: 'password_reset'; userId: string }
+  | { type: 'password_reset'; userId: string; /** Umur khusus (bawaan 30 menit) — hanya untuk undangan akun. */ ttlMs?: number }
 
 /** Terbitkan token baru; token lama jenis yang sama (untuk email/pengguna yang sama) yang belum dipakai dihanguskan. */
 export async function issueToken(input: IssueInput): Promise<string> {
@@ -34,7 +37,7 @@ export async function issueToken(input: IssueInput): Promise<string> {
       data: {
         type: input.type,
         tokenHash: hashToken(raw),
-        expiresAt: new Date(Date.now() + TOKEN_TTL_MS[input.type]),
+        expiresAt: new Date(Date.now() + (input.type === 'password_reset' && input.ttlMs ? input.ttlMs : TOKEN_TTL_MS[input.type])),
         ...(input.type === 'registration' ? { email: input.email, payload: input.payload } : { userId: input.userId }),
       },
     }),

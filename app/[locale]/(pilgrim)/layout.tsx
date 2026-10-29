@@ -1,8 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
-import { prisma } from '@/lib/db'
-import { isContactComplete } from '@/lib/auth/contact'
+import { getOnboardingState, isOnboardingComplete } from '@/lib/auth/contact'
 import { safeLocale } from '@/lib/utils/locale'
 import { LayoutDashboard, FileText, UserRound, Plus } from 'lucide-react'
 
@@ -16,11 +15,11 @@ export default async function PilgrimLayout({ children, params }: Props) {
   const session = await getSession()
   if (!session) redirect(`/${safeLocale(locale)}/login`)
 
-  // Gerbang "Lengkapi data" (docs/arsitektur-auth.md §3.5): jamaah wajib mengisi telepon + WhatsApp sebelum halaman lain. Dicek di sini
+  // Gerbang "Lengkapi data" (docs/arsitektur-auth.md §3.5): jamaah wajib mengisi telepon + WhatsApp dan memberi persetujuan (privasi + WhatsApp) sebelum halaman lain. Dicek di sini
   // (Server Component, punya Prisma) — middleware berjalan di Edge tanpa DB. Staf tidak terkena.
   if (session.role === 'pilgrim') {
-    const contact = await prisma.user.findUnique({ where: { id: session.userId }, select: { phone: true, whatsapp: true } })
-    if (contact && !isContactComplete(contact)) redirect(`/${safeLocale(locale)}/lengkapi-data`)
+    const state = await getOnboardingState(session.userId)
+    if (state && !isOnboardingComplete(state)) redirect(`/${safeLocale(locale)}/lengkapi-data`)
   }
 
   const navItems = [
