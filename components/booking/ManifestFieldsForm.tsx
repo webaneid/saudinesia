@@ -2,9 +2,7 @@
 
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
-import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
-import { COUNTRIES } from '@/lib/constants/countries'
-import { isoToFlagEmoji } from '@/lib/utils/flag'
+import { CountryCodeSelect } from '@/components/shared/CountryCodeSelect'
 import { cn } from '@/lib/utils'
 
 // Bentuk field seperti dikembalikan getManifestFieldRequirements() (docs/arsitektur-manifest.md
@@ -21,11 +19,6 @@ export type ManifestField = {
 }
 
 export type PhoneValue = { countryCode: string; number: string }
-
-const COUNTRY_CODE_OPTIONS: AutocompleteOption[] = COUNTRIES.map(c => ({
-  id: c.code,
-  label: `${isoToFlagEmoji(c.code)} +${c.dialCode} ${c.name}`,
-}))
 
 type Props = {
   fields: ManifestField[]
@@ -96,14 +89,7 @@ function ManifestFieldInput({ field, value, onChange }: { field: ManifestField; 
       const v = (value as PhoneValue | undefined) ?? { countryCode: 'ID', number: '' }
       return (
         <div className="flex gap-2">
-          <div className="w-36 shrink-0">
-            <AutocompleteSelect
-              options={COUNTRY_CODE_OPTIONS}
-              value={v.countryCode}
-              onChange={code => onChange({ ...v, countryCode: code ?? 'ID' })}
-              placeholder="Kode negara"
-            />
-          </div>
+          <CountryCodeSelect value={v.countryCode} onChange={countryCode => onChange({ ...v, countryCode })} />
           <Input type="tel" placeholder="8xx xxxx xxxx" className="flex-1"
             value={v.number} onChange={e => onChange({ ...v, number: e.target.value })} />
         </div>
