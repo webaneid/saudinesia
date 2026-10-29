@@ -77,7 +77,7 @@ t('penjaga sumber komponen: latar daftar PADAT (bg-background), lewat portal, ta
   assert.match(comp, /inAdmin && 'brand-scope'/, 'warna merek admin ikut ke portal')
   assert.match(read('app/globals.css'), /\.admin-canvas,\s*\.brand-scope \{\s*--primary/, 'brand-scope membawa variabel merek')
   for (const f of walk('app').concat(walk('components'))) assert.doesNotMatch(read(f), /\b(bg|text|border|ring)-popover\b/, `${f}: kelas popover tak didefinisikan → latar transparan`)
-  for (const needle of ['role="combobox"', 'role="listbox"', 'role="option"', 'aria-activedescendant', 'aria-selected', "e.key === 'Escape'", "e.key === 'Tab'", "e.key === 'Home'", "e.key === 'End'", 'scrollIntoView', 'createPortal', 'reposition', 'if (open && placed) inputRef.current?.focus()', "'scroll'", 'window.innerHeight', 'matchOptions']) assert.ok(comp.includes(needle), needle)
+  for (const needle of ['role="combobox"', 'role="listbox"', 'role="option"', 'aria-activedescendant', 'aria-selected', "e.key === 'Escape'", "e.key === 'Tab'", "e.key === 'Home'", "e.key === 'End'", 'scrollIntoView', 'createPortal', 'reposition', 'if (open && placed)', "'scroll'", 'window.innerHeight', 'matchOptions']) assert.ok(comp.includes(needle), needle)
   assert.doesNotMatch(comp, /\.toLowerCase\(\)\.includes/, 'pencarian hanya lewat matchOptions (satu aturan)')
 })
 
@@ -94,18 +94,32 @@ t('satu definisi kode negara telepon: ContactPicker dan kolom telepon manifest m
   for (const f of ['components/shared/AddressPicker.tsx', 'components/admin/vendor/VendorForm.tsx']) assert.match(read(f), /from '@\/lib\/ui\/countryOptions'/, `${f}: opsi negara bersama`)
 })
 
-t('Fase 2: tak ada `<select>` polos berpilihan kosong ("— pilih —", value="") di formulir — daftar data yang bertumbuh memakai ChoiceSelect; pengecualian hanya yang tercatat (Fase 3)', () => {
-  const Fase3 = new Set(['components/shared/TransportSearch.tsx']) // filter publik "Semua …" — menunggu Fase 3
+t('Fase 2+3: TIDAK ADA `<select>` polos di app/ maupun components/ (selain implementasi combobox itu sendiri) — daftar data dan enum pendek sama-sama lewat ChoiceSelect/CurrencySelect', () => {
   const bad: string[] = []
   for (const f of walk('app').concat(walk('components'))) {
-    if (Fase3.has(f)) continue
-    for (const m of read(f).matchAll(/<select\b[\s\S]*?<\/select>/g)) if (/<option value=(""|\{""\})|—\s*pilih/i.test(m[0])) bad.push(f)
+    if (f === 'components/shared/AutocompleteSelect.tsx') continue
+    if (/<select\b/.test(read(f).replace(/\/\*\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''))) bad.push(f)
   }
-  assert.deepEqual([...new Set(bad)], [], 'ganti dengan <ChoiceSelect> (components/shared/ChoiceSelect.tsx)')
+  assert.deepEqual(bad, [], 'ganti dengan <ChoiceSelect> (components/shared/ChoiceSelect.tsx)')
   const mods = ['packages/[id]/page.tsx', 'tour-packages/[id]/page.tsx', 'transport/trips/[id]/page.tsx', 'flight/new/page.tsx', 'flight/[id]/page.tsx']
   for (const m of mods) assert.match(read(`app/[locale]/admin/(protected)/products/${m}`), /<ChoiceSelect/, m)
   for (const m of ['MuthowifAssignPanel', 'CostActualsPanel']) assert.match(read(`app/[locale]/admin/(protected)/bookings/[id]/${m}.tsx`), /<ChoiceSelect/, m)
   assert.match(read('components/shared/ChoiceSelect.tsx'), /value=\{value \|\| null\} onChange=\{id => onChange\(id \?\? ''\)\}/, 'adaptor string ↔ null')
+})
+
+t('Fase 3: kotak cari otomatis hanya untuk daftar > 7 pilihan atau onSearch; enum pendek memakai daftar berfokus keyboard; mata uang satu komponen; baris vendor+mata uang bertumpuk (tak menyempit)', () => {
+  assert.match(comp, /searchable \?\? \(!!onSearch \|\| options\.length > 7\)/)
+  assert.match(comp, /\(hasSearch \? inputRef : listRef\)\.current\?\.focus\(\)/, 'daftar tanpa kotak cari menerima fokus keyboard')
+  assert.match(comp, /tabIndex=\{hasSearch \? undefined : -1\} onKeyDown=\{hasSearch \? undefined : onInputKey\}/)
+  assert.match(comp, /findIndex\(o => o\.id === value\)/, 'sorotan awal = pilihan terpilih')
+  const cur = read('components/shared/CurrencySelect.tsx')
+  assert.match(cur, /clearable=\{false\}/)
+  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/muthowif/page.tsx']) {
+    const src = read(f)
+    assert.match(src, /<CurrencySelect/, f)
+    assert.doesNotMatch(src, /CURRENCIES\.map|currencies\.map/, `${f}: tak boleh membuat opsi mata uang sendiri`)
+  }
+  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
 })
 
 if (failed) { console.log(`\n${failed} GAGAL`); process.exit(1) }

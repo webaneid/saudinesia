@@ -23,6 +23,10 @@ type Props = {
   className?: string
   /** Nama aksesibel kotak (bila tak ada label terlihat di dekatnya). */
   ariaLabel?: string
+  /** Kotak cari di dalam daftar. Bawaan: tampil bila pilihan > 7 atau memakai `onSearch`; daftar pendek (enum) tanpa kotak cari. */
+  searchable?: boolean
+  /** `sm` = setinggi baris tabel (aksi inline di sel). */
+  size?: 'md' | 'sm'
   // Kalau diisi, komponen TIDAK memfilter `options` sendiri (asumsi pemanggil sudah mengembalikan
   // hasil yang relevan dari server, mis. lewat endpoint pencarian) — dipakai untuk daftar besar
   // yang tidak realistis dimuat semua sekaligus. Kalau kosong (default), filter dilakukan lokal
@@ -42,7 +46,7 @@ type Placement = { top?: number; bottom?: number; left: number; minWidth: number
 // sehingga tidak pernah terpotong kartu/panel `overflow-hidden` induknya; selalu selebar isinya (min selebar kotak), membuka ke atas bila
 // ruang di bawah sempit (tinggi daftar menyesuaikan sisa ruang), dan bergeser ke kiri bila meluap layar. Warna merek admin dibawa lewat `brand-scope`. Dua mode: filter lokal atau
 // pencarian server-side (`onSearch`). Navigasi keyboard penuh (panah/Home/End/Enter/Esc/Tab) dengan pola ARIA combobox + listbox.
-export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pilih…', disabled, loading, clearable = true, searchPlaceholder = 'Ketik untuk mencari…', className, ariaLabel, onSearch }: Props) {
+export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pilih…', disabled, loading, clearable = true, searchPlaceholder = 'Ketik untuk mencari…', className, ariaLabel, searchable, size = 'md', onSearch }: Props) {
   const uid = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -55,6 +59,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
   const [place, setPlace] = useState<Placement | null>(null)
 
   const selected = options.find(o => o.id === value) ?? null
+  const hasSearch = searchable ?? (!!onSearch || options.length > 7)
   const shown = useMemo(() => (onSearch ? options : matchOptions(options, query)), [options, query, onSearch])
 
   const close = useCallback((refocus: boolean) => {
@@ -62,7 +67,8 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
     if (refocus) triggerRef.current?.focus()
   }, [])
 
-  useEffect(() => { setCursor(0) }, [shown])
+  // Sorotan awal: pilihan yang sedang terpilih (daftar pendek) atau yang teratas (saat mengetik).
+  useEffect(() => { setCursor(query ? 0 : Math.max(0, shown.findIndex(o => o.id === value))) }, [shown, open]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Posisi daftar dihitung dari kotak terpilih SEBELUM paint (tak berkedip) dan diperbarui saat layar/gulir/ukuran berubah.
   const reposition = useCallback(() => {
@@ -94,7 +100,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
 
   // Fokus ke kotak cari hanya setelah daftar terpasang dan terlihat (sebelum diposisikan ia `visibility: hidden` dan tak bisa difokuskan).
   const placed = place !== null
-  useEffect(() => { if (open && placed) inputRef.current?.focus() }, [open, placed])
+  useEffect(() => { if (open && placed) (hasSearch ? inputRef : listRef).current?.focus() }, [open, placed, hasSearch])
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
@@ -146,7 +152,8 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
         ref={triggerRef} type="button" role="combobox" aria-label={ariaLabel} aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? listId : undefined}
         disabled={disabled} onClick={() => (open ? close(false) : setOpen(true))} onKeyDown={onTriggerKey}
         className={cn(
-          'flex h-10 w-full items-center gap-2 rounded-md border bg-background px-3 text-left text-sm ring-offset-background transition-colors',
+          'flex w-full items-center gap-2 rounded-md border bg-background text-left ring-offset-background transition-colors',
+          size === 'sm' ? 'h-8 px-2 text-xs' : 'h-10 px-3 text-sm',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
           open ? 'border-ring' : 'border-input hover:border-muted-foreground/40',
           disabled && 'cursor-not-allowed opacity-50',
@@ -177,16 +184,22 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
             inAdmin && 'brand-scope',
           )}
         >
+          {hasSearch && (
           <div className="relative border-b border-input p-2">
-            <Search aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              ref={inputRef} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={ariaLabel ?? placeholder}
-              aria-activedescendant={shown[cursor] ? `${uid}-o${cursor}` : undefined}
-              value={query} onChange={e => onQueryChange(e.target.value)} onKeyDown={onInputKey} placeholder={searchPlaceholder} autoComplete="off"
-              className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            />
-          </div>
-          <ul id={listId} ref={listRef} role="listbox" style={{ maxHeight: place?.listMax ?? LIST_MAX_PX }} className="m-0 list-none overflow-y-auto p-1">
+              <Search aria-hidden className="pointer-events-none absolute left-4 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <input
+                ref={inputRef} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={ariaLabel ?? placeholder}
+                aria-activedescendant={shown[cursor] ? `${uid}-o${cursor}` : undefined}
+                value={query} onChange={e => onQueryChange(e.target.value)} onKeyDown={onInputKey} placeholder={searchPlaceholder} autoComplete="off"
+                className="h-9 w-full rounded-lg border border-input bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              />
+            </div>
+          )}
+          <ul
+            id={listId} ref={listRef} role="listbox" aria-label={ariaLabel ?? placeholder} style={{ maxHeight: place?.listMax ?? LIST_MAX_PX }}
+            tabIndex={hasSearch ? undefined : -1} onKeyDown={hasSearch ? undefined : onInputKey} aria-activedescendant={!hasSearch && shown[cursor] ? `${uid}-o${cursor}` : undefined}
+            className="m-0 list-none overflow-y-auto p-1 outline-none"
+          >
             {shown.length === 0 && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted-foreground">{loading ? 'Memuat…' : 'Tidak ada hasil.'}</li>}
             {shown.map((o, i) => (
               <li

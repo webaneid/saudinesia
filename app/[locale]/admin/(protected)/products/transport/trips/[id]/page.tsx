@@ -8,6 +8,7 @@ import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { CurrencySelect } from '@/components/shared/CurrencySelect'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -115,9 +116,7 @@ function PricingRow({ pricing, onChanged }: {
           <div className="min-w-0 flex-1">
             <VendorPicker value={vendorId} onChange={setVendorId} context="transport" label="Vendor transport" />
           </div>
-          <select className="admin-inp w-20 shrink-0 text-sm" value={currency} onChange={e => setCurrency(e.target.value)}>
-            {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
         </div>
       </div>
 

@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Bus } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
 
@@ -26,7 +27,7 @@ export default function NewVehiclePage() {
         <div><p className="mb-1 text-xs text-admin-muted">Nama</p><input className="admin-inp" autoFocus value={form.name} onChange={set('name')} placeholder="Bus Pariwisata 49" /></div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Tipe</p>
-          <select className="admin-select" value={form.vehicleType} onChange={set('vehicleType')}>{TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}</select>
+          <ChoiceSelect value={form.vehicleType} onChange={v => setForm(f => ({ ...f, vehicleType: v }))} clearable={false} options={TYPES.map(t => ({ id: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} />
         </div>
         <div><p className="mb-1 text-xs text-admin-muted">Kapasitas (orang)</p><input type="number" min={1} className="admin-inp" value={form.capacity} onChange={set('capacity')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Jumlah Armada (unit)</p><input type="number" min={1} className="admin-inp" value={form.fleetCount} onChange={set('fleetCount')} /></div>

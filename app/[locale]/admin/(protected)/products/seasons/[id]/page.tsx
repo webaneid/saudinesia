@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { CalendarDays } from 'lucide-react'
 import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type Season = { id: string; name: string; startDate: string; endDate: string }
 
@@ -29,7 +30,7 @@ export default function EditSeasonPage() {
       remove={{ confirmText: 'Hapus musim ini secara permanen?', onDelete: e.remove, deleting: e.deleting }}
     >
       <div className="grid gap-3 md:grid-cols-3">
-        <div><p className="mb-1 text-xs text-admin-muted">Musim</p><select className="admin-select" value={form.name} onChange={set('name')}><option value="ramadan">Ramadan</option><option value="hajj">Haji</option><option value="regular">Regular</option></select></div>
+        <div><p className="mb-1 text-xs text-admin-muted">Musim</p><ChoiceSelect ariaLabel="Musim" value={form.name} onChange={v => setForm(f => f && { ...f, name: v })} clearable={false} options={[{ id: 'ramadan', label: 'Ramadan' }, { id: 'hajj', label: 'Haji' }, { id: 'regular', label: 'Regular' }]} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Mulai</p><input type="date" className="admin-inp" value={form.startDate} onChange={set('startDate')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Selesai</p><input type="date" className="admin-inp" value={form.endDate} onChange={set('endDate')} /></div>
       </div>

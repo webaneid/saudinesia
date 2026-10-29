@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { X, UploadCloud, FileText, ImageIcon, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { DOC_LABEL, REQUIRED_DOCUMENTS, type DocType } from '@/lib/constants/booking'
 import type { VisaRequirement } from '@/lib/types/visa'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 const ALLOWED_MIMES  = ['image/jpeg', 'image/png', 'application/pdf']
 const ALLOWED_LABEL  = 'JPG, PNG, atau PDF'
@@ -125,16 +126,10 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
             <label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-admin-muted block mb-1.5">
               Jenis Dokumen
             </label>
-            <select
-              value={docType}
-              onChange={e => setDocType(e.target.value as DocType)}
-              disabled={!!defaultDocType || uploading}
-              className="admin-select text-sm disabled:opacity-60"
-            >
-              {docOptions.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+            <ChoiceSelect
+              ariaLabel="Jenis dokumen" value={docType} onChange={v => setDocType(v as DocType)} clearable={false}
+              disabled={!!defaultDocType || uploading} options={docOptions.map(o => ({ id: o.value, label: o.label }))}
+            />
           </div>
 
           {/* Drop zone */}

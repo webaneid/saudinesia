@@ -8,6 +8,7 @@ import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type TourismSite = { id: string; name: string; city: string | null; description: string | null; gmapsUrl: string | null; isActive: boolean }
 type Form = { name: string; city: string; description: string; gmapsUrl: string; isActive: boolean }
@@ -58,11 +59,7 @@ export default function TourismSiteEditPage() {
         </div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Kota</p>
-          <select className="admin-select" value={form.city} onChange={ev => patch({ city: ev.target.value })}>
-            <option value="makkah">Makkah</option>
-            <option value="madinah">Madinah</option>
-            <option value="jeddah">Jeddah</option>
-          </select>
+          <ChoiceSelect ariaLabel="Kota" value={form.city} onChange={v => patch({ city: v })} clearable={false} options={[{ id: 'makkah', label: 'Makkah' }, { id: 'madinah', label: 'Madinah' }, { id: 'jeddah', label: 'Jeddah' }]} />
         </div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Link Google Maps</p>

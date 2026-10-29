@@ -6,6 +6,7 @@ import { UtensilsCrossed } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export default function NewCateringPage() {
   const { locale } = useParams() as { locale: string }
@@ -25,11 +26,11 @@ export default function NewCateringPage() {
         <div className="md:col-span-2"><p className="mb-1 text-xs text-admin-muted">Nama Paket</p><input className="admin-inp" autoFocus value={form.name} onChange={set('name')} /></div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Board Type</p>
-          <select className="admin-select" value={form.boardType} onChange={set('boardType')}><option value="full_board">Full Board</option><option value="half_board">Half Board</option></select>
+          <ChoiceSelect ariaLabel="Board type" value={form.boardType} onChange={v => setForm(f => ({ ...f, boardType: v }))} clearable={false} options={[{ id: 'full_board', label: 'Full Board' }, { id: 'half_board', label: 'Half Board' }]} />
         </div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Menu</p>
-          <select className="admin-select" value={form.menuStyle} onChange={set('menuStyle')}><option value="asian">Asia</option><option value="arabic">Arab</option><option value="western">Barat</option></select>
+          <ChoiceSelect ariaLabel="Menu" value={form.menuStyle} onChange={v => setForm(f => ({ ...f, menuStyle: v }))} clearable={false} options={[{ id: 'asian', label: 'Asia' }, { id: 'arabic', label: 'Arab' }, { id: 'western', label: 'Barat' }]} />
         </div>
         <div><p className="mb-1 text-xs text-admin-muted">Harga/org/hari Regular</p><input type="number" className="admin-inp" value={form.pricePerPersonRegular} onChange={set('pricePerPersonRegular')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Harga/org/hari Ramadan</p><input type="number" className="admin-inp" value={form.pricePerPersonRamadan} onChange={set('pricePerPersonRamadan')} /></div>

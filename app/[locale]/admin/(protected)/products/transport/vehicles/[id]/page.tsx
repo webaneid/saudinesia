@@ -7,6 +7,7 @@ import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MediaField } from '@/components/admin/media/MediaField'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
 
@@ -60,9 +61,7 @@ export default function VehicleEditPage() {
         </div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Tipe</p>
-          <select className="admin-select" value={form.vehicleType} onChange={ev => patch({ vehicleType: ev.target.value })}>
-            {TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
-          </select>
+          <ChoiceSelect value={form.vehicleType} onChange={v => patch({ vehicleType: v })} clearable={false} options={TYPES.map(t => ({ id: t, label: t.charAt(0).toUpperCase() + t.slice(1) }))} />
         </div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Kapasitas (orang)</p>

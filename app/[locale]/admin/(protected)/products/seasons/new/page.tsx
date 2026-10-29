@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { CalendarDays } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export default function NewSeasonPage() {
   const { locale } = useParams() as { locale: string }
@@ -23,7 +24,7 @@ export default function NewSeasonPage() {
       <div className="grid gap-3 md:grid-cols-3">
         <div>
           <p className="mb-1 text-xs text-admin-muted">Musim</p>
-          <select className="admin-select" value={form.name} onChange={set('name')}><option value="ramadan">Ramadan</option><option value="hajj">Haji</option><option value="regular">Regular</option></select>
+          <ChoiceSelect ariaLabel="Musim" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} clearable={false} options={[{ id: 'ramadan', label: 'Ramadan' }, { id: 'hajj', label: 'Haji' }, { id: 'regular', label: 'Regular' }]} />
         </div>
         <div><p className="mb-1 text-xs text-admin-muted">Mulai</p><input type="date" className="admin-inp" value={form.startDate} onChange={set('startDate')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Selesai</p><input type="date" className="admin-inp" value={form.endDate} onChange={set('endDate')} /></div>

@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { formatRupiah, cn } from '@/lib/utils'
 import { ManifestFieldsForm, type ManifestField, type PhoneValue } from '@/components/booking/ManifestFieldsForm'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type TripOption = { id: string; name: string; category: string | null; origin: string; destination: string }
 type VehicleOption = {
@@ -127,10 +128,7 @@ export function TransportCheckoutForm({ trips, preselectedTripId }: { trips: Tri
         <div className="grid md:grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label>Rute</Label>
-            <select value={tripId} onChange={e => setTripId(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-              {trips.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
+            <ChoiceSelect ariaLabel="Rute" value={tripId} onChange={setTripId} clearable={false} options={trips.map(t => ({ id: t.id, label: t.name }))} />
           </div>
           <div className="space-y-2">
             <Label>Tanggal Perjalanan</Label>

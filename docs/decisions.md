@@ -3051,3 +3051,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** Daftar pilihan hotel/kendaraan/visa tumbuh dan tak bisa dicari; verifikasi browser menunjukkan daftar absolut Fase 1 terpotong kartu `overflow-hidden` di editor Paket, sehingga portal wajib. Variabel `--primary` dipisah ke `.brand-scope` agar tak menyeret latar `.admin-canvas`.
 **Alternatives considered:** Portal tanpa membawa warna merek (ditolak: sorotan jadi biru); menghapus `overflow-hidden` kartu (ditolak: efek samping di semua editor); `chooser` terpisah per halaman (ditolak: duplikasi).
 **Security check:** hanya komponen klien (tanpa route/auth/skema/dependensi); `bun audit` bersih; tes sumber + 13 mutasi (termasuk select kosong baru, adaptor nilai).
+
+## 2026-10-30 — Combobox seragam (Fase 3)
+**Decision:** Semua `<select>` yang tersisa (±24: enum pendek, mata uang ×6, sisi publik/jamaah) diganti `ChoiceSelect`/`CurrencySelect`; `AutocompleteSelect` mendapat `searchable` (otomatis hanya > 7 pilihan) dan `size`. Larangan `<select>` polos ditegakkan tes di seluruh `app/` dan `components/`; kelas `admin-select*` dihapus. Baris Vendor + Mata uang dibuat bertumpuk.
+**Rationale:** Pemilik meminta dropdown konsisten, bagus, dan elegan di semua modul. Enum pendek tak butuh kotak cari, tetapi harus bertampilan sama dan bisa dioperasikan dengan keyboard; baris vendor lama menyempit hingga "Pilih ve…".
+**Alternatives considered:** Membiarkan `<select>` native untuk enum ≤ 7 (ditolak: tampilan beda dan tak bisa ditata konsisten); komponen terpisah untuk enum (ditolak: duplikasi — satu komponen dengan `searchable` otomatis).
+**Security check:** hanya komponen/halaman klien (tanpa route/auth/skema/dependensi); `bun audit` bersih; penjaga sumber + tes.

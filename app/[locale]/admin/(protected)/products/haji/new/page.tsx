@@ -7,6 +7,7 @@ import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { HAJI_TYPES } from '@/lib/constants/haji'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export default function NewHajiPage() {
   const { locale } = useParams() as { locale: string }
@@ -27,7 +28,7 @@ export default function NewHajiPage() {
     >
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
         <div className="lg:col-span-2"><p className="mb-1 text-xs text-admin-muted">Nama Produk</p><input className="admin-inp" autoFocus value={form.name} onChange={set('name')} placeholder="Haji Furoda 2027 - Paket Premium" /></div>
-        <div><p className="mb-1 text-xs text-admin-muted">Jenis Haji</p><select className="admin-select" value={form.hajiType} onChange={set('hajiType')}>{HAJI_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}</select></div>
+        <div><p className="mb-1 text-xs text-admin-muted">Jenis Haji</p><ChoiceSelect ariaLabel="Jenis haji" value={form.hajiType} onChange={v => setForm(f => ({ ...f, hajiType: v }))} clearable={false} options={HAJI_TYPES.map(t => ({ id: t.value, label: t.label }))} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Tahun</p><input type="number" className="admin-inp" value={form.year} onChange={set('year')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Tanggal Berangkat</p><input type="date" className="admin-inp" value={form.departureDate} onChange={set('departureDate')} /></div>
         <div><p className="mb-1 text-xs text-admin-muted">Tanggal Kembali</p><input type="date" className="admin-inp" value={form.returnDate} onChange={set('returnDate')} /></div>

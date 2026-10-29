@@ -18,6 +18,8 @@ import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { CurrencySelect } from '@/components/shared/CurrencySelect'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -262,10 +264,7 @@ export default function HotelDetailPage() {
           <MetaBox title="Atribut" icon={ListChecks} collapsible={false}>
             <div>
               <label htmlFor="hotel-city" className="mb-1 block text-xs text-admin-muted">Kota</label>
-              <select id="hotel-city" className="admin-select" value={form.city} onChange={set('city')}>
-                <option value="makkah">Makkah</option>
-                <option value="madinah">Madinah</option>
-              </select>
+              <ChoiceSelect ariaLabel="Kota" value={form.city} onChange={v => setForm(f => ({ ...f, city: v }))} clearable={false} options={[{ id: 'makkah', label: 'Makkah' }, { id: 'madinah', label: 'Madinah' }]} />
             </div>
             <div>
               <label htmlFor="hotel-stars" className="mb-1 block text-xs text-admin-muted">Bintang</label>
@@ -555,9 +554,7 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
             <div className="min-w-0 flex-1">
               <VendorPicker value={vendorId} onChange={setVendorId} context="hotel" label="Vendor hotel" />
             </div>
-            <select className="admin-inp w-20 shrink-0" value={currency} onChange={e => setCurrency(e.target.value)}>
-              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
+            <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
           </div>
 
           <div className="space-y-2">

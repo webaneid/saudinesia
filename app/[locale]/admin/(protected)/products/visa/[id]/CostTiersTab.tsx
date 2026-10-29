@@ -8,6 +8,7 @@ import { Switch } from '@/components/admin/ui/Switch'
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { CurrencySelect } from '@/components/shared/CurrencySelect'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -243,13 +244,12 @@ type VendorFieldProps = {
 // Komponen tingkat atas (bukan didefinisikan di dalam CostTiersTab) supaya tidak di-mount ulang tiap render.
 function VendorField({ vendorId, onSelect, currency, onCurrency, label }: VendorFieldProps) {
   return (
-    <div className="flex items-start gap-2">
-      <div className="min-w-0 flex-1">
-        <VendorPicker value={vendorId} onChange={onSelect} context="visa" label={label} />
+    <div className="space-y-2">
+      <VendorPicker value={vendorId} onChange={onSelect} context="visa" label={label} />
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-admin-muted">Mata uang</span>
+        <CurrencySelect value={currency} onChange={onCurrency} currencies={CURRENCIES} />
       </div>
-      <select aria-label="Mata uang" className="admin-select w-24 shrink-0" value={currency} onChange={e => onCurrency(e.target.value)}>
-        {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
-      </select>
     </div>
   )
 }

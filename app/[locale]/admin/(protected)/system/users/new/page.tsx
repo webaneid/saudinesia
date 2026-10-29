@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { Users } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export default function NewAdminUserPage() {
   const { locale } = useParams() as { locale: string }
@@ -26,7 +27,7 @@ export default function NewAdminUserPage() {
         <div><p className="mb-1 text-xs text-admin-muted">Password</p><input type="password" className="admin-inp" autoComplete="new-password" value={form.password} onChange={set('password')} placeholder="Min 8 kar, huruf+angka+spesial" /></div>
         <div>
           <p className="mb-1 text-xs text-admin-muted">Role</p>
-          <select className="admin-select" value={form.role} onChange={set('role')}><option value="admin">Admin (Ops)</option><option value="manager">Manager</option><option value="superadmin">Super Admin</option></select>
+          <ChoiceSelect ariaLabel="Role" value={form.role} onChange={v => setForm(f => ({ ...f, role: v }))} clearable={false} options={[{ id: 'admin', label: 'Admin (Ops)' }, { id: 'manager', label: 'Manager' }, { id: 'superadmin', label: 'Super Admin' }]} />
         </div>
       </div>
     </CreatePage>

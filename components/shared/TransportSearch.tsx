@@ -8,6 +8,7 @@ import {
   ArrowRightLeft, ArrowRight, Search, SearchX,
 } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 export type VehicleOption = {
   pricingId:   string
@@ -80,33 +81,21 @@ export default function TransportSearch({ trips, locale }: Props) {
       {/* Route finder */}
       <div className="rounded-2xl border bg-card p-5 space-y-3">
         <p className="text-sm font-medium text-muted-foreground">Mau ke mana?</p>
-        <div className="flex items-center gap-2">
-          <label className="flex-1 rounded-xl border bg-background px-3 py-2.5">
+        <div className="flex items-end gap-2">
+          <div className="min-w-0 flex-1 space-y-1">
             <span className="block text-[11px] text-muted-foreground">Dari</span>
-            <select
-              value={origin} onChange={e => setOrigin(e.target.value)}
-              className="w-full bg-transparent text-sm font-medium text-foreground outline-none -ml-px"
-            >
-              <option value="">Semua titik jemput</option>
-              {origins.map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
-          </label>
+            <ChoiceSelect ariaLabel="Dari" placeholder="Semua titik jemput" value={origin} onChange={setOrigin} options={origins.map(o => ({ id: o, label: o }))} />
+          </div>
           <button
             type="button" onClick={swap} aria-label="Tukar titik jemput dan tujuan"
-            className="shrink-0 h-9 w-9 rounded-full border grid place-items-center text-muted-foreground hover:text-teal-600 hover:border-teal-300 transition-colors"
+            className="shrink-0 h-10 w-10 rounded-full border grid place-items-center text-muted-foreground hover:text-teal-600 hover:border-teal-300 transition-colors"
           >
             <ArrowRightLeft className="h-4 w-4" />
           </button>
-          <label className="flex-1 rounded-xl border bg-background px-3 py-2.5">
+          <div className="min-w-0 flex-1 space-y-1">
             <span className="block text-[11px] text-muted-foreground">Ke</span>
-            <select
-              value={destination} onChange={e => setDest(e.target.value)}
-              className="w-full bg-transparent text-sm font-medium text-foreground outline-none -ml-px"
-            >
-              <option value="">Semua tujuan</option>
-              {destinations.map(d => <option key={d} value={d}>{d}</option>)}
-            </select>
-          </label>
+            <ChoiceSelect ariaLabel="Ke" placeholder="Semua tujuan" value={destination} onChange={setDest} options={destinations.map(d => ({ id: d, label: d }))} />
+          </div>
         </div>
       </div>
 
