@@ -2,10 +2,13 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
+import { onboardingRefusal } from '@/lib/auth/contact'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession()
+    const refusal = await onboardingRefusal(session.userId, session.role)
+    if (refusal) return refusal
     const { id } = await params
 
     const booking = await prisma.booking.findFirst({

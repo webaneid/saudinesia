@@ -6,6 +6,7 @@ import {
   deleteObject,
 } from '@/lib/storage/minio'
 import { ok, err } from '@/lib/validators'
+import { onboardingRefusal } from '@/lib/auth/contact'
 import { REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 
@@ -70,6 +71,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   if (auth.isAdmin) {
     return NextResponse.json(err('Admins cannot upload on behalf of pilgrims'), { status: 403 })
   }
+  const refusal = await onboardingRefusal(auth.session.userId, auth.session.role)
+  if (refusal) return refusal
 
   let formData: FormData
   try {

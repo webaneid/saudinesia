@@ -1,6 +1,8 @@
+import { NextResponse } from 'next/server'
 import type { UserRole } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { PRIVACY_POLICY_VERSION, WHATSAPP_CONSENT_VERSION } from '@/lib/constants/legal'
+import { err } from '@/lib/validators'
 
 // Data kontak akun (docs/arsitektur-auth.md §3.5). Telepon & WhatsApp: digit E.164, tidak diverifikasi, tidak unik.
 
@@ -32,6 +34,17 @@ export async function requireContactForBooking(userId: string, role: UserRole): 
   if (role !== 'pilgrim') return true
   const state = await getOnboardingState(userId)
   return Boolean(state && isOnboardingComplete(state))
+}
+
+/**
+ * Gerbang langkah awal di SERVER untuk endpoint jamaah yang MENGUMPULKAN data pribadi atau uang (SEC-107; layout hanya menahan UI): pesan, unggah dokumen,
+ * unggah bukti bayar, simpan alamat/profil. Mengembalikan respons 422 yang siap dikirim bila langkah awal belum lengkap, `null` bila boleh lanjut (staf selalu boleh).
+ * Sengaja TIDAK dipasang pada hak jamaah: batalkan booking, hapus dokumen, minta penghapusan akun, lihat data, dan endpoint langkah awal itu sendiri.
+ * Dijaga `scripts/test-customers-create.ts` (penemu rute: tiap POST/PUT/PATCH jamaah wajib memanggil ini atau tercatat sebagai pengecualian).
+ */
+export async function onboardingRefusal(userId: string, role: UserRole): Promise<NextResponse | null> {
+  if (await requireContactForBooking(userId, role)) return null
+  return NextResponse.json(err('Lengkapi nomor telepon, WhatsApp, dan persetujuan Anda terlebih dahulu.'), { status: 422 })
 }
 
 export type ContactUpdate =

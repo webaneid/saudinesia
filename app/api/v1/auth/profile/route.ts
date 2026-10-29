@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
+import { onboardingRefusal } from '@/lib/auth/contact'
 import { profileSchema } from '@/lib/validators/auth'
 import { upsertAddress } from '@/lib/address/prepare'
 import { ok, err } from '@/lib/validators'
@@ -27,6 +28,8 @@ export async function GET() {
 export async function PUT(request: Request) {
   try {
     const session = await requireSession()
+    const refusal = await onboardingRefusal(session.userId, session.role)
+    if (refusal) return refusal
 
     const body = await request.json().catch(() => null)
     const parsed = profileSchema.safeParse(body)
