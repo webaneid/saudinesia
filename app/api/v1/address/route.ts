@@ -5,12 +5,15 @@ import { ok, err } from '@/lib/validators'
 import { addressSchema } from '@/lib/validators/address'
 import { prepareAddressData } from '@/lib/address/prepare'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
+import { onboardingRefusal } from '@/lib/auth/contact'
 
 // docs/arsitektur-alamat.md §3.1 — Address adalah entitas nilai reusable, siapa pun yang login
 // boleh membuat baris baru (dipakai pilgrim mengisi manifest, bukan cuma admin).
 export async function POST(req: Request) {
   try {
     const session = await requireSession()
+    const refusal = await onboardingRefusal(session.userId, session.role)
+    if (refusal) return refusal
     const limit = await consume(policy('addressCreateUser', session.userId))
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
     const parsed = addressSchema.safeParse(await req.json().catch(() => null))

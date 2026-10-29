@@ -44,7 +44,7 @@ export async function notify(input: NotifyInput): Promise<ChannelOutcome[]> {
 }
 
 async function run({ userId, bookingId = null, event, dedupe = false }: NotifyInput): Promise<ChannelOutcome[]> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true, fullName: true } })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, emailVerifiedAt: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true, fullName: true } })
   if (!user) return []
 
   const deliver = (channel: 'whatsapp' | 'email', recipient: string, preview: string, send: () => Promise<SendOutcome>) =>
@@ -75,12 +75,17 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
     }))
   }
 
-  // Email — hanya bila akun punya alamat yang bisa dituju. Email placeholder (`*.invalid`) tidak pernah dikirimi.
+  // Email — hanya bila akun punya alamat yang bisa dituju dan terverifikasi. Email placeholder (`*.invalid`) tidak pernah dikirimi.
   if (isDeliverableEmail(user.email)) {
     const email = user.email
     tasks.push((async () => {
       const setting = await prisma.siteSetting.findFirst({ select: { emailNotificationsEnabled: true } })
       const content = emailContent(event, { name: user.fullName.trim(), bookingId })
+      // Alamat yang pemiliknya belum membuktikan (akun buatan staf yang belum diaktifkan) bisa salah ketik atau milik orang lain: rincian pesanan tak boleh dikirim ke sana (SEC-106).
+      // Pesan auth (tautan aktivasi) tidak lewat notify() — ia memang dikirim ke alamat yang belum terbukti.
+      if (!user.emailVerifiedAt) {
+        return deliver('email', email, content.subject, async () => ({ status: 'skipped' as const, reason: 'Alamat email belum diverifikasi pemiliknya' }))
+      }
       if (setting && !setting.emailNotificationsEnabled) {
         return deliver('email', email, content.subject, async () => ({ status: 'skipped' as const, reason: 'Notifikasi email dinonaktifkan di pengaturan admin' }))
       }

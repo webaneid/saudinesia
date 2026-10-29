@@ -281,14 +281,15 @@ await t('requireContactForBooking: jamaah tanpa kontak ATAU tanpa persetujuan di
   assert.equal(await requireContactForBooking('tidak-ada', 'pilgrim'), false)
 })
 
-await t('route POST /bookings memanggil requireContactForBooking SEBELUM membaca body dan SEBELUM efek samping (penjaga tak boleh terhapus diam-diam)', async () => {
+await t('route POST /bookings memanggil onboardingRefusal (gerbang langkah awal, SEC-107) SEBELUM membaca body dan SEBELUM efek samping (penjaga tak boleh terhapus diam-diam)', async () => {
   const src = readFileSync(new URL('../app/api/v1/bookings/route.ts', import.meta.url), 'utf8')
   const post = src.slice(src.indexOf('export async function POST'))
-  const guard = post.indexOf('requireContactForBooking(')
+  const guard = post.indexOf('onboardingRefusal(')
   assert.ok(guard > 0, 'penjaga hilang dari POST /bookings')
   assert.ok(guard < post.indexOf('request.json()'), 'penjaga harus sebelum membaca body')
   assert.ok(guard < post.indexOf('prisma.$transaction'), 'penjaga harus sebelum transaksi/efek samping')
-  assert.match(post, /status: 422/)
+  assert.match(post, /if \(refusal\) return refusal/)
+  assert.match(readFileSync(new URL('../lib/auth/contact.ts', import.meta.url), 'utf8'), /status: 422/, 'gerbang menjawab 422')
 })
 
 await t('updateContact: pengguna daftar manual (sudah menyetujui saat menyelesaikan) tidak ditanya lagi; akun tak ada → not_found', async () => {

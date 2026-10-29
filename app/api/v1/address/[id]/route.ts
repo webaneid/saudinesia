@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
+import { onboardingRefusal } from '@/lib/auth/contact'
 import { ok, err } from '@/lib/validators'
 import { addressSchema } from '@/lib/validators/address'
 import { prepareAddressData } from '@/lib/address/prepare'
@@ -33,6 +34,8 @@ export async function GET(_req: Request, { params }: Ctx) {
 export async function PUT(req: Request, { params }: Ctx) {
   try {
     const session = await requireSession()
+    const refusal = await onboardingRefusal(session.userId, session.role)
+    if (refusal) return refusal
     const { id } = await params
     if (!(await canAccessAddress(session, id))) return NextResponse.json(err('Alamat tidak ditemukan'), { status: 404 })
     const parsed = addressSchema.safeParse(await req.json().catch(() => null))

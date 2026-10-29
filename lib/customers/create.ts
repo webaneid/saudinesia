@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { hash } from 'bcryptjs'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { issueToken, INVITATION_TTL_MS } from '@/lib/auth/tokens'
+import { INVITATION_TTL_MS, discardToken, issueToken, supersedeOlderTokens } from '@/lib/auth/tokens'
 import { sendAuthEmail } from '@/lib/auth/authEmail'
 import { prepareAddressData } from '@/lib/address/prepare'
 import type { CustomerCreateInput } from '@/lib/validators/customers'
@@ -71,10 +71,16 @@ export async function findInvitable(userId: string): Promise<{ ok: true; user: I
   return { ok: true, user }
 }
 
-/** Terbitkan token baru (tautan lama hangus) dan kirim emailnya. Token tak pernah keluar dari server selain lewat email. */
+/**
+ * Terbitkan token baru dan kirim emailnya. Tautan lama HANYA dihanguskan bila email baru benar-benar terkirim: kirim ulang yang gagal/dilewati membuang token barunya
+ * dan membiarkan tautan lama tetap berfungsi (SEC-106). Di development (tautan dicetak ke log server) token baru dipertahankan dan yang lama tetap dihanguskan.
+ * Token tak pernah keluar dari server selain lewat email.
+ */
 export async function sendInvitation(user: Invitable): Promise<Exclude<InviteStatus, 'none'>> {
-  const token = await issueToken({ type: 'password_reset', userId: user.id, ttlMs: INVITATION_TTL_MS })
+  const token = await issueToken({ type: 'password_reset', userId: user.id, ttlMs: INVITATION_TTL_MS }, { keepExisting: true })
   const result = await sendAuthEmail('account_invitation', user.email, { name: user.fullName, locale: 'id', token })
+  if (result.status === 'sent' || process.env.NODE_ENV === 'development') await supersedeOlderTokens(token)
+  else await discardToken(token)
   return result.status
 }
 
