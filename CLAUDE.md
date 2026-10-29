@@ -180,7 +180,7 @@ middleware.ts                 # auth + role guard
 - One component per file; filename = component name in PascalCase
 - Use shadcn/ui primitives as the base; extend via `className` props only
 - Never import from `admin/` inside `(pilgrim)/` routes or vice versa
-- Dropdown pencarian di formulir = `components/shared/AutocompleteSelect` (opsi `prefix`/`hint`/`short`, aturan cari di `lib/ui/combobox.ts`); kode negara telepon = `CountryCodeSelect`, opsi negara = `lib/ui/countryOptions.ts`. Tidak ada `<select>` polos di mana pun: daftar data dan enum pendek = `ChoiceSelect` (nilai string; kotak cari otomatis hanya untuk > 7 pilihan), mata uang = `CurrencySelect`. Jangan membuat dropdown sendiri atau memakai kelas `bg-popover` (token tak ada → daftar transparan) — dijaga `scripts/test-combobox.ts` (`docs/arsitektur-combobox.md`)
+- Dropdown pencarian di formulir = `components/shared/AutocompleteSelect` (opsi `prefix`/`hint`/`short`, aturan cari di `lib/ui/combobox.ts`); kode negara telepon = `CountryCodeSelect`, opsi negara = `lib/ui/countryOptions.ts`; bendera = komponen `Flag` (SVG di `public/flags`, disalin `scripts/sync-flags.ts`) — JANGAN emoji bendera (Windows menampilkannya sebagai huruf). Tidak ada `<select>` polos di mana pun: daftar data dan enum pendek = `ChoiceSelect` (nilai string; kotak cari otomatis hanya untuk > 7 pilihan), mata uang = `CurrencySelect`. Jangan membuat dropdown sendiri atau memakai kelas `bg-popover` (token tak ada → daftar transparan) — dijaga `scripts/test-combobox.ts` (`docs/arsitektur-combobox.md`)
 
 ---
 

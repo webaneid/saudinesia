@@ -3057,3 +3057,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** Pemilik meminta dropdown konsisten, bagus, dan elegan di semua modul. Enum pendek tak butuh kotak cari, tetapi harus bertampilan sama dan bisa dioperasikan dengan keyboard; baris vendor lama menyempit hingga "Pilih ve…".
 **Alternatives considered:** Membiarkan `<select>` native untuk enum ≤ 7 (ditolak: tampilan beda dan tak bisa ditata konsisten); komponen terpisah untuk enum (ditolak: duplikasi — satu komponen dengan `searchable` otomatis).
 **Security check:** hanya komponen/halaman klien (tanpa route/auth/skema/dependensi); `bun audit` bersih; penjaga sumber + tes.
+
+## 2026-10-30 — Bendera SVG, bukan emoji
+**Decision:** Bendera negara memakai gambar SVG statis (`public/flags/<ISO>.svg`, disalin `scripts/sync-flags.ts` dari devDependency `country-flag-icons`, MIT) lewat komponen `Flag`; `ComboOption.prefix` diganti `flag` (kode ISO); `isoToFlagEmoji` dan emoji bendera dihapus dan dilarang tes.
+**Rationale:** Windows tidak menggambar emoji bendera (tampil dua huruf kode negara); pemilik memilih gambar agar sama di semua perangkat. SVG di-commit supaya produksi tak bergantung pada node_modules dan dilayani sebagai berkas statis; paket hanya dipakai saat menyalin.
+**Alternatives considered:** Biarkan emoji (ditolak: tampilan Windows); lencana teks "ID" (ditolak: kurang informatif); komponen React per bendera dari paket (ditolak: menambah bundel JS ratusan bendera); CDN eksternal (ditolak: pelacakan/ketergantungan pihak ketiga).
+**Security check:** dependensi baru hanya devDependency data (tanpa kode runtime) — pemelihara dan lisensi MIT diperiksa; `bun audit` bersih; tiap SVG diperiksa tes (tanpa skrip/elemen eksternal, < 20 KB, identik dengan sumber) dan ditampilkan lewat `<img>` (skrip SVG tak dieksekusi); tak ada route/auth/skema baru.

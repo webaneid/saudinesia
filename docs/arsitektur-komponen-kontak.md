@@ -172,3 +172,5 @@ Semua 5 fase di §9 dieksekusi berurutan, `bun run build` 0 error di tiap fase. 
 - Pola desain & keputusan gaya: `docs/arsitektur-alamat.md` (komponen berdiri sendiri dulu → diwire, `.nullish()` di validator, styling shadcn generik)
 - Prasyarat/pasangan: `docs/arsitektur-manifest.md` §3.1 (perlu update saat dieksekusi, lihat §7 di atas)
 - Booking multi-jamaah: keputusan besar "satu akun bisa booking untuk banyak orang" (diskusi sesi 2026-07-23, sebelum eksekusi Alamat)
+
+> **Pembaruan 2026-10-30:** emoji bendera (`isoToFlagEmoji`, `lib/utils/flag.ts`) dihapus — Windows tidak menggambarnya (tampil dua huruf). Bendera kini gambar SVG statis `public/flags/<ISO>.svg` lewat komponen `Flag`; lihat `docs/arsitektur-combobox.md` §4d.
