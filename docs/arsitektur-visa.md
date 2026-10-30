@@ -1,5 +1,7 @@
 # Arsitektur — Modul Visa
 
+> **Koreksi 2026-10-30 (recheck booking-engine-v2 §0.1):** `VisaProduct.requiredComponents` **sudah dibaca** `lib/validators/booking.ts` (validasi `hotel`/`transport` di `superRefine`) — catatan "belum dibaca wizard manapun" di §9 basi (wizard sudah dihapus; validator server yang membacanya). Belum ada UI admin untuk mengisinya, kedua visa yang ada berisi `[]`, dan komponen `flight` belum dikenal. Aturan ketergantungan visa dirancang ulang di `docs/arsitektur-booking-engine-v2.md` §4.1 (per produk + pelonggaran per pelanggan).
+
 > **Status: SOURCE OF TRUTH untuk modul Visa.** Dokumen ini menggantikan bagian Visa di `docs/architecture.md` (yang berisi desain awal/skema lama dan sudah tidak sesuai kode). Ditulis berdasarkan audit langsung ke kode aktual per **2026-07-08**. Update dokumen ini setiap kali struktur/alur visa berubah — jangan biarkan basi seperti pendahulunya.
 >
 > Riwayat rencana yang melahirkan struktur saat ini ada di `docs/decisions.md` entri **2026-05-22 — Visa Product v2**. Dokumen lama `docs/visa-architecture.md` (rencana v2) sudah diserap ke sini dan dihapus.
