@@ -159,25 +159,25 @@ const hp = await newSchedule(); await addCost('hotel', hp.schedule.id, 'kamar', 
 const pkg = await prisma.package.create({
   data: {
     name: `${tag} paket`, 
-    hotelMakkahMode: 'included', includedHotelMakkahScheduleId: hp.schedule.id, includedHotelMakkahNights: 3, includedHotelMakkahNumRooms: 2, includedHotelMakkahPrice: 1_200_000,
+    hotelMakkahMode: 'included', includedHotelMakkahScheduleId: hp.schedule.id, includedHotelMakkahNights: 3, includedHotelMakkahOccupancy: 2, includedHotelMakkahPrice: 1_200_000,
   },
 })
 await addCost('package', pkg.id, 'layanan', 500_000)
-await t('Paket Umroh: modal = komponen + (malam × kamar × modal hotel), jual = komponen + harga hotel tersimpan', async () => {
+await t('Paket Umroh (PER ORANG): modal = komponen + (malam × modal kamar ÷ isi), jual = komponen + (malam × harga kamar tersimpan ÷ isi)', async () => {
   await repriceOwner('package', pkg.id)
   const p = await getPricePoint('package', pkg.id)
-  // jual: komponen 500.000×1,2=600.000 + hotel 3×2×1.200.000=7.200.000 ; modal: 500.000 + 3×2×1.000.000
-  assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [6_500_000, 7_800_000, 1_300_000])
+  // jual: komponen 500.000×1,2=600.000 + hotel 3×1.200.000÷2=1.800.000 ; modal: 500.000 + 3×1.000.000÷2=1.500.000
+  assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [2_000_000, 2_400_000, 400_000])
 })
 await t('Paket Umroh: bagian included yang modalnya TAK bisa dipastikan (muthowif) → modal paket null, jual tetap benar (untung tak diklaim)', async () => {
   await prisma.package.update({ where: { id: pkg.id }, data: { muthowifMode: 'included', includedMuthowifPrice: 400_000 } })
   await repriceOwner('package', pkg.id)
   const p = await getPricePoint('package', pkg.id)
-  assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [null, 8_200_000, null])
+  assert.deepEqual([p?.costIdr, p?.sellIdr, p?.profitIdr], [null, 2_800_000, null])
 })
 await t('Paket Umroh: hotel included yang titik harganya TANPA modal → modal paket null', async () => {
   const legacyHotel = await newSchedule(); await setManualSell({ ownerType: 'hotel', ownerId: legacyHotel.schedule.id, sellIdr: 900_000, byUserId: 'u-engine-test' }) // jual tanpa modal
-  const p2 = await prisma.package.create({ data: { name: `${tag} paket2`, hotelMadinahMode: 'included', includedHotelMadinahScheduleId: legacyHotel.schedule.id, includedHotelMadinahNights: 2, includedHotelMadinahNumRooms: 1, includedHotelMadinahPrice: 900_000 } })
+  const p2 = await prisma.package.create({ data: { name: `${tag} paket2`, hotelMadinahMode: 'included', includedHotelMadinahScheduleId: legacyHotel.schedule.id, includedHotelMadinahNights: 2, includedHotelMadinahOccupancy: 1, includedHotelMadinahPrice: 900_000 } })
   await repriceOwner('package', p2.id)
   const p = await getPricePoint('package', p2.id)
   assert.deepEqual([p?.costIdr, p?.sellIdr], [null, 1_800_000])

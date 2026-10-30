@@ -67,15 +67,20 @@ function buildBuyerAddress(user: InvoiceBooking['user']): string {
   return [addr.fullAddress, addr.city, addr.stateRegion, addr.countryCode].filter(Boolean).join(', ')
 }
 
-// Urutan baris di invoice: sama seperti sebelum snapshot (hotel, transport, muthowif, katering, paket ziarah, haji, visa), penyesuaian tingkat-booking paling akhir.
-const ITEM_ORDER = ['hotel', 'transport', 'muthowif', 'catering', 'tourPackage', 'haji', 'visa', 'booking']
+// Urutan baris di invoice: paket umroh, tiket, hotel, transport, muthowif, katering, paket ziarah, haji, visa; penyesuaian tingkat-booking paling akhir.
+const ITEM_ORDER = ['package', 'flight', 'hotel', 'transport', 'muthowif', 'catering', 'tourPackage', 'haji', 'visa', 'booking']
+// Item yang diurai SATU BARIS PER KOMPONEN di invoice (keputusan pemilik P2, docs/arsitektur-booking-engine-v2.md §10.2): "Visa × 2", "Hotel Makkah × 2", …
+const ITEMIZED = new Set(['package'])
 
 export async function buildInvoiceData(booking: InvoiceBooking): Promise<InvoiceData> {
   // Satu baris invoice per ITEM (paket berbaris-banyak — komponen, hotel, penyesuaian — tampil sebagai satu baris bagi pilgrim).
   const groups = new Map<string, { type: string; itemId: string; label: string; detail: string; qty: number; amountCents: number }>()
   for (const l of booking.priceSnapshots) {
-    const key = `${l.itemType}|${l.itemId}`
-    const g = groups.get(key) ?? { type: l.itemType, itemId: l.itemId, label: l.itemLabel, detail: l.itemDetail, qty: l.itemQty, amountCents: 0 }
+    const itemized = ITEMIZED.has(l.itemType)
+    const key = itemized ? `${l.itemType}|${l.itemId}|${l.lineKey}` : `${l.itemType}|${l.itemId}`
+    const g = groups.get(key) ?? (itemized
+      ? { type: l.itemType, itemId: l.itemId, label: l.description, detail: `${l.itemLabel} · ${l.itemDetail}`, qty: Number(l.qty), amountCents: 0 }
+      : { type: l.itemType, itemId: l.itemId, label: l.itemLabel, detail: l.itemDetail, qty: l.itemQty, amountCents: 0 })
     g.amountCents += Math.round(Number(l.totalSellIdr) * 100)
     groups.set(key, g)
   }

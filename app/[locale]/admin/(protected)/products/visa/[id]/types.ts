@@ -11,6 +11,7 @@ export type ProductDetail = {
   processDays: number
   isActive: boolean
   durationFeeRules?: unknown
+  requiredComponents: unknown // aturan ketergantungan (lib/validators/visa.ts)
   // docs/arsitektur-dokumen.md §4 — sumber kebenaran syarat dokumen (Json `requirements` lama sudah deprecated)
   documentRequirements: VisaRequirement[]
 }

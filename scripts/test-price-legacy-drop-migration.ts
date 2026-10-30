@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyUser } from './lib/legacyUser'
 
 await assertThrowawayDb()
 
@@ -130,7 +131,7 @@ async function world(db: PrismaClient, withPoints: boolean, skip?: string) {
   await setLegacy(db, 'muthowif_service_price', muth.id, { price: 450_000 }); ids.muthowif_service_price = muth.id
   const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090 } })
   await setLegacy(db, 'haji_products', haji.id, { price: 4_200_000 }); ids.haji_products = haji.id
-  const pkg = await db.package.create({ data: { name: 'P' } })
+  const pkg = await db.package.create({ data: { name: 'P' }, select: { id: true } })
   await setLegacy(db, 'packages', pkg.id, { price: 6_600_000 }); ids.packages = pkg.id
   const tour = await db.tourPackage.create({ data: { name: 'Z' } })
   await setLegacy(db, 'tour_packages', tour.id, { price: 350_000 }); ids.tour_packages = tour.id
@@ -208,7 +209,7 @@ await t('katering diperiksa PER MUSIM: musim berharga tanpa titik membatalkan wa
 })
 await t('riwayat kurs/vendor beku Visa dipindah ke snapshot (hanya yang kosong); snapshot yang sudah membawa jejak tak diubah; trigger beku AKTIF lagi sesudahnya', async () => {
   const r = await scenarioWith(async db => {
-    const user = await db.user.create({ data: { email: `m${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+    const user = await legacyUser(db, { email: `m${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
     const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh' } })
     const bk = await db.booking.create({ data: { bookingCode: `K${Date.now()}`, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 3_000_000 }, select: { id: true } })
     const mk = async (hist: { fx: string[]; vendor: string[] } | null, snapVendors: string[]) => {

@@ -1,5 +1,7 @@
 # Arsitektur — Modul Paket Umroh (`Package`/`PackageItem`)
 
+> **Pembaruan 2026-10-31 (booking engine v2 Fase 4, `docs/arsitektur-booking-engine-v2.md` §10.2):** Paket Umroh kini **dapat dipesan** (item `package`, model `BookingPackage`) dan dijual **PER ORANG**: hotel `included` = malam × harga kamar ÷ isi kamar (kolom `included*NumRooms` diganti `included*Occupancy`), kendaraan `included` = harga ÷ kapasitas, katering `included` = hari × harga per orang-hari. Di invoice paket diurai satu baris per komponen × jumlah orang. Tanggal berangkat dipilih saat booking (dalam periode tiket bila bertiket); hanya kursi tiket yang ditahan. Muthowif `user_choice` belum dapat dipesan. Bagian di bawah yang menyebut "jumlah kamar" atau "booking belum disentuh" adalah riwayat.
+
 > **Status per 2026-07-22: SELESAI & TERVERIFIKASI (§4-§6 — Fase 1-6 semua dieksekusi).** §1-§2 adalah audit as-built kondisi SEBELUM refactor (arsip). §3-§6 adalah rencana yang SUDAH dieksekusi penuh mengikuti "Fase Eksekusi SOP" di `CLAUDE.md` — setiap fase digerbangi `bun run build` 0 error, diverifikasi browser end-to-end (lihat §7).
 >
 > Cakupan sesi ini **hanya modul PRODUCT** (schema, fungsi harga, admin builder, katalog publik) — **booking engine (wizard, `BookingPackage`, kuota) sengaja TIDAK disentuh**, akan direfactor total terpisah (lihat `docs/arsitektur-booking.md`, rencana pending). Ini instruksi eksplisit user 2026-07-22: "abaikan dulu booking engine ... intinya sekarang focus di product masing2 terlebih dahulu biar cepat."

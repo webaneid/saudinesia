@@ -13,6 +13,10 @@ import { ok, err } from '@/lib/validators'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import { writeBookingItems } from '@/lib/booking/lineItems'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
+import { reserveFlightQuota } from '@/lib/quota'
+import { resolvePackageItem } from '@/lib/booking/packageItem'
+import { visaRuleViolations } from '@/lib/booking/ruleContext'
+import { blockingViolations } from '@/lib/booking/rules'
 import { ItemNotBookableError } from '@/lib/booking/errors'
 import { displayStatusOf, paymentDeadlineFor, statusSelect } from '@/lib/booking/lifecycle'
 
@@ -81,6 +85,14 @@ export async function POST(request: Request) {
       }
       return { breakdown, transportQuotaId }
     }))
+    // Paket Umroh: pilihan, tanggal (periode tiket), dan isi paket di-resolve SEKALI sebelum transaksi (lib/booking/packageItem.ts, §10.2).
+    const packageResolved = await Promise.all(data.items.flatMap(i => (i.itemType === 'package' ? [resolvePackageItem(i)] : [])))
+
+    // Aturan visa per produk (lib/booking/rules.ts): pelanggaran yang tak dilonggarkan untuk pemesan → 422 dengan daftar apa yang kurang.
+    const violations = blockingViolations(await visaRuleViolations(data, session.userId, packageResolved, tourPackageResolved))
+    if (violations.length > 0) {
+      return NextResponse.json({ success: false, error: violations[0]!.message, meta: { violations } }, { status: 422 })
+    }
 
     const booking = await prisma.$transaction(async (tx) => {
       // ── 1. Reserve quotas (throws if insufficient) — via lib/quota/adapters, docs/arsitektur-booking.md §6 Step 1 ──
@@ -88,6 +100,7 @@ export async function POST(request: Request) {
       // TypeScript memaksa exhaustiveness (switch tanpa default akan error compile kalau ada
       // itemType baru yang belum ditangani, sama semangatnya dengan quotaAdapters registry).
       let tourPackageIdx = 0
+      let packageIdx = 0
       for (const item of data.items) {
         switch (item.itemType) {
           case 'hotel':
@@ -120,6 +133,14 @@ export async function POST(request: Request) {
           case 'haji':
             await reserveHaji(tx, item.hajiProductId, item.numPersons)
             break
+          case 'flight':
+            await reserveFlightQuota(tx, item.flightScheduleId, item.numPassengers)
+            break
+          case 'package': {
+            const r = packageResolved[packageIdx++]!
+            if (r.flightScheduleId) await reserveFlightQuota(tx, r.flightScheduleId, item.numPeople) // hanya kursi tiket yang ditahan untuk paket (§10.2)
+            break
+          }
         }
       }
 
@@ -139,7 +160,7 @@ export async function POST(request: Request) {
 
       // ── 3. Item + visa per jamaah + SNAPSHOT HARGA (lib/booking/lineItems.ts). Harga dibaca server dari titik harga, dibekukan ke price_snapshots, dan
       // `totalAmount` = Σ snapshot yang baru ditulis (invarian I4, docs/arsitektur-harga-terpadu.md §17) — tak ada angka harga dari klien, tak ada penjumlahan terpisah.
-      const totalAmount = await writeBookingItems(tx, bk.id, data, tourPackageResolved)
+      const totalAmount = await writeBookingItems(tx, bk.id, data, tourPackageResolved, packageResolved)
       await recomputeBookingDates(tx, bk.id) // tanggal acuan = item paling awal / paling akhir (lib/booking/dates.ts)
 
       return tx.booking.update({ where: { id: bk.id }, data: { totalAmount } })

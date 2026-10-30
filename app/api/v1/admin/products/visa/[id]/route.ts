@@ -8,6 +8,7 @@ import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteVisaProduct } from '@/lib/admin/productDelete'
 import { visaFeeRules, visaPriceSummary } from '@/lib/pricing/engine/read'
+import { visaRequiredComponentsSchema } from '@/lib/validators/visa'
 
 const requirementSchema = z.object({
   docType:     z.string().min(1),
@@ -28,6 +29,8 @@ const updateSchema = z.object({
   priceLabel:   z.string().nullable().optional(),
   processDays:  z.coerce.number().int().positive().optional(),
   isActive:     z.boolean().optional(),
+  // Aturan ketergantungan (docs/arsitektur-booking-engine-v2.md §10.2) — bentuk dijaga skema yang SAMA dengan pembacanya (lib/booking/rules.ts).
+  requiredComponents: visaRequiredComponentsSchema.optional(),
 }).strict()
 
 type Ctx = { params: Promise<{ id: string }> }

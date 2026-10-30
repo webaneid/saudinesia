@@ -19,7 +19,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
     if (!head) return { kind: 'not_found' }
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${head.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } })
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true } })
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })
     if (payment.status !== 'pending' || booking.status !== 'active' || booking.confirmedAt !== null) return { kind: 'conflict' }
 
     if (input.action === 'confirm') {
@@ -32,6 +32,8 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       for (const tp of booking.tourPackages) await quotaAdapters.tourPackage.confirm(tx, tp)
       for (const bm of booking.muthowif) await quotaAdapters.muthowif.confirm(tx, bm)
       for (const bh of booking.haji) await quotaAdapters.haji.confirm(tx, bh)
+      for (const bf of booking.flights) await quotaAdapters.flight.confirm(tx, bf)
+      for (const bp of booking.packages) await quotaAdapters.package.confirm(tx, bp)
     } else {
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'rejected', notes: input.notes ?? null } })
       // Status tampilan kembali "menunggu pembayaran" dengan sendirinya (turunan: tak ada lagi payment `pending`) — tak ada kolom yang diubah di booking.

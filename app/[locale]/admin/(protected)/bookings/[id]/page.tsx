@@ -36,6 +36,8 @@ export default async function AdminBookingDetail({ params }: Props) {
       muthowif:   { include: { muthowif: true } },
       catering:   { include: { cateringOption: true } },
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
+      flights:    { include: { flightSchedule: { include: { route: true } } } },
+      packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
     },
@@ -150,6 +152,34 @@ export default async function AdminBookingDetail({ params }: Props) {
                 {' — '}
                 <span className="capitalize">{h.hotelRoomSchedule.period.hotel.city}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">{h.nights} mlm</span>
+              </p>
+            ))}
+          </div>
+        )}
+
+        {booking.packages.length > 0 && (
+          <div className="admin-card p-4 space-y-2">
+            <p className="admin-section">Paket Umroh</p>
+            {booking.packages.map(bp => (
+              <p key={bp.id} className="text-[13px] text-admin-ink/80">
+                <span className="font-medium text-admin-ink">{bp.package.name}</span>
+                {' — '}
+                <span>{formatCalendarDate(bp.departureDate, DATE_NUMERIC)} – {formatCalendarDate(bp.returnDate, DATE_NUMERIC)}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">{bp.numPeople} orang · {formatRupiah(Number(bp.totalPrice))}</span>
+              </p>
+            ))}
+          </div>
+        )}
+
+        {booking.flights.length > 0 && (
+          <div className="admin-card p-4 space-y-2">
+            <p className="admin-section">Tiket Pesawat</p>
+            {booking.flights.map(bf => (
+              <p key={bf.id} className="text-[13px] text-admin-ink/80">
+                <span className="font-medium text-admin-ink">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</span>
+                {' — '}
+                <span>{formatCalendarDate(bf.departureDate, DATE_NUMERIC)}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">{bf.numPassengers} penumpang · {formatRupiah(Number(bf.totalPrice))}</span>
               </p>
             ))}
           </div>

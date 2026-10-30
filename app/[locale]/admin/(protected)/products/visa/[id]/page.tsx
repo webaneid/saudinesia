@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, FileText, Info, KeyRound, Loader2, Save, Wallet } from 'lucide-react'
+import { Check, FileText, Info, KeyRound, Link2, Loader2, Save, Wallet } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
@@ -12,12 +12,14 @@ import type { VisaRequirement } from '@/lib/types/visa'
 import { CostTiersTab } from './CostTiersTab'
 import { ProductInfoTab } from './ProductInfoTab'
 import { RequirementsTab } from './RequirementsTab'
+import { RulesTab } from './RulesTab'
+import { parseRequiredComponents, type RequiredComponent } from '@/lib/validators/visa'
 import type { DeleteResult, InfoForm, ProductDetail } from './types'
 
-type TabKey = 'info' | 'docs' | 'price'
+type TabKey = 'info' | 'docs' | 'rules' | 'price'
 type Props = { params: Promise<{ locale: string; id: string }> }
 
-const snapshotOf = (form: InfoForm, reqs: VisaRequirement[]) => JSON.stringify({ form, reqs })
+const snapshotOf = (form: InfoForm, reqs: VisaRequirement[], rules: RequiredComponent[]) => JSON.stringify({ form, reqs, rules })
 const cleanReqs = (reqs: VisaRequirement[]) => reqs.filter(r => r.docType.trim() && r.label.trim())
 
 export default function VisaEditPage({ params }: Props) {
@@ -27,6 +29,7 @@ export default function VisaEditPage({ params }: Props) {
   const [product, setProduct] = useState<ProductDetail | null>(null)
   const [form, setForm] = useState<InfoForm | null>(null)
   const [reqs, setReqs] = useState<VisaRequirement[]>([])
+  const [rules, setRules] = useState<RequiredComponent[]>([])
   const [snapshot, setSnapshot] = useState('')
   const [tab, setTab] = useState<TabKey>('info')
   const [saving, setSaving] = useState(false)
@@ -51,9 +54,11 @@ export default function VisaEditPage({ params }: Props) {
       const nextReqs = Array.isArray(v.documentRequirements)
         ? v.documentRequirements.map(r => ({ docType: r.docType, label: r.label, description: r.description, required: r.required }))
         : []
+      const nextRules = parseRequiredComponents(v.requiredComponents).components
       setForm(nextForm)
       setReqs(nextReqs)
-      setSnapshot(snapshotOf(nextForm, nextReqs))
+      setRules(nextRules)
+      setSnapshot(snapshotOf(nextForm, nextReqs, nextRules))
     })
   }, [refreshProduct])
 
@@ -68,7 +73,7 @@ export default function VisaEditPage({ params }: Props) {
     return <div className="flex items-center gap-2 p-6 text-sm text-admin-muted"><Loader2 className="size-4 animate-spin" /> Memuat…</div>
   }
 
-  const dirty = snapshotOf(form, reqs) !== snapshot
+  const dirty = snapshotOf(form, reqs, rules) !== snapshot
   const canSave = !!form.name.trim() && !!form.visaType.trim() && Number(form.processDays) > 0
   const requiredCount = reqs.filter(r => r.required).length
   const price = Number(product.price)
@@ -76,11 +81,13 @@ export default function VisaEditPage({ params }: Props) {
 
   const patchForm = (patch: Partial<InfoForm>) => { setForm(f => (f ? { ...f, ...patch } : f)); setJustSaved(false) }
   const setRequirements = (next: VisaRequirement[]) => { setReqs(next); setJustSaved(false) }
+  const setRuleList = (next: RequiredComponent[]) => { setRules(next); setJustSaved(false) }
 
   function discard() {
-    const saved = JSON.parse(snapshot) as { form: InfoForm; reqs: VisaRequirement[] }
+    const saved = JSON.parse(snapshot) as { form: InfoForm; reqs: VisaRequirement[]; rules: RequiredComponent[] }
     setForm(saved.form)
     setReqs(saved.reqs)
+    setRules(saved.rules)
     setError(null)
   }
 
@@ -94,7 +101,7 @@ export default function VisaEditPage({ params }: Props) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         name: form.name.trim(), country: form.country.trim(), visaType: form.visaType.trim(),
-        description: form.description, processDays: Number(form.processDays), isActive: form.isActive, requirements,
+        description: form.description, processDays: Number(form.processDays), isActive: form.isActive, requirements, requiredComponents: rules,
       }),
     })
     if (!res.ok) {
@@ -104,7 +111,7 @@ export default function VisaEditPage({ params }: Props) {
       return
     }
     setReqs(requirements)
-    setSnapshot(snapshotOf(form, requirements))
+    setSnapshot(snapshotOf(form, requirements, rules))
     await refreshProduct()
     setSaving(false)
     setJustSaved(true)
@@ -119,7 +126,7 @@ export default function VisaEditPage({ params }: Props) {
       if (j.data.deleted) { router.push(`/${locale}/admin/products/visa`); return null }
       // Status di formulir DAN baseline ikut nonaktif, ketikan lain yang belum disimpan tetap terhitung "belum disimpan".
       setForm(f => (f ? { ...f, isActive: false } : f))
-      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; reqs: VisaRequirement[] }; return snapshotOf({ ...saved.form, isActive: false }, saved.reqs) })
+      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; reqs: VisaRequirement[]; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, saved.reqs, saved.rules) })
       await refreshProduct()
       return { notice: j.data.message ?? 'Dipakai sehingga dinonaktifkan.' }
     } catch {
@@ -130,6 +137,7 @@ export default function VisaEditPage({ params }: Props) {
   const tabs: readonly TabItem<TabKey>[] = [
     { id: 'info', label: 'Informasi', icon: Info },
     { id: 'docs', label: 'Persyaratan dokumen', icon: FileText, count: reqs.length },
+    { id: 'rules', label: 'Aturan pemesanan', icon: Link2, count: rules.length || undefined },
     { id: 'price', label: 'Harga dan HPP', icon: Wallet, count: ruleCount || undefined },
   ]
 
@@ -157,6 +165,9 @@ export default function VisaEditPage({ params }: Props) {
       </div>
       <div id={tabPanelId('docs')} role="tabpanel" aria-labelledby={tabId('docs')} hidden={tab !== 'docs'}>
         <RequirementsTab reqs={reqs} onChange={setRequirements} />
+      </div>
+      <div id={tabPanelId('rules')} role="tabpanel" aria-labelledby={tabId('rules')} hidden={tab !== 'rules'}>
+        <RulesTab rules={rules} onChange={setRuleList} />
       </div>
       <div id={tabPanelId('price')} role="tabpanel" aria-labelledby={tabId('price')} hidden={tab !== 'price'}>
         <CostTiersTab productId={id} onSaved={refreshProduct} />

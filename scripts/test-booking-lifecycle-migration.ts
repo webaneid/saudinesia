@@ -1,5 +1,5 @@
 // Uji migrasi siklus hidup booking (prisma/migrations/20261105090000_booking_lifecycle): tiap status v1 dipetakan ke siklus hidup baru, `confirmedAt`/`confirmedById` diisi dari pembayaran
-// terkonfirmasi (atau updatedAt), tanggal acuan boleh kosong, CHECK draf terpasang, dan DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini).
+// terkonfirmasi (atau updatedAt), tanggal acuan boleh kosong, dan CHECK draf terpasang (uji drift TERBARU kini di scripts/test-booking-engine-core-migration.ts).
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyUser } from './lib/legacyUser'
 
 await assertThrowawayDb()
 
@@ -100,13 +101,13 @@ const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 // SQL mentah: klien Prisma proyek sudah tak mengenal tabel yang akan dibuang.
 async function seedUser(db: PrismaClient) {
-  return db.user.create({ data: { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+  return legacyUser(db, { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
 }
 const exists = async (name: string, rel: string) => Number((await q1(name, `select count(*)::int as n from information_schema.tables where table_name = '${rel}'`))[0]!.n) === 1
 const colExists = async (name: string) => Number((await q1(name, `select count(*)::int as n from information_schema.columns where table_name = 'bookings' and column_name = 'groupId'`))[0]!.n) === 1
 
 async function seedBooking(db: PrismaClient, code: string) {
-  const u = await db.user.create({ data: { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+  const u = await legacyUser(db, { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
   await db.booking.create({ data: { bookingCode: code, userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 } })
   return u.id
 }
@@ -115,8 +116,8 @@ async function seedBooking(db: PrismaClient, code: string) {
 // Fixture pada DB PRA-migrasi lewat SQL mentah (klien proyek sudah tak mengenal enum lama).
 type Seed = { code: string; status: string; confirmedPayAt?: string; payBy?: boolean }
 async function seedOld(db: PrismaClient, rows: Seed[]) {
-  const u = await db.user.create({ data: { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
-  const staff = await db.user.create({ data: { email: `s${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Staf', role: 'admin', isActive: true, emailVerifiedAt: new Date() } })
+  const u = await legacyUser(db, { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
+  const staff = await legacyUser(db, { email: `s${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Staf', role: 'admin', isActive: true, emailVerifiedAt: new Date() })
   for (const r of rows) {
     const id = `00000000-0000-4000-8000-${String(rows.indexOf(r) + 1).padStart(12, '0')}`
     await db.$executeRawUnsafe(`INSERT INTO bookings (id, "bookingCode", "userId", status, "departureDate", "returnDate", season, "totalAmount", "updatedAt") VALUES ('${id}', '${r.code}', '${u.id}', '${r.status}'::booking_status, '2027-06-01', '2027-06-10', 'regular', 1000, '2026-10-01 03:00:00')`)
@@ -177,7 +178,7 @@ await t('tanggal acuan boleh kosong (draf); confirmedAt bertipe timestamptz; FK 
     await assert.rejects(() => db.$executeRawUnsafe(`INSERT INTO bookings (id, "bookingCode", "userId", status, season, "totalAmount", "confirmedAt", "updatedAt") VALUES ('b0000000-0000-4000-8000-000000000002', 'D2', '${u.id}', 'draft', 'regular', 0, now(), now())`), /bookings_draft_unconfirmed|check/i)
     await db.$executeRawUnsafe(`UPDATE bookings SET status = 'active', "confirmedAt" = now(), "confirmedById" = '${u.id}' WHERE "bookingCode" = 'D1'`)
     // FK SET NULL: menghapus staf yang mengonfirmasi tak menghapus booking
-    const staff2 = await db.user.create({ data: { email: `x${Date.now()}@example.test`, passwordHash: 'x', fullName: 'S2', role: 'admin', isActive: true } })
+    const staff2 = await legacyUser(db, { email: `x${Date.now()}@example.test`, passwordHash: 'x', fullName: 'S2', role: 'admin', isActive: true })
     await db.$executeRawUnsafe(`UPDATE bookings SET "confirmedById" = '${staff2.id}' WHERE "bookingCode" = 'D1'`)
     await db.$executeRawUnsafe(`DELETE FROM users WHERE id = '${staff2.id}'`)
     const row = await db.$queryRawUnsafe<Array<{ n: number; c: boolean }>>(`select count(*)::int as n, bool_or("confirmedById" is null) as c from bookings where "bookingCode" = 'D1'`)
@@ -190,12 +191,7 @@ await t('enum lama tepat enam nilai dan semuanya tercakup pemetaan — tak ada b
   assert.deepEqual(old, ['awaiting_payment', 'payment_review', 'confirmed', 'active', 'completed', 'cancelled'])
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
+// (uji drift TERBARU kini di scripts/test-booking-engine-core-migration.ts)
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────
 await admin.$disconnect()

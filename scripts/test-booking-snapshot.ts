@@ -482,7 +482,7 @@ await t('PENJAGA SUMBER: hanya engine/snapshot.ts menulis price_snapshots; route
   for (const forbidden of [/requireSellPrice/, /computeSellPrice/, /computeCateringBookingPrice/, /baseTotal|totalForVehicle|hotelChoicePrice/, /\btotalAmount \+=/, /pricePoint\./]) {
     assert.doesNotMatch(route, forbidden, `route booking tidak boleh memuat ${forbidden}`)
   }
-  assert.match(route, /writeBookingItems\(tx, bk\.id, data, tourPackageResolved\)/)
+  assert.match(route, /writeBookingItems\(tx, bk\.id, data, tourPackageResolved, packageResolved\)/)
   const invoice = readFileSync(join(root, 'lib/pdf/invoiceData.ts'), 'utf8')
   assert.doesNotMatch(invoice, /\.totalPrice|\.unitPrice|\.pricePerNight|sellPriceSnapshot|\.hotels|\.transports|\.tourPackages/, 'invoice hanya membaca price_snapshots')
   const items = readFileSync(join(root, 'lib/booking/lineItems.ts'), 'utf8')

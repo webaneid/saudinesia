@@ -55,7 +55,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${id} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
       const booking = await tx.booking.findUniqueOrThrow({
         where: { id },
-        include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true },
+        include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true },
       })
       if (!isPilgrimCancellable(booking)) return null
       // Bukti transfer menunggu verifikasi = uang mungkin sudah dikirim: batal ditolak agar pembayaran itu tetap bisa diproses admin (SEC-119).

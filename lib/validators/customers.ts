@@ -15,3 +15,10 @@ export const customerCreateSchema = z.object({
 }).strict()
 
 export type CustomerCreateInput = z.infer<typeof customerCreateSchema>
+
+// Kebijakan pemesanan per pelanggan (docs/arsitektur-booking-engine-v2.md D5, §10.2). Hanya kolom ini — tak ada jalan mengubah kolom akun lain lewat sini.
+export const customerPolicySchema = z.object({
+  allowVisaWithoutBundle: z.boolean(),
+}).strict()
+
+export type CustomerPolicyInput = z.infer<typeof customerPolicySchema>
