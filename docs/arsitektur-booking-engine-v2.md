@@ -49,7 +49,7 @@ Prinsip:
 | D14 | **Pajak**: daftar pajak di Pengaturan Invoice (PPN, tarif 0 = tak dipakai; mode harga katalog **termasuk** atau **ditambah** pajak); tampil di baris paling akhir invoice; dibebankan ke pelanggan; NPWP perusahaan (PT). **PPh 23 ditunda** (pemotongan oleh pelanggan badan). PPN masukan dari vendor **tidak** dicatat (hanya keluaran). |
 | D15 | **MDR gateway dibebankan ke pelanggan** (setelan per gateway: persen + tetap), tampil sebagai baris "Biaya layanan" di halaman bayar; di buku kas menjadi komponen terpisah, sedangkan biaya asli dari gateway menjadi uang keluar. |
 | D16 | **Peran**: semua admin boleh melakukan semuanya untuk sementara (peran admin belum dirancang; satu titik kebijakan `lib/booking/policy.ts`, pola `lib/pricing/policy.ts`). |
-| D17 | **Buku kas** (akun kas + entri append-only) ditulis sejak awal oleh engine; menu **Keuangan** (Buku Kas, Saldo Rekening, Arus Kas, PPN, Laba per Booking, Bagi Hasil, Transfer Antar Akun) menyusul (Fase 12). **Bagi hasil sementara hanya developer** (sisanya hak klien), berupa **setelan** `ProfitShareRule[]` (nama penerima, **dasar: laba per booking _atau_ omzet per transaksi**, persen); satu aturan awal "Developer" dengan usulan 5% — **dasar dan jumlah BELUM disepakati**, ditetapkan saat Fase 12 (K1). Laporan PPN bulanan dan ekspor CSV = pengembangan berikutnya. |
+| D17 | **Buku kas** (akun kas + entri append-only) ditulis sejak awal oleh engine; menu **Keuangan** (Buku Kas, Saldo Rekening, Arus Kas, PPN, Laba per Booking, Bagi Hasil, Transfer Antar Akun) menyusul (Fase 12). **Bagi hasil sementara hanya developer** (sisanya hak klien), berupa **setelan** `ProfitShareRule[]` (penerima, **dasar = omzet per project/produk** sebagaimana dikonfirmasi pemilik 2026-10-30; pilihan dasar laba tetap tersedia sebagai opsi, cakupan semua produk atau modul/produk tertentu, persen). Aturan awal "Developer" usulan 5% dari omzet (pendapatan sebelum pajak) — **persen/jumlah belum disepakati**, ditetapkan saat Fase 12 (K1). Laporan PPN bulanan dan ekspor CSV = pengembangan berikutnya. |
 | D18 | **Satu booking = satu invoice yang diperbarui terus** (bukan invoice tambahan). Nomor invoice: awalan custom + format di Pengaturan Invoice. |
 | D19 | **Zona waktu** ditegakkan (§5) — pemilik meminta pengingat permanen: salah zona waktu saat membuat fitur baru sudah sering terjadi. |
 
@@ -130,7 +130,7 @@ Admin membatalkan → dialog menampilkan terbayar/tagihan, daftar pembayaran, da
 - **Profil perusahaan**: logo (`MediaField`/MinIO), nama, alamat (`AddressPicker`), telepon, email, situs.
 - **Rekening bank[]**: bank, nomor, atas nama, cabang, aktif, urutan; **QRIS[]**: nama, gambar, payload EMV (dibaca otomatis), aktif.
 - **Metode bayar**: aktifkan transfer/QRIS/iPaymu/Xendit; per gateway: MDR (% + tetap, dibebankan ke pelanggan), mode sandbox/produksi. **Kunci API di env**, bukan database.
-- **Kode unik**: aktif, rentang. **Syarat & Ketentuan** (teks kaya, `richTextField`) dan catatan kaki invoice. **Bagi hasil** (`ProfitShareRule[]`: penerima, dasar laba/omzet, persen — nilai belum disepakati, K1).
+- **Kode unik**: aktif, rentang. **Syarat & Ketentuan** (teks kaya, `richTextField`) dan catatan kaki invoice. **Bagi hasil** (`ProfitShareRule[]`: penerima, dasar omzet (bawaan) atau laba, cakupan produk, persen — nilai belum disepakati, K1).
 
 ## 7. Halaman dan alur
 - **Admin → Booking → Baru**: pilih/ buat pelanggan (Tambah Pelanggan inline) → tambah produk (popup: pilih modul → daftar produk modul itu → atur tanggal/jumlah per item) → jumlah jamaah → pratinjau invoice (aturan visa, total, pajak, jatuh tempo bisa diedit) → **simpan draf** / **Terbitkan** → langsung ke form data jamaah. Daftar draf di menu Booking.
@@ -171,7 +171,7 @@ Fase 9–10 membutuhkan akun sandbox dan kunci dari pemilik. Kuota (penahanan sa
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 
 ## 12. Keputusan terbuka dan yang sudah ditetapkan
-- **K1 — bagi hasil**: dasar (laba per booking **atau** omzet per transaksi), jumlah/persen, dan kapan "terhitung" **belum disepakati** → dibuat sebagai setelan (`ProfitShareRule[]`), diputuskan saat Fase 12.
+- **K1 — bagi hasil**: **dasar = omzet per project/produk** (pemilik, 2026-10-30; omzet = pendapatan baris item sebelum pajak, tanpa kode unik dan biaya layanan). Masih terbuka: **persen/jumlah** (usulan 5%), apakah persen **sama untuk semua produk atau berbeda per modul/produk**, dan **kapan terhitung** (setelah lunas / setelah keberangkatan / per pembayaran terverifikasi secara proporsional). Dibuat sebagai setelan `ProfitShareRule[]`; ditetapkan saat Fase 12.
 - ~~K2 — transport ke hotel~~ **Ditetapkan (2026-10-30):** memakai jurusan modul Transport (kategori/trip) — §4.1.
 - ~~K3 — tanggal visa~~ **Ditetapkan:** visa punya tanggal rencana keberangkatan (`plannedTravelDate`), bawaan dari tiket — D1.
 - **K4 — setoran PPN** (pengingat/jadwal setor-lapor): **ditunda**, dievaluasi nanti bersama akuntan (Fase 12+).
