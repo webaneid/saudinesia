@@ -273,16 +273,18 @@ async function main() {
     ],
   })
 
-  // Harga layanan muthowif — satu baris flat, harga & HPP diisi lewat admin UI (docs/arsitektur-muthowif.md §10)
-  await prisma.muthowifServicePrice.upsert({
-    where: { id: 'seed-muthowif-service-price' },
-    create: { id: 'seed-muthowif-service-price' },
+  // Harga layanan muthowif — satu baris flat, harga & HPP diisi lewat admin UI (docs/arsitektur-muthowif.md §10). Baris ini SINGLETON (unik `singleton`) dan sudah
+  // dibuat migrasi 20260720000000 dengan id acak — upsert lewat `singleton`, bukan id tetap (id tetap bentrok di setiap DB yang baru dimigrasi).
+  const muthowifService = await prisma.muthowifServicePrice.upsert({
+    where: { singleton: true },
+    create: {},
     update: {},
+    select: { id: true },
   })
   // Harga jual = titik harga MANUAL (modal diisi lewat admin UI → PriceCard) — kolom harga lama sudah dihapus (harga terpadu Fase 5).
   await prisma.pricePoint.upsert({
-    where: { ownerType_ownerId_variantKey: { ownerType: 'muthowif', ownerId: 'seed-muthowif-service-price', variantKey: '' } },
-    create: { ownerType: 'muthowif', ownerId: 'seed-muthowif-service-price', unit: 'person_day', manualSellIdr: 300_000, sellIdr: 300_000, manualNote: 'harga awal seed', manualAt: new Date() },
+    where: { ownerType_ownerId_variantKey: { ownerType: 'muthowif', ownerId: muthowifService.id, variantKey: '' } },
+    create: { ownerType: 'muthowif', ownerId: muthowifService.id, unit: 'person_day', manualSellIdr: 300_000, sellIdr: 300_000, manualNote: 'harga awal seed', manualAt: new Date() },
     update: {},
   })
 
