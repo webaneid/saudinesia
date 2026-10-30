@@ -49,9 +49,10 @@ Prinsip:
 | D14 | **Pajak**: daftar pajak di Pengaturan Invoice (PPN, tarif 0 = tak dipakai; mode harga katalog **termasuk** atau **ditambah** pajak); tampil di baris paling akhir invoice; dibebankan ke pelanggan; NPWP perusahaan (PT). **PPh 23 ditunda** (pemotongan oleh pelanggan badan). PPN masukan dari vendor **tidak** dicatat (hanya keluaran). |
 | D15 | **MDR gateway dibebankan ke pelanggan** (setelan per gateway: persen + tetap), tampil sebagai baris "Biaya layanan" di halaman bayar; di buku kas menjadi komponen terpisah, sedangkan biaya asli dari gateway menjadi uang keluar. |
 | D16 | **Peran**: semua admin boleh melakukan semuanya untuk sementara (peran admin belum dirancang; satu titik kebijakan `lib/booking/policy.ts`, pola `lib/pricing/policy.ts`). |
-| D17 | **Buku kas** (akun kas + entri append-only) ditulis sejak awal oleh engine; menu **Keuangan** (Buku Kas, Saldo Rekening, Arus Kas, PPN, Laba per Booking, Bagi Hasil, Transfer Antar Akun) menyusul (Fase 12). **Bagi hasil sementara hanya developer** (sisanya hak klien), berupa **setelan** `ProfitShareRule[]` (penerima, **dasar = omzet per project/produk** sebagaimana dikonfirmasi pemilik 2026-10-30; pilihan dasar laba tetap tersedia sebagai opsi, cakupan semua produk atau modul/produk tertentu, persen). Aturan awal "Developer" usulan 5% dari omzet (pendapatan sebelum pajak) — **persen/jumlah belum disepakati**, ditetapkan saat Fase 12 (K1). Laporan PPN bulanan dan ekspor CSV = pengembangan berikutnya. |
+| D17 | **Buku kas** (akun kas + entri append-only) ditulis sejak awal oleh engine; menu **Keuangan** (Buku Kas, Saldo Rekening, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun; Bagi Hasil = Fase 13) menyusul (Fase 12). **Bagi hasil** = modul tersendiri dengan halaman setelan sendiri (D20, §6b, Fase 13). Laporan PPN bulanan dan ekspor CSV = pengembangan berikutnya. |
 | D18 | **Satu booking = satu invoice yang diperbarui terus** (bukan invoice tambahan). Nomor invoice: awalan custom + format di Pengaturan Invoice. |
 | D19 | **Zona waktu** ditegakkan (§5) — pemilik meminta pengingat permanen: salah zona waktu saat membuat fitur baru sudah sering terjadi. |
+| D20 | **Bagi hasil** (2026-10-30, dikonfirmasi pemilik): sementara hanya **developer**, **bawaan 5%**, sisanya hak klien; seluruh angkanya **setelan** sesuai kesepakatan dengan klien nanti, di **halaman setelan sendiri** (akan terus dikembangkan, bukan bagian Pengaturan Invoice). Dasar dipilih di setelan: **(a) omzet** per project/booking/produk — bagian developer dimuat ke harga (marjin naik, mis. 20% → 25%, supaya hak klien tak berkurang; bagian ini dibayar pelanggan); atau **(b) keuntungan** per project/booking/produk — dihitung setelah booking/produk selesai dari keuntungannya (mis. jual 200 rb, untung 50 rb → developer 5% × 50 rb); diambil **per transaksi** (tiap booking dihitung sendiri). |
 
 ## 3. Model domain
 
@@ -130,7 +131,16 @@ Admin membatalkan → dialog menampilkan terbayar/tagihan, daftar pembayaran, da
 - **Profil perusahaan**: logo (`MediaField`/MinIO), nama, alamat (`AddressPicker`), telepon, email, situs.
 - **Rekening bank[]**: bank, nomor, atas nama, cabang, aktif, urutan; **QRIS[]**: nama, gambar, payload EMV (dibaca otomatis), aktif.
 - **Metode bayar**: aktifkan transfer/QRIS/iPaymu/Xendit; per gateway: MDR (% + tetap, dibebankan ke pelanggan), mode sandbox/produksi. **Kunci API di env**, bukan database.
-- **Kode unik**: aktif, rentang. **Syarat & Ketentuan** (teks kaya, `richTextField`) dan catatan kaki invoice. **Bagi hasil** (`ProfitShareRule[]`: penerima, dasar omzet (bawaan) atau laba, cakupan produk, persen — nilai belum disepakati, K1).
+- **Kode unik**: aktif, rentang. **Syarat & Ketentuan** (teks kaya, `richTextField`) dan catatan kaki invoice.
+
+## 6b. Pengaturan Bagi Hasil (halaman sendiri, Sistem → Bagi Hasil) — D20
+Halaman terpisah dari Pengaturan Invoice karena modulnya akan terus berkembang. Isi:
+- **Daftar aturan** `RevenueShareRule`: penerima (awal: "Developer"), **persen (bawaan 5)**, **dasar** `omzet` | `keuntungan`, **cakupan** (semua produk · modul tertentu · produk tertentu), aktif, **berlaku sejak** (tanggal) — perubahan membuat versi baru (riwayat tak ditimpa).
+- **Saat terbit, aturan yang berlaku dibekukan ke booking** (usulan K1: perubahan kesepakatan berlaku untuk booking baru, bukan menulis ulang yang lama — sama dengan harga beku).
+- **Hak bagi hasil per transaksi** `RevenueShareEntry` (booking, item/modul, aturan + versi, dasar, nilai dasar, persen, jumlah, status `accrued`/`settled`/`void`, tanggal terhitung); pembayarannya ke penerima tercatat sebagai uang keluar di buku kas (komponen `bagi_hasil`). Laporan: hak − dibayar = sisa per penerima (pola `bantuanku` §3.3).
+- **Dasar omzet**: bagian penerima dimuat ke **harga**: marjin efektif naik sebesar bagian itu sehingga hak klien tidak berkurang (rumus tepat: K1). Hak terhitung per pembayaran terverifikasi secara proporsional (pokok sebelum pajak).
+- **Dasar keuntungan**: tidak mengubah harga; hak terhitung **saat booking/produk selesai** dari keuntungannya (pendapatan sebelum pajak − modal; memakai pengeluaran aktual bila ada, selain itu modal rencana — K1).
+- Contoh: jual Rp 200.000, untung Rp 50.000, dasar keuntungan 5% → hak developer Rp 2.500 untuk transaksi itu.
 
 ## 7. Halaman dan alur
 - **Admin → Booking → Baru**: pilih/ buat pelanggan (Tambah Pelanggan inline) → tambah produk (popup: pilih modul → daftar produk modul itu → atur tanggal/jumlah per item) → jumlah jamaah → pratinjau invoice (aturan visa, total, pajak, jatuh tempo bisa diedit) → **simpan draf** / **Terbitkan** → langsung ke form data jamaah. Daftar draf di menu Booking.
@@ -163,7 +173,8 @@ Sumber: `/Users/webane/sites/facport/apps/api/src/lib/qris-emv.ts` (parser TLV, 
 | **9** | **iPaymu** (webhook, MDR) | sandbox lulus |
 | **10** | **Xendit** | sandbox lulus |
 | **11** | **Front-end pelanggan** memakai engine | e2e pelanggan |
-| **12** | **Menu Keuangan**: Buku Kas, Saldo Rekening, Arus Kas, PPN (ditagihkan vs diterima + pengingat setor), Laba per Booking + bagi hasil developer, Transfer Antar Akun, ekspor CSV | angka laporan = buku kas |
+| **12** | **Menu Keuangan**: Buku Kas, Saldo Rekening, Arus Kas, PPN (ditagihkan vs diterima + pengingat setor), Laba per Booking, Transfer Antar Akun, ekspor CSV | angka laporan = buku kas |
+| **13** | **Bagi Hasil**: halaman setelan (aturan berversi), pewarisan dasar omzet ke harga (`lib/pricing`), hak per transaksi (omzet per pembayaran terverifikasi; keuntungan saat selesai), pembayaran ke penerima via buku kas, laporan hak/dibayar/sisa | contoh §6b terbukti; harga lama tak berubah tanpa pembaruan ulang |
 
 Fase 9–10 membutuhkan akun sandbox dan kunci dari pemilik. Kuota (penahanan saat terbit, kuota kursi tiket) **bukan patokan desain** (keputusan pemilik): adapter dipakai apa adanya dan dikerjakan lebih lanjut terpisah.
 
@@ -171,7 +182,7 @@ Fase 9–10 membutuhkan akun sandbox dan kunci dari pemilik. Kuota (penahanan sa
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 
 ## 12. Keputusan terbuka dan yang sudah ditetapkan
-- **K1 — bagi hasil**: **dasar = omzet per project/produk** (pemilik, 2026-10-30; omzet = pendapatan baris item sebelum pajak, tanpa kode unik dan biaya layanan). Masih terbuka: **persen/jumlah** (usulan 5%), apakah persen **sama untuk semua produk atau berbeda per modul/produk**, dan **kapan terhitung** (setelah lunas / setelah keberangkatan / per pembayaran terverifikasi secara proporsional). Dibuat sebagai setelan `ProfitShareRule[]`; ditetapkan saat Fase 12.
+- **K1 — bagi hasil** (D20 sebagian besar ditetapkan: bawaan 5%, dasar omzet atau keuntungan via setelan, per transaksi, halaman sendiri). **Masih terbuka sebelum Fase 13:** (1) **rumus dasar omzet** — contoh HPP Rp 1.000.000, marjin 20%, developer 5%: (A) tambah poin marjin 20%→25% → jual 1.250.000, developer 5% dari jual = 62.500, hak klien 187.500 (18,75% dari HPP, bukan 20%); (B) *gross-up* tepat → jual = 1.000.000×1,2÷0,95 = 1.263.158, developer 63.158, hak klien tepat 200.000; (C) developer = 5 poin marjin (5% dari HPP = 50.000) jual 1.250.000, klien 200.000 — itu "5% dari modal", bukan dari omzet. Usulan: **B**; (2) **kapan hak omzet terhitung** — proporsional per pembayaran terverifikasi (usulan) atau saat lunas/selesai; (3) **keuntungan memakai modal rencana atau pengeluaran aktual** (usulan: aktual bila ada); (4) **aturan lama vs baru** (usulan: dibekukan saat terbit); (5) cakupan per modul/produk (persen sama atau berbeda).
 - ~~K2 — transport ke hotel~~ **Ditetapkan (2026-10-30):** memakai jurusan modul Transport (kategori/trip) — §4.1.
 - ~~K3 — tanggal visa~~ **Ditetapkan:** visa punya tanggal rencana keberangkatan (`plannedTravelDate`), bawaan dari tiket — D1.
 - **K4 — setoran PPN** (pengingat/jadwal setor-lapor): **ditunda**, dievaluasi nanti bersama akuntan (Fase 12+).
