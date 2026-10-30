@@ -3,8 +3,25 @@ import { ok, err } from '@/lib/validators'
 import { customerCreateSchema } from '@/lib/validators/customers'
 import { requireCustomerManage } from '@/lib/customers/policy'
 import { createCustomer, inviteCustomer, type InviteStatus } from '@/lib/customers/create'
+import { isDeletedAccount, listCustomers } from '@/lib/customers/query'
+import { z } from 'zod'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
+
+const searchSchema = z.object({ q: z.string().trim().max(100).default('') })
+
+// Cari pelanggan untuk pemilih (form booking admin, §10.3): 10 teratas, hanya id/nama/email. Daftar lengkap ada di halaman Pelanggan (server component).
+export async function GET(req: Request) {
+  try {
+    await requireCustomerManage()
+    const parsed = searchSchema.safeParse({ q: new URL(req.url).searchParams.get('q') ?? undefined })
+    if (!parsed.success) return NextResponse.json(err('Pencarian tidak valid'), { status: 400 })
+    const { items } = await listCustomers({ q: parsed.data.q }, { page: 1, limit: 10, skip: 0 })
+    return NextResponse.json(ok(items.filter(c => !isDeletedAccount(c.email)).map(c => ({ id: c.id, fullName: c.fullName, email: c.email }))))
+  } catch (e) {
+    return authFailureResponse(e, 'admin/customers/GET')
+  }
+}
 
 // Tambah pelanggan (docs/arsitektur-pelanggan.md §6). Akun lahir belum diaktifkan; undangan "buat password" dikirim bila diminta.
 export async function POST(req: Request) {

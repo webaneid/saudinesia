@@ -1,6 +1,6 @@
 // Uji migrasi inti engine booking (prisma/migrations/20261106090000_booking_engine_core, docs/arsitektur-booking-engine-v2.md §10.2): aturan visa string lama → objek,
 // nilai aturan tak dikenal → BERHENTI; paket hotel `included` berjumlah kamar → BERHENTI (makna harga berubah ke per orang), yang tidak included dibuang; kolom pelonggaran pelanggan;
-// tabel booking_packages dengan CHECK + FK; atomik; dan DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini).
+// tabel booking_packages dengan CHECK + FK; atomik (uji drift TERBARU kini di scripts/test-booking-draft-migration.ts).
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -175,12 +175,7 @@ await t('pelanggan: allowVisaWithoutBundle NOT NULL default false untuk akun lam
   } finally { await db.$disconnect() }
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
+// (uji drift TERBARU kini di scripts/test-booking-draft-migration.ts)
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────
 await admin.$disconnect()

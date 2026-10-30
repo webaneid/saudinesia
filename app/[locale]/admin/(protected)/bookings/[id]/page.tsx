@@ -1,4 +1,4 @@
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
@@ -8,7 +8,7 @@ import { getPaymentConfig } from '@/lib/constants/payment'
 import { ArrowLeft, FileDown } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
 import { VisaActions } from './VisaActions'
-import { PassportForm } from './PassportForm'
+import { PilgrimDataForm } from './PilgrimDataForm'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
 import { PilgrimDocuments } from '@/components/admin/PilgrimDocuments'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
@@ -18,7 +18,7 @@ import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canRecordCost } from '@/lib/pricing/policy'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
-import { DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
+import { DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -43,6 +43,7 @@ export default async function AdminBookingDetail({ params }: Props) {
     },
   })
   if (!booking) notFound()
+  if (booking.status === 'draft') redirect(`/${locale}/admin/bookings/drafts/${id}`) // draf diedit di editor draf (§10.3)
 
   // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
   // parseRequirements(visaProduct.requirements), dikumpulkan per pilgrim (server component, jadi
@@ -280,14 +281,12 @@ export default async function AdminBookingDetail({ params }: Props) {
                   </div>
                 </div>
 
-                <PassportForm
+                <PilgrimDataForm
+                  bookingId={id}
                   pilgrimId={p.id}
-                  initial={{
-                    passportNumber: String((p.fieldValues as Record<string, unknown>).passportNumber ?? ''),
-                    passportExpiry: String((p.fieldValues as Record<string, unknown>).passportExpiry ?? ''),
-                    nationality: String((p.fieldValues as Record<string, unknown>).nationality ?? 'Indonesian'),
-                    dateOfBirth: String((p.fieldValues as Record<string, unknown>).dateOfBirth ?? ''),
-                  }}
+                  fields={(manifestFieldsByPilgrim.get(p.id) ?? []).map(f => ({ id: f.id, fieldKey: f.fieldKey, label: f.label, fieldType: f.fieldType, options: f.options, required: f.required, role: f.role, order: f.order }))}
+                  initial={p.fieldValues as Record<string, unknown>}
+                  plannedTravelDate={p.visaApplication ? (p.visaApplication.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null) : undefined}
                 />
 
                 {p.visaApplication && (

@@ -11,6 +11,7 @@ import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { ResendInviteButton } from './ResendInviteButton'
 import { VisaPolicyToggle } from './VisaPolicyToggle'
+import { NewBookingButton } from './NewBookingButton'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Card } from '@/components/admin/ui/Card'
@@ -103,6 +104,7 @@ export default async function AdminCustomerDetail({ params, searchParams }: Prop
         <Card className="space-y-3 p-5">
           <h2 className="m-0 text-sm font-bold text-admin-ink">Aturan pemesanan</h2>
           <VisaPolicyToggle customerId={c.id} initial={c.allowVisaWithoutBundle} />
+          <div className="border-t border-admin-line pt-3"><NewBookingButton customerId={c.id} locale={locale} /></div>
         </Card>
       )}
 

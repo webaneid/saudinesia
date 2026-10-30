@@ -1,12 +1,12 @@
 import { prisma } from '@/lib/db'
-import type { CreateBookingInput } from '@/lib/validators/booking'
+import type { BookingInput } from './create'
 import type { PackageResolved } from './packageItem'
 import type { TourPackageResolved } from './lineItems'
 import { evaluateVisaRules, type BookingCoverage, type RuleViolation } from './rules'
 
 // Pemuat konteks untuk lib/booking/rules.ts (fungsi aturannya sendiri murni). Komponen booking = item mandiri + isi Paket Umroh + kendaraan Paket Ziarah.
 
-export async function bookingCoverage(data: CreateBookingInput, packages: readonly PackageResolved[], tours: readonly TourPackageResolved[]): Promise<BookingCoverage> {
+export async function bookingCoverage(data: BookingInput, packages: readonly PackageResolved[], tours: readonly TourPackageResolved[]): Promise<BookingCoverage> {
   const quotaIds = [
     ...data.items.flatMap(i => (i.itemType === 'transport' ? [i.transportQuotaId] : [])),
     ...tours.flatMap(t => (t.transportQuotaId ? [t.transportQuotaId] : [])),
@@ -38,7 +38,7 @@ export async function bookingCoverage(data: CreateBookingInput, packages: readon
  * paket serba-pilihan tidak "berisi semuanya"). Visa `included` paket tidak dievaluasi — bundel yang dikurasi admin (D5).
  * Pelonggaran dibaca dari akun PEMILIK booking (bukan dari klien).
  */
-export async function visaRuleViolations(data: CreateBookingInput, ownerUserId: string, packages: readonly PackageResolved[], tours: readonly TourPackageResolved[]): Promise<RuleViolation[]> {
+export async function visaRuleViolations(data: BookingInput, ownerUserId: string, packages: readonly PackageResolved[], tours: readonly TourPackageResolved[]): Promise<RuleViolation[]> {
   const ids = [...new Set([...data.pilgrims.flatMap(p => (p.visaProductId ? [p.visaProductId] : [])), ...packages.flatMap(p => (p.choices.visaProductId ? [p.choices.visaProductId] : []))])]
   if (ids.length === 0) return []
   const [visas, owner, coverage] = await Promise.all([

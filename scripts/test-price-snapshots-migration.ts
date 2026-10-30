@@ -124,7 +124,7 @@ async function fullWorld(db: PrismaClient, withGap = 0) {
   const btp = await db.bookingTourPackage.create({ data: { bookingId: bk.id, tourPackageId: tour.id, tourDate: d('2027-06-02'), numPeople: 4, totalPrice: 2_000_000 } })
   const bj = await db.bookingHaji.create({ data: { bookingId: bk.id, hajiProductId: haji.id, numPersons: 2, totalPrice: 12_000_000 } })
   const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
-  const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh', selectedDurationDays: 30 } })
+  const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh', selectedDurationDays: 30 }, select: { id: true } })
   await setLegacy(db, 'visa_applications', va.id, { hppSnapshotRupiah: 1_500_000, sellPriceSnapshot: 1_800_000 })
   return { booking: bk.id, bh: bh.id, bt: bt.id, bm: bm.id, bc: bc.id, btp: btp.id, bj: bj.id, va: va.id, sch: sch.id }
 }
@@ -173,7 +173,7 @@ await t('Visa tanpa HPP (0) → modal null; visa tanpa harga beku tidak dibuatka
     const u = await mkUser(db)
     const bk = await mkBooking(db, u.id, 0)
     const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
-    await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaType: 'Umroh' } })
+    await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaType: 'Umroh' }, select: { id: true } })
     return { a: w.booking, b: bk.id }
   })
   assert.equal(r.code, 0, r.out.slice(-400))

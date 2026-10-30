@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Plus } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
@@ -101,7 +102,8 @@ export default async function AdminBookings({ params, searchParams }: Props) {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Daftar Booking" description="Cari berdasarkan kode booking atau nama pemesan." />
+      <PageHeader title="Daftar Booking" description="Cari berdasarkan kode booking atau nama pemesan."
+        actions={<Link href={`/${locale}/admin/bookings/new`} className="admin-btn"><Plus className="h-4 w-4" /> Booking Baru</Link>} />
 
       <FilterBar active={Boolean(q || status)} resetHref={buildListHref(base, { limit: limitParam })}>
         <SearchForm

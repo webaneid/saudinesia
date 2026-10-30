@@ -774,6 +774,8 @@ model Booking {
   paymentDeadline DateTime?
   // Konfirmasi booking (kuota dijamin, visa mulai diproses) — terpisah dari status siklus hidup dan dari uang.
   confirmedAt     DateTime?     @db.Timestamptz(3)
+  // Isi draf (status `draft`, docs/arsitektur-booking-engine-v2.md §10.3): masukan pesan berbentuk skema jalur pesan, TANPA item/kuota/snapshot. Dikosongkan saat terbit.
+  draft           Json?
   confirmedById   String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
@@ -856,6 +858,8 @@ model VisaApplication {
   // DIISI kode manapun: menunggu Gap #1/#2 di docs/arsitektur-visa.md §7 diperbaiki dulu
   // (visaProductId tidak pernah di-set saat create booking, wizard belum punya step pilih VisaProduct).
   selectedDurationDays Int?
+  // Rencana tanggal berangkat jamaah (D1): bawaan = tiket pergi paling awal di booking yang sama, dapat diedit di form data jamaah.
+  plannedTravelDate    DateTime? @db.Date
 
   pilgrim     BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
   visaProduct VisaProduct?   @relation(fields: [visaProductId], references: [id])
