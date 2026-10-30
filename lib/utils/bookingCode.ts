@@ -1,7 +1,8 @@
 import { prisma } from '@/lib/db'
+import { yearInApp } from '@/lib/time'
 
 export async function generateBookingCode(): Promise<string> {
-  const year = new Date().getFullYear()
+  const year = yearInApp()
   const count = await prisma.booking.count({
     where: { bookingCode: { startsWith: `SND-${year}-` } },
   })

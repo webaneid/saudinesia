@@ -16,6 +16,7 @@ services:
       MINIO_PORT: "9000"
       MINIO_USE_SSL: "false"
       NODE_ENV: production
+      TZ: UTC
     depends_on:
       postgres:
         condition: service_healthy

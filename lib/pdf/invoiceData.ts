@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
+import { DATE_SHORT_MONTH_2D, formatInstant } from '@/lib/time'
 
 // Invoice dibangun HANYA dari `price_snapshots` (docs/arsitektur-harga-terpadu.md §17, invarian I3/I4/I5): harga yang tertera adalah harga yang DIBEKUKAN saat dipesan —
 // bukan dihitung ulang dan bukan dibaca dari kolom harga item. Hanya JUAL yang masuk ke sini; modal/untung tak pernah keluar ke dokumen pilgrim.
@@ -50,7 +51,7 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 function formatDate(d: Date): string {
-  return new Date(d).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })
+  return formatInstant(d, DATE_SHORT_MONTH_2D)
 }
 
 function buildBuyerAddress(user: InvoiceBooking['user']): string {

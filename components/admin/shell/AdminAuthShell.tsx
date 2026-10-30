@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { yearInApp } from '@/lib/time'
 
 type AdminAuthShellProps = { title: string; description?: string; children: ReactNode }
 
@@ -21,7 +22,7 @@ export function AdminAuthShell({ title, description, children }: AdminAuthShellP
           </header>
           {children}
         </section>
-        <p className="m-0 text-center text-xs text-white/60">© {new Date().getFullYear()} Saudinesia</p>
+        <p className="m-0 text-center text-xs text-white/60">© {yearInApp()} Saudinesia</p>
       </div>
     </main>
   )

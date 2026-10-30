@@ -1,5 +1,6 @@
 // All quota helpers MUST be called inside prisma.$transaction() to prevent race conditions.
 import type { Prisma } from '@prisma/client'
+import { formatCalendarDate } from '@/lib/time'
 
 type Tx = Prisma.TransactionClient
 
@@ -141,7 +142,7 @@ export async function reservePoolMuthowifQuota(tx: Tx, date: Date, people: numbe
     // sekarang tahu persisnya kenapa gagal. Kata "insufficient"/"capacity" dipertahankan
     // (pola sama fungsi reserve* lain di file ini) supaya cocok dengan pattern-match di
     // app/api/v1/bookings/route.ts yang mem-forward pesan ini apa adanya sebagai 409.
-    const dateLabel = date.toLocaleDateString('id-ID', { dateStyle: 'medium' })
+    const dateLabel = formatCalendarDate(date)
     throw new Error(`Muthowif pool capacity insufficient for ${dateLabel}: need ${people}, have ${Math.max(available, 0)}`)
   }
   await tx.muthowifPoolAvailability.update({

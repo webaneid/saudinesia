@@ -13,6 +13,7 @@ import { sellPrices } from '@/lib/pricing/engine/read'
 import { buildListHref, buildPageMeta, parseListParams } from '@/lib/table/pagination'
 import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
 import { Pagination } from '@/components/shared/data-table/Pagination'
+import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
 
@@ -21,7 +22,7 @@ const RATE_PAGE_SIZE = 10
 type Period = { id: string; periodStart: Date; periodEnd: Date; schedules: Array<{ roomTypeId: string; totalQuota: number; pendingQuota: number; bookedQuota: number; price: number }> }
 
 function formatShortDate(d: Date) {
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatCalendarDate(d, DATE_SHORT_MONTH)
 }
 
 export default async function HotelDetailPage({ params, searchParams }: Props) {

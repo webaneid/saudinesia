@@ -9,6 +9,7 @@ import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { hajiAvailable, hajiPriced } from '@/lib/haji/catalog'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { DATE_LONG, formatCalendarDate } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -93,7 +94,7 @@ export default async function HajiCatalogPage({ params }: Props) {
                   {p.departureDate && (
                     <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Calendar className="h-3.5 w-3.5" />
-                      {new Date(p.departureDate).toLocaleDateString('id-ID', { dateStyle: 'long' })}
+                      {formatCalendarDate(p.departureDate, DATE_LONG)}
                       {p.durationDays && <span>· {p.durationDays} hari</span>}
                     </div>
                   )}

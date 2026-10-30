@@ -17,6 +17,7 @@ import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canRecordCost } from '@/lib/pricing/policy'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
+import { DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -118,13 +119,13 @@ export default async function AdminBookingDetail({ params }: Props) {
           <p className="text-[13px] text-admin-ink/80">
             Berangkat:{' '}
             <span className="font-medium text-admin-ink">
-              {new Date(booking.departureDate).toLocaleDateString('id-ID', { dateStyle: 'long' })}
+              {formatCalendarDate(booking.departureDate, DATE_LONG)}
             </span>
           </p>
           <p className="text-[13px] text-admin-ink/80">
             Kembali:{' '}
             <span className="font-medium text-admin-ink">
-              {new Date(booking.returnDate).toLocaleDateString('id-ID', { dateStyle: 'long' })}
+              {formatCalendarDate(booking.returnDate, DATE_LONG)}
             </span>
           </p>
           <p className="text-[13px] text-admin-ink/80">
@@ -156,7 +157,7 @@ export default async function AdminBookingDetail({ params }: Props) {
               <p key={tp.id} className="text-[13px] text-admin-ink/80">
                 <span className="font-medium text-admin-ink">{tp.tourPackage.name}</span>
                 {' — '}
-                <span>{new Date(tp.tourDate).toLocaleDateString('id-ID')}</span>
+                <span>{formatCalendarDate(tp.tourDate, DATE_NUMERIC)}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">
                   {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''} · {formatRupiah(Number(tp.totalPrice))}
                 </span>
@@ -171,14 +172,14 @@ export default async function AdminBookingDetail({ params }: Props) {
             {booking.muthowif.map(bm => (
               <div key={bm.id} className="space-y-2">
                 <p className="text-[13px] text-admin-ink/80">
-                  {new Date(bm.startDate).toLocaleDateString('id-ID')} – {new Date(bm.endDate).toLocaleDateString('id-ID')}
+                  {formatCalendarDate(bm.startDate, DATE_NUMERIC)} – {formatCalendarDate(bm.endDate, DATE_NUMERIC)}
                   <span className="text-admin-muted ml-2 text-[12px]">{bm.numDays} hari × {bm.numPeople} orang</span>
                 </p>
                 {bm.muthowif ? (
                   <p className="text-[13px] text-admin-ink">
                     <span className="font-medium">{bm.muthowif.name}</span>
                     <span className="text-admin-muted ml-2 text-[12px]">
-                      di-assign {bm.assignedAt ? new Date(bm.assignedAt).toLocaleDateString('id-ID') : '-'}
+                      di-assign {bm.assignedAt ? formatInstant(bm.assignedAt, DATE_NUMERIC) : '-'}
                     </span>
                   </p>
                 ) : (

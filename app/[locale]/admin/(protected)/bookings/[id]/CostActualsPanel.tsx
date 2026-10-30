@@ -6,6 +6,7 @@ import { ActionButton, RowActions } from '@/components/admin/data-table/RowActio
 import { formatRupiah } from '@/lib/utils'
 import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { todayInApp } from '@/lib/time'
 
 // Pengeluaran aktual ke vendor vs modal rencana (docs/arsitektur-harga-terpadu.md §20, 7C). Catatan penyebab selisih wajib bila lunas ≠ rencana atau sudah melebihi rencana
 // (server yang memutuskan; pesan galatnya ditampilkan apa adanya). "Hapus" = BATALKAN dengan alasan (riwayat tetap).
@@ -17,7 +18,7 @@ type Entry = {
 type Line = { snapshotId: string; itemType: string; label: string; planIdr: number | null; plannedVendorIds: string[]; actualIdr: number; varianceIdr: number | null; settled: boolean; needsNote: boolean; entries: Entry[] }
 type Data = { lines: Line[]; loose: Entry[] }
 
-const today = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
+const today = () => todayInApp()
 
 export function CostActualsPanel({ bookingId }: { bookingId: string }) {
   const [data, setData] = useState<Data | null>(null)

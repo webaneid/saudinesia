@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { APP_TIMEZONE, daysBetween, endOfDayExclusiveInApp, isCalendarDate, startOfDayInApp, todayInApp } from '@/lib/time'
 
 // LAPORAN UNTUNG dari snapshot harga (docs/arsitektur-harga-terpadu.md §19, Fase 6). Semua angka berasal dari `price_snapshots` (beku saat dipesan — tak bergeser oleh kurs/harga
 // sesudahnya) + `payments`/`refunds`. SQL mentah ber-parameter ($queryRaw): Prisma ORM tidak mengekspresikan agregat per irisan + rasio dibayar per booking dalam satu kueri;
@@ -25,20 +26,17 @@ const STATUSES: Record<ReportScope, string[]> = {
   with_pending: ['confirmed', 'active', 'completed', 'awaiting_payment', 'payment_review'],
 }
 const MAX_RANGE_DAYS = 366 * 5
-const DAY_MS = 86_400_000
 
 const money = (x: number | null | undefined): number => Math.round((x ?? 0) * 100) / 100
 
-/** Batas periode menurut WIB (UTC+7): [from 00:00, to+1 hari 00:00). Tanggal tak sah / terbalik / terlalu panjang → ReportInputError. */
+/** Batas periode menurut ZONA APLIKASI (lib/time): [from 00:00, to+1 hari 00:00). Tanggal tak sah / terbalik / terlalu panjang → ReportInputError. */
 export function periodBounds(from: string, to: string): { fromTs: Date; toTs: Date } {
-  const iso = /^\d{4}-\d{2}-\d{2}$/
-  if (!iso.test(from) || !iso.test(to)) throw new ReportInputError('Tanggal harus berformat YYYY-MM-DD')
-  const fromTs = new Date(`${from}T00:00:00+07:00`)
-  const toTs = new Date(new Date(`${to}T00:00:00+07:00`).getTime() + DAY_MS)
-  if (Number.isNaN(fromTs.getTime()) || Number.isNaN(toTs.getTime())) throw new ReportInputError('Tanggal tidak valid')
-  if (toTs.getTime() <= fromTs.getTime()) throw new ReportInputError('Tanggal akhir tidak boleh sebelum tanggal awal')
-  if ((toTs.getTime() - fromTs.getTime()) / DAY_MS > MAX_RANGE_DAYS) throw new ReportInputError('Rentang laporan maksimal 5 tahun')
-  return { fromTs, toTs }
+  const shape = /^\d{4}-\d{2}-\d{2}$/
+  if (!shape.test(from) || !shape.test(to)) throw new ReportInputError('Tanggal harus berformat YYYY-MM-DD')
+  if (!isCalendarDate(from) || !isCalendarDate(to)) throw new ReportInputError('Tanggal tidak valid')
+  if (daysBetween(from, to) < 0) throw new ReportInputError('Tanggal akhir tidak boleh sebelum tanggal awal')
+  if (daysBetween(from, to) + 1 > MAX_RANGE_DAYS) throw new ReportInputError('Rentang laporan maksimal 5 tahun')
+  return { fromTs: startOfDayInApp(from), toTs: endOfDayExclusiveInApp(to) }
 }
 
 /** `bookings.createdAt` adalah `timestamp` TANPA zona (nilai UTC dari Prisma): batas dikirim sebagai teks UTC + cast `::timestamp` — jangan mengikat `Date` (driver mengubahnya ke zona sesi server). */
@@ -127,7 +125,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
     run<Agg & { bucket: string }>(Prisma.sql`
       SELECT CASE WHEN jsonb_array_length(vendor_ids) = 1 THEN vendor_ids->>0 WHEN jsonb_array_length(vendor_ids) > 1 THEN '__multi' ELSE '__none' END AS bucket, ${AGG}
       FROM l GROUP BY 1 ORDER BY SUM(sell) DESC, 1`),
-    run<Agg & { month: string }>(Prisma.sql`SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM') AS month, ${AGG} FROM l GROUP BY 1 ORDER BY 1`),
+    run<Agg & { month: string }>(Prisma.sql`SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC' AT TIME ZONE ${APP_TIMEZONE}), 'YYYY-MM') AS month, ${AGG} FROM l GROUP BY 1 ORDER BY 1`),
     prisma.$queryRaw<Array<{ bookings: number; retained: number }>>(Prisma.sql`
       SELECT COUNT(*)::int AS bookings, COALESCE(SUM(GREATEST(0, x.paid - x.refunded)), 0)::float8 AS retained FROM (
         SELECT COALESCE((SELECT SUM(py."amount") FROM "payments" py WHERE py."bookingId" = bk."id" AND py."status" = 'confirmed'), 0)::float8 AS paid,
@@ -187,9 +185,8 @@ export async function getBookingProfitRows(p: ReportParams, page: number, limit:
   }
 }
 
-const wib = (d: Date): string => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 10)
-/** Periode bawaan: tanggal 1 bulan ini s/d hari ini (WIB). */
+/** Periode bawaan: tanggal 1 bulan ini s/d hari ini (zona aplikasi). */
 export function defaultPeriod(now = new Date()): { from: string; to: string } {
-  const today = wib(now)
+  const today = todayInApp(now)
   return { from: `${today.slice(0, 8)}01`, to: today }
 }

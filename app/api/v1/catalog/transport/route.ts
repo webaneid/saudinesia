@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { addDays, dbDateOf, todayInApp } from '@/lib/time'
 
 const querySchema = z.object({
   category: z.string().optional(),
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
     if (!parsed.success) return NextResponse.json(err('Parameter tidak valid'), { status: 400 })
 
     const { category, date, tripId } = parsed.data
-    const travelDate = date ? new Date(date) : new Date(Date.now() + 7 * 86_400_000)
+    const travelDate = dbDateOf(date ?? addDays(todayInApp(), 7))
 
     const quotas = await prisma.transportQuota.findMany({
       where: {

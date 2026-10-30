@@ -9,6 +9,7 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { Badge } from '@/components/admin/ui/Badge'
+import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
 
 type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
 type FlightSchedule = {
@@ -18,7 +19,7 @@ type FlightSchedule = {
 }
 
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatCalendarDate(d, DATE_SHORT_MONTH)
 }
 
 export default function FlightPage() {

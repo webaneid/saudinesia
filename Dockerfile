@@ -6,6 +6,8 @@
 
 FROM oven/bun:1-slim AS base
 WORKDIR /app
+# Zona proses UTC (docs/arsitektur-booking-engine-v2.md §5): logika waktu aplikasi memakai lib/time dan tak bergantung pada zona proses; ini menjaga getter lokal yang lolos tetap deterministik.
+ENV TZ=UTC
 # Prisma butuh openssl & ca-certificates. Image slim tidak membawanya: tanpa ini Prisma salah mendeteksi versi
 # libssl saat `prisma generate`, dan binary engine yang dihasilkan tidak cocok dengan runtime.
 RUN apt-get update -y \

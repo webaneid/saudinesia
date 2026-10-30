@@ -9,7 +9,8 @@ import { Pagination, pageWindow } from '@/components/admin/data-table/Pagination
 import { DataTable } from '@/components/admin/data-table/DataTable'
 import { ACTION_ICONS, ACTION_LABELS, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { filterHref, filterOptions } from '@/lib/admin/filter'
-import { matchPreset, periodPresets, wibDate } from '@/lib/admin/period'
+import { matchPreset, periodPresets } from '@/lib/admin/period'
+import { dateInApp } from '@/lib/time'
 import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
 
 let failed = 0
@@ -114,7 +115,7 @@ t('periodPresets (tabel nilai dihitung tangan, WIB): bulan ini, bulan lalu, 90 h
     ['month', '2026-10-01', '2026-10-29'], ['prev', '2026-09-01', '2026-09-30'], ['90', '2026-08-01', '2026-10-29'], ['year', '2026-01-01', '2026-10-29'],
   ])
   // 20:00 UTC tanggal 31 Des = 03:00 WIB tanggal 1 Jan: periode ikut hari WIB, bukan UTC
-  assert.equal(wibDate(new Date('2026-12-31T20:00:00Z')), '2027-01-01')
+  assert.equal(dateInApp(new Date('2026-12-31T20:00:00Z')), '2027-01-01')
   const ny = periodPresets(new Date('2026-12-31T20:00:00Z'))
   assert.deepEqual(ny.map(x => [x.from, x.to]), [['2027-01-01', '2027-01-01'], ['2026-12-01', '2026-12-31'], ['2026-10-04', '2027-01-01'], ['2027-01-01', '2027-01-01']])
   assert.equal(matchPreset(p, '2026-09-01', '2026-09-30'), 'prev')
@@ -161,7 +162,7 @@ t('PENJAGA SUMBER: Pembayaran tak lagi membuat daftar sendiri; filter status per
   for (const f of ['reports', 'reports/variance']) {
     const src = readFileSync(join(root, `${ADMIN}${f}/page.tsx`), 'utf8')
     assert.match(src, /<PeriodFilter/, f)
-    assert.doesNotMatch(src, /const presets|function presets|wibDate = /, `${f}: preset periode satu tempat (lib/admin/period.ts)`)
+    assert.doesNotMatch(src, /const presets|function presets|wibDate = |dateInApp = /, `${f}: preset periode satu tempat (lib/admin/period.ts)`)
   }
 })
 

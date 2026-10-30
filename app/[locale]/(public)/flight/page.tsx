@@ -9,6 +9,7 @@ import { DataTable, type Column } from '@/components/shared/data-table/DataTable
 import { FilterBar } from '@/components/shared/data-table/FilterBar'
 import { Pagination } from '@/components/shared/data-table/Pagination'
 import { SearchForm } from '@/components/shared/data-table/SearchForm'
+import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
 
 // Katalog tiket pesawat (publik). Tabel + pencarian + paginasi memakai kit bersama (docs/arsitektur-tabel.md Fase 4): di HP tiap baris menjadi kartu.
 
@@ -18,7 +19,7 @@ type Props = {
 }
 
 function formatDate(d: Date) {
-  return d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatCalendarDate(d, DATE_SHORT_MONTH)
 }
 
 type Row = { id: string; origin: string; destination: string; departureFrom: Date; departureTo: Date; price: number; airline: string | null }

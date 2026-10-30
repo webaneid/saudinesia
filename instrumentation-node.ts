@@ -21,6 +21,7 @@ export async function registerNode() {
 
   void ensureMinioBucket()
   void repriceOnBoot()
+  void import('@/lib/time/dbZone').then(m => m.checkDatabaseTimezone()) // hanya memperingatkan: zona sesi DB harus UTC (docs/arsitektur-booking-engine-v2.md §5)
 }
 
 // Titik harga (`price_points`) dilengkapi/diperbarui saat server naik: migrasi hanya menyalin harga jual dari kolom lama (modal kosong); ini mengisi modal dan

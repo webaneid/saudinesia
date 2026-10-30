@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { ShieldAlert } from 'lucide-react'
+import { DATE_NUMERIC, formatInstant } from '@/lib/time'
 
 type DeletionRequest = { status: 'pending' | 'completed' | 'rejected' | 'withdrawn'; requestedAt: string; minWaitHours?: number } | null
 
@@ -48,7 +49,7 @@ export function DeletionRequestCard() {
       {request?.status === 'pending' && (
         <div className="space-y-2">
           <p className="text-xs text-amber-600">
-            Permintaan Anda menunggu sejak {new Date(request.requestedAt).toLocaleDateString('id-ID')}. Kami juga mengirim email konfirmasi ke alamat akun Anda.
+            Permintaan Anda menunggu sejak {formatInstant(request.requestedAt, DATE_NUMERIC)}. Kami juga mengirim email konfirmasi ke alamat akun Anda.
           </p>
           <Button variant="outline" size="sm" disabled={loading} onClick={handleWithdraw}>
             {loading ? 'Memproses...' : 'Batalkan Permintaan'}

@@ -4,11 +4,10 @@ import {
   confirmMuthowifQuota, releaseMuthowifQuota,
 } from '@/lib/quota'
 import type { QuotaAdapter, Tx } from './types'
+import { calendarDateOf, dbDateOf, eachDay } from '@/lib/time'
 
 function eachDate(start: Date, end: Date): Date[] {
-  const dates: Date[] = []
-  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) dates.push(new Date(d))
-  return dates
+  return [...eachDay(calendarDateOf(start), calendarDateOf(end))].map(dbDateOf)
 }
 
 // Dua lapis kapasitas (docs/arsitektur-muthowif.md §9.2-§9.4): pool (gabungan semua muthowif
