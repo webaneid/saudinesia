@@ -104,9 +104,15 @@ await t('skema bank/QRIS/pajak: batas dan bentuk (tarif 3 desimal, dasar 0 ditol
   for (const x of [{ ratePercent: 101 }, { ratePercent: 11.1234 }, { basisPercent: 0 }, { basisPercent: 100.1 }, { mode: 'lain' }, { name: '' }]) assert.equal(taxRuleSchema.safeParse({ name: 'PPN', ratePercent: 11, basisPercent: 100, mode: 'added', ...x }).success, false, JSON.stringify(x))
 })
 
+const createdUsers: string[] = [] // akun staf yang dibuat uji ini sendiri (dihapus di pembersihan)
 console.log('== simpan, alamat, zona waktu ==')
 await t('updateInvoiceSettings menyimpan nilai, mencatat staf, memperbarui zona aplikasi; alamat dibuat → diubah (baris yang sama) → dihapus (tanpa yatim)', async () => {
-  const staff = await prisma.user.findFirstOrThrow({ where: { role: { in: ['superadmin', 'admin', 'manager'] } }, select: { id: true } }).catch(async () => prisma.user.create({ data: { email: `inv-${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Staf', role: 'admin', isActive: true } }))
+  // DB kosong (CI) tak punya staf hasil seed → buat satu, dan HAPUS di pembersihan: akun non-demo yang tertinggal membuat penjaga seed (test-seed-guard) menolak berjalan.
+  const staff = await prisma.user.findFirstOrThrow({ where: { role: { in: ['superadmin', 'admin', 'manager'] } }, select: { id: true } }).catch(async () => {
+    const u = await prisma.user.create({ data: { email: `inv-${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Staf', role: 'admin', isActive: true }, select: { id: true } })
+    createdUsers.push(u.id)
+    return u
+  })
   const base = invoiceSettingsSchema.parse({ ...valid(), numberPrefix: 'SND', appTimezone: 'Asia/Riyadh', defaultDueDays: 10, companyName: 'PT Saudinesia', companyEmail: 'a@b.co', address: { type: 'international', fullAddress: '1 Orchard Rd', countryCode: 'SG', city: 'Singapore' } })
   const s1 = await updateInvoiceSettings(base, staff.id)
   assert.deepEqual([s1.numberPrefix, s1.defaultDueDays, s1.appTimezone, s1.companyName, s1.updatedById], ['SND', 10, 'Asia/Riyadh', 'PT Saudinesia', staff.id])
@@ -391,6 +397,7 @@ await wipeSeq(); await resetDefaults()
 await prisma.address.deleteMany({ where: { id: { in: createdAddresses } } })
 await prisma.taxRule.deleteMany({ where: { name: { in: ['PPN Uji'] } } })
 await exec(`TRUNCATE settings_audit`) // pembersihan uji (TRUNCATE tak melewati trigger baris append-only)
+await prisma.user.deleteMany({ where: { id: { in: createdUsers } } }) // staf buatan uji (invoice_settings.updatedById = SET NULL)
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 await prisma.$disconnect()
 process.exit(failed ? 1 : 0)
