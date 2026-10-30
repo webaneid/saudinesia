@@ -1,5 +1,5 @@
 import {
-  LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
+  Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
   Users, UserCheck, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale,
   type LucideIcon,
@@ -40,6 +40,7 @@ const SISTEM: NavItem[] = [
   { path: '/admin/system/users',             icon: Users,       label: 'Pengguna' },
   { path: '/admin/system/vendors',           icon: Handshake,   label: 'Vendor' },
   { path: '/admin/system/deletion-requests', icon: ShieldAlert, label: 'Hapus Akun' },
+  { path: '/admin/system/invoice-settings',  icon: Receipt,     label: 'Pengaturan Invoice' },
   { path: '/admin/system/settings',          icon: Settings,    label: 'Pengaturan' },
 ]
 
@@ -84,6 +85,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   categories: 'Kategori',
   new: 'Baru',
   settings: 'Pengaturan',
+  'invoice-settings': 'Pengaturan Invoice',
 }
 
 /** Segmen yang tidak punya halaman sendiri (hanya folder pengelompok) — di breadcrumb tampil sebagai teks, bukan tautan. */

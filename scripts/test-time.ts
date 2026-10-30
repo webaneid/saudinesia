@@ -1,18 +1,27 @@
 // Modul waktu (docs/arsitektur-booking-engine-v2.md §5): tabel nilai dihitung tangan. DIJALANKAN di bawah beberapa `TZ` (lihat package.json) — hasil HARUS identik di
 // UTC, Asia/Jakarta, Asia/Riyadh, dan America/Los_Angeles; itulah inti jaminannya (tanggal tak boleh bergeser oleh zona server/peramban). Tanpa database.
 import assert from 'node:assert/strict'
+import { copyFileSync, mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { getCancellationPolicy } from '@/lib/utils/cancellationPolicy'
 import {
-  APP_TIMEZONE, DATETIME_LONG, DATETIME_MEDIUM, DATE_LONG, DATE_MEDIUM, DATE_NUMERIC,
-  addDays, calendarDateOf, dateInApp, daysBetween, dbDateOf, eachDay, endOfDayExclusiveInApp, formatCalendarDate, formatInstant, instantFromWallClock,
+  DEFAULT_APP_TIMEZONE, DATETIME_LONG, DATETIME_MEDIUM, DATE_LONG, DATE_MEDIUM, DATE_NUMERIC,
+  addDays, calendarDateOf, getAppTimezone, isCanonicalTimezone, isValidTimezone, setAppTimezone, dateInApp, daysBetween, dbDateOf, eachDay, endOfDayExclusiveInApp, formatCalendarDate, formatInstant, instantFromWallClock,
   isCalendarDate, offsetMsAt, parseAppDateTime, startOfDayInApp, toAppDateTimeInput, todayInApp, wallClockOf, yearInApp, zoneLabel,
 } from '@/lib/time'
 
 const expectedOffsetMin: Record<string, number> = { UTC: 0, 'Asia/Jakarta': -420, 'Asia/Riyadh': -180, 'America/Los_Angeles': 420 } // getTimezoneOffset pada 2026-01-15 (PST di LA: 480)
 const tzEnv = process.env.TZ ?? '(kosong)'
 let failed = 0
-function t(name: string, fn: () => void) {
-  try { fn(); console.log(`PASS [${tzEnv}] ${name}`) } catch (e) { failed++; console.log(`FAIL [${tzEnv}] ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
+const pending: Promise<void>[] = []
+function t(name: string, fn: () => void | Promise<void>) {
+  const bad = (e: unknown) => { failed++; console.log(`FAIL [${tzEnv}] ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
+  try {
+    const r = fn()
+    if (r instanceof Promise) pending.push(r.then(() => console.log(`PASS [${tzEnv}] ${name}`)).catch(bad))
+    else console.log(`PASS [${tzEnv}] ${name}`)
+  } catch (e) { bad(e) }
 }
 const iso = (d: Date) => d.toISOString()
 
@@ -67,7 +76,8 @@ t('dateInApp/todayInApp (tabel nilai WIB): batas tengah malam WIB = 17:00 UTC �
   assert.equal(todayInApp(new Date('2026-12-31T17:00:00Z')), '2027-01-01')
   assert.equal(yearInApp(new Date('2026-12-31T16:59:59Z')), 2026)
   assert.equal(yearInApp(new Date('2026-12-31T17:00:00Z')), 2027, 'kode booking tahun baru mulai tepat 00:00 WIB (dulu getFullYear() mengikuti zona server)')
-  assert.equal(APP_TIMEZONE, 'Asia/Jakarta')
+  assert.equal(DEFAULT_APP_TIMEZONE, 'Asia/Jakarta')
+  assert.equal(getAppTimezone(), 'Asia/Jakarta')
 })
 
 t('zona lain eksplisit: Riyadh (+3) dan Los Angeles (DST −7 → −8 pada 1 Nov 2026) menghitung hari sendiri', () => {
@@ -151,5 +161,45 @@ t('kebijakan pembatalan memakai HARI KALENDER zona aplikasi (dulu selisih instan
   for (const [at, pct, why] of table) assert.equal(getCancellationPolicy(dep, new Date(at)).refundPercent, pct, `${at} — ${why}`)
 })
 
+t('zona aplikasi = setelan: setAppTimezone mengubah SEMUA bawaan (hari ini, batas hari, format, input); nama tak dikenal ditolak dan zona tak berubah; isValidTimezone', () => {
+  for (const ok of ['Asia/Jakarta', 'Asia/Riyadh', 'America/Los_Angeles', 'UTC', 'Asia/Makassar']) assert.equal(isValidTimezone(ok), true, ok)
+  for (const bad of ['', 'WIB', 'Jakarta', 'Asia/Nowhere', 'a'.repeat(65), 123, null, undefined]) assert.equal(isValidTimezone(bad), false, String(bad))
+  const at = new Date('2026-10-29T17:30:00Z')
+  try {
+    assert.equal(dateInApp(at), '2026-10-30')
+    setAppTimezone('Asia/Riyadh')
+    assert.equal(getAppTimezone(), 'Asia/Riyadh')
+    assert.equal(dateInApp(at), '2026-10-29', 'di Riyadh (+3) masih 29 Okt 20.30')
+    assert.equal(formatInstant(at, DATETIME_MEDIUM), '29 Okt 2026, 20.30')
+    assert.equal(iso(startOfDayInApp('2026-10-30')), '2026-10-29T21:00:00.000Z')
+    assert.equal(iso(parseAppDateTime('2026-10-30T09:24')!), '2026-10-30T06:24:00.000Z')
+    assert.equal(toAppDateTimeInput(at), '2026-10-29T20:30')
+    assert.equal(zoneLabel(), 'GMT+3')
+    assert.throws(() => setAppTimezone('Asia/Nowhere'), RangeError)
+    assert.equal(getAppTimezone(), 'Asia/Riyadh', 'tetap setelah penolakan')
+  } finally { setAppTimezone('Asia/Jakarta') }
+  assert.equal(dateInApp(at), '2026-10-30')
+})
+
+t('SEC-110: zona aplikasi hidup di globalThis — instans modul KEDUA (Next dapat memuat lib/time ganda: instrumentation/route/halaman) melihat setelan yang diset instans pertama; isCanonicalTimezone menolak bentuk offset', async () => {
+  // Instans modul TERPISAH: salinan berkas ke jalur lain (Bun mengabaikan query string pada impor, jadi `?x` tetap instans yang sama). Modul ini murni, tanpa impor lain.
+  const dir = mkdtempSync(join(tmpdir(), 'time-inst-'))
+  copyFileSync(new URL('../lib/time/index.ts', import.meta.url), join(dir, 'time.ts'))
+  const other = await import(join(dir, 'time.ts')) as typeof import('@/lib/time')
+  rmSync(dir, { recursive: true, force: true })
+  assert.notEqual(other.setAppTimezone, setAppTimezone, 'prasyarat: benar-benar instans modul terpisah')
+  try {
+    setAppTimezone('Asia/Riyadh')
+    assert.equal(other.getAppTimezone(), 'Asia/Riyadh')
+    other.setAppTimezone('Asia/Makassar')
+    assert.equal(getAppTimezone(), 'Asia/Makassar')
+    assert.equal(other.dateInApp(new Date('2026-10-29T16:30:00Z')), '2026-10-30')
+  } finally { setAppTimezone('Asia/Jakarta') }
+  assert.equal(other.getAppTimezone(), 'Asia/Jakarta')
+  for (const bad of ['+07:00', 'GMT+7', 'UTC+3', 'asia/jakarta', 'WIB', '', 7]) assert.equal(isCanonicalTimezone(bad), false, String(bad))
+  for (const good of ['Asia/Jakarta', 'UTC', 'America/Los_Angeles']) assert.equal(isCanonicalTimezone(good), true, good)
+})
+
+await Promise.all(pending)
 console.log(failed ? `\n[${tzEnv}] ${failed} GAGAL` : `\n[${tzEnv}] SEMUA LULUS`)
 process.exit(failed ? 1 : 0)

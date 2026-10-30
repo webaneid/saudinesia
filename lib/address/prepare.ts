@@ -58,14 +58,14 @@ type UpsertResult = { ok: true; id: string } | { ok: false; message: string }
 // Dipakai entity yang punya addressId sendiri (User/Vendor/Hotel, docs/arsitektur-alamat.md §9) —
 // create/update Address DALAM request yang sama dengan entity pemiliknya (bukan API /api/v1/address
 // terpisah), supaya atomik: kalau langkah entity gagal, tidak ada Address yatim tersisa.
-export async function upsertAddress(existingAddressId: string | null, input: AddressInput): Promise<UpsertResult> {
+export async function upsertAddress(existingAddressId: string | null, input: AddressInput, db: Pick<typeof prisma, 'address'> = prisma): Promise<UpsertResult> {
   const prepared = await prepareAddressData(input)
   if (!prepared.ok) return { ok: false, message: prepared.message }
 
   if (existingAddressId) {
-    const updated = await prisma.address.update({ where: { id: existingAddressId }, data: prepared.data })
+    const updated = await db.address.update({ where: { id: existingAddressId }, data: prepared.data })
     return { ok: true, id: updated.id }
   }
-  const created = await prisma.address.create({ data: prepared.data })
+  const created = await db.address.create({ data: prepared.data })
   return { ok: true, id: created.id }
 }

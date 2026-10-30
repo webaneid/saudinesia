@@ -229,6 +229,7 @@ await t('F2: SETIAP tipe di registry punya <MediaField productType="…"> di hal
   const pages: Record<keyof typeof MEDIA_OWNERS, string> = {
     hotel: 'hotels/[id]/page.tsx', tour_package: 'tour-packages/[id]/page.tsx', vehicle: 'transport/vehicles/[id]/page.tsx', haji: 'haji/[id]/page.tsx',
     package: 'packages/[id]/page.tsx', catering: 'catering/[id]/page.tsx', visa: 'visa/[id]/ProductInfoTab.tsx', muthowif: 'muthowif/[id]/page.tsx', tourism_site: 'tourism-sites/[id]/page.tsx',
+    invoice_settings: '../system/invoice-settings/InvoiceSettingsEditor.tsx', // logo perusahaan (Pengaturan Invoice, bukan produk)
   }
   assert.deepEqual(Object.keys(pages).sort(), Object.keys(MEDIA_OWNERS).sort(), 'tipe baru di registry wajib dipetakan ke halaman edit')
   for (const [type, file] of Object.entries(pages)) assert.match(readFileSync(dir + file, 'utf8'), new RegExp(`<MediaField\\s[^>]*productType="${type}"`), `${type}: MediaField tidak terpasang di ${file}`)

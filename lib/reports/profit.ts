@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { APP_TIMEZONE, daysBetween, endOfDayExclusiveInApp, isCalendarDate, startOfDayInApp, todayInApp } from '@/lib/time'
+import { getAppTimezone, daysBetween, endOfDayExclusiveInApp, isCalendarDate, startOfDayInApp, todayInApp } from '@/lib/time'
 
 // LAPORAN UNTUNG dari snapshot harga (docs/arsitektur-harga-terpadu.md §19, Fase 6). Semua angka berasal dari `price_snapshots` (beku saat dipesan — tak bergeser oleh kurs/harga
 // sesudahnya) + `payments`/`refunds`. SQL mentah ber-parameter ($queryRaw): Prisma ORM tidak mengekspresikan agregat per irisan + rasio dibayar per booking dalam satu kueri;
@@ -125,7 +125,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
     run<Agg & { bucket: string }>(Prisma.sql`
       SELECT CASE WHEN jsonb_array_length(vendor_ids) = 1 THEN vendor_ids->>0 WHEN jsonb_array_length(vendor_ids) > 1 THEN '__multi' ELSE '__none' END AS bucket, ${AGG}
       FROM l GROUP BY 1 ORDER BY SUM(sell) DESC, 1`),
-    run<Agg & { month: string }>(Prisma.sql`SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC' AT TIME ZONE ${APP_TIMEZONE}), 'YYYY-MM') AS month, ${AGG} FROM l GROUP BY 1 ORDER BY 1`),
+    run<Agg & { month: string }>(Prisma.sql`SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC' AT TIME ZONE ${getAppTimezone()}), 'YYYY-MM') AS month, ${AGG} FROM l GROUP BY 1 ORDER BY 1`),
     prisma.$queryRaw<Array<{ bookings: number; retained: number }>>(Prisma.sql`
       SELECT COUNT(*)::int AS bookings, COALESCE(SUM(GREATEST(0, x.paid - x.refunded)), 0)::float8 AS retained FROM (
         SELECT COALESCE((SELECT SUM(py."amount") FROM "payments" py WHERE py."bookingId" = bk."id" AND py."status" = 'confirmed'), 0)::float8 AS paid,

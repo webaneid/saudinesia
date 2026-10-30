@@ -1,5 +1,5 @@
 // Uji migrasi pembersihan (prisma/migrations/20261102090000_drop_group_and_booking_visa): modul Group Booking dan `booking_visa` yang tak pernah terpakai dibuang — FAIL-CLOSED: bila salah satu tabel/kolom
-// berisi data, migrasi BERHENTI dan semuanya utuh (rollback); kosong → tabel/kolom/FK hilang; dan DB hasil SEMUA migrasi = schema.prisma (uji drift terbaru berada di berkas ini).
+// berisi data, migrasi BERHENTI dan semuanya utuh (rollback); kosong → tabel/kolom/FK hilang; (uji drift terbaru dipindah ke test-invoice-settings-migration).
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -91,7 +91,6 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
   return { name, ids, ...res }
 }
 
-const diff = (name: string) => run(dbUrl(name), ['migrate', 'diff', '--from-url', dbUrl(name), '--to-schema-datamodel', 'schema.prisma', '--exit-code'])
 const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 
@@ -140,12 +139,7 @@ await t('FAIL-CLOSED: booking yang menunjuk grup (bookings.groupId terisi) → b
   })
   assert.notEqual(r.code, 0)
 })
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
+// Uji drift TERBARU kini di scripts/test-invoice-settings-migration.ts (migrasi terbaru).
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()
