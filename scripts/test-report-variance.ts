@@ -9,6 +9,7 @@ import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { getVarianceLines, getVarianceReport } from '@/lib/reports/variance'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
 
@@ -23,8 +24,8 @@ const v1 = await mkVendor('satu'), v2 = await mkVendor('dua')
 const bookings: string[] = []
 let n = 0
 
-async function mkBooking(code: string, at: string, status: 'confirmed' | 'cancelled', lines: Array<{ key: string; type: string; plan: number | null; label: string }>) {
-  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${code}`, userId: owner.id, status, departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: lines.length * 1_000_000, createdAt: new Date(at) } })
+async function mkBooking(code: string, at: string, status: LegacyBookingStatus, lines: Array<{ key: string; type: string; plan: number | null; label: string }>) {
+  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${code}`, userId: owner.id, ...legacyBookingState(status), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: lines.length * 1_000_000, createdAt: new Date(at) } })
   bookings.push(b.id)
   const ids: Record<string, string> = {}
   for (const l of lines) {

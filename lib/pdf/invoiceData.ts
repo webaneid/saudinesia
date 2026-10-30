@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { displayStatus, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 import { DATE_SHORT_MONTH_2D, formatInstant } from '@/lib/time'
 
@@ -41,13 +42,15 @@ export type InvoiceData = {
   balanceDue:  number
 }
 
-const STATUS_LABEL: Record<string, string> = {
+const STATUS_LABEL: Record<DisplayStatus, string> = {
+  draft:            'DRAF',
   awaiting_payment: 'UNPAID',
   payment_review:   'MENUNGGU KONFIRMASI',
   confirmed:        'LUNAS',
-  active:           'LUNAS',
+  in_progress:      'LUNAS',
   completed:        'LUNAS',
   cancelled:        'DIBATALKAN',
+  expired:          'HANGUS',
 }
 
 function formatDate(d: Date): string {
@@ -108,7 +111,7 @@ export async function buildInvoiceData(booking: InvoiceBooking): Promise<Invoice
     invoiceDate:   formatDate(booking.createdAt),
     dueDate:       booking.paymentDeadline ? formatDate(booking.paymentDeadline) : null,
     paidDate:      confirmedPayment?.confirmedAt ? formatDate(confirmedPayment.confirmedAt) : null,
-    statusLabel:   STATUS_LABEL[booking.status] ?? booking.status,
+    statusLabel:   STATUS_LABEL[displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })],
     bookingCode:   booking.bookingCode,
     buyer: {
       name:    booking.user.fullName,

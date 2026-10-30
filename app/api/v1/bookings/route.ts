@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
+import { getInvoiceSettings } from '@/lib/invoice/settings'
+import { recomputeBookingDates } from '@/lib/booking/dates'
 import { requireSession } from '@/lib/auth/session'
 import { createBookingSchema } from '@/lib/validators/booking'
 import { generateBookingCode } from '@/lib/utils/bookingCode'
@@ -12,20 +14,22 @@ import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePri
 import { writeBookingItems } from '@/lib/booking/lineItems'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
 import { ItemNotBookableError } from '@/lib/booking/errors'
+import { displayStatusOf, paymentDeadlineFor, statusSelect } from '@/lib/booking/lifecycle'
 
 export async function GET() {
   try {
     const session = await requireSession()
     const bookings = await prisma.booking.findMany({
-      where: { userId: session.userId },
+      where: { userId: session.userId, status: { not: 'draft' } }, // draf = urusan admin, tak tampil ke jamaah
       orderBy: { createdAt: 'desc' },
       select: {
-        id: true, bookingCode: true, status: true,
-        departureDate: true, returnDate: true, totalAmount: true, createdAt: true,
+        id: true, bookingCode: true, ...statusSelect,
+        totalAmount: true, createdAt: true,
         _count: { select: { pilgrims: true } },
       },
     })
-    return NextResponse.json(ok(bookings))
+    // `status` = status tampilan (menunggu bayar / diverifikasi / dikonfirmasi / …), bukan siklus hidup mentah; bukti yang menunggu tak dibocorkan terpisah.
+    return NextResponse.json(ok(bookings.map(({ payments, confirmedAt, ...b }) => ({ ...b, status: displayStatusOf({ ...b, confirmedAt, payments }) }))))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(err('Unauthorized'), { status: 401 })
@@ -54,7 +58,9 @@ export async function POST(request: Request) {
 
     const data = parsed.data
     const bookingCode = await generateBookingCode()
-    const paymentDeadline = new Date(Date.now() + 24 * 60 * 60 * 1000)
+    // Batas bayar = akhir hari jatuh tempo (zona aplikasi), `defaultDueDays` dari Pengaturan Invoice. Hanya label untuk jamaah — tidak mengikat (docs/arsitektur-booking-engine-v2.md D4).
+    const { defaultDueDays } = await getInvoiceSettings()
+    const paymentDeadline = paymentDeadlineFor(new Date(), defaultDueDays)
 
     // Resolve breakdown + transportQuotaId SEKALI per paket ziarah (dipakai reserve DAN create,
     // hindari query dobel + jaga konsistensi). Mode included: auto-resolve TransportQuota dari
@@ -122,7 +128,7 @@ export async function POST(request: Request) {
         data: {
           bookingCode,
           userId:          session.userId,
-          status:          'awaiting_payment',
+          status:          'active',
           departureDate:   new Date(data.departureDate),
           returnDate:      new Date(data.returnDate),
           season:          data.season,
@@ -134,6 +140,7 @@ export async function POST(request: Request) {
       // ── 3. Item + visa per jamaah + SNAPSHOT HARGA (lib/booking/lineItems.ts). Harga dibaca server dari titik harga, dibekukan ke price_snapshots, dan
       // `totalAmount` = Σ snapshot yang baru ditulis (invarian I4, docs/arsitektur-harga-terpadu.md §17) — tak ada angka harga dari klien, tak ada penjumlahan terpisah.
       const totalAmount = await writeBookingItems(tx, bk.id, data, tourPackageResolved)
+      await recomputeBookingDates(tx, bk.id) // tanggal acuan = item paling awal / paling akhir (lib/booking/dates.ts)
 
       return tx.booking.update({ where: { id: bk.id }, data: { totalAmount } })
     }, { isolationLevel: 'Serializable' })

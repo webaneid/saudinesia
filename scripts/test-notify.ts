@@ -133,13 +133,13 @@ try {
 await t('WhatsApp HANYA untuk konfirmasi booking, pengingat pembayaran, pembayaran dikonfirmasi/ditolak; selebihnya email saja', async () => {
   const wa: NotificationEvent[] = [
     { type: 'booking_submitted', code: 'SND-1', deadline: 'besok' },
-    { type: 'payment_reminder_12h', code: 'SND-1', deadline: 'besok' },
-    { type: 'payment_reminder_22h', code: 'SND-1', deadline: 'besok' },
+    { type: 'payment_reminder_d1', code: 'SND-1', deadline: 'besok' },
+    { type: 'payment_reminder_d0', code: 'SND-1', deadline: 'besok' },
     { type: 'payment_confirmed', code: 'SND-1' },
     { type: 'payment_rejected', code: 'SND-1' },
   ]
   const emailOnly: NotificationEvent[] = [
-    { type: 'auto_cancelled', code: 'SND-1' },
+    { type: 'booking_expired', code: 'SND-1' },
     { type: 'visa_status_change', code: 'SND-1', status: 'approved' },
     { type: 'welcome', name: 'Budi' },
     { type: 'test' },
@@ -199,11 +199,11 @@ console.log('== email sebagai jaring pengaman ==')
 // SEMUA pemberitahuan tetap sampai lewat email. Diuji untuk SETIAP jenis kejadian, bukan sampel.
 const ALL_EVENTS: NotificationEvent[] = [
   { type: 'booking_submitted', code: 'SND-1', deadline: 'besok' },
-  { type: 'payment_reminder_12h', code: 'SND-1', deadline: 'besok' },
-  { type: 'payment_reminder_22h', code: 'SND-1', deadline: 'besok' },
+  { type: 'payment_reminder_d1', code: 'SND-1', deadline: 'besok' },
+  { type: 'payment_reminder_d0', code: 'SND-1', deadline: 'besok' },
   { type: 'payment_confirmed', code: 'SND-1' },
   { type: 'payment_rejected', code: 'SND-1' },
-  { type: 'auto_cancelled', code: 'SND-1' },
+  { type: 'booking_expired', code: 'SND-1' },
   { type: 'visa_status_change', code: 'SND-1', status: 'approved' },
   { type: 'contact_changed' },
   { type: 'welcome', name: 'Budi' },
@@ -331,7 +331,7 @@ console.log('== penerima & kanal ==')
 
   await t('dedupe: kanal yang sudah "sent" dilewati ("duplicate"), tidak ada baris/request baru', async () => {
     configure(); const u = await user('i'); const b = await booking(u.id)
-    const ev: NotificationEvent = { type: 'payment_reminder_12h', code: 'SND-1', deadline: 'besok' }
+    const ev: NotificationEvent = { type: 'payment_reminder_d1', code: 'SND-1', deadline: 'besok' }
     await notify({ userId: u.id, bookingId: b.id, event: ev, dedupe: true })
     const again = await notify({ userId: u.id, bookingId: b.id, event: ev, dedupe: true })
     assert.deepEqual(again.map((o) => o.status), ['duplicate', 'duplicate'])
@@ -341,7 +341,7 @@ console.log('== penerima & kanal ==')
 
   await t('dedupe TIDAK menghitung "failed"/"skipped": percobaan ulang berhasil (dulu pengingat gagal tak pernah dicoba lagi)', async () => {
     configure({ email: false }); const u = await user('j'); const b = await booking(u.id)
-    const ev: NotificationEvent = { type: 'payment_reminder_22h', code: 'SND-2', deadline: 'nanti' }
+    const ev: NotificationEvent = { type: 'payment_reminder_d0', code: 'SND-2', deadline: 'nanti' }
     await notify({ userId: u.id, bookingId: b.id, event: ev, dedupe: true }) // email skipped
     configure()                                                              // kredensial sekarang diisi
     const retry = await notify({ userId: u.id, bookingId: b.id, event: ev, dedupe: true })

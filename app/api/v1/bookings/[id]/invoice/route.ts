@@ -26,6 +26,7 @@ export async function GET(_req: Request, { params }: Params) {
   if (!isAdmin && booking.userId !== session.userId) {
     return NextResponse.json(err('Unauthorized'), { status: 401 })
   }
+  if (!isAdmin && booking.status === 'draft') return NextResponse.json(err('Booking tidak ditemukan'), { status: 404 }) // draf belum diterbitkan
 
   try {
     const data = await buildInvoiceData(booking)

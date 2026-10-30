@@ -5,6 +5,7 @@ import { formatRupiah } from '@/lib/utils'
 import { BookOpen, CreditCard, FileText, Clock, Package, Star, KeyRound, Building2 } from 'lucide-react'
 import Link from 'next/link'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
+import { bookingWhere, displayStatusOf, statusSelect } from '@/lib/booking/lifecycle'
 import { BOOKING_TONE } from '@/lib/admin/statusTone'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
@@ -21,11 +22,11 @@ export default async function AdminOverview({ params }: Props) {
   const isManager = MANAGER_ROLES.includes(session.role)
 
   const [pendingPayment, paymentReview, pendingVisa, confirmedToday] = await Promise.all([
-    prisma.booking.count({ where: { status: 'awaiting_payment' } }),
-    prisma.booking.count({ where: { status: 'payment_review' } }),
+    prisma.booking.count({ where: bookingWhere.awaiting_payment }),
+    prisma.booking.count({ where: bookingWhere.payment_review }),
     prisma.visaApplication.count({ where: { status: 'pending_documents' } }),
     prisma.booking.count({
-      where: { status: 'confirmed', updatedAt: { gte: startOfDayInApp(todayInApp()) } },
+      where: { ...bookingWhere.confirmed, confirmedAt: { gte: startOfDayInApp(todayInApp()) } }, // dikonfirmasi HARI INI = `confirmedAt` hari ini (bukan updatedAt)
     }),
   ])
 
@@ -54,7 +55,7 @@ export default async function AdminOverview({ params }: Props) {
 
   const recentBookings = await prisma.booking.findMany({
     orderBy: { createdAt: 'desc' }, take: 8,
-    include: { user: { select: { fullName: true } }, _count: { select: { pilgrims: true } } },
+    include: { user: { select: { fullName: true } }, _count: { select: { pilgrims: true } }, payments: statusSelect.payments },
   })
 
   type RecentRow = (typeof recentBookings)[number]
@@ -62,7 +63,7 @@ export default async function AdminOverview({ params }: Props) {
     { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent-strong hover:text-admin-accent">{b.bookingCode}</Link> },
     { key: 'name', header: 'Pemesan', cell: b => <span className="text-[13px] text-admin-ink/80">{b.user.fullName ?? '-'}</span> },
     { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{b._count.pilgrims} jamaah</span> },
-    { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status.replace(/_/g, ' ')}</Badge> },
+    { key: 'status', header: 'Status', cell: b => { const st = displayStatusOf(b); return <Badge tone={BOOKING_TONE[st] ?? 'neutral'}>{BOOKING_STATUS[st].label}</Badge> } },
     { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
   ]
 

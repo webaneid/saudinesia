@@ -95,7 +95,7 @@ const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 async function world(db: PrismaClient) {
   const user = await db.user.create({ data: { email: `m${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
-  const mk = (code: string, total: number) => db.booking.create({ data: { bookingCode: code, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: total } })
+  const mk = (code: string, total: number) => db.booking.create({ data: { bookingCode: code, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: total }, select: { id: true } })
   const b1 = await mk('M1', 5_000_000), b2 = await mk('M2', 3_000_000)
   const pay = (bookingId: string, status: 'pending' | 'confirmed' | 'rejected', amount: number) => db.payment.create({ data: { bookingId, amount, method: 'bank_transfer', status } })
   const confirmedZero = await pay(b1.id, 'confirmed', 0)       // alur lama: dikonfirmasi tanpa jumlah → total booking

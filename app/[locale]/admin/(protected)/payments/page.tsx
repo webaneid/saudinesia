@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { bookingWhere } from '@/lib/booking/lifecycle'
 import { formatRupiah } from '@/lib/utils'
 import { escapeLike } from '@/lib/utils/search'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
@@ -38,8 +39,9 @@ export default async function AdminPayments({ params, searchParams }: Props) {
   const proof = (PROOF_FILTERS as readonly string[]).includes(sp.proof as string) ? (sp.proof as (typeof PROOF_FILTERS)[number]) : undefined
 
   const where: Prisma.BookingWhereInput = {
-    status: 'payment_review',
-    ...(proof ? { payments: proof === 'with' ? { some: { buktiTransferPath: { not: null } } } : { none: { buktiTransferPath: { not: null } } } } : {}),
+    ...bookingWhere.payment_review, // ada pembayaran `pending` pada booking hidup yang belum dikonfirmasi
+    // AND: `payments` sudah dipakai fragmen status di atas; filter bukti harus digabung, bukan menimpanya
+    ...(proof ? { AND: [{ payments: proof === 'with' ? { some: { buktiTransferPath: { not: null } } } : { none: { buktiTransferPath: { not: null } } } }] } : {}),
     ...(q ? { OR: [{ bookingCode: { contains: escapeLike(q), mode: 'insensitive' } }, { user: { fullName: { contains: escapeLike(q), mode: 'insensitive' } } }] } : {}),
   }
 

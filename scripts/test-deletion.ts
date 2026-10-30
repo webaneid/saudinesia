@@ -14,6 +14,7 @@ import { deleteObjectsByPrefix } from '@/lib/storage/minio'
 import { MIN_WAIT_HOURS, executeDeletion, previewDeletion, rejectDeletion, submitDeletionRequest, withdrawDeletionRequest, type DeletionDeps } from '@/lib/account/deletion'
 import { issueSessionToken, resolveSessionToken } from '@/lib/auth/session'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
 
@@ -70,7 +71,7 @@ async function quota(): Promise<string> {
   return (transportQuotaId = q.id)
 }
 
-async function seed(opts: { bookingStatus?: 'completed' | 'cancelled' | 'active' | 'awaiting_payment'; refundStatus?: 'paid' | 'pending'; role?: 'pilgrim' | 'admin'; freshRequest?: boolean } = {}): Promise<Seeded> {
+async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 'paid' | 'pending'; role?: 'pilgrim' | 'admin'; freshRequest?: boolean } = {}): Promise<Seeded> {
   const email = `${uniq()}@example.test`
   const number = digits()
   const googleSub = `gsub-${uniq()}`
@@ -88,7 +89,7 @@ async function seed(opts: { bookingStatus?: 'completed' | 'cancelled' | 'active'
 
   const booking = await prisma.booking.create({
     data: {
-      bookingCode: `BK-${uniq()}`, userId: user.id, status: opts.bookingStatus ?? 'completed',
+      bookingCode: `BK-${uniq()}`, userId: user.id, ...legacyBookingState(opts.bookingStatus ?? 'completed'),
       departureDate: new Date('2026-01-10'), returnDate: new Date('2026-01-20'), season: 'regular', totalAmount: new Decimal(12_500_000), notes: 'Catatan: istri sakit, nomor 0812-RAHASIA',
       pilgrims: { create: [{ isLeader: true, userId: user.id, fieldValues: { fullName: 'Budi Santoso', passportNumber: 'X1234567', dateOfBirth: '1980-01-01' } }] },
     },
@@ -569,12 +570,12 @@ await t('SEC-57 penjaga sumber: unggah dokumen memeriksa ulang pemilik sebelum m
   assert.ok(sw.includes('ERASED_EMAIL.test') && sw.includes("status: 'completed'"))
 })
 
-await t('tiap kolom userId pada skema punya perlakuan eksplisit di penghapusan (skema bertambah → tes ini merah sampai ditinjau)', async () => {
+await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghapusan (skema bertambah → tes ini merah sampai ditinjau)', async () => {
   const schema = readFileSync('prisma/schema.prisma', 'utf8')
   const found = new Set<string>()
   for (const [, name, body] of schema.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm)) {
     if (name === 'User') continue
-    for (const line of body!.split('\n')) { const m = line.trim().match(/^(\w*[uU]serId)\s+String/); if (m) found.add(`${name}.${m[1]}`) }
+    for (const line of body!.split('\n')) { const m = line.trim().match(/^(\w*[uU]serId|\w+ById)\s+String/); if (m) found.add(`${name}.${m[1]}`) }
   }
   // Perlakuan tiap kolom (harus cocok dengan lib/account/deletion.ts). Menambah kolom userId baru WAJIB menambah baris di sini DAN menanganinya di sana.
   const HANDLED: Record<string, string> = {
@@ -587,6 +588,12 @@ await t('tiap kolom userId pada skema punya perlakuan eksplisit di penghapusan (
     'BookingAdjustment.byUserId': 'dipertahankan (jejak audit penyesuaian harga oleh STAF; catatan `reason` pesanan jamaah dibersihkan — lihat bookingAdjustment.updateMany)',
     'BookingAdjustment.reasonEditedByUserId': 'dipertahankan (jejak audit edit catatan oleh STAF; isi catatan jamaah dibersihkan — bookingAdjustment.updateMany)',
     'PriceChange.byUserId': 'dipertahankan (jejak audit harga oleh STAF; jalur UU PDP hanya untuk jamaah — blockersFor menolak akun bukan jamaah)',
+    // Kolom `*ById` = id STAF pelaku (SEC-121: dulu tak terpindai). Dipertahankan sebagai jejak audit; FK SET NULL; jalur UU PDP hanya untuk jamaah (blockersFor menolak akun bukan jamaah).
+    'AccountDeletionRequest.processedById': 'dipertahankan (staf yang memproses permintaan hapus)',
+    'Booking.confirmedById': 'dipertahankan (staf yang mengonfirmasi booking; tak pernah dikirim ke jamaah)',
+    'Payment.confirmedById': 'dipertahankan (staf yang memverifikasi pembayaran)',
+    'Refund.approvedById': 'dipertahankan (staf yang menyetujui refund)',
+    'InvoiceSettings.updatedById': 'dipertahankan (staf terakhir yang mengubah pengaturan)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')

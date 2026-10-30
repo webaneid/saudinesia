@@ -11,7 +11,8 @@ import { accountDeletedEmail, deletionRejectedEmail, deletionRequestedEmail } fr
 // hapus objek MinIO, ubah DB. Aman diulang. Tidak ada log yang memuat PII.
 
 /** Booking yang masih berjalan — jamaah belum boleh dihapus (data dipakai memproses visa/transport/muthowif). */
-export const NON_TERMINAL_BOOKING_STATUSES = ['awaiting_payment', 'payment_review', 'confirmed', 'active'] as const
+// Siklus hidup tersimpan (lib/booking/lifecycle.ts): `active` mencakup menunggu bayar / ditinjau / dikonfirmasi / berjalan. Draf (belum terbit) dan yang sudah final tidak menahan penghapusan.
+export const NON_TERMINAL_BOOKING_STATUSES = ['active'] as const
 const UNSETTLED_REFUND_STATUSES = ['pending', 'approved'] as const
 
 /**

@@ -8,6 +8,7 @@ import { formatRupiah } from '@/lib/utils'
 import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
 import { getPaymentConfig } from '@/lib/constants/payment'
 import { DocumentGrid } from '@/components/shared/media/DocumentGrid'
@@ -25,7 +26,7 @@ export default async function BookingDetailPage({ params }: Props) {
   if (!session) redirect(`/${safeLocale(locale)}/login`)
 
   const booking = await prisma.booking.findFirst({
-    where: { id, userId: session.userId },
+    where: { id, userId: session.userId, status: { not: 'draft' } }, // draf = urusan admin, tak tampil ke jamaah
     include: {
       hotels:     { include: { hotelRoomSchedule: { include: { period: { include: { hotel: true } }, roomType: true } } } },
       transports: { include: { transportQuota: { include: { pricing: { include: { trip: true, vehicle: true } } } } } },
@@ -37,6 +38,8 @@ export default async function BookingDetailPage({ params }: Props) {
     },
   })
   if (!booking) notFound()
+  const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
+  const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
   // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
   // parseRequirements(visaProduct.requirements)
@@ -62,9 +65,8 @@ export default async function BookingDetailPage({ params }: Props) {
     return typeof name === 'string' && name ? name : 'Jamaah'
   }
 
-  const statusCfg = BOOKING_STATUS[booking.status as keyof typeof BOOKING_STATUS] ?? { label: booking.status, badge: 'secondary' }
+  const statusCfg = BOOKING_STATUS[st]
   const deadline = booking.paymentDeadline
-  const hasPayment = booking.payments.length > 0
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8 space-y-6">
@@ -92,7 +94,7 @@ export default async function BookingDetailPage({ params }: Props) {
       </div>
 
       {/* Payment notice */}
-      {booking.status === 'awaiting_payment' && (
+      {(st === 'awaiting_payment' || st === 'payment_review') && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-amber-600" />
@@ -100,7 +102,7 @@ export default async function BookingDetailPage({ params }: Props) {
           </div>
           {deadline && (
             <p className="text-sm text-amber-700">
-              Batas waktu: <span className="font-bold">{formatInstant(deadline, DATETIME_FULL)}</span>
+              Mohon bayar sebelum: <span className="font-bold">{formatInstant(deadline, DATETIME_FULL)}</span>
             </p>
           )}
           <div className="rounded-lg bg-white/70 p-4 space-y-2 text-sm">
@@ -119,14 +121,14 @@ export default async function BookingDetailPage({ params }: Props) {
           <div className="text-center">
             <p className="text-2xl font-bold text-amber-900">{formatRupiah(Number(booking.totalAmount))}</p>
           </div>
-          {!hasPayment && (
+          {st === 'awaiting_payment' && (
             <Button asChild className="w-full">
               <Link href={`/${locale}/bookings/${id}/upload-bukti`}>
                 <UploadCloud className="mr-2 h-4 w-4" /> Upload Bukti Transfer
               </Link>
             </Button>
           )}
-          {hasPayment && (
+          {st === 'payment_review' && (
             <div className="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle className="h-4 w-4" /> Bukti transfer sudah diupload, menunggu konfirmasi.
             </div>
@@ -138,8 +140,8 @@ export default async function BookingDetailPage({ params }: Props) {
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <h2 className="font-semibold">Detail Perjalanan</h2>
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <div><p className="text-muted-foreground">Berangkat</p><p className="font-semibold">{formatCalendarDate(booking.departureDate, DATE_LONG)}</p></div>
-          <div><p className="text-muted-foreground">Kembali</p><p className="font-semibold">{formatCalendarDate(booking.returnDate, DATE_LONG)}</p></div>
+          <div><p className="text-muted-foreground">Berangkat</p><p className="font-semibold">{booking.departureDate ? formatCalendarDate(booking.departureDate, DATE_LONG) : '-'}</p></div>
+          <div><p className="text-muted-foreground">Kembali</p><p className="font-semibold">{booking.returnDate ? formatCalendarDate(booking.returnDate, DATE_LONG) : '-'}</p></div>
           <div><p className="text-muted-foreground">Jumlah Jamaah</p><p className="font-semibold">{booking.pilgrims.length} orang</p></div>
           <div><p className="text-muted-foreground">Musim</p><p className="font-semibold capitalize">{booking.season}</p></div>
         </div>

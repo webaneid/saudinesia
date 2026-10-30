@@ -1,5 +1,5 @@
 // Uji migrasi Pengaturan Invoice (prisma/migrations/20261104090000_invoice_settings): ADITIF — tabel baru + baris bawaan, tak ada data lama tersentuh; CHECK terpasang; dan DB hasil
-// SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini; yang lama dipindah ke sini).
+// SEMUA migrasi = schema.prisma (uji drift TERBARU kini di scripts/test-booking-lifecycle-migration.ts).
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -109,7 +109,7 @@ console.log('== skenario ==')
 
 async function seedBooking(db: PrismaClient, code: string) {
   const u = await db.user.create({ data: { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
-  await db.booking.create({ data: { bookingCode: code, userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 } })
+  await db.booking.create({ data: { bookingCode: code, userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 }, select: { id: true } })
   return u.id
 }
 
@@ -137,12 +137,7 @@ await t('CHECK terpasang di DB hasil migrasi (15 + 4 penguatan), jejak settings_
   assert.ok(types.length === 8 && types.every(x => x.data_type === 'timestamp with time zone'), JSON.stringify(types))
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
-})
+// (uji drift TERBARU kini di scripts/test-booking-lifecycle-migration.ts)
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await admin.$disconnect()

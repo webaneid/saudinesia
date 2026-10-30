@@ -11,6 +11,7 @@ import { getCustomer, listCustomers } from '@/lib/customers/query'
 import { parseListParams } from '@/lib/admin/pagination'
 import { getAdminNavigation } from '@/lib/admin/navigation'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
 
@@ -35,8 +36,8 @@ const staff = await mk('staff', { role: 'admin' })
 const gone = await prisma.user.create({ data: { email: `deleted-${tag}@deleted.invalid`, passwordHash: 'x', fullName: 'Akun Dihapus', role: 'pilgrim', isActive: false } })
 ids.push(gone.id)
 
-const bk = async (userId: string, code: string, total: number, status: 'awaiting_payment' | 'confirmed' | 'cancelled' = 'confirmed') =>
-  prisma.booking.create({ data: { bookingCode: `${tag}-${code}`, userId, status, departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: total } })
+const bk = async (userId: string, code: string, total: number, status: LegacyBookingStatus = 'confirmed') =>
+  prisma.booking.create({ data: { bookingCode: `${tag}-${code}`, userId, ...legacyBookingState(status), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: total } })
 const pay = (bookingId: string, amount: number, status: 'pending' | 'confirmed' | 'rejected') => prisma.payment.create({ data: { bookingId, amount, method: 'bank_transfer', status } })
 const b1 = await bk(alice.id, 'a1', 5_000_000)
 const b2 = await bk(alice.id, 'a2', 3_000_000, 'awaiting_payment')
@@ -92,7 +93,7 @@ await t('detail: profil, penanda Google (boolean), pesanan terbaru dulu, ringkas
 })
 await t('detail: daftar pesanan berpaginasi (12 pesanan, 5 per halaman → halaman 1/2/3, total 12, terbaru dulu, halaman di luar batas dijepit)', async () => {
   const dana = await mk('dana')
-  for (let i = 0; i < 12; i++) await prisma.booking.create({ data: { bookingCode: `${tag}-d${String(i).padStart(2, '0')}`, userId: dana.id, status: 'confirmed', departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 1_000_000, createdAt: new Date(Date.UTC(2090, 0, 1 + i)) } })
+  for (let i = 0; i < 12; i++) await prisma.booking.create({ data: { bookingCode: `${tag}-d${String(i).padStart(2, '0')}`, userId: dana.id, ...legacyBookingState('confirmed'), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 1_000_000, createdAt: new Date(Date.UTC(2090, 0, 1 + i)) } })
   const page = (p: number) => getCustomer(dana.id, parseListParams(new URLSearchParams(`page=${p}&limit=5`)))
   const [p1, p2, p3, p9] = [await page(1), await page(2), await page(3), await page(9)]
   assert.deepEqual([p1!.bookings.length, p2!.bookings.length, p3!.bookings.length], [5, 5, 2])

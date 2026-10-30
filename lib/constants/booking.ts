@@ -1,13 +1,16 @@
 // Single source of truth for booking & visa status labels and colors.
 // Update here → reflected everywhere in the app.
 
+// Kunci = status TAMPILAN (lib/booking/lifecycle.ts `DisplayStatus`): siklus hidup tersimpan + turunan pembayaran/tanggal. Urutan = urutan di filter.
 export const BOOKING_STATUS = {
-  awaiting_payment: { label: 'Menunggu Pembayaran',    badge: 'warning'     },
+  draft:            { label: 'Draf',                    badge: 'secondary'   },
+  awaiting_payment: { label: 'Menunggu Pembayaran',     badge: 'warning'     },
   payment_review:   { label: 'Pembayaran Diverifikasi', badge: 'secondary'   },
   confirmed:        { label: 'Dikonfirmasi',            badge: 'success'     },
-  active:           { label: 'Dalam Perjalanan',        badge: 'default'     },
+  in_progress:      { label: 'Dalam Perjalanan',        badge: 'default'     },
   completed:        { label: 'Selesai',                 badge: 'success'     },
   cancelled:        { label: 'Dibatalkan',              badge: 'destructive' },
+  expired:          { label: 'Hangus',                  badge: 'destructive' },
 } as const satisfies Record<string, { label: string; badge: string }>
 
 export const VISA_STATUS = {

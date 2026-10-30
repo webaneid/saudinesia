@@ -97,7 +97,7 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
 let seq = 0
 const mkUser = (db: PrismaClient) => db.user.create({ data: { email: `m${Date.now()}${++seq}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
 const mkBooking = (db: PrismaClient, userId: string, totalAmount: number) =>
-  db.booking.create({ data: { bookingCode: `MIG${Date.now()}${++seq}`, userId, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount } })
+  db.booking.create({ data: { bookingCode: `MIG${Date.now()}${++seq}`, userId, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount }, select: { id: true } })
 
 /** Satu booking berisi ketujuh tipe item; total = Σ item persis (tanpa selisih). */
 async function fullWorld(db: PrismaClient, withGap = 0) {
