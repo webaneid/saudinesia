@@ -6,9 +6,12 @@ export async function registerNode() {
   if (globalThis._cronStarted) return
   globalThis._cronStarted = true
 
-  const { startAutoCancelJob, startPaymentReminderJob } = await import('@/lib/cron/autocancelJob')
-  startAutoCancelJob()
-  startPaymentReminderJob()
+  // Jadwal harian mengikuti zona aplikasi: muat dulu dari Pengaturan Invoice (fire-and-forget agar boot tak tertahan), baru jadwalkan. Mengubah zona butuh restart agar jadwal ikut berpindah.
+  void (async () => {
+    const [{ loadAppTimezone }, { startBookingLifecycleJobs }] = await Promise.all([import('@/lib/invoice/settings'), import('@/lib/cron/bookingLifecycleJob')])
+    await loadAppTimezone()
+    startBookingLifecycleJobs()
+  })().catch(e => console.error('[cron] gagal menjadwalkan siklus hidup booking:', e))
 
   const { startAuthTokenCleanupJob } = await import('@/lib/cron/authTokenJob')
   startAuthTokenCleanupJob()
@@ -21,7 +24,6 @@ export async function registerNode() {
 
   void ensureMinioBucket()
   void repriceOnBoot()
-  void import('@/lib/invoice/settings').then(m => m.loadAppTimezone()) // zona aplikasi dari Pengaturan Invoice (docs/arsitektur-booking-engine-v2.md §6)
   void import('@/lib/time/dbZone').then(m => m.checkDatabaseTimezone()) // hanya memperingatkan: zona sesi DB harus UTC (docs/arsitektur-booking-engine-v2.md §5)
 }
 

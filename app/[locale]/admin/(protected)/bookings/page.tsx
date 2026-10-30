@@ -1,9 +1,10 @@
 import Link from 'next/link'
-import type { BookingStatus, Prisma } from '@prisma/client'
+import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
 import { escapeLike } from '@/lib/utils/search'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
+import { displayStatusOf, isStatusFilter, statusSelect, statusWhere } from '@/lib/booking/lifecycle'
 import { BOOKING_TONE } from '@/lib/admin/statusTone'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
@@ -23,12 +24,8 @@ type Props = {
 }
 
 type BookingRow = Prisma.BookingGetPayload<{
-  include: { user: { select: { fullName: true; phone: true } }; _count: { select: { pilgrims: true } } }
+  include: { user: { select: { fullName: true; phone: true } }; _count: { select: { pilgrims: true } }; payments: { select: { id: true } } }
 }>
-
-// hasOwnProperty, bukan `in` — `in` meloloskan "toString"/"constructor" dari prototype.
-const isBookingStatus = (v: string | undefined): v is BookingStatus =>
-  !!v && Object.prototype.hasOwnProperty.call(BOOKING_STATUS, v)
 
 export default async function AdminBookings({ params, searchParams }: Props) {
   const { locale } = await params
@@ -36,15 +33,16 @@ export default async function AdminBookings({ params, searchParams }: Props) {
   const sp = await searchParams
   const list = parseListParams(sp)
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
-  const status = isBookingStatus(rawStatus) ? rawStatus : undefined
+  const status = isStatusFilter(rawStatus) ? rawStatus : undefined
   const q = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 100)
 
   const where: Prisma.BookingWhereInput = {
-    status,
-    OR: q ? [
+    ...(status ? statusWhere(status) : {}),
+    // AND, bukan OR di akar: filter status `confirmed` membawa OR sendiri
+    AND: q ? [{ OR: [
       { bookingCode: { contains: escapeLike(q), mode: 'insensitive' } },
       { user: { fullName: { contains: escapeLike(q), mode: 'insensitive' } } },
-    ] : undefined,
+    ] }] : undefined,
   }
 
   const { items: bookings, meta } = await paginate<BookingRow>(
@@ -54,7 +52,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
       ...range,
-      include: { user: { select: { fullName: true, phone: true } }, _count: { select: { pilgrims: true } } },
+      include: { user: { select: { fullName: true, phone: true } }, _count: { select: { pilgrims: true } }, payments: statusSelect.payments },
     }),
   )
 
@@ -82,7 +80,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     },
     {
       key: 'departure', header: 'Berangkat',
-      cell: b => <span className="text-[12px] text-admin-muted">{formatCalendarDate(b.departureDate)}</span>,
+      cell: b => <span className="text-[12px] text-admin-muted">{b.departureDate ? formatCalendarDate(b.departureDate) : 'Belum ada tanggal'}</span>,
     },
     {
       key: 'total', header: 'Total', hideBelowLg: true,
@@ -90,7 +88,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     },
     {
       key: 'status', header: 'Status',
-      cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge>,
+      cell: b => { const st = displayStatusOf(b); return <Badge tone={BOOKING_TONE[st] ?? 'neutral'}>{BOOKING_STATUS[st].label}</Badge> },
     },
     {
       key: 'actions', header: '', actions: true,

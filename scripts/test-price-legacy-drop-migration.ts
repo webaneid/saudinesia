@@ -210,7 +210,7 @@ await t('riwayat kurs/vendor beku Visa dipindah ke snapshot (hanya yang kosong);
   const r = await scenarioWith(async db => {
     const user = await db.user.create({ data: { email: `m${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
     const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh' } })
-    const bk = await db.booking.create({ data: { bookingCode: `K${Date.now()}`, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 3_000_000 } })
+    const bk = await db.booking.create({ data: { bookingCode: `K${Date.now()}`, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 3_000_000 }, select: { id: true } })
     const mk = async (hist: { fx: string[]; vendor: string[] } | null, snapVendors: string[]) => {
       const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
       const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh' } })

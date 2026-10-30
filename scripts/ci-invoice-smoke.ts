@@ -21,7 +21,7 @@ try {
   const user = await prisma.user.create({ data: { email: `inv-ci-${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Pemesan CI', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
   const booking = await prisma.booking.create({
     data: {
-      bookingCode: `CI-INV-${Date.now()}`, userId: user.id, status: 'awaiting_payment',
+      bookingCode: `CI-INV-${Date.now()}`, userId: user.id, status: 'active',
       departureDate: new Date('2026-12-10'), returnDate: new Date('2026-12-20'), season: 'regular', totalAmount: '5000000',
       pilgrims: { create: [{ isLeader: true, fieldValues: { fullName: 'Pemesan CI' } }] },
     },

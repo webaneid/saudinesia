@@ -104,7 +104,7 @@ const colExists = async (name: string) => Number((await q1(name, `select count(*
 console.log('== skenario ==')
 
 await t('kosong (keadaan nyata): migrasi berhasil — tabel groups, group_members, booking_visa dan kolom bookings.groupId (beserta FK) hilang; tabel lain utuh', async () => {
-  const r = await scenarioWith(async db => { const u = await seedUser(db); await db.booking.create({ data: { bookingCode: 'K1', userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 } }); return {} })
+  const r = await scenarioWith(async db => { const u = await seedUser(db); await db.booking.create({ data: { bookingCode: 'K1', userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 }, select: { id: true } }); return {} })
   assert.equal(r.code, 0, `migrasi harus berhasil:\n${r.out.slice(-500)}`)
   assert.deepEqual([await exists(r.name, 'groups'), await exists(r.name, 'group_members'), await exists(r.name, 'booking_visa'), await colExists(r.name)], [false, false, false, false])
   assert.equal((await q1(r.name, `select conname from pg_constraint where conname = 'bookings_groupId_fkey'`)).length, 0)
@@ -122,7 +122,7 @@ await t('FAIL-CLOSED: group_members berisi data → berhenti', async () => {
 await t('FAIL-CLOSED: booking_visa berisi data → berhenti', async () => {
   const r = await scenarioWith(async db => {
     const u = await seedUser(db)
-    const b = await db.booking.create({ data: { bookingCode: 'K3', userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 } })
+    const b = await db.booking.create({ data: { bookingCode: 'K3', userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 }, select: { id: true } })
     const v = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh' } })
     await db.$executeRawUnsafe(`INSERT INTO booking_visa (id, "bookingId", "visaProductId", "numPersons", "totalPrice") VALUES ('bv1', '${b.id}', '${v.id}', 1, 1)`)
     return {}
@@ -133,7 +133,7 @@ await t('FAIL-CLOSED: booking yang menunjuk grup (bookings.groupId terisi) → b
   const r = await scenarioWith(async db => {
     const u = await seedUser(db)
     await db.$executeRawUnsafe(`INSERT INTO groups (id, "groupCode", "leaderUserId", "totalMembers") VALUES ('g4', 'GR-4', '${u.id}', 2)`)
-    const b = await db.booking.create({ data: { bookingCode: 'K4', userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 } })
+    const b = await db.booking.create({ data: { bookingCode: 'K4', userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 }, select: { id: true } })
     await db.$executeRawUnsafe(`UPDATE bookings SET "groupId" = 'g4' WHERE id = '${b.id}'`)
     return {}
   })

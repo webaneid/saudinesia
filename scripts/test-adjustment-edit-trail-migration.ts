@@ -96,7 +96,7 @@ const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 async function world(db: PrismaClient) {
   const user = await db.user.create({ data: { email: `m${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
-  const bk = await db.booking.create({ data: { bookingCode: 'R1', userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1_500_000 } })
+  const bk = await db.booking.create({ data: { bookingCode: 'R1', userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1_500_000 }, select: { id: true } })
   // SQL mentah: klien Prisma proyek sudah mengenal kolom baru yang BELUM ada di DB pra-migrasi.
   await db.$executeRawUnsafe(`INSERT INTO price_snapshots (id, "bookingId", "itemType", "itemId", "lineKey", "itemLabel", "itemQty", description, qty, unit, "unitSellIdr", "totalSellIdr", mode) VALUES ('old1', '${bk.id}', 'hotel', 'old1', 'main', 'Hotel', 1, 'Hotel', 1, 'item', 1500000, 1500000, 'auto')`)
   await db.$executeRawUnsafe(`INSERT INTO booking_adjustments (id, "bookingId", "amountIdr", label, reason, "totalBefore", "totalAfter", "costKnownIdr", "belowCost", "byUserId") VALUES ('adj1', '${bk.id}', -100000, 'Nego', NULL, 1500000, 1400000, 1200000, false, 'x')`)

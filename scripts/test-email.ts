@@ -177,11 +177,11 @@ console.log('== template ==')
 const EVENTS: NotificationEvent[] = [
   { type: 'booking_submitted', code: 'SND-0001', deadline: '25 Oktober 2026 10.00' },
   { type: 'booking_submitted', code: 'SND-0001', deadline: null },
-  { type: 'payment_reminder_12h', code: 'SND-0002', deadline: '25 Oktober 2026 10.00' },
-  { type: 'payment_reminder_22h', code: 'SND-0002', deadline: '25 Oktober 2026 10.00' },
+  { type: 'payment_reminder_d1', code: 'SND-0002', deadline: '25 Oktober 2026 10.00' },
+  { type: 'payment_reminder_d0', code: 'SND-0002', deadline: '25 Oktober 2026 10.00' },
   { type: 'payment_confirmed', code: 'SND-0003' },
   { type: 'payment_rejected', code: 'SND-0003' },
-  { type: 'auto_cancelled', code: 'SND-0004' },
+  { type: 'booking_expired', code: 'SND-0004' },
   { type: 'visa_status_change', code: 'SND-0005', status: 'Visa Terbit' },
   { type: 'welcome', name: 'Budi Santoso' },
   { type: 'test' },
@@ -239,9 +239,9 @@ await t('APP_URL yang mengandung tanda kutip tidak bisa keluar dari atribut href
   delete env.APP_URL
 })
 
-await t('kejadian tanpa CTA (auto_cancelled) tidak memuat tombol; test/welcome memuat footnote/CTA sesuai', () => {
+await t('kejadian tanpa CTA (booking_expired) tidak memuat tombol; test/welcome memuat footnote/CTA sesuai', () => {
   env.APP_URL = 'https://saudinesia.test'
-  assert.ok(!emailContent({ type: 'auto_cancelled', code: 'X' }, { name: 'A' }).html.includes('<a href="https://saudinesia.test/id/'))
+  assert.ok(!emailContent({ type: 'booking_expired', code: 'X' }, { name: 'A' }).html.includes('<a href="https://saudinesia.test/id/'))
   assert.ok(emailContent({ type: 'test' }, { name: 'A' }).html.includes('panel admin'))
   assert.ok(emailContent({ type: 'welcome', name: 'A' }, { name: 'A' }).html.includes('href="https://saudinesia.test/id"'))
   delete env.APP_URL

@@ -40,6 +40,7 @@ model User {
   address                   Address?                 @relation(fields: [addressId], references: [id])
   bookings                  Booking[]
   confirmedPayments         Payment[]                @relation("ConfirmedBy")
+  confirmedBookings         Booking[]                @relation("BookingConfirmedBy")
   approvedRefunds           Refund[]                 @relation("ApprovedBy")
   notifications             NotificationLog[]
   authTokens                AuthToken[]
@@ -758,17 +759,22 @@ model Booking {
   id              String        @id @default(uuid())
   bookingCode     String        @unique
   userId          String
-  status          BookingStatus @default(awaiting_payment)
-  departureDate   DateTime      @db.Date
-  returnDate      DateTime      @db.Date
+  status          BookingStatus @default(active)
+  // Tanggal acuan TURUNAN dari item (paling awal / paling akhir) — dihitung ulang oleh recomputeBookingDates(); NULL = belum ada item bertanggal (mis. draf).
+  departureDate   DateTime?     @db.Date
+  returnDate      DateTime?     @db.Date
   season          String
   totalAmount     Decimal       @db.Decimal(14, 2)
   notes           String?
   paymentDeadline DateTime?
+  // Konfirmasi booking (kuota dijamin, visa mulai diproses) — terpisah dari status siklus hidup dan dari uang.
+  confirmedAt     DateTime?     @db.Timestamptz(3)
+  confirmedById   String?
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  user User @relation(fields: [userId], references: [id])
+  user        User  @relation(fields: [userId], references: [id])
+  confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
 
   pilgrims       BookingPilgrim[]
   hotels         BookingHotel[]
@@ -792,13 +798,13 @@ model Booking {
   @@map("bookings")
 }
 
+// Siklus hidup booking (docs/arsitektur-booking-engine-v2.md §3.2, Fase 3). Status pembayaran/"menunggu bayar"/"dikonfirmasi" adalah TURUNAN (lib/booking/lifecycle.ts), bukan nilai enum.
 enum BookingStatus {
-  awaiting_payment
-  payment_review
-  confirmed
-  active
+  draft // dibuat admin, belum terbit — bebas diedit, tanpa kuota
+  active // terbit dan hidup (menunggu bayar / dibayar / dikonfirmasi — dilihat dari pembayaran dan confirmedAt)
   completed
   cancelled
+  expired // hangus: lewat batas keberangkatan tanpa uang masuk
 
   @@map("booking_status")
 }

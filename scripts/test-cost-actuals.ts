@@ -11,6 +11,7 @@ import { prisma } from '@/lib/db'
 import { CostActualError, createCostActual, lineState, listCostActuals, updateCostActual, voidCostActual } from '@/lib/costs/actuals'
 import { getVendorUsage } from '@/lib/vendors/integrity'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
 
@@ -28,7 +29,7 @@ let n = 0
 
 /** Booking dengan tiga baris: hotel (rencana 6.000.000), visa (1.500.000), katering (modal tak diketahui). */
 async function mkBooking() {
-  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${++n}`, userId: owner.id, status: 'confirmed', departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 11_000_000 } })
+  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${++n}`, userId: owner.id, ...legacyBookingState('confirmed'), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 11_000_000 } })
   bookings.push(b.id)
   const mk = async (type: string, sell: number, cost: number | null, key = 'main') => (await prisma.priceSnapshot.create({ data: {
     bookingId: b.id, itemType: type, itemId: `${b.id}-${type}-${key}`, lineKey: key, itemLabel: type, itemQty: 1, description: `Baris ${type}`, qty: 1, unit: 'item',

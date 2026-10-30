@@ -37,8 +37,8 @@ async function apply(input: ApplyInput): Promise<AdjustResult> {
     // Kunci baris booking: dua penyesuaian paralel tak boleh sama-sama membaca total lama.
     const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${input.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     if (locked.length === 0) throw new AdjustmentError(404, 'Pesanan tidak ditemukan')
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId }, select: { status: true, totalAmount: true } })
-    if (booking.status !== 'awaiting_payment') throw new AdjustmentError(409, 'Total hanya dapat disesuaikan saat pesanan menunggu pembayaran. Setelah dibayar, gunakan jalur refund.')
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId }, select: { status: true, totalAmount: true, confirmedAt: true, payments: { where: { status: 'pending' }, select: { id: true }, take: 1 } } })
+    if (booking.status !== 'active' || booking.confirmedAt !== null || booking.payments.length > 0) throw new AdjustmentError(409, 'Total hanya dapat disesuaikan saat pesanan menunggu pembayaran. Setelah dibayar, gunakan jalur refund.')
 
     const before = await bookingSnapshotTotals(tx, input.bookingId)
     const totalBefore = round2(Number(booking.totalAmount))

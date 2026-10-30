@@ -47,9 +47,9 @@ export default async function AdminCustomerDetail({ params, searchParams }: Prop
   const bookingColumns: Column<(typeof c.bookings)[number]>[] = [
     { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
     { key: 'ordered', header: 'Dipesan', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{dt(b.createdAt)}</span> },
-    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[12px] text-admin-muted">{day(b.departureDate)}</span> },
+    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[12px] text-admin-muted">{b.departureDate ? day(b.departureDate) : '-'}</span> },
     { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(b.totalAmount)}</span> },
-    { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge> },
+    { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status].label}</Badge> },
     { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
   ]
 

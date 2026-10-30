@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
+import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
 import { getPaymentConfig } from '@/lib/constants/payment'
 import { ArrowLeft, FileDown } from 'lucide-react'
@@ -68,14 +69,18 @@ export default async function AdminBookingDetail({ params }: Props) {
     return typeof name === 'string' && name ? name : 'Jamaah'
   }
 
-  const cfg     = BOOKING_STATUS[booking.status as keyof typeof BOOKING_STATUS]
+  const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
+  const cfg     = BOOKING_STATUS[st]
   const payment = booking.payments[0]
 
   const STATUS_BADGE: Record<string, string> = {
     payment_review:   'admin-badge-blue',
     awaiting_payment: 'admin-badge-amber',
     confirmed:        'admin-badge-green',
+    in_progress:      'admin-badge-blue',
+    completed:        'admin-badge-green',
     cancelled:        'admin-badge-red',
+    expired:          'admin-badge-red',
   }
 
   const VISA_BADGE: Record<string, string> = {
@@ -102,13 +107,13 @@ export default async function AdminBookingDetail({ params }: Props) {
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-admin-line px-3 py-1.5 text-[12px] font-medium text-admin-ink/80 hover:text-admin-ink hover:bg-white hover:shadow-admin transition-colors">
           <FileDown className="h-3.5 w-3.5" /> Unduh Invoice
         </a>
-        <span className={STATUS_BADGE[booking.status] ?? 'admin-badge-gray'}>
-          {cfg?.label}
+        <span className={STATUS_BADGE[st] ?? 'admin-badge-gray'}>
+          {cfg.label}
         </span>
       </div>
 
       {/* Payment confirmation */}
-      {(booking.status === 'payment_review' || booking.status === 'awaiting_payment') && payment && (
+      {(st === 'payment_review' || st === 'awaiting_payment') && payment && (
         <PaymentActions bookingId={id} paymentId={payment.id} buktiPath={payment.buktiTransferPath} totalAmount={Number(booking.totalAmount)} />
       )}
 
@@ -119,13 +124,13 @@ export default async function AdminBookingDetail({ params }: Props) {
           <p className="text-[13px] text-admin-ink/80">
             Berangkat:{' '}
             <span className="font-medium text-admin-ink">
-              {formatCalendarDate(booking.departureDate, DATE_LONG)}
+              {booking.departureDate ? formatCalendarDate(booking.departureDate, DATE_LONG) : 'Belum ada tanggal'}
             </span>
           </p>
           <p className="text-[13px] text-admin-ink/80">
             Kembali:{' '}
             <span className="font-medium text-admin-ink">
-              {formatCalendarDate(booking.returnDate, DATE_LONG)}
+              {booking.returnDate ? formatCalendarDate(booking.returnDate, DATE_LONG) : 'Belum ada tanggal'}
             </span>
           </p>
           <p className="text-[13px] text-admin-ink/80">
@@ -192,7 +197,7 @@ export default async function AdminBookingDetail({ params }: Props) {
       </div>
 
       {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
-      <BookingPriceCard bookingId={id} status={booking.status} />
+      <BookingPriceCard bookingId={id} status={st} />
       {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
 
       {/* Dokumen per jamaah */}

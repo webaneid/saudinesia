@@ -17,7 +17,7 @@ export const waTemplates = {
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,
 
   paymentReminder: (code: string, deadline: string) =>
-    `Reminder: Pembayaran booking *${code}* belum kami terima.\nBatas waktu: *${deadline}*\n\nSegera lakukan pembayaran agar booking tidak dibatalkan.`,
+    `Reminder: Pembayaran booking *${code}* belum kami terima.\nBatas waktu: *${deadline}*\n\nSegera lakukan pembayaran agar tempat Anda tetap aman.`,
 
   paymentConfirmed: (code: string) =>
     `Pembayaran booking *${code}* telah dikonfirmasi. Terima kasih!\n\nDokumen perjalanan akan kami kirimkan segera setelah visa diproses.`,

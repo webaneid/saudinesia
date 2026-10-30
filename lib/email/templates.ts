@@ -51,20 +51,20 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         heading: 'Booking Anda sudah kami terima',
         paragraphs: [
           `Halo ${ctx.name}, terima kasih telah memesan di Saudinesia.`,
-          'Selesaikan pembayaran sebelum batas waktu agar booking Anda tidak dibatalkan otomatis, lalu unggah bukti transfer di halaman booking.',
+          'Selesaikan pembayaran sebelum batas waktu agar tempat Anda tetap aman, lalu unggah bukti transfer di halaman booking.',
         ],
         facts: [['Kode booking', e.code], ...(e.deadline ? ([['Batas pembayaran', e.deadline]] as [string, string][]) : [])],
         cta: bookingCta,
       }
-    case 'payment_reminder_12h':
-    case 'payment_reminder_22h':
+    case 'payment_reminder_d1':
+    case 'payment_reminder_d0':
       return {
         subject: `Pengingat pembayaran booking ${e.code}`,
         preheader: `Batas pembayaran: ${e.deadline}.`,
         heading: 'Pembayaran belum kami terima',
         paragraphs: [
           `Halo ${ctx.name}, pembayaran untuk booking Anda belum kami terima.`,
-          'Segera lakukan pembayaran agar booking tidak dibatalkan otomatis.',
+          'Segera lakukan pembayaran agar tempat Anda tetap aman.',
         ],
         facts: [['Kode booking', e.code], ['Batas pembayaran', e.deadline]],
         cta: bookingCta,
@@ -93,13 +93,13 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         facts: [['Kode booking', e.code]],
         cta: { label: 'Unggah ulang bukti', path: bookingPath(ctx.bookingId) },
       }
-    case 'auto_cancelled':
+    case 'booking_expired':
       return {
-        subject: `Booking ${e.code} dibatalkan otomatis`,
-        preheader: 'Pembayaran tidak diterima dalam batas waktu.',
-        heading: 'Booking dibatalkan otomatis',
+        subject: `Booking ${e.code} hangus`,
+        preheader: 'Pembayaran belum kami terima hingga mendekati tanggal keberangkatan.',
+        heading: 'Booking hangus',
         paragraphs: [
-          `Halo ${ctx.name}, booking Anda dibatalkan otomatis karena pembayaran tidak kami terima dalam batas waktu.`,
+          `Halo ${ctx.name}, booking Anda kami hanguskan karena belum ada pembayaran yang kami terima hingga mendekati tanggal keberangkatan.`,
           'Jika Anda masih ingin berangkat, silakan buat booking baru atau hubungi kami.',
         ],
         facts: [['Kode booking', e.code]],

@@ -21,9 +21,10 @@ export class ReportInputError extends Error {
 export type ReportScope = 'recognized' | 'with_pending'
 export type ReportParams = { from: string; to: string; scope: ReportScope }
 
-const STATUSES: Record<ReportScope, string[]> = {
-  recognized: ['confirmed', 'active', 'completed'],
-  with_pending: ['confirmed', 'active', 'completed', 'awaiting_payment', 'payment_review'],
+// Booking yang dihitung (siklus hidup v2): `recognized` = sudah dikonfirmasi (active + confirmedAt) atau selesai; `with_pending` = semua yang hidup/selesai (draf, batal, hangus tak dihitung).
+const SCOPE_SQL: Record<ReportScope, Prisma.Sql> = {
+  recognized: Prisma.sql`(bk."status" = 'completed' OR (bk."status" = 'active' AND bk."confirmedAt" IS NOT NULL))`,
+  with_pending: Prisma.sql`bk."status" IN ('active', 'completed')`,
 }
 const MAX_RANGE_DAYS = 366 * 5
 
@@ -47,11 +48,11 @@ function base(p: ReportParams) {
   const { fromTs, toTs } = periodBounds(p.from, p.to)
   return Prisma.sql`
     WITH b AS (
-      SELECT bk."id", bk."bookingCode", bk."createdAt", bk."status"::text AS status, bk."totalAmount"::float8 AS total,
+      SELECT bk."id", bk."bookingCode", bk."createdAt", CASE WHEN bk."status" = 'active' THEN CASE WHEN bk."confirmedAt" IS NOT NULL THEN 'confirmed' WHEN EXISTS (SELECT 1 FROM "payments" pp WHERE pp."bookingId" = bk."id" AND pp."status" = 'pending') THEN 'payment_review' ELSE 'awaiting_payment' END ELSE bk."status"::text END AS status, bk."totalAmount"::float8 AS total,
         COALESCE((SELECT SUM(py."amount") FROM "payments" py WHERE py."bookingId" = bk."id" AND py."status" = 'confirmed'), 0)::float8 AS paid,
         COALESCE((SELECT SUM(rf."amount") FROM "refunds" rf WHERE rf."bookingId" = bk."id" AND rf."status" IN ('approved', 'paid')), 0)::float8 AS refunded
       FROM "bookings" bk
-      WHERE bk."createdAt" >= ${utcText(fromTs)}::timestamp AND bk."createdAt" < ${utcText(toTs)}::timestamp AND bk."status"::text = ANY(${STATUSES[p.scope]}::text[])
+      WHERE bk."createdAt" >= ${utcText(fromTs)}::timestamp AND bk."createdAt" < ${utcText(toTs)}::timestamp AND ${SCOPE_SQL[p.scope]}
     ), l AS (
       SELECT b."id" AS booking_id, b."createdAt" AS created_at, s."itemType" AS item_type, s."vendorIds" AS vendor_ids, s."totalSellIdr"::float8 AS sell,
         CASE WHEN s."totalCostIdr" IS NOT NULL THEN s."totalCostIdr"::float8

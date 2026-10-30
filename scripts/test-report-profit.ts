@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { getBookingProfitRows, getProfitReport, periodBounds, ReportInputError, type ReportParams } from '@/lib/reports/profit'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
 
@@ -27,9 +28,9 @@ type Line = { itemType: string; lineKey?: string; label?: string; sell: number; 
 type Pay = { amount: number; status: 'pending' | 'confirmed' | 'rejected' }
 type Ref = { amount: number; status: 'pending' | 'approved' | 'paid' | 'rejected' }
 let n = 0
-async function mk(code: string, at: string, status: 'awaiting_payment' | 'payment_review' | 'confirmed' | 'active' | 'completed' | 'cancelled', lines: Line[], pays: Pay[] = [], refs: Ref[] = []) {
+async function mk(code: string, at: string, status: LegacyBookingStatus, lines: Line[], pays: Pay[] = [], refs: Ref[] = []) {
   const total = lines.reduce((s, l) => s + l.sell, 0)
-  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${code}`, userId: user.id, status, departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: total, createdAt: new Date(at) } })
+  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${code}`, userId: user.id, ...legacyBookingState(status), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: total, createdAt: new Date(at) } })
   bookings.push(b.id)
   for (const l of lines) {
     await prisma.priceSnapshot.create({ data: {

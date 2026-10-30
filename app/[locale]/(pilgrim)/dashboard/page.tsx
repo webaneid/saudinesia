@@ -8,6 +8,7 @@ import { Plus, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
+import { STATUS_FILTERS, displayStatusOf, statusSelect, statusWhere, type StatusFilter } from '@/lib/booking/lifecycle'
 import type { BookingStatus, Prisma } from '@prisma/client'
 import { buildListHref, paginate, parseListParams } from '@/lib/table/pagination'
 import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
@@ -22,17 +23,18 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } } } }>
+type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } }; payments: { select: { id: true } } } }>
 
-// hasOwnProperty, bukan `in` — `in` meloloskan "toString"/"constructor" dari prototype.
-const isBookingStatus = (v: string | undefined): v is BookingStatus => !!v && Object.prototype.hasOwnProperty.call(BOOKING_STATUS, v)
+// Draf adalah urusan admin (belum diterbitkan) — tak pernah tampil ke jamaah, juga bukan pilihan filter.
+const PILGRIM_STATUS_FILTERS = STATUS_FILTERS.filter(s => s !== 'draft')
+const isPilgrimFilter = (v: string | undefined): v is StatusFilter => !!v && (PILGRIM_STATUS_FILTERS as readonly string[]).includes(v)
 
 export default async function DashboardPage({ params, searchParams }: Props) {
   const { locale } = await params
   const sp = await searchParams
   const list = parseListParams(sp, 10)
   const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
-  const status = isBookingStatus(rawStatus) ? rawStatus : undefined
+  const status = isPilgrimFilter(rawStatus) ? rawStatus : undefined
   const session = await getSession()
   if (!session) redirect(`/${safeLocale(locale)}/login`)
 
@@ -42,15 +44,15 @@ export default async function DashboardPage({ params, searchParams }: Props) {
   })
 
   // Jumlah SELURUH booking pemilik (tanpa filter) menentukan tampilan "belum ada booking"; daftar sendiri berpaginasi + filter status.
-  const ownBookings = await prisma.booking.count({ where: { userId: session.userId } })
-  const where: Prisma.BookingWhereInput = { userId: session.userId, ...(status ? { status } : {}) }
+  const ownBookings = await prisma.booking.count({ where: { userId: session.userId, status: { not: 'draft' } } })
+  const where: Prisma.BookingWhereInput = { userId: session.userId, status: { not: 'draft' }, ...(status ? { AND: [statusWhere(status)] } : {}) }
   const { items: bookings, meta } = await paginate<BookingRow>(
     list,
     () => prisma.booking.count({ where }),
     range => prisma.booking.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
-      include: { _count: { select: { pilgrims: true } } },
+      include: { _count: { select: { pilgrims: true } }, payments: statusSelect.payments },
       ...range,
     }),
   )
@@ -59,13 +61,13 @@ export default async function DashboardPage({ params, searchParams }: Props) {
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const columns: Column<BookingRow>[] = [
     { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
-    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{formatCalendarDate(b.departureDate)}</span> },
+    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{b.departureDate ? formatCalendarDate(b.departureDate) : '-'}</span> },
     { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{b._count.pilgrims} jamaah</span> },
     { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(Number(b.totalAmount))}</span> },
     {
       key: 'status', header: 'Status',
       cell: b => {
-        const cfg = BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS] ?? { label: b.status, badge: 'secondary' }
+        const cfg = BOOKING_STATUS[displayStatusOf(b)]
         return <Badge variant={cfg.badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>{cfg.label}</Badge>
       },
     },
@@ -117,7 +119,7 @@ export default async function DashboardPage({ params, searchParams }: Props) {
         <div className="space-y-3">
           <h2 className="text-lg font-semibold">Riwayat Booking</h2>
           <FilterBar active={Boolean(status)} resetHref={buildListHref(base, { limit: limitParam })}>
-            <FilterSelect label="Status" value={status ?? ''} options={Object.entries(BOOKING_STATUS).map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: { limit: limitParam } }} />
+            <FilterSelect label="Status" value={status ?? ''} options={Object.entries(BOOKING_STATUS).filter(([value]) => value !== 'draft').map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: { limit: limitParam } }} />
           </FilterBar>
           <DataTable
             columns={columns} rows={bookings} getRowId={b => b.id} empty="Tidak ada booking dengan status ini."

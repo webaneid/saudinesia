@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { displayStatusOf, statusSelect, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { paginate, type ListParams, type PageMeta } from '@/lib/admin/pagination'
 import { getCountryName } from '@/lib/constants/countries'
 import { escapeLike } from '@/lib/utils/search'
@@ -96,7 +97,7 @@ export type CustomerDetail = CustomerRow & {
   googleLinked: boolean
   /** Alamat rumah dirangkai satu baris; null = belum diisi. */
   address: string | null
-  bookings: Array<{ id: string; bookingCode: string; status: string; departureDate: Date; totalAmount: number; createdAt: Date }>
+  bookings: Array<{ id: string; bookingCode: string; status: DisplayStatus; departureDate: Date | null; totalAmount: number; createdAt: Date }>
   /** Paginasi daftar pesanan (total = SEMUA pesanan akun ini). */
   bookingsMeta: PageMeta
   payments: { confirmedIdr: number; confirmedCount: number; pendingCount: number; rejectedCount: number }
@@ -123,7 +124,7 @@ export async function getCustomer(id: string, bookingList: ListParams = { page: 
       () => prisma.booking.count({ where: { userId: id } }),
       range => prisma.booking.findMany({
         where: { userId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], ...range,
-        select: { id: true, bookingCode: true, status: true, departureDate: true, totalAmount: true, createdAt: true },
+        select: { id: true, bookingCode: true, totalAmount: true, createdAt: true, ...statusSelect },
       }),
     ),
     prisma.payment.groupBy({ by: ['status'], where: { booking: { userId: id } }, _count: true, _sum: { amount: true } }),
@@ -140,7 +141,7 @@ export async function getCustomer(id: string, bookingList: ListParams = { page: 
     deleted: isDeletedAccount(u.email), emailVerifiedAt: u.emailVerifiedAt, whatsappVerifiedAt: u.whatsappVerifiedAt, googleLinked: u.googleSub !== null,
     address,
     bookingCount: agg.get(id)?.bookingCount ?? 0, paidIdr: agg.get(id)?.paidIdr ?? 0,
-    bookings: bookingsPage.items.map(b => ({ ...b, totalAmount: Number(b.totalAmount) })), bookingsMeta: bookingsPage.meta,
+    bookings: bookingsPage.items.map(b => ({ id: b.id, bookingCode: b.bookingCode, status: displayStatusOf(b), departureDate: b.departureDate, totalAmount: Number(b.totalAmount), createdAt: b.createdAt })), bookingsMeta: bookingsPage.meta,
     payments: { confirmedIdr: Number(pay('confirmed')?._sum.amount ?? 0), confirmedCount: pay('confirmed')?._count ?? 0, pendingCount: pay('pending')?._count ?? 0, rejectedCount: pay('rejected')?._count ?? 0 },
   }
 }

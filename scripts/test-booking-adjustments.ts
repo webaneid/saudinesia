@@ -14,6 +14,8 @@ import { getProfitReport } from '@/lib/reports/profit'
 import { PaymentAmountError, resolveConfirmedAmount } from '@/lib/payments/confirmAmount'
 import { processPayment } from '@/lib/payments/process'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
+import { displayStatus } from '@/lib/booking/lifecycle'
 
 await assertThrowawayDb()
 
@@ -29,9 +31,10 @@ const bookings: string[] = []
 let n = 0
 
 /** Booking menunggu pembayaran: hotel jual 1.000.000 (modal 800.000) + visa jual 500.000 (modal 400.000) → total 1.500.000, HPP awal diketahui 1.200.000. */
-async function mkBooking(status: 'awaiting_payment' | 'payment_review' | 'confirmed' | 'cancelled' = 'awaiting_payment', at = new Date('2090-03-10T05:00:00Z')) {
-  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${++n}`, userId: user.id, status, departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 1_500_000, createdAt: at } })
+async function mkBooking(status: LegacyBookingStatus = 'awaiting_payment', at = new Date('2090-03-10T05:00:00Z')) {
+  const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${++n}`, userId: user.id, ...legacyBookingState(status), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 1_500_000, createdAt: at } })
   bookings.push(b.id)
+  if (status === 'payment_review') await prisma.payment.create({ data: { bookingId: b.id, amount: 0, method: 'bank_transfer', status: 'pending' } }) // bukti menunggu verifikasi
   for (const [type, sell, cost] of [['hotel', 1_000_000, 800_000], ['visa', 500_000, 400_000]] as const) {
     await prisma.priceSnapshot.create({ data: { bookingId: b.id, itemType: type, itemId: `${b.id}-${type}`, itemLabel: type === 'hotel' ? 'Hotel Uji' : 'Visa Uji', itemQty: 1, description: type, qty: 1, unit: 'item', unitSellIdr: sell, totalSellIdr: sell, unitCostIdr: cost, totalCostIdr: cost, mode: 'auto' } })
   }
@@ -129,9 +132,11 @@ await t('PEMBATALAN lewat baris pembalik: total kembali, snapshot bertambah satu
 await t('pembatalan memerlukan menunggu-bayar; membatalkan diskon di bawah HPP menaikkan total (tak butuh catatan baru)', async () => {
   const id = await mkBooking()
   const a = await adjustBookingTotal({ bookingId: id, amountIdr: -400_000, label: 'Nego', reason: 'kesepakatan', byUserId: staff.id })
-  await prisma.booking.update({ where: { id }, data: { status: 'payment_review' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('payment_review') })
+  await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'bank_transfer', status: 'pending' } }) // bukti menunggu verifikasi = payment `pending`
   await rejectsAdj(() => reverseAdjustment({ bookingId: id, adjustmentId: a.adjustmentId, byUserId: staff.id }), 409, /menunggu pembayaran/)
-  await prisma.booking.update({ where: { id }, data: { status: 'awaiting_payment' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('awaiting_payment') })
+  await prisma.payment.deleteMany({ where: { bookingId: id, status: 'pending' } })
   const rev = await reverseAdjustment({ bookingId: id, adjustmentId: a.adjustmentId, byUserId: staff.id })
   assert.deepEqual([rev.totalAfter, rev.belowCost], [1_500_000, false])
 })
@@ -169,9 +174,10 @@ await t('INVOICE: label tampil sebagai baris tersendiri, jumlah = total; CATATAN
 await t('LAPORAN UNTUNG: penyesuaian bermodal 0 → untung ikut turun (jual 1.400.000 − modal 1.200.000 = 200.000); pesanan di bawah HPP terlihat rugi', async () => {
   const id = await mkBooking('confirmed', new Date('2090-09-10T05:00:00Z'))
   // dikonfirmasi lewat jalur lama: sesuaikan saat awaiting lalu ubah status (jalur nyata: diskon sebelum bayar)
-  await prisma.booking.update({ where: { id }, data: { status: 'awaiting_payment' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('awaiting_payment') })
+  await prisma.payment.deleteMany({ where: { bookingId: id, status: 'pending' } })
   await adjustBookingTotal({ bookingId: id, amountIdr: -100_000, label: 'Diskon', byUserId: staff.id })
-  await prisma.booking.update({ where: { id }, data: { status: 'confirmed' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('confirmed') })
   const r = await getProfitReport({ from: '2090-09-01', to: '2090-09-30', scope: 'recognized' })
   assert.deepEqual([r.summary.sellIdr, r.summary.costKnownIdr, r.summary.profitIdr], [1_400_000, 1_200_000, 200_000])
 })
@@ -187,14 +193,15 @@ await t('aturan jumlah (murni): bawaan = total; sama dengan total tanpa catatan;
 })
 
 // ── pemrosesan pembayaran (7A + audit M1/M2): status dibaca ulang di dalam kunci ─────────────────────────────────────────
-const mkPaid = async (bookingStatus: 'payment_review' | 'awaiting_payment' | 'cancelled' | 'confirmed' = 'payment_review', payStatus: 'pending' | 'confirmed' | 'rejected' = 'pending') => {
-  const id = await mkBooking(bookingStatus)
+const mkPaid = async (bookingStatus: LegacyBookingStatus = 'payment_review', payStatus: 'pending' | 'confirmed' | 'rejected' = 'pending') => {
+  const id = await mkBooking(bookingStatus === 'payment_review' ? 'awaiting_payment' : bookingStatus) // bukti menunggu = payment `pending` yang dibuat di bawah
   const pay = await prisma.payment.create({ data: { bookingId: id, amount: payStatus === 'confirmed' ? 1_500_000 : 0, method: 'bank_transfer', status: payStatus } })
   return { id, pay: pay.id }
 }
 const snap = async (bookingId: string, payId: string) => {
   const b = await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } }); const p = await prisma.payment.findUniqueOrThrow({ where: { id: payId } })
-  return { booking: b.status, pay: p.status, amount: Number(p.amount), notes: p.notes, confirmedAt: p.confirmedAt?.toISOString() ?? null }
+  const pending = await prisma.payment.count({ where: { bookingId, status: 'pending' } })
+  return { booking: displayStatus({ status: b.status, confirmedAt: b.confirmedAt, hasPendingPayment: pending > 0, departureDate: b.departureDate, returnDate: b.returnDate }), pay: p.status, amount: Number(p.amount), notes: p.notes, confirmedAt: p.confirmedAt?.toISOString() ?? null }
 }
 await t('KONFIRMASI: bawaan jumlah = total pesanan, status payment confirmed + booking confirmed, siapa/kapan tercatat; jumlah tersimpan dibaca invoice (sisa tagihan 0)', async () => {
   const { id, pay } = await mkPaid()
@@ -236,7 +243,7 @@ await t('GANDA/BASI ditolak (conflict, tak ada yang berubah): konfirmasi dua kal
   const c = await mkPaid('cancelled')
   assert.equal((await processPayment(c.pay, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
   assert.equal((await snap(c.id, c.pay)).booking, 'cancelled', 'booking batal tak dihidupkan kembali')
-  const w = await mkPaid('awaiting_payment')
+  const w = await mkPaid('confirmed') // sudah dikonfirmasi sebelumnya (confirmedAt terisi) lalu ada bukti kedua → tak diproses lagi
   assert.equal((await processPayment(w.pay, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
   assert.equal((await processPayment('00000000-0000-4000-8000-000000000000', { action: 'confirm', byUserId: staff.id })).kind, 'not_found')
 })
@@ -263,9 +270,10 @@ await t('AUDIT L2 (Fase 8): pembatalan yang menghasilkan total DI BAWAH HPP teta
 })
 await t('AUDIT L1: label penyesuaian TIDAK memengaruhi laporan — diskon berlabel "Penyesuaian data lama" tetap bermodal 0 (untung turun, tak menyelinap ke "tanpa modal")', async () => {
   const id = await mkBooking('confirmed', new Date('2090-10-10T05:00:00Z'))
-  await prisma.booking.update({ where: { id }, data: { status: 'awaiting_payment' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('awaiting_payment') })
+  await prisma.payment.deleteMany({ where: { bookingId: id, status: 'pending' } })
   await adjustBookingTotal({ bookingId: id, amountIdr: -300_000, label: 'Penyesuaian data lama', reason: 'uji penyamaran', byUserId: staff.id })
-  await prisma.booking.update({ where: { id }, data: { status: 'confirmed' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('confirmed') })
   const r = await getProfitReport({ from: '2090-10-01', to: '2090-10-31', scope: 'recognized' })
   assert.deepEqual([r.summary.sellIdr, r.summary.sellUnknownCostIdr, r.summary.profitIdr], [1_200_000, 0, 0])
 })
@@ -350,7 +358,7 @@ await t('EDIT CATATAN (Fase 8C + SEC-101): hanya `reason` yang berubah (label, j
   const other = await mkBooking()
   await rejectsAdj(() => updateAdjustmentReason({ bookingId: other, adjustmentId: r.adjustmentId, reason: 'x', byUserId: staff.id }), 404, /tidak ditemukan/)
   await rejectsAdj(() => updateAdjustmentReason({ bookingId: id, adjustmentId: '00000000-0000-0000-0000-000000000000', reason: 'x', byUserId: staff.id }), 404, /tidak ditemukan/)
-  await prisma.booking.update({ where: { id }, data: { status: 'confirmed' } })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('confirmed') })
   assert.equal((await updateAdjustmentReason({ bookingId: id, adjustmentId: r.adjustmentId, reason: 'dicatat ulang setelah lunas', byUserId: staff.id })).reason, 'dicatat ulang setelah lunas')
 })
 await t('EDIT CATATAN: dua editor bersamaan → keduanya berhasil berurutan, jejak = editor TERAKHIR yang benar-benar menulis (pasangan pelaku+waktu tak pernah campur); DB menolak pasangan tak lengkap', async () => {
@@ -384,7 +392,7 @@ await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar mema
   const confirm = read('app/api/v1/admin/payments/[id]/confirm/route.ts')
   assert.match(confirm, /processPayment\(/); assert.match(confirm, /\.strict\(\)/)
   const proc = read('lib/payments/process.ts')
-  assert.match(proc, /FOR UPDATE/); assert.match(proc, /resolveConfirmedAmount\(/); assert.match(proc, /payment\.status !== 'pending' \|\| booking\.status !== 'payment_review'/)
+  assert.match(proc, /FOR UPDATE/); assert.match(proc, /resolveConfirmedAmount\(/); assert.match(proc, /payment\.status !== 'pending' \|\| booking\.status !== 'active' \|\| booking\.confirmedAt !== null/)
   assert.doesNotMatch(read('app/api/v1/bookings/[id]/route.ts'), /payments:\s*\{ orderBy: \{ createdAt: 'desc' \}, take: 1 \}/, 'catatan staf pembayaran tak boleh ikut ke jamaah')
   const walk = (dir: string, out: string[] = []): string[] => { for (const f of readdirSync(dir)) { if (f === 'node_modules' || f === '.next' || f.startsWith('.')) continue; const p = join(dir, f); if (statSync(p).isDirectory()) walk(p, out); else if (/\.(ts|tsx)$/.test(f)) out.push(p) } return out }
   const writers = [...walk(join(root, 'app')), ...walk(join(root, 'lib')), ...walk(join(root, 'components'))].filter(f => /bookingAdjustment\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\b/.test(readFileSync(f, 'utf8')))
