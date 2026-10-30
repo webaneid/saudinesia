@@ -99,15 +99,15 @@ export function deleteTourPackage(id: string): Promise<DeleteOutcome> {
   })
 }
 
-// Paket Umroh: hari ini TIDAK ada tabel booking yang merujuk `packages` (booking engine direncanakan dirombak). Penjaga CI menyidik FK masuknya —
-// FK baru ke `packages` akan membuat tes merah sampai penghitungan di bawah diperbarui.
+// Paket Umroh: dirujuk item booking `booking_packages` (FK Restrict, booking engine v2 Fase 4) — paket yang pernah dipesan dinonaktifkan, bukan dihapus.
+// Penjaga CI menyidik FK masuknya — FK baru ke `packages` akan membuat tes merah sampai penghitungan di bawah diperbarui.
 export function deletePackage(id: string): Promise<DeleteOutcome> {
   return run({
     table: 'packages', id, mediaType: 'package',
-    count: async () => 0,
+    count: db => db.bookingPackage.count({ where: { packageId: id } }),
     drop: async tx => { await dropPolymorphic(tx, 'package', [id]); await tx.package.delete({ where: { id } }) }, // opsi hotel/visa/katering ikut (CASCADE)
     deactivate: () => prisma.package.update({ where: { id }, data: { isActive: false } }),
-    usedBy: n => `Paket umroh dipakai di ${n} rujukan`,
+    usedBy: n => `Paket umroh dipesan di ${n} booking`,
   })
 }
 

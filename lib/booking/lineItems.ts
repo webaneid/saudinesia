@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError } from './errors'
-import { calendarDateOf } from '@/lib/time'
+import { packageLines, type PackageResolved } from './packageItem'
+import { calendarDateOf, dbDateOf } from '@/lib/time'
 import type { CreateBookingInput, BookingItemInput } from '@/lib/validators/booking'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import type { TourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
@@ -29,11 +30,14 @@ type Item<T extends BookingItemInput['itemType']> = Extract<BookingItemInput, { 
  * Lem sementara menunggu perombakan booking engine: yang bertahan hanyalah kontrak `price_snapshots` + `engine/snapshot.ts`.
  */
 export async function writeBookingItems(
-  tx: Prisma.TransactionClient, bookingId: string, data: CreateBookingInput, tourResolved: readonly TourPackageResolved[],
+  tx: Prisma.TransactionClient, bookingId: string, data: CreateBookingInput, tourResolved: readonly TourPackageResolved[], packageResolved: readonly PackageResolved[] = [],
 ): Promise<number> {
   const pending: PendingItem[] = []
   const add = (meta: PendingItem['meta'], lines: SnapshotLine[]) => pending.push({ meta, lines })
   let tourIdx = 0
+  let packageIdx = 0
+  // Slot visa dari paket (visa included/dipilih): jamaah TANPA visa sendiri dipasangkan berurutan; harganya sudah di baris paket (§10.2).
+  const packageVisaSlots: string[] = []
 
   for (const item of data.items) {
     switch (item.itemType) {
@@ -148,6 +152,43 @@ export async function writeBookingItems(
         add({ itemType: 'haji', itemId: row.id, label: haji.name, detail: `${item.numPersons} orang`, qty: item.numPersons }, lines)
         break
       }
+      case 'flight': {
+        const sch = await tx.flightSchedule.findUnique({
+          where: { id: item.flightScheduleId },
+          select: { isActive: true, departureFrom: true, departureTo: true, route: { select: { origin: true, destination: true } } },
+        })
+        if (!sch || !sch.isActive) throw new ItemNotBookableError('Jadwal tiket pesawat tidak tersedia')
+        // Tanggal terbang harus di periode harga/kuota jadwal yang dipilih (jadwal periode murah tak boleh dipakai di luar periodenya).
+        if (item.departureDate < calendarDateOf(sch.departureFrom) || item.departureDate > calendarDateOf(sch.departureTo)) {
+          throw new ItemNotBookableError(`Tanggal terbang di luar periode jadwal tiket (${day(sch.departureFrom)} – ${day(sch.departureTo)})`)
+        }
+        const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'tiket pesawat')
+        const label = `Tiket ${sch.route.origin} → ${sch.route.destination}`
+        const line = lineFromPoint(point, { description: label, qty: item.numPassengers, unit: 'person' })
+        const row = await tx.bookingFlight.create({
+          data: {
+            bookingId, flightScheduleId: item.flightScheduleId, departureDate: dbDateOf(item.departureDate),
+            numPassengers: item.numPassengers, unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
+          },
+        })
+        add({ itemType: 'flight', itemId: row.id, label, detail: `${day(item.departureDate)} · ${item.numPassengers} penumpang`, qty: item.numPassengers }, [line])
+        break
+      }
+      case 'package': {
+        const r = packageResolved[packageIdx++]!
+        const lines = await packageLines(tx, item.packageId, r, item.numPeople)
+        const totalPrice = sumSell(lines)
+        if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket umroh belum ditetapkan')
+        const row = await tx.bookingPackage.create({
+          data: {
+            bookingId, packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
+            numPeople: item.numPeople, flightScheduleId: r.flightScheduleId, choices: r.choices as Prisma.InputJsonValue, totalPrice,
+          },
+        })
+        if (r.visaProductId) for (let i = 0; i < item.numPeople; i++) packageVisaSlots.push(r.visaProductId)
+        add({ itemType: 'package', itemId: row.id, label: r.name, detail: `${day(r.departureDate)} – ${day(r.returnDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
+        break
+      }
     }
   }
 
@@ -156,7 +197,16 @@ export async function writeBookingItems(
   // titik harga yang memuat lama tinggal (harga manual menang); modal/jejak kurs-vendor beku ada di `price_snapshots`.
   for (const p of data.pilgrims) {
     const pilgrim = await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: p.fieldValues as Prisma.InputJsonValue } })
-    if (!p.visaProductId) continue
+    if (!p.visaProductId) {
+      const fromPackage = packageVisaSlots.shift()
+      if (fromPackage) {
+        const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
+        if (!vp) throw new ItemNotBookableError('Produk visa paket tidak tersedia')
+        // Tanpa baris harga: visa ini sudah dibayar lewat baris paket (Σ snapshot tetap = total).
+        await tx.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaProductId: fromPackage, visaType: vp.visaType, status: 'pending_documents' } })
+      }
+      continue
+    }
 
     const visaProduct = await tx.visaProduct.findUnique({ where: { id: p.visaProductId }, select: { name: true, visaType: true } })
     if (!visaProduct) throw new ItemNotBookableError('Produk visa tidak tersedia')

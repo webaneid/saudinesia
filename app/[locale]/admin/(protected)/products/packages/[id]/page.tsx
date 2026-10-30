@@ -39,10 +39,10 @@ type PackageDetail = {
   id: string; name: string; description: string | null; priceLabel: string | null; highlights: string[]; isActive: boolean; isFeatured: boolean
 
   hotelMakkahMode: Mode
-  includedHotelMakkahScheduleId: string | null; includedHotelMakkahNights: number | null; includedHotelMakkahNumRooms: number | null; includedHotelMakkahPrice: string | null
+  includedHotelMakkahScheduleId: string | null; includedHotelMakkahNights: number | null; includedHotelMakkahOccupancy: number | null; includedHotelMakkahPrice: string | null
   includedHotelMakkahSchedule: HotelSlotSchedule
   hotelMadinahMode: Mode
-  includedHotelMadinahScheduleId: string | null; includedHotelMadinahNights: number | null; includedHotelMadinahNumRooms: number | null; includedHotelMadinahPrice: string | null
+  includedHotelMadinahScheduleId: string | null; includedHotelMadinahNights: number | null; includedHotelMadinahOccupancy: number | null; includedHotelMadinahPrice: string | null
   includedHotelMadinahSchedule: HotelSlotSchedule
   hotelOptions: PackageHotelOptionRow[]
 
@@ -69,13 +69,13 @@ type Breakdown = {
   components: { costComponent: string; vendorId: string; currency: string; hppRupiah: number; sellPrice: number }[]
   componentsTotalSellPrice: number
   hotelMakkahMode: Mode
-  hotelMakkah: { hotelName: string; roomTypeName: string; nights: number; numRooms: number; pricePerNight: number; totalPrice: number } | null
+  hotelMakkah: { hotelName: string; roomTypeName: string; nights: number; occupancy: number; pricePerNight: number; totalPrice: number } | null
   hotelMakkahOptions: { hotelRoomScheduleId: string; hotelName: string; roomTypeName: string; nights: number; pricePerNight: number }[]
   hotelMadinahMode: Mode
-  hotelMadinah: { hotelName: string; roomTypeName: string; nights: number; numRooms: number; pricePerNight: number; totalPrice: number } | null
+  hotelMadinah: { hotelName: string; roomTypeName: string; nights: number; occupancy: number; pricePerNight: number; totalPrice: number } | null
   hotelMadinahOptions: { hotelRoomScheduleId: string; hotelName: string; roomTypeName: string; nights: number; pricePerNight: number }[]
   transportMode: Mode
-  includedTransportPrice: number | null; includedVehicleName: string | null
+  includedTransportPrice: number | null; includedTransportPerPerson: number | null; includedVehicleName: string | null
   vehicleOptions: { transportPricingId: string; vehicleName: string; vehiclePrice: number }[]
   muthowifMode: Mode
   includedMuthowifPrice: number | null; currentMuthowifPrice: number | null
@@ -141,8 +141,8 @@ export default function PackageBuilderPage({ params }: Props) {
   const [breakdown, setBreakdown] = useState<Breakdown | null>(null)
 
   // Hotel Makkah/Madinah — form "tetapkan" untuk mode included
-  const [hmForm, setHmForm] = useState({ scheduleId: '', nights: '1', numRooms: '1' })
-  const [hdForm, setHdForm] = useState({ scheduleId: '', nights: '1', numRooms: '1' })
+  const [hmForm, setHmForm] = useState({ scheduleId: '', nights: '1', occupancy: '4' })
+  const [hdForm, setHdForm] = useState({ scheduleId: '', nights: '1', occupancy: '4' })
   const [addHmOption, setAddHmOption] = useState({ scheduleId: '', nights: '1' })
   const [addHdOption, setAddHdOption] = useState({ scheduleId: '', nights: '1' })
 
@@ -175,8 +175,8 @@ export default function PackageBuilderPage({ params }: Props) {
         }
         setForm(info); setBaseline(info)
       }
-      setHmForm({ scheduleId: p.includedHotelMakkahScheduleId ?? '', nights: String(p.includedHotelMakkahNights ?? 1), numRooms: String(p.includedHotelMakkahNumRooms ?? 1) })
-      setHdForm({ scheduleId: p.includedHotelMadinahScheduleId ?? '', nights: String(p.includedHotelMadinahNights ?? 1), numRooms: String(p.includedHotelMadinahNumRooms ?? 1) })
+      setHmForm({ scheduleId: p.includedHotelMakkahScheduleId ?? '', nights: String(p.includedHotelMakkahNights ?? 1), occupancy: String(p.includedHotelMakkahOccupancy ?? 4) })
+      setHdForm({ scheduleId: p.includedHotelMadinahScheduleId ?? '', nights: String(p.includedHotelMadinahNights ?? 1), occupancy: String(p.includedHotelMadinahOccupancy ?? 4) })
       setIncludedPricingChoice(p.transportTripId && p.includedTransportPricingId ? `${p.transportTripId}::${p.includedTransportPricingId}` : '')
       setUserChoiceTripId(p.transportMode === 'user_choice' ? (p.transportTripId ?? '') : '')
       setIncludedFlightChoice(p.flightRouteId && p.includedFlightScheduleId ? `${p.flightRouteId}::${p.includedFlightScheduleId}` : '')
@@ -255,7 +255,7 @@ export default function PackageBuilderPage({ params }: Props) {
     await patch({
       includedHotelMakkahScheduleId: hmForm.scheduleId || null,
       includedHotelMakkahNights: hmForm.scheduleId ? Number(hmForm.nights) : null,
-      includedHotelMakkahNumRooms: hmForm.scheduleId ? Number(hmForm.numRooms) : null,
+      includedHotelMakkahOccupancy: hmForm.scheduleId ? Number(hmForm.occupancy) : null,
     })
   }
   async function handleAddHotelOption(slot: 'makkah' | 'madinah') {
@@ -282,7 +282,7 @@ export default function PackageBuilderPage({ params }: Props) {
     await patch({
       includedHotelMadinahScheduleId: hdForm.scheduleId || null,
       includedHotelMadinahNights: hdForm.scheduleId ? Number(hdForm.nights) : null,
-      includedHotelMadinahNumRooms: hdForm.scheduleId ? Number(hdForm.numRooms) : null,
+      includedHotelMadinahOccupancy: hdForm.scheduleId ? Number(hdForm.occupancy) : null,
     })
   }
 
@@ -354,7 +354,7 @@ export default function PackageBuilderPage({ params }: Props) {
   async function handleSaveCatering() {
     await patch({
       includedCateringOptionId: cateringForm.optionId || null,
-      includedCateringNumPeople: cateringForm.optionId ? Number(cateringForm.numPeople) : null,
+      includedCateringNumPeople: cateringForm.optionId ? 1 : null, // paket dijual per orang — jumlah orang datang dari booking
       includedCateringNumDays: cateringForm.optionId ? Number(cateringForm.numDays) : null,
     })
   }
@@ -388,7 +388,7 @@ export default function PackageBuilderPage({ params }: Props) {
     ? breakdown.componentsTotalSellPrice
       + (breakdown.hotelMakkahMode === 'included' && breakdown.hotelMakkah ? breakdown.hotelMakkah.totalPrice : 0)
       + (breakdown.hotelMadinahMode === 'included' && breakdown.hotelMadinah ? breakdown.hotelMadinah.totalPrice : 0)
-      + (breakdown.transportMode === 'included' ? (breakdown.includedTransportPrice ?? 0) : 0)
+      + (breakdown.transportMode === 'included' ? (breakdown.includedTransportPerPerson ?? 0) : 0)
       + (breakdown.muthowifMode === 'included' ? (breakdown.includedMuthowifPrice ?? 0) : 0)
       + (breakdown.visaMode === 'included' ? (breakdown.includedVisaPrice ?? 0) : 0)
       + (breakdown.flightMode === 'included' ? (breakdown.includedFlightPrice ?? 0) : 0)
@@ -469,14 +469,14 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.hotelMakkahMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga hotel ini MASUK ke Harga Jual Paket — pilgrim tidak memilih hotel Makkah saat booking.</p>
-            {pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahPrice != null && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahNumRooms != null && (
-              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMakkahSchedule.period.hotel.name} — {pkg.includedHotelMakkahSchedule.roomType.name}</span> — {pkg.includedHotelMakkahNights} malam × {pkg.includedHotelMakkahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMakkahPrice))} = {rupiah(pkg.includedHotelMakkahNights * pkg.includedHotelMakkahNumRooms * Number(pkg.includedHotelMakkahPrice))}</p>
+            {pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahPrice != null && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahOccupancy != null && (
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMakkahSchedule.period.hotel.name} — {pkg.includedHotelMakkahSchedule.roomType.name}</span> — {pkg.includedHotelMakkahNights} malam × {rupiah(Number(pkg.includedHotelMakkahPrice))}/kamar ÷ {pkg.includedHotelMakkahOccupancy} orang = {rupiah(Math.ceil(pkg.includedHotelMakkahNights * Number(pkg.includedHotelMakkahPrice) / pkg.includedHotelMakkahOccupancy))}/orang</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
               <ChoiceSelect className="md:col-span-2" placeholder="— pilih hotel + tipe kamar —" value={hmForm.scheduleId} onChange={v => setHmForm(f => ({ ...f, scheduleId: v }))}
                 options={makkahSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Malam" value={hmForm.nights} onChange={e => setHmForm(f => ({ ...f, nights: e.target.value }))} />
-              <input className="admin-inp" type="number" min={1} placeholder="Kamar" value={hmForm.numRooms} onChange={e => setHmForm(f => ({ ...f, numRooms: e.target.value }))} />
+              <input className="admin-inp" type="number" min={1} max={20} placeholder="Orang/kamar" aria-label="Orang per kamar" value={hmForm.occupancy} onChange={e => setHmForm(f => ({ ...f, occupancy: e.target.value }))} />
             </div>
             <button onClick={handleSaveHotelMakkah} disabled={!hmForm.scheduleId} className="admin-btn-sm disabled:opacity-50 w-fit">Tetapkan</button>
           </div>
@@ -516,14 +516,14 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.hotelMadinahMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga hotel ini MASUK ke Harga Jual Paket.</p>
-            {pkg.includedHotelMadinahSchedule && pkg.includedHotelMadinahPrice != null && pkg.includedHotelMadinahNights != null && pkg.includedHotelMadinahNumRooms != null && (
-              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMadinahSchedule.period.hotel.name} — {pkg.includedHotelMadinahSchedule.roomType.name}</span> — {pkg.includedHotelMadinahNights} malam × {pkg.includedHotelMadinahNumRooms} kamar × {rupiah(Number(pkg.includedHotelMadinahPrice))} = {rupiah(pkg.includedHotelMadinahNights * pkg.includedHotelMadinahNumRooms * Number(pkg.includedHotelMadinahPrice))}</p>
+            {pkg.includedHotelMadinahSchedule && pkg.includedHotelMadinahPrice != null && pkg.includedHotelMadinahNights != null && pkg.includedHotelMadinahOccupancy != null && (
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedHotelMadinahSchedule.period.hotel.name} — {pkg.includedHotelMadinahSchedule.roomType.name}</span> — {pkg.includedHotelMadinahNights} malam × {rupiah(Number(pkg.includedHotelMadinahPrice))}/kamar ÷ {pkg.includedHotelMadinahOccupancy} orang = {rupiah(Math.ceil(pkg.includedHotelMadinahNights * Number(pkg.includedHotelMadinahPrice) / pkg.includedHotelMadinahOccupancy))}/orang</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
               <ChoiceSelect className="md:col-span-2" placeholder="— pilih hotel + tipe kamar —" value={hdForm.scheduleId} onChange={v => setHdForm(f => ({ ...f, scheduleId: v }))}
                 options={madinahSchedules.map(s => ({ id: s.id, label: `${s.hotelName} — ${s.roomTypeName}`, hint: `${rupiah(s.price)}/mlm` }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Malam" value={hdForm.nights} onChange={e => setHdForm(f => ({ ...f, nights: e.target.value }))} />
-              <input className="admin-inp" type="number" min={1} placeholder="Kamar" value={hdForm.numRooms} onChange={e => setHdForm(f => ({ ...f, numRooms: e.target.value }))} />
+              <input className="admin-inp" type="number" min={1} max={20} placeholder="Orang/kamar" aria-label="Orang per kamar" value={hdForm.occupancy} onChange={e => setHdForm(f => ({ ...f, occupancy: e.target.value }))} />
             </div>
             <button onClick={handleSaveHotelMadinah} disabled={!hdForm.scheduleId} className="admin-btn-sm disabled:opacity-50 w-fit">Tetapkan</button>
           </div>
@@ -566,7 +566,7 @@ export default function PackageBuilderPage({ params }: Props) {
             <ChoiceSelect placeholder="— pilih kendaraan —" value={includedPricingChoice} onChange={handleSetIncludedPricing}
               options={allPricingFlat.map(p => ({ id: `${p.tripId}::${p.id}`, label: `${p.tripName} — ${p.vehicle.name}`, hint: rupiah(Number(p.price)) }))} />
             {pkg.includedTransportPricing && pkg.includedTransportPrice != null && (
-              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedTransportPricing.vehicle.name}</span> — {rupiah(Number(pkg.includedTransportPrice))} (harga referensi awal, bisa diedit lewat Komponen Biaya kalau perlu penyesuaian)</p>
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedTransportPricing.vehicle.name}</span> — {rupiah(Number(pkg.includedTransportPrice))}/kendaraan, dibagi rata sesuai kapasitas kendaraan (harga per orang di ringkasan)</p>
             )}
           </div>
         )}
@@ -668,13 +668,12 @@ export default function PackageBuilderPage({ params }: Props) {
         {pkg.cateringMode === 'included' && (
           <div className="space-y-2 pt-1">
             <p className="text-[11px] text-admin-accent-strong bg-admin-accent/10 rounded px-2 py-1 w-fit">Harga katering ini MASUK ke Harga Jual Paket.</p>
-            {pkg.includedCateringOption && pkg.includedCateringPrice != null && pkg.includedCateringNumPeople != null && pkg.includedCateringNumDays != null && (
-              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedCateringOption.name}</span> — {pkg.includedCateringNumPeople} orang × {pkg.includedCateringNumDays} hari = {rupiah(Number(pkg.includedCateringPrice))}</p>
+            {pkg.includedCateringOption && pkg.includedCateringPrice != null && pkg.includedCateringNumDays != null && (
+              <p className="text-[12px] text-admin-muted">Dikunci: <span className="font-medium text-admin-ink">{pkg.includedCateringOption.name}</span> — {pkg.includedCateringNumDays} hari = {rupiah(Number(pkg.includedCateringPrice))}/orang</p>
             )}
             <div className="grid md:grid-cols-4 gap-2">
               <ChoiceSelect className="md:col-span-2" placeholder="— pilih menu katering —" value={cateringForm.optionId} onChange={v => setCateringForm(f => ({ ...f, optionId: v }))}
                 options={allCateringOptions.map(c => ({ id: c.id, label: c.name, hint: `${rupiah(Number(c.pricePerPersonRegular))}/orang/hari` }))} />
-              <input className="admin-inp" type="number" min={1} placeholder="Orang" value={cateringForm.numPeople} onChange={e => setCateringForm(f => ({ ...f, numPeople: e.target.value }))} />
               <input className="admin-inp" type="number" min={1} placeholder="Hari" value={cateringForm.numDays} onChange={e => setCateringForm(f => ({ ...f, numDays: e.target.value }))} />
             </div>
             <button onClick={handleSaveCatering} disabled={!cateringForm.optionId} className="admin-btn-sm disabled:opacity-50 w-fit">Tetapkan</button>
@@ -724,7 +723,7 @@ export default function PackageBuilderPage({ params }: Props) {
       {breakdown && (
         <MetaBox title="Rincian Harga" icon={Wallet}>
           <div>
-            <p className="text-sm font-semibold text-admin-ink">Harga Jual Paket (dasar)</p>
+            <p className="text-sm font-semibold text-admin-ink">Harga Jual Paket per orang (dasar)</p>
             <p className="text-[11px] text-admin-muted/70 mt-0.5">Komponen + tiap bagian yang modenya &quot;Included&quot; saja — ini yang tampil di katalog publik.</p>
           </div>
           <div className="space-y-1.5">
@@ -747,7 +746,7 @@ export default function PackageBuilderPage({ params }: Props) {
             {breakdown.transportMode === 'included' && breakdown.includedTransportPrice != null && (
               <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">
                 <span className="text-[13px] text-admin-ink">Kendaraan — {breakdown.includedVehicleName}</span>
-                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedTransportPrice)}</span>
+                <span className="text-[13px] font-medium text-admin-ink">{rupiah(breakdown.includedTransportPerPerson ?? 0)}</span>
               </div>
             )}
             {breakdown.muthowifMode === 'included' && breakdown.includedMuthowifPrice != null && (

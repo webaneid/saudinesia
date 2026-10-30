@@ -95,6 +95,8 @@ export type CustomerDetail = CustomerRow & {
   whatsappVerifiedAt: Date | null
   /** Hanya penanda: nilai `googleSub` tak pernah dibaca. */
   googleLinked: boolean
+  /** Pelonggaran aturan visa (D5): boleh pesan visa tanpa pesawat dan hotel. */
+  allowVisaWithoutBundle: boolean
   /** Alamat rumah dirangkai satu baris; null = belum diisi. */
   address: string | null
   bookings: Array<{ id: string; bookingCode: string; status: DisplayStatus; departureDate: Date | null; totalAmount: number; createdAt: Date }>
@@ -111,6 +113,7 @@ export async function getCustomer(id: string, bookingList: ListParams = { page: 
     select: {
       ...LIST_SELECT,
       googleSub: true, // hanya dipakai untuk `!== null` di bawah — tak pernah dikembalikan
+      allowVisaWithoutBundle: true,
       address: { select: {
         type: true, fullAddress: true, postalCode: true, countryCode: true, city: true, stateRegion: true,
         village: { select: { name: true } }, district: { select: { name: true } }, regency: { select: { name: true } }, province: { select: { name: true } },
@@ -139,6 +142,7 @@ export async function getCustomer(id: string, bookingList: ListParams = { page: 
     id: u.id, fullName: u.fullName, email: u.email, phone: u.phone, whatsapp: u.whatsapp,
     whatsappVerified: u.whatsappVerifiedAt !== null, emailVerified: u.emailVerifiedAt !== null, isActive: u.isActive, createdAt: u.createdAt,
     deleted: isDeletedAccount(u.email), emailVerifiedAt: u.emailVerifiedAt, whatsappVerifiedAt: u.whatsappVerifiedAt, googleLinked: u.googleSub !== null,
+    allowVisaWithoutBundle: u.allowVisaWithoutBundle,
     address,
     bookingCount: agg.get(id)?.bookingCount ?? 0, paidIdr: agg.get(id)?.paidIdr ?? 0,
     bookings: bookingsPage.items.map(b => ({ id: b.id, bookingCode: b.bookingCode, status: displayStatusOf(b), departureDate: b.departureDate, totalAmount: Number(b.totalAmount), createdAt: b.createdAt })), bookingsMeta: bookingsPage.meta,

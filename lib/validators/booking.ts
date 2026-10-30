@@ -58,6 +58,28 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
     hajiProductId: z.string().uuid(),
     numPersons:    z.number().int().min(1),
   }),
+  // Tiket pesawat (docs/arsitektur-booking-engine-v2.md §10.2): tanggal = tanggal terbang sungguhan, harus di periode jadwal (diperiksa server). Pergi-pulang = dua item.
+  z.object({
+    itemType: z.literal('flight'),
+    flightScheduleId: z.string().uuid(),
+    departureDate:    z.string().date(),
+    numPassengers:    z.number().int().min(1).max(2000),
+  }),
+  // Paket Umroh (§10.2): harga PER ORANG × numPeople; `choices` = pilihan untuk komponen `user_choice` (di luar daftar opsi paket → 422).
+  z.object({
+    itemType: z.literal('package'),
+    packageId:     z.string().uuid(),
+    departureDate: z.string().date(),
+    numPeople:     z.number().int().min(1).max(2000),
+    choices: z.object({
+      hotelMakkahScheduleId:  z.string().uuid().optional(),
+      hotelMadinahScheduleId: z.string().uuid().optional(),
+      transportPricingId:     z.string().uuid().optional(),
+      visaProductId:          z.string().uuid().optional(),
+      flightScheduleId:       z.string().uuid().optional(),
+      cateringOptionId:       z.string().uuid().optional(),
+    }).strict().default({}),
+  }),
 ])
 
 export const createBookingSchema = z.object({
@@ -126,7 +148,7 @@ export const createBookingSchema = z.object({
   const found = idsWithVisa.length > 0
     ? await prisma.visaProduct.findMany({
         where: { id: { in: idsWithVisa }, isActive: true },
-        select: { id: true, requiredComponents: true },
+        select: { id: true },
       })
     : []
   const foundById = new Map(found.map(f => [f.id, f]))
@@ -142,33 +164,8 @@ export const createBookingSchema = z.object({
     }
   })
 
-  // Validasi silang requiredComponents (docs/arsitektur-visa.md §9.1-9.2): kalau varian visa yang
-  // dipilih mewajibkan hotel/transport, request tanpa komponen itu ditolak — bukan cuma
-  // mengandalkan UI wizard (lihat rencana Step 1 di docs/arsitektur-visa.md §9.6). Otomatis aman
-  // untuk pilgrim tanpa visa — requiredComponentsUnion cuma terisi dari `found`, yang cuma berasal
-  // dari pilgrim yang benar-benar pilih visa (§6 Step 6a) — checkout Transport-only tidak pernah
-  // dipaksa punya hotel/transport gara-gara pilgrim lain di booking yang sama.
-  const requiredComponentsUnion = new Set<string>()
-  for (const product of found.values()) {
-    const components = Array.isArray(product.requiredComponents) ? product.requiredComponents as string[] : []
-    components.forEach(c => requiredComponentsUnion.add(c))
-  }
-  const hasHotelItem     = data.items.some(i => i.itemType === 'hotel')
-  const hasTransportItem = data.items.some(i => i.itemType === 'transport')
-  if (requiredComponentsUnion.has('hotel') && !hasHotelItem) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Varian visa yang dipilih mewajibkan hotel — pilih hotel Makkah atau Madinah',
-      path: ['items'],
-    })
-  }
-  if (requiredComponentsUnion.has('transport') && !hasTransportItem) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: 'Varian visa yang dipilih mewajibkan transport — pilih minimal satu transport',
-      path: ['items'],
-    })
-  }
+  // Aturan ketergantungan visa TIDAK di sini lagi: dievaluasi lib/booking/rules.ts dari route (422 + daftar pelanggaran, bisa
+  // dilonggarkan per pelanggan, dan dipenuhi isi Paket) — docs/arsitektur-booking-engine-v2.md §10.2.
 
   // docs/arsitektur-manifest.md §3 — field wajib ditentukan ManifestFieldRequirement produk yang
   // relevan (visa per pilgrim YANG PILIH visa; "core" — lib/manifest/constants.ts — untuk pilgrim

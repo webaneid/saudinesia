@@ -10,32 +10,34 @@ datasource db {
 // ─── USERS & AUTH ────────────────────────────────────────────
 
 model User {
-  id                 String    @id @default(uuid())
-  email              String    @unique
-  passwordHash       String
-  fullName           String
+  id                     String    @id @default(uuid())
+  email                  String    @unique
+  passwordHash           String
+  fullName               String
   // Kontak (docs/arsitektur-auth.md §3.1): digit E.164 tanpa "+", TIDAK diverifikasi dan TIDAK unik — bukan identitas.
-  phone              String?
-  whatsapp           String?
+  phone                  String?
+  whatsapp               String?
   // Verifikasi WhatsApp lewat pesan MASUK (ADR-0002, docs/arsitektur-whatsapp-verifikasi.md). WhatsApp hanya dikirim ke nomor terverifikasi.
   // `verifiedWhatsapp` = salinan nomor yang terbukti, kolom UNIK: satu nomor hanya untuk satu akun TERVERIFIKASI (nomor belum terverifikasi boleh sama).
   // Prisma tak bisa mengekspresikan indeks unik parsial, jadi keunikan dicapai lewat kolom terpisah yang hanya terisi saat terverifikasi.
   // Mengubah `whatsapp` mengosongkan keduanya.
-  whatsappVerifiedAt DateTime?
-  verifiedWhatsapp   String?   @unique
+  whatsappVerifiedAt     DateTime?
+  verifiedWhatsapp       String?   @unique
   // Bukti email milik pemilik akun (tautan verifikasi / reset password / Google). Login mensyaratkan ini DAN isActive.
-  emailVerifiedAt    DateTime?
+  emailVerifiedAt        DateTime?
   // Identitas Google (klaim `sub` ID token — stabil, TIDAK berubah walau emailnya berubah). Hanya jamaah; staf tak pernah tersambung.
-  googleSub          String?   @unique
-  role               UserRole  @default(pilgrim)
+  googleSub              String?   @unique
+  role                   UserRole  @default(pilgrim)
   // Hanya "boleh login (tidak dinonaktifkan admin)" — BUKAN lagi penanda "belum verifikasi" (itu emailVerifiedAt).
-  isActive           Boolean   @default(true)
+  isActive               Boolean   @default(true)
   // Pencabutan sesi (SEC-18, docs/arsitektur-auth.md §11): JWT membawa `ver`; getSession() menolak token yang `ver`-nya ≠ kolom ini.
   // Dinaikkan saat password diganti/direset, akun dinonaktifkan, peran diubah, atau akun Google disambung ke akun lama.
-  sessionVersion     Int       @default(0)
-  addressId          String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  sessionVersion         Int       @default(0)
+  // Pelonggaran aturan visa per pelanggan (docs/arsitektur-booking-engine-v2.md D5/§10.2): pelanggaran `requiredComponents` visa turun jadi peringatan.
+  allowVisaWithoutBundle Boolean   @default(false)
+  addressId              String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   address                   Address?                 @relation(fields: [addressId], references: [id])
   bookings                  Booking[]
@@ -333,8 +335,9 @@ model FlightSchedule {
   isActive      Boolean  @default(true)
   createdAt     DateTime @default(now())
 
-  route              FlightRoute     @relation(fields: [routeId], references: [id])
+  route              FlightRoute      @relation(fields: [routeId], references: [id])
   bookingFlights     BookingFlight[]
+  bookingPackages    BookingPackage[] // kursi yang ditahan item Paket Umroh (tiket included/pilihan)
   includedInPackages Package[] // paket umroh yang mengunci schedule ini sbg tiket "included" (docs/arsitektur-paket-umroh.md §4)
 
   @@map("flight_schedules")
@@ -451,8 +454,9 @@ model VisaProduct {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
 
-  // BARU (docs/arsitektur-visa.md §9.2) — belum dipakai wizard/booking, lihat gap di docs/arsitektur-visa.md §9.5
-  requiredComponents Json @default("[]") // ["hotel","transport"] dst — komponen booking lain yang wajib untuk varian ini
+  // Komponen yang WAJIB ada di booking yang sama (docs/arsitektur-booking-engine-v2.md §4.1/§10.2): [{type:'flight'}, {type:'hotel'}, {type:'transport', categories?, tripIds?}].
+  // Bentuk dijaga `visaRequiredComponentsSchema` (lib/validators/visa.ts); dievaluasi HANYA oleh lib/booking/rules.ts.
+  requiredComponents Json @default("[]")
 
   visaApplications   VisaApplication[]
   includedInPackages Package[] // paket umroh yang mengunci produk ini sbg visa "included" (docs/arsitektur-paket-umroh.md §4)
@@ -523,14 +527,14 @@ model Package {
   hotelMakkahMode               PriceVariableMode @default(none)
   includedHotelMakkahScheduleId String?
   includedHotelMakkahNights     Int?
-  includedHotelMakkahNumRooms   Int?
+  includedHotelMakkahOccupancy  Int? // orang per kamar — harga per orang = malam × harga kamar ÷ isi (Fase 4 §10.2)
   includedHotelMakkahPrice      Decimal?          @db.Decimal(14, 2)
 
   // Hotel Madinah
   hotelMadinahMode               PriceVariableMode @default(none)
   includedHotelMadinahScheduleId String?
   includedHotelMadinahNights     Int?
-  includedHotelMadinahNumRooms   Int?
+  includedHotelMadinahOccupancy  Int? // orang per kamar
   includedHotelMadinahPrice      Decimal?          @db.Decimal(14, 2)
 
   // Transport (pola identik TourPackage §12.3)
@@ -564,6 +568,7 @@ model Package {
   hotelOptions    PackageHotelOption[]
   visaOptions     PackageVisaOption[]
   cateringOptions PackageCateringOption[]
+  bookings        BookingPackage[]
 
   transportTrip                TransportTrip?     @relation(fields: [transportTripId], references: [id])
   includedTransportPricing     TransportPricing?  @relation(fields: [includedTransportPricingId], references: [id])
@@ -785,6 +790,7 @@ model Booking {
   tourPackages   BookingTourPackage[]
   services       BookingService[]
   haji           BookingHaji[]
+  packages       BookingPackage[]
   priceSnapshots PriceSnapshot[]
   adjustments    BookingAdjustment[]
   costActuals    CostActual[]
@@ -1003,6 +1009,28 @@ model BookingHaji {
   hajiProduct HajiProduct @relation(fields: [hajiProductId], references: [id])
 
   @@map("booking_haji")
+}
+
+// Item Paket Umroh (docs/arsitektur-booking-engine-v2.md §10.2): harga PER ORANG × numPeople, diurai satu baris per komponen di price_snapshots.
+// Tanggal dipilih saat booking; `returnDate` = berangkat + Σ malam hotel paket. Hanya kursi tiket yang ditahan (`flightScheduleId`).
+model BookingPackage {
+  id               String   @id @default(uuid())
+  bookingId        String
+  packageId        String
+  departureDate    DateTime @db.Date
+  returnDate       DateTime @db.Date
+  numPeople        Int
+  flightScheduleId String?
+  choices          Json     @default("{}") // id pilihan komponen user_choice (tanpa data pribadi)
+  totalPrice       Decimal  @db.Decimal(14, 2)
+
+  booking        Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  package        Package         @relation(fields: [packageId], references: [id])
+  flightSchedule FlightSchedule? @relation(fields: [flightScheduleId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId])
+  @@index([packageId])
+  @@map("booking_packages")
 }
 
 // ─── PAYMENTS & REFUNDS ───────────────────────────────────────

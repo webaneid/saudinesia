@@ -58,9 +58,13 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
 
-    // Jadwal yang masih punya booking (walau belum ada pemanggil di fase ini, siap-siap kalau
-    // ada) — nonaktifkan (soft), bukan hapus fisik. docs/arsitektur-tiket-pesawat.md §9 poin 8.
-    const bookingCount = await prisma.bookingFlight.count({ where: { flightScheduleId: id } })
+    // Jadwal yang pernah dipesan (item tiket ATAU Paket Umroh bertiket, FK Restrict — booking engine v2 §10.2) — nonaktifkan (soft), bukan hapus fisik.
+    // docs/arsitektur-tiket-pesawat.md §9 poin 8.
+    const [flights, packages] = await Promise.all([
+      prisma.bookingFlight.count({ where: { flightScheduleId: id } }),
+      prisma.bookingPackage.count({ where: { flightScheduleId: id } }),
+    ])
+    const bookingCount = flights + packages
     if (bookingCount > 0) {
       const schedule = await prisma.flightSchedule.update({ where: { id }, data: { isActive: false } })
       return NextResponse.json(ok(schedule))

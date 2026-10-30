@@ -108,10 +108,10 @@ export type CompositePart = { lineKey: string; description: string; qty: number;
 /**
  * Baris untuk produk KOMPOSIT (Paket Ziarah, Haji): harga dasar = JUAL TITIK HARGA pemiliknya (harga manual menang). Terurai menjadi satu baris per Komponen Biaya
  * (modal = HPP, jual = jual komponen), satu per bagian `included`, ditambah baris `penyesuaian` = jual titik − Σ baris (tak ditulis bila 0) sehingga Σ baris SELALU = jual titik × pengali.
- * `multiplier` = jumlah satuan yang dibeli (Haji: orang; paket ziarah: 1 — harga per paket).
+ * `multiplier` = jumlah satuan yang dibeli (Haji dan Paket Umroh: orang; paket ziarah: 1 — harga per paket).
  * Titik harga tak ada → `ItemNotBookableError`. Jual titik 0 diizinkan (paket yang seluruhnya pilihan pilgrim); pemanggil menolak item bertotal 0.
  */
-export async function compositeLines(db: Db, o: { ownerType: 'tour_package' | 'haji'; ownerId: string; /** untuk pesan galat: "Harga {what} belum ditetapkan" */ what: string; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
+export async function compositeLines(db: Db, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat: "Harga {what} belum ditetapkan" */ what: string; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
   const point = await readPoint(db, o.ownerType, o.ownerId, '')
   if (!point) throw new ItemNotBookableError(`Harga ${o.what} belum ditetapkan`)
   const { components } = await computeCostComponents(o.ownerType, o.ownerId)

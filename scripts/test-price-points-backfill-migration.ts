@@ -117,7 +117,7 @@ async function legacyWorld(db: PrismaClient): Promise<Record<string, string>> {
   const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090 } })
   await setLegacy(db, 'haji_products', haji.id, { price: 4_200_000 })
   const haji0 = await db.hajiProduct.create({ data: { name: 'HJ0', hajiType: 'reguler', year: 2091 } })
-  const pkg = await db.package.create({ data: { name: 'P' } })
+  const pkg = await db.package.create({ data: { name: 'P' }, select: { id: true } })
   await setLegacy(db, 'packages', pkg.id, { price: 6_600_000 })
   const tour = await db.tourPackage.create({ data: { name: 'Z' } })
   await setLegacy(db, 'tour_packages', tour.id, { price: 350_000 })

@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 
 type Tx = Prisma.TransactionClient
-export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule'
+export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'customer_policy'
 export type AuditAction = 'create' | 'update' | 'delete' | 'toggle'
 
 /** Tulis satu baris jejak (SEC-109) DI DALAM transaksi perubahan — tanpa jejak, perubahan ikut dibatalkan. Tabel append-only (trigger). */

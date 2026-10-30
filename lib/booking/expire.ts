@@ -47,7 +47,7 @@ export async function expireOverdueBookings(now: Date = new Date()): Promise<Exp
 async function loadForExpiry(tx: Prisma.TransactionClient, id: string): Promise<CancellableBooking | null> {
   const booking = await tx.booking.findUnique({
     where: { id },
-    include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true },
+    include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true },
   })
   if (!booking || booking.status !== 'active' || booking.confirmedAt !== null) return null
   const activity = await tx.payment.count({ where: { bookingId: id, status: { in: [...PAYMENT_ACTIVITY] } } })

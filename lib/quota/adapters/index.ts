@@ -5,6 +5,7 @@ import { cateringAdapter } from './catering'
 import { tourPackageAdapter } from './tourPackage'
 import { visaAdapter } from './visa'
 import { hajiAdapter } from './haji'
+import { flightAdapter, packageAdapter } from './flight'
 
 // Registry lengkap secara statis (object literal, bukan Record<K,V> generik seragam — tiap
 // adapter beroperasi atas baris tipenya sendiri, lihat lib/quota/adapters/types.ts) — TypeScript
@@ -20,6 +21,8 @@ export const quotaAdapters = {
   tourPackage: tourPackageAdapter,
   visa: visaAdapter,
   haji: hajiAdapter,
+  flight: flightAdapter,
+  package: packageAdapter,
 }
 
 export { reserveHotel } from './hotel'

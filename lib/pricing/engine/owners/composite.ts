@@ -71,7 +71,7 @@ export const packageOwner: PriceOwner = {
         cost: async () => {
           const h = b.hotelMakkah
           const c = h ? await pointCost('hotel', h.scheduleId) : null
-          return h && c != null ? h.nights * h.numRooms * c : null
+          return h && c != null ? h.nights * c / h.occupancy : null // per orang (paket dijual per orang)
         },
       },
       {
@@ -79,10 +79,16 @@ export const packageOwner: PriceOwner = {
         cost: async () => {
           const h = b.hotelMadinah
           const c = h ? await pointCost('hotel', h.scheduleId) : null
-          return h && c != null ? h.nights * h.numRooms * c : null
+          return h && c != null ? h.nights * c / h.occupancy : null // per orang (paket dijual per orang)
         },
       },
-      { price: included(b.transportMode, b.includedTransportPrice), cost: () => (b.includedTransportPricingId ? pointCost('transport', b.includedTransportPricingId) : Promise.resolve(null)) },
+      {
+        price: included(b.transportMode, b.includedTransportPerPerson),
+        cost: async () => {
+          const c = b.includedTransportPricingId ? await pointCost('transport', b.includedTransportPricingId) : null
+          return c != null && b.includedTransportPrice && b.includedTransportPerPerson ? c * b.includedTransportPerPerson / b.includedTransportPrice : null // bagian per orang, rasio yang sama dengan jual
+        },
+      },
       { price: included(b.muthowifMode, b.includedMuthowifPrice), cost: async () => null }, // satuan muthowif dalam paket belum baku → modal belum lengkap
       { price: included(b.visaMode, b.includedVisaPrice), cost: () => (b.includedVisaProductId ? cheapestVariantCost('visa', b.includedVisaProductId) : Promise.resolve(null)) },
       { price: included(b.flightMode, b.includedFlightPrice), cost: () => (b.includedFlightScheduleId ? pointCost('flight', b.includedFlightScheduleId) : Promise.resolve(null)) },

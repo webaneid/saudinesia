@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
-import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown } from 'lucide-react'
+import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
@@ -33,6 +33,8 @@ export default async function BookingDetailPage({ params }: Props) {
       muthowif:   { include: { muthowif: true } },
       catering:   { include: { cateringOption: true } },
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
+      flights:    { include: { flightSchedule: { include: { route: true } } } },
+      packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
     },
@@ -158,6 +160,36 @@ export default async function BookingDetailPage({ params }: Props) {
                 <p className="text-muted-foreground capitalize">{h.hotelRoomSchedule.period.hotel.city} · {h.nights} malam · {h.numRooms} kamar {h.hotelRoomSchedule.roomType.name}</p>
               </div>
               <p className="font-semibold">{formatRupiah(Number(h.totalPrice))}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {booking.packages.length > 0 && (
+        <div className="rounded-xl border bg-card p-5 space-y-3">
+          <h3 className="font-semibold flex items-center gap-2"><Package className="h-4 w-4 text-primary" /> Paket Umroh</h3>
+          {booking.packages.map(bp => (
+            <div key={bp.id} className="flex justify-between text-sm">
+              <div>
+                <p className="font-medium">{bp.package.name}</p>
+                <p className="text-muted-foreground">{formatCalendarDate(bp.departureDate, DATE_NUMERIC)} – {formatCalendarDate(bp.returnDate, DATE_NUMERIC)} · {bp.numPeople} orang</p>
+              </div>
+              <p className="font-semibold">{formatRupiah(Number(bp.totalPrice))}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {booking.flights.length > 0 && (
+        <div className="rounded-xl border bg-card p-5 space-y-3">
+          <h3 className="font-semibold flex items-center gap-2"><Plane className="h-4 w-4 text-primary" /> Tiket Pesawat</h3>
+          {booking.flights.map(bf => (
+            <div key={bf.id} className="flex justify-between text-sm">
+              <div>
+                <p className="font-medium">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</p>
+                <p className="text-muted-foreground">{formatCalendarDate(bf.departureDate, DATE_NUMERIC)} · {bf.numPassengers} penumpang</p>
+              </div>
+              <p className="font-semibold">{formatRupiah(Number(bf.totalPrice))}</p>
             </div>
           ))}
         </div>

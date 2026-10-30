@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyUser } from './lib/legacyUser'
 
 await assertThrowawayDb()
 
@@ -95,7 +96,7 @@ async function scenarioWith(fixtures: (db: PrismaClient) => Promise<Record<strin
 }
 
 let seq = 0
-const mkUser = (db: PrismaClient) => db.user.create({ data: { email: `m${Date.now()}${++seq}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+const mkUser = (db: PrismaClient) => legacyUser(db, { email: `m${Date.now()}${++seq}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
 const mkBooking = (db: PrismaClient, userId: string, totalAmount: number) =>
   db.booking.create({ data: { bookingCode: `MIG${Date.now()}${++seq}`, userId, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount }, select: { id: true } })
 

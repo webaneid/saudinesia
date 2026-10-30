@@ -184,11 +184,11 @@ await t('HANGUS tanpa refund; pembatalan biasa: refund dihitung dari uang yang S
   const pendingOnly = await mk({ dep: far, total: 5_000_000, pays: ['pending', 'rejected'] })
   assert.deepEqual(mine(await expireOverdueBookings(new Date('2090-12-31T01:00:00Z'))).filter(i => i === toExpire), [toExpire])
   assert.equal(await prisma.refund.count({ where: { bookingId: toExpire } }), 0, 'hangus: tanpa refund')
-  const cancelled = await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id: toCancel }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true } }), 'uji'))
+  const cancelled = await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id: toCancel }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } }), 'uji'))
   assert.equal(cancelled.refundAmount, 5_000_000)
   assert.equal(await prisma.refund.count({ where: { bookingId: toCancel } }), 1)
   for (const id of [unpaid, pendingOnly]) {
-    const r = await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true } }), 'uji'))
+    const r = await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } }), 'uji'))
     assert.equal(r.refundAmount, 0, 'belum ada uang masuk → refund 0')
     assert.equal(await prisma.refund.count({ where: { bookingId: id } }), 0, 'tak ada baris Refund untuk uang yang tak pernah diterima')
   }

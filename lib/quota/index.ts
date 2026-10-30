@@ -1,4 +1,5 @@
 // All quota helpers MUST be called inside prisma.$transaction() to prevent race conditions.
+import { ItemNotBookableError } from '@/lib/booking/errors'
 import type { Prisma } from '@prisma/client'
 import { formatCalendarDate } from '@/lib/time'
 
@@ -58,14 +59,14 @@ export async function releaseTransportQuota(tx: Tx, quotaId: string, seats: numb
   })
 }
 
-// Belum ada pemanggil di codebase — infrastruktur kuota disiapkan lebih dulu dari integrasi wizard
-// booking (di luar scope sesi ini, lihat docs/arsitektur-tiket-pesawat.md §2.1), didokumentasikan
-// eksplisit supaya tidak jadi gap tersembunyi seperti insiden confirmMuthowifQuota().
+// Kursi tiket: dipanggil POST /bookings (item `flight` dan Paket Umroh bertiket); confirm/release lewat lib/quota/adapters/flight.ts (§10.2 booking engine v2).
 export async function reserveFlightQuota(tx: Tx, scheduleId: string, seats: number): Promise<void> {
-  const schedule = await tx.flightSchedule.findUniqueOrThrow({
+  const schedule = await tx.flightSchedule.findUnique({
     where: { id: scheduleId },
-    select: { totalSeats: true, pendingSeats: true, bookedSeats: true },
+    select: { totalSeats: true, pendingSeats: true, bookedSeats: true, isActive: true },
   })
+  // Jadwal tak ada / nonaktif = item tak dapat dijual (422), bukan galat server — dicek sebelum kursi ditahan.
+  if (!schedule || !schedule.isActive) throw new ItemNotBookableError('Jadwal tiket pesawat tidak tersedia')
   const available = schedule.totalSeats - schedule.pendingSeats - schedule.bookedSeats
   if (available < seats) throw new Error(`Flight quota insufficient: need ${seats}, have ${available}`)
   await tx.flightSchedule.update({

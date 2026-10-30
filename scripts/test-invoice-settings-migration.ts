@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyUser } from './lib/legacyUser'
 
 await assertThrowawayDb()
 
@@ -100,7 +101,7 @@ const q1 = async (name: string, sql: string) => (await query(name, sql))
 
 // SQL mentah: klien Prisma proyek sudah tak mengenal tabel yang akan dibuang.
 async function seedUser(db: PrismaClient) {
-  return db.user.create({ data: { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+  return legacyUser(db, { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
 }
 const exists = async (name: string, rel: string) => Number((await q1(name, `select count(*)::int as n from information_schema.tables where table_name = '${rel}'`))[0]!.n) === 1
 const colExists = async (name: string) => Number((await q1(name, `select count(*)::int as n from information_schema.columns where table_name = 'bookings' and column_name = 'groupId'`))[0]!.n) === 1
@@ -108,7 +109,7 @@ const colExists = async (name: string) => Number((await q1(name, `select count(*
 console.log('== skenario ==')
 
 async function seedBooking(db: PrismaClient, code: string) {
-  const u = await db.user.create({ data: { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+  const u = await legacyUser(db, { email: `m${Date.now()}${Math.random().toString(36).slice(2, 6)}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
   await db.booking.create({ data: { bookingCode: code, userId: u.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 1 }, select: { id: true } })
   return u.id
 }

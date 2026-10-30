@@ -6,14 +6,18 @@ export type { ComponentBreakdown }
 
 export type VehicleOption = { transportPricingId: string; vehicleName: string; vehiclePrice: number }
 
+// Paket Umroh dijual PER ORANG (docs/arsitektur-booking-engine-v2.md §10.2, keputusan pemilik P1): setiap angka `*PerPerson`/`totalPrice` di sini = untuk SATU orang.
+// Kamar dan kendaraan dibagi rata: harga per orang = harga unit ÷ isi (dibulatkan ke atas ke rupiah — tak pernah menjual di bawah harga unit).
+export const perPersonShare = (unitTotal: number, occupancy: number): number => Math.ceil(unitTotal / Math.max(1, occupancy))
+
 export type HotelSlotBreakdown = {
   scheduleId: string
   hotelName: string
   roomTypeName: string
   nights: number
-  numRooms: number
-  pricePerNight: number
-  totalPrice: number
+  occupancy: number // orang per kamar
+  pricePerNight: number // harga KAMAR per malam
+  totalPrice: number // per orang = malam × harga kamar ÷ isi
 } | null
 
 export type HotelSlotOption = {
@@ -21,12 +25,14 @@ export type HotelSlotOption = {
   hotelName: string
   roomTypeName: string
   nights: number
-  pricePerNight: number // live dari HotelRoomSchedule.price
+  pricePerNight: number // harga KAMAR per malam, live dari titik harga
+  occupancy: number // isi kamar bawaan tipe kamar (RoomType.defaultCapacity)
+  perPersonPrice: number // malam × harga kamar ÷ isi
 }
 
 export type VisaOption = { visaProductId: string; name: string; price: number }
 export type FlightOption = { flightScheduleId: string; label: string; price: number }
-export type CateringOptionRow = { cateringOptionId: string; name: string; numPeople: number; numDays: number; price: number }
+export type CateringOptionRow = { cateringOptionId: string; name: string; numPeople: number; numDays: number; price: number } // price = PER ORANG (hari × harga per orang-hari)
 
 export type PackageBreakdown = {
   components: ComponentBreakdown[]
@@ -42,8 +48,13 @@ export type PackageBreakdown = {
 
   transportMode: 'included' | 'user_choice' | 'none'
   includedTransportPricingId: string | null
-  includedTransportPrice: number | null
+  includedTransportPrice: number | null // harga KENDARAAN (masukan tersimpan)
+  includedTransportPerPerson: number | null // harga kendaraan ÷ kapasitas
   includedVehicleName: string | null
+  includedTripId: string | null
+  includedTripCategory: string | null
+  tripCategory: string | null // kategori jurusan trip sumber pilihan (user_choice)
+  transportTripId: string | null // trip sumber pilihan (user_choice)
   vehicleOptions: VehicleOption[]
 
   muthowifMode: 'included' | 'user_choice' | 'none'
@@ -82,7 +93,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
     where: { id: packageId },
     include: {
       transportTrip: { include: { pricing: { where: { isActive: true }, include: { vehicle: true } } } },
-      includedTransportPricing: { include: { vehicle: true } },
+      includedTransportPricing: { include: { vehicle: true, trip: { select: { category: true } } } },
       includedHotelMakkahSchedule: { include: { period: { include: { hotel: true } }, roomType: true } },
       includedHotelMadinahSchedule: { include: { period: { include: { hotel: true } }, roomType: true } },
       hotelOptions: { include: { hotelRoomSchedule: { include: { period: { include: { hotel: true } }, roomType: true } } } },
@@ -109,15 +120,16 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
   ])
 
   // Hotel Makkah
-  const hotelMakkah: HotelSlotBreakdown = pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahNumRooms != null && pkg.includedHotelMakkahPrice != null
+  const hotelMakkahOcc = pkg.includedHotelMakkahOccupancy ?? pkg.includedHotelMakkahSchedule?.roomType.defaultCapacity ?? 1
+  const hotelMakkah: HotelSlotBreakdown = pkg.includedHotelMakkahSchedule && pkg.includedHotelMakkahNights != null && pkg.includedHotelMakkahPrice != null
     ? {
         scheduleId: pkg.includedHotelMakkahSchedule.id,
         hotelName: pkg.includedHotelMakkahSchedule.period.hotel.name,
         roomTypeName: pkg.includedHotelMakkahSchedule.roomType.name,
         nights: pkg.includedHotelMakkahNights,
-        numRooms: pkg.includedHotelMakkahNumRooms,
+        occupancy: hotelMakkahOcc,
         pricePerNight: Number(pkg.includedHotelMakkahPrice),
-        totalPrice: pkg.includedHotelMakkahNights * pkg.includedHotelMakkahNumRooms * Number(pkg.includedHotelMakkahPrice),
+        totalPrice: perPersonShare(pkg.includedHotelMakkahNights * Number(pkg.includedHotelMakkahPrice), hotelMakkahOcc),
       }
     : null
   const hotelMakkahOptions: HotelSlotOption[] = pkg.hotelMakkahMode === 'user_choice'
@@ -127,19 +139,22 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
         roomTypeName: o.hotelRoomSchedule.roomType.name,
         nights: o.nights,
         pricePerNight: hotelPrice.get(o.hotelRoomScheduleId) ?? 0,
+        occupancy: o.hotelRoomSchedule.roomType.defaultCapacity,
+        perPersonPrice: perPersonShare(o.nights * (hotelPrice.get(o.hotelRoomScheduleId) ?? 0), o.hotelRoomSchedule.roomType.defaultCapacity),
       }))
     : []
 
   // Hotel Madinah
-  const hotelMadinah: HotelSlotBreakdown = pkg.includedHotelMadinahSchedule && pkg.includedHotelMadinahNights != null && pkg.includedHotelMadinahNumRooms != null && pkg.includedHotelMadinahPrice != null
+  const hotelMadinahOcc = pkg.includedHotelMadinahOccupancy ?? pkg.includedHotelMadinahSchedule?.roomType.defaultCapacity ?? 1
+  const hotelMadinah: HotelSlotBreakdown = pkg.includedHotelMadinahSchedule && pkg.includedHotelMadinahNights != null && pkg.includedHotelMadinahPrice != null
     ? {
         scheduleId: pkg.includedHotelMadinahSchedule.id,
         hotelName: pkg.includedHotelMadinahSchedule.period.hotel.name,
         roomTypeName: pkg.includedHotelMadinahSchedule.roomType.name,
         nights: pkg.includedHotelMadinahNights,
-        numRooms: pkg.includedHotelMadinahNumRooms,
+        occupancy: hotelMadinahOcc,
         pricePerNight: Number(pkg.includedHotelMadinahPrice),
-        totalPrice: pkg.includedHotelMadinahNights * pkg.includedHotelMadinahNumRooms * Number(pkg.includedHotelMadinahPrice),
+        totalPrice: perPersonShare(pkg.includedHotelMadinahNights * Number(pkg.includedHotelMadinahPrice), hotelMadinahOcc),
       }
     : null
   const hotelMadinahOptions: HotelSlotOption[] = pkg.hotelMadinahMode === 'user_choice'
@@ -149,12 +164,15 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
         roomTypeName: o.hotelRoomSchedule.roomType.name,
         nights: o.nights,
         pricePerNight: hotelPrice.get(o.hotelRoomScheduleId) ?? 0,
+        occupancy: o.hotelRoomSchedule.roomType.defaultCapacity,
+        perPersonPrice: perPersonShare(o.nights * (hotelPrice.get(o.hotelRoomScheduleId) ?? 0), o.hotelRoomSchedule.roomType.defaultCapacity),
       }))
     : []
 
   // Transport
   const includedTransportPrice = pkg.transportMode === 'included' && pkg.includedTransportPrice != null ? Number(pkg.includedTransportPrice) : null
   const includedVehicleName = pkg.transportMode === 'included' && pkg.includedTransportPricing ? pkg.includedTransportPricing.vehicle.name : null
+  const includedTransportPerPerson = includedTransportPrice != null && pkg.includedTransportPricing ? perPersonShare(includedTransportPrice, pkg.includedTransportPricing.vehicle.capacity) : null
   const vehicleOptions: VehicleOption[] = pkg.transportMode === 'user_choice'
     ? (pkg.transportTrip?.pricing.map(p => ({ transportPricingId: p.id, vehicleName: p.vehicle.name, vehiclePrice: transportPrice.get(p.id) ?? 0 })) ?? [])
     : []
@@ -192,7 +210,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
         name: o.cateringOption.name,
         numPeople: o.numPeople,
         numDays: o.numDays,
-        price: o.numPeople * o.numDays * (cateringPrice.get(o.cateringOptionId)?.regular ?? 0),
+        price: o.numDays * (cateringPrice.get(o.cateringOptionId)?.regular ?? 0), // per orang (paket dijual per orang)
       }))
     : []
 
@@ -202,7 +220,11 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
     hotelMadinahMode: pkg.hotelMadinahMode, hotelMadinah, hotelMadinahOptions,
     transportMode: pkg.transportMode,
     includedTransportPricingId: pkg.transportMode === 'included' ? pkg.includedTransportPricingId : null,
-    includedTransportPrice, includedVehicleName, vehicleOptions,
+    includedTransportPrice, includedTransportPerPerson, includedVehicleName, vehicleOptions,
+    includedTripId: pkg.transportMode === 'included' ? pkg.includedTransportPricing?.tripId ?? null : null,
+    includedTripCategory: pkg.transportMode === 'included' ? pkg.includedTransportPricing?.trip.category ?? null : null,
+    tripCategory: pkg.transportTrip?.category ?? null,
+    transportTripId: pkg.transportTripId,
     muthowifMode: pkg.muthowifMode, includedMuthowifPrice, currentMuthowifPrice,
     visaMode: pkg.visaMode,
     includedVisaProductId: pkg.visaMode === 'included' ? pkg.includedVisaProductId : null,
@@ -219,7 +241,7 @@ export async function computePackageBreakdown(packageId: string): Promise<Packag
 }
 
 /**
- * Harga jual paket DASAR — komponen custom + tiap komponen yang mode-nya 'included' saja. TIDAK
+ * Harga jual paket DASAR PER ORANG — komponen custom + tiap komponen yang mode-nya 'included' saja. TIDAK
  * PERNAH menyertakan 'user_choice' (docs/arsitektur-paket-umroh.md §5). Dipakai untuk cache
  * Package.price ("mulai dari") dan basis penjumlahan booking nanti.
  */
@@ -227,7 +249,7 @@ export function baseTotal(b: PackageBreakdown): number {
   return b.componentsTotalSellPrice
     + (b.hotelMakkahMode === 'included' && b.hotelMakkah ? b.hotelMakkah.totalPrice : 0)
     + (b.hotelMadinahMode === 'included' && b.hotelMadinah ? b.hotelMadinah.totalPrice : 0)
-    + (b.transportMode === 'included' ? (b.includedTransportPrice ?? 0) : 0)
+    + (b.transportMode === 'included' ? (b.includedTransportPerPerson ?? 0) : 0)
     + (b.muthowifMode === 'included' ? (b.includedMuthowifPrice ?? 0) : 0)
     + (b.visaMode === 'included' ? (b.includedVisaPrice ?? 0) : 0)
     + (b.flightMode === 'included' ? (b.includedFlightPrice ?? 0) : 0)

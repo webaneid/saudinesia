@@ -24,12 +24,12 @@ const updateSchema = z.object({
   hotelMakkahMode:               modeEnum.optional(),
   includedHotelMakkahScheduleId: z.string().min(1).nullable().optional(),
   includedHotelMakkahNights:     z.number().int().min(1).nullable().optional(),
-  includedHotelMakkahNumRooms:   z.number().int().min(1).nullable().optional(),
+  includedHotelMakkahOccupancy:  z.number().int().min(1).max(20).nullable().optional(), // orang per kamar (paket dijual per orang)
 
   hotelMadinahMode:               modeEnum.optional(),
   includedHotelMadinahScheduleId: z.string().min(1).nullable().optional(),
   includedHotelMadinahNights:     z.number().int().min(1).nullable().optional(),
-  includedHotelMadinahNumRooms:   z.number().int().min(1).nullable().optional(),
+  includedHotelMadinahOccupancy:  z.number().int().min(1).max(20).nullable().optional(),
 
   transportMode:              modeEnum.optional(),
   transportTripId:            z.string().min(1).nullable().optional(),
@@ -53,8 +53,8 @@ const updateSchema = z.object({
 // Field yang mempengaruhi harga jual paket dasar (docs/arsitektur-paket-umroh.md §5) — perubahan
 // salah satu ini WAJIB memicu refresh cache.
 const PRICE_AFFECTING_FIELDS = [
-  'hotelMakkahMode', 'includedHotelMakkahScheduleId', 'includedHotelMakkahNights', 'includedHotelMakkahNumRooms',
-  'hotelMadinahMode', 'includedHotelMadinahScheduleId', 'includedHotelMadinahNights', 'includedHotelMadinahNumRooms',
+  'hotelMakkahMode', 'includedHotelMakkahScheduleId', 'includedHotelMakkahNights', 'includedHotelMakkahOccupancy',
+  'hotelMadinahMode', 'includedHotelMadinahScheduleId', 'includedHotelMadinahNights', 'includedHotelMadinahOccupancy',
   'transportMode', 'transportTripId', 'includedTransportPricingId',
   'muthowifMode',
   'visaMode', 'includedVisaProductId',
@@ -185,8 +185,8 @@ export async function PUT(req: Request, { params }: Ctx) {
       }
     }
 
-    // Katering — price = numPeople × numDays × pricePerPersonRegular, dihitung ulang kalau salah
-    // satu dari 3 field ini disentuh.
+    // Katering — paket dijual PER ORANG: price = numDays × harga per orang-hari (musim reguler), dihitung ulang kalau salah
+    // satu dari 3 field ini disentuh. `includedCateringNumPeople` tak lagi mengalikan harga (jumlah orang datang dari booking).
     const cateringTouched = (['includedCateringOptionId', 'includedCateringNumPeople', 'includedCateringNumDays'] as const)
       .some(k => k in parsed.data)
     if (cateringTouched) {
@@ -199,7 +199,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       const numDays = parsed.data.includedCateringNumDays !== undefined ? parsed.data.includedCateringNumDays : before.includedCateringNumDays
       if (optionId && numPeople && numDays) {
         await prisma.cateringOption.findUniqueOrThrow({ where: { id: optionId }, select: { id: true } })
-        data.includedCateringPrice = numPeople * numDays * ((await cateringSeasonPrices([optionId])).get(optionId)?.regular ?? 0)
+        data.includedCateringPrice = numDays * ((await cateringSeasonPrices([optionId])).get(optionId)?.regular ?? 0)
       } else {
         data.includedCateringPrice = null
       }

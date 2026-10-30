@@ -203,7 +203,7 @@ const EXPECTED_FK: Record<string, string[]> = {
   muthowif: ['booking_muthowif.muthowifId n', 'muthowif_availability.muthowifId c'],
   tourism_sites: ['tour_package_sites.tourismSiteId r'],
   tour_packages: ['booking_tour_packages.tourPackageId r', 'tour_package_hotel_options.tourPackageId c', 'tour_package_hotels.tourPackageId c', 'tour_package_sites.tourPackageId c'],
-  packages: ['package_catering_options.packageId c', 'package_hotel_options.packageId c', 'package_visa_options.packageId c'],
+  packages: ['booking_packages.packageId r', 'package_catering_options.packageId c', 'package_hotel_options.packageId c', 'package_visa_options.packageId c'],
   visa_products: ['package_visa_options.visaProductId r', 'packages.includedVisaProductId n', 'visa_applications.visaProductId n'],
   hotels: ['hotel_price_periods.hotelId c', 'hotel_services.hotelId c'],
   hotel_room_schedules: [

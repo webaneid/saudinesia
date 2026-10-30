@@ -5,7 +5,7 @@ import { computeRefundAmount } from '@/lib/utils/cancellationPolicy'
 type Tx = Prisma.TransactionClient
 
 export type CancellableBooking = Prisma.BookingGetPayload<{
-  include: { hotels: true; transports: true; muthowif: true; tourPackages: true; haji: true }
+  include: { hotels: true; transports: true; muthowif: true; tourPackages: true; haji: true; flights: true; packages: true }
 }>
 
 // docs/arsitektur-booking.md §6 Step 3 — SATU fungsi dipakai self-cancel (DELETE
@@ -24,6 +24,8 @@ export async function cancelBooking(tx: Tx, booking: CancellableBooking, reason:
   for (const tp of booking.tourPackages) await quotaAdapters.tourPackage.release(tx, tp)
   for (const bm of booking.muthowif) await quotaAdapters.muthowif.release(tx, bm)
   for (const bh of booking.haji) await quotaAdapters.haji.release(tx, bh)
+  for (const bf of booking.flights) await quotaAdapters.flight.release(tx, bf)
+  for (const bp of booking.packages) await quotaAdapters.package.release(tx, bp)
 
   const paid = finalStatus === 'expired' || !booking.departureDate ? 0 : Number((await tx.payment.aggregate({ where: { bookingId: booking.id, status: 'confirmed' }, _sum: { amount: true } }))._sum.amount ?? 0)
   const refund = paid > 0 && booking.departureDate ? computeRefundAmount(paid, booking.departureDate) : 0

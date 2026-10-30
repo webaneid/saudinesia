@@ -856,7 +856,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] Fase 1 — Waktu & fondasi (`lib/time/`, `DateTimeField`, migrasi `toLocale*`/`+7 jam`/getter lokal, DB UTC ditegakkan + `TZ=UTC`, `test-time` matriks 4 TZ + penemu sumber) — selesai 2026-10-30; kebijakan pembatalan kini hari kalender (§5.9)
 - [x] Fase 2 — Pengaturan Invoice (penomoran tanpa lompat, pajak, perusahaan + logo, rekening, QRIS, metode bayar, kode unik, S&K, zona waktu aplikasi sebagai setelan) — selesai 2026-10-30 (§6.1)
 - [x] Fase 3 — Siklus hidup booking (enum `draft|active|completed|cancelled|expired`, status tampilan turunan `lib/booking/lifecycle.ts`, `confirmedAt/By`, tanggal acuan turunan nullable, hangus tanpa uang masuk + pengingat H-1/H-0 menggantikan batal-otomatis 24 jam; migrasi fail-closed diuji) — selesai 2026-10-31 (§10.1)
-- [ ] Fase 4 — Inti engine (aturan visa per produk + `allowVisaWithoutBundle`, item tiket + Paket Umroh)
+- [x] Fase 4 — Inti engine (aturan visa per produk `lib/booking/rules.ts` + pelonggaran per pelanggan `allowVisaWithoutBundle`, item tiket + kursi, Paket Umroh per orang terurai per komponen di invoice; migrasi fail-closed diuji) — selesai 2026-10-31 (§10.2)
 - [ ] Fase 5 — Form booking admin (draf, popup modul→produk, pratinjau, terbit, form jamaah)
 - [ ] Fase 6 — Invoice terbit (penomoran, pajak, revisi, void snapshot T1, invoice publik + PDF baru)
 - [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
