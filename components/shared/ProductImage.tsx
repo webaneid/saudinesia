@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Building2, Bus, KeyRound, Landmark, MapPin, Package, Star, UserRound, UtensilsCrossed } from 'lucide-react'
+import { Receipt, Building2, Bus, KeyRound, Landmark, MapPin, Package, Star, UserRound, UtensilsCrossed } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MediaProductType } from '@/lib/media/owners'
 
@@ -7,7 +7,7 @@ import type { MediaProductType } from '@/lib/media/owners'
 // berikon per tipe produk, sehingga kartu tak pernah "bolong" dan tata letak tak bergeser saat foto baru diunggah. Server Component murni;
 // URL berasal dari `getFeaturedCards`/`getProductImages` (presigned, bucket tetap private).
 const ICONS: Record<MediaProductType, LucideIcon> = {
-  hotel: Building2, tour_package: Landmark, vehicle: Bus, haji: Star, package: Package, catering: UtensilsCrossed, visa: KeyRound, muthowif: UserRound, tourism_site: MapPin,
+  hotel: Building2, tour_package: Landmark, vehicle: Bus, haji: Star, package: Package, catering: UtensilsCrossed, visa: KeyRound, muthowif: UserRound, tourism_site: MapPin, invoice_settings: Receipt,
 }
 
 type Props = {

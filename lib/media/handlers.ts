@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { requireManager } from '@/lib/auth/session'
+import { requireManager, SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { isMediaProductType, ownerOf, type MediaProductType } from './owners'
@@ -13,7 +13,7 @@ import { minioMediaStorage, type MediaStorage } from './storage'
 
 type CollectionCtx = { params: Promise<{ productType: string; productId: string }> }
 type ItemCtx = { params: Promise<{ productType: string; productId: string; imageId: string }> }
-type Options = { requireWrite?: () => Promise<unknown>; storage?: MediaStorage }
+type Options = { requireWrite?: () => Promise<{ role?: string } | undefined | unknown>; storage?: MediaStorage }
 
 const uuid = z.string().uuid()
 const patchSchema = z.object({ alt: z.string().max(200).nullable().optional(), isFeatured: z.boolean().optional() }).strict()
@@ -21,6 +21,12 @@ const patchSchema = z.object({ alt: z.string().max(200).nullable().optional(), i
 const orderSchema = z.object({ order: z.array(uuid).min(1).max(50) }).strict()
 
 const bad = (message: string, status = 400) => NextResponse.json(err(message), { status })
+/** Pemilik berlabel `superadminOnly` (logo invoice) menuntut peran superadmin; sesi tanpa peran (suntikan uji) tidak dibatasi — hanya pemilik berlabel itu yang diperiksa. */
+const forbidden = (session: unknown, type: MediaProductType): boolean => {
+  if (!(ownerOf(type) as { superadminOnly?: boolean }).superadminOnly) return false
+  const role = (session as { role?: string } | undefined)?.role
+  return !role || !SUPERADMIN_ROLES.includes(role as never)
+}
 
 export function createMediaHandlers(options: Options = {}) {
   const requireWrite = options.requireWrite ?? requireManager
@@ -36,7 +42,9 @@ export function createMediaHandlers(options: Options = {}) {
   /** Validasi parameter rute: tipe terdaftar + id uuid; selain itu 404 (tak membocorkan bentuk registry). */
   async function target(ctx: CollectionCtx | ItemCtx): Promise<{ type: MediaProductType; productId: string; imageId?: string } | null> {
     const p = await ctx.params
-    if (!isMediaProductType(p.productType) || !uuid.safeParse(p.productId).success) return null
+    if (!isMediaProductType(p.productType)) return null
+    const lit = (ownerOf(p.productType) as { idLiteral?: string }).idLiteral // pemilik baris tunggal (Pengaturan Invoice): id literal 'global', bukan UUID
+    if (lit ? p.productId !== lit : !uuid.safeParse(p.productId).success) return null
     const imageId = 'imageId' in p ? p.imageId : undefined
     if (imageId !== undefined && !uuid.safeParse(imageId).success) return null
     return { type: p.productType, productId: p.productId, imageId }
@@ -44,9 +52,10 @@ export function createMediaHandlers(options: Options = {}) {
 
   async function listGET(_req: Request, ctx: CollectionCtx) {
     try {
-      await requireWrite()
+      const session = await requireWrite()
       const t = await target(ctx)
       if (!t) return bad('Tidak ditemukan', 404)
+      if (forbidden(session, t.type)) return bad('Forbidden', 403)
       const owner = ownerOf(t.type)
       if (!(await owner.exists(t.productId))) return bad(`${owner.label} tidak ditemukan`, 404)
       const images = await Promise.all((await service.list(t.type, t.productId)).map(view))
@@ -56,9 +65,10 @@ export function createMediaHandlers(options: Options = {}) {
 
   async function listPOST(req: Request, ctx: CollectionCtx) {
     try {
-      await requireWrite()
+      const session = await requireWrite()
       const t = await target(ctx)
       if (!t) return bad('Tidak ditemukan', 404)
+      if (forbidden(session, t.type)) return bad('Forbidden', 403)
       let form: FormData
       try { form = await req.formData() } catch { return bad('Form tidak valid') }
       const file = form.get('file')
@@ -73,9 +83,10 @@ export function createMediaHandlers(options: Options = {}) {
 
   async function orderPATCH(req: Request, ctx: CollectionCtx) {
     try {
-      await requireWrite()
+      const session = await requireWrite()
       const t = await target(ctx)
       if (!t) return bad('Tidak ditemukan', 404)
+      if (forbidden(session, t.type)) return bad('Forbidden', 403)
       const parsed = orderSchema.safeParse(await req.json().catch(() => null))
       if (!parsed.success) return bad(parsed.error.issues[0]?.message ?? 'Data tidak valid')
       const result = await service.reorder(t.type, t.productId, parsed.data.order)
@@ -86,9 +97,10 @@ export function createMediaHandlers(options: Options = {}) {
 
   async function itemPATCH(req: Request, ctx: ItemCtx) {
     try {
-      await requireWrite()
+      const session = await requireWrite()
       const t = await target(ctx)
       if (!t?.imageId) return bad('Tidak ditemukan', 404)
+      if (forbidden(session, t.type)) return bad('Forbidden', 403)
       const parsed = patchSchema.safeParse(await req.json().catch(() => null))
       if (!parsed.success) return bad(parsed.error.issues[0]?.message ?? 'Data tidak valid')
       const result = await service.update(t.type, t.productId, t.imageId, parsed.data)
@@ -99,9 +111,10 @@ export function createMediaHandlers(options: Options = {}) {
 
   async function itemDELETE(_req: Request, ctx: ItemCtx) {
     try {
-      await requireWrite()
+      const session = await requireWrite()
       const t = await target(ctx)
       if (!t?.imageId) return bad('Tidak ditemukan', 404)
+      if (forbidden(session, t.type)) return bad('Forbidden', 403)
       const result = await service.remove(t.type, t.productId, t.imageId)
       if (!result.ok) return bad(result.message, result.status)
       return NextResponse.json(ok(null))

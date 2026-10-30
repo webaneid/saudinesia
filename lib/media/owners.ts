@@ -5,7 +5,7 @@ import { prisma } from '@/lib/db'
 // `mode`: featured = tepat satu foto (unggah baru MENGGANTI); gallery = banyak foto, satu bertanda sampul, maksimal `max`.
 export type MediaMode = 'featured' | 'gallery'
 
-type Owner = { mode: MediaMode; max: number; label: string; exists: (id: string) => Promise<boolean> }
+type Owner = { mode: MediaMode; max: number; label: string; exists: (id: string) => Promise<boolean>; /** Bentuk id pemilik selain UUID (mis. baris tunggal 'global'). Bawaan: UUID. */ idLiteral?: string; /** Hanya superadmin yang boleh (selain manager+ biasa) — mis. logo kop invoice (Pengaturan Invoice, area Sistem). */ superadminOnly?: boolean }
 
 const has = (q: Promise<unknown | null>) => q.then(r => r !== null)
 
@@ -18,6 +18,7 @@ export const MEDIA_OWNERS = {
   catering:     { mode: 'featured', max: 1,  label: 'Paket Katering', exists: (id) => has(prisma.cateringOption.findUnique({ where: { id }, select: { id: true } })) },
   visa:         { mode: 'featured', max: 1,  label: 'Produk Visa',    exists: (id) => has(prisma.visaProduct.findUnique({ where: { id }, select: { id: true } })) },
   muthowif:     { mode: 'featured', max: 1,  label: 'Muthowif',       exists: (id) => has(prisma.muthowif.findUnique({ where: { id }, select: { id: true } })) },
+  invoice_settings: { mode: 'featured', max: 1, label: 'Logo perusahaan', idLiteral: 'global', superadminOnly: true, exists: (id) => has(prisma.invoiceSettings.findUnique({ where: { id }, select: { id: true } })) },
   tourism_site: { mode: 'featured', max: 1,  label: 'Situs Wisata',   exists: (id) => has(prisma.tourismSite.findUnique({ where: { id }, select: { id: true } })) },
 } as const satisfies Record<string, Owner>
 

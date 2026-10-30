@@ -3,12 +3,36 @@
 //
 // Dua jenis nilai waktu, jangan dicampur:
 //  • INSTAN (`Date` dari kolom timestamp — createdAt, paidAt, requestedAt): satu titik waktu absolut. Disimpan UTC; "hari ini", batas hari, dan tampilan
-//    dihitung di ZONA APLIKASI (`APP_TIMEZONE`).
+//    dihitung di ZONA APLIKASI (`getAppTimezone()`).
 //  • TANGGAL KALENDER (kolom `@db.Date` — departureDate, checkIn, tourDate): tanggal di tempat kejadian, tanpa jam/zona. Di aplikasi berupa string `YYYY-MM-DD`;
 //    `Date` dari Prisma (UTC tengah malam) hanya dibaca lewat `calendarDateOf`/`formatCalendarDate`, tak pernah lewat getter lokal (`getDate()`/`setHours()`).
 
-/** Zona aplikasi. Fase 2 booking-engine-v2 menjadikannya setelan; semua fungsi menerima `tz` opsional supaya perubahan itu tak menyentuh pemanggil. */
-export const APP_TIMEZONE = 'Asia/Jakarta'
+/** Zona bawaan (sebelum setelan dimuat). */
+export const DEFAULT_APP_TIMEZONE = 'Asia/Jakarta'
+
+// Zona aplikasi = setelan "Pengaturan Invoice → Waktu" (docs/arsitektur-booking-engine-v2.md §6, Fase 2). Satu nilai per proses (satu replika, satu operator):
+// dimuat saat boot dan diperbarui saat setelan disimpan di server (`lib/invoice/settings.ts`), dan diset di klien lewat `AppTimezoneProvider`. Semua fungsi menerima `tz` opsional.
+// Disimpan di `globalThis` (pola singleton Prisma/`_cronStarted`): Next 15 dapat memuat modul ini lebih dari sekali di proses yang sama (instrumentation, route handler, halaman RSC);
+// satu nilai bersama memastikan setelan yang disimpan/dimuat terlihat oleh semuanya (SEC-110).
+const G = globalThis as typeof globalThis & { __appTimezone?: string }
+export const getAppTimezone = (): string => G.__appTimezone ?? DEFAULT_APP_TIMEZONE
+/** Nama zona IANA yang dikenal runtime ("Asia/Jakarta", "America/Los_Angeles"…). */
+export function isValidTimezone(tz: unknown): tz is string {
+  if (typeof tz !== 'string' || tz.length === 0 || tz.length > 64) return false
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true } catch { return false }
+}
+/** Nama zona KANONIK yang boleh DISIMPAN sebagai setelan: terdaftar di runtime (`Intl.supportedValuesOf`) atau "UTC"; bentuk offset ("+07:00", "GMT+7") ditolak — Postgres menafsirkannya lain (SEC-114). */
+export function isCanonicalTimezone(tz: unknown): tz is string {
+  if (!isValidTimezone(tz) || /^[+-]?\d|^(GMT|UTC)[+-]/i.test(tz)) return false
+  if (tz === 'UTC') return true
+  const list = typeof Intl.supportedValuesOf === 'function' ? (Intl.supportedValuesOf('timeZone') as string[]) : null
+  return list ? list.includes(tz) : tz.includes('/')
+}
+/** Ganti zona aplikasi proses ini. Menolak nama yang tak dikenal (zona tak berubah). */
+export function setAppTimezone(tz: string): void {
+  if (!isValidTimezone(tz)) throw new RangeError(`Zona waktu tidak dikenal: ${String(tz)}`)
+  G.__appTimezone = tz
+}
 
 export type CalendarDate = string // 'YYYY-MM-DD'
 const CAL_RE = /^(\d{4})-(\d{2})-(\d{2})$/
@@ -60,7 +84,7 @@ function partsFormatter(tz: string): Intl.DateTimeFormat {
 }
 export type WallClock = { y: number; mo: number; d: number; h: number; mi: number; s: number }
 /** Jam dinding (tahun…detik) dari satu instan di zona `tz`. */
-export function wallClockOf(instant: Date | number, tz: string = APP_TIMEZONE): WallClock {
+export function wallClockOf(instant: Date | number, tz: string = getAppTimezone()): WallClock {
   const ms = typeof instant === 'number' ? instant : instant.getTime()
   if (Number.isNaN(ms)) throw new RangeError('Instan tidak valid')
   const p: Record<string, number> = {}
@@ -68,12 +92,12 @@ export function wallClockOf(instant: Date | number, tz: string = APP_TIMEZONE): 
   return { y: p.year!, mo: p.month!, d: p.day!, h: p.hour!, mi: p.minute!, s: p.second! }
 }
 /** Selisih (ms) jam dinding `tz` terhadap UTC pada instan itu (WIB = +7 jam, Riyadh = +3, Los Angeles = −7/−8). */
-export function offsetMsAt(instant: number, tz: string = APP_TIMEZONE): number {
+export function offsetMsAt(instant: number, tz: string = getAppTimezone()): number {
   const w = wallClockOf(instant, tz)
   return Date.UTC(w.y, w.mo - 1, w.d, w.h, w.mi, w.s) - Math.floor(instant / 1000) * 1000
 }
 /** Instan yang jam dindingnya di `tz` adalah nilai itu (kebalikan `wallClockOf`; benar melewati batas DST). */
-export function instantFromWallClock(w: { y: number; mo: number; d: number; h?: number; mi?: number; s?: number }, tz: string = APP_TIMEZONE): Date {
+export function instantFromWallClock(w: { y: number; mo: number; d: number; h?: number; mi?: number; s?: number }, tz: string = getAppTimezone()): Date {
   const guess = Date.UTC(w.y, w.mo - 1, w.d, w.h ?? 0, w.mi ?? 0, w.s ?? 0)
   const off1 = offsetMsAt(guess, tz)
   let t = guess - off1
@@ -82,24 +106,24 @@ export function instantFromWallClock(w: { y: number; mo: number; d: number; h?: 
   return new Date(t)
 }
 /** Tanggal kalender di zona aplikasi untuk satu instan ("hari ini" = `dateInApp(new Date())`). */
-export function dateInApp(instant: Date | number = new Date(), tz: string = APP_TIMEZONE): CalendarDate {
+export function dateInApp(instant: Date | number = new Date(), tz: string = getAppTimezone()): CalendarDate {
   const w = wallClockOf(instant, tz)
   return `${String(w.y).padStart(4, '0')}-${String(w.mo).padStart(2, '0')}-${String(w.d).padStart(2, '0')}`
 }
-export const todayInApp = (now: Date = new Date(), tz: string = APP_TIMEZONE): CalendarDate => dateInApp(now, tz)
-export const yearInApp = (now: Date = new Date(), tz: string = APP_TIMEZONE): number => yearOf(dateInApp(now, tz))
+export const todayInApp = (now: Date = new Date(), tz: string = getAppTimezone()): CalendarDate => dateInApp(now, tz)
+export const yearInApp = (now: Date = new Date(), tz: string = getAppTimezone()): number => yearOf(dateInApp(now, tz))
 /** Awal hari (00:00:00.000) tanggal kalender itu di `tz`, sebagai instan. */
-export function startOfDayInApp(day: CalendarDate, tz: string = APP_TIMEZONE): Date {
+export function startOfDayInApp(day: CalendarDate, tz: string = getAppTimezone()): Date {
   assertCal(day)
   return instantFromWallClock({ y: Number(day.slice(0, 4)), mo: Number(day.slice(5, 7)), d: Number(day.slice(8, 10)) }, tz)
 }
 /** Awal hari BERIKUTNYA di `tz` (batas eksklusif "akhir hari": instan < nilai ini masih hari itu). */
-export function endOfDayExclusiveInApp(day: CalendarDate, tz: string = APP_TIMEZONE): Date { return startOfDayInApp(addDays(day, 1), tz) }
+export function endOfDayExclusiveInApp(day: CalendarDate, tz: string = getAppTimezone()): Date { return startOfDayInApp(addDays(day, 1), tz) }
 
 // ── masukan tanggal-jam (formulir) ─────────────────────────────────────────────────────────────────────────────────────
 const LOCAL_DT_RE = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/
 /** Nilai `<input type="datetime-local">` (`YYYY-MM-DDTHH:mm`) DITAFSIRKAN di zona aplikasi (bukan zona peramban) → instan. Tak sah → `null`. */
-export function parseAppDateTime(value: string, tz: string = APP_TIMEZONE): Date | null {
+export function parseAppDateTime(value: string, tz: string = getAppTimezone()): Date | null {
   const m = LOCAL_DT_RE.exec(value)
   if (!m) return null
   const [y, mo, d, h, mi, s] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), Number(m[5]), Number(m[6] ?? 0)]
@@ -107,7 +131,7 @@ export function parseAppDateTime(value: string, tz: string = APP_TIMEZONE): Date
   return instantFromWallClock({ y, mo, d, h, mi, s }, tz)
 }
 /** Instan → nilai `<input type="datetime-local">` (`YYYY-MM-DDTHH:mm`) menurut zona aplikasi. */
-export function toAppDateTimeInput(instant: Date | number = new Date(), tz: string = APP_TIMEZONE): string {
+export function toAppDateTimeInput(instant: Date | number = new Date(), tz: string = getAppTimezone()): string {
   const w = wallClockOf(instant, tz)
   const p = (n: number, l = 2) => String(n).padStart(l, '0')
   return `${p(w.y, 4)}-${p(w.mo)}-${p(w.d)}T${p(w.h)}:${p(w.mi)}`
@@ -130,7 +154,7 @@ const toDate = (v: DateInput): Date => {
   return d
 }
 /** Tampilkan INSTAN di zona aplikasi (selalu `timeZone` eksplisit). Bahasa Indonesia. */
-export function formatInstant(value: DateInput, options: Intl.DateTimeFormatOptions = DATE_MEDIUM, tz: string = APP_TIMEZONE): string {
+export function formatInstant(value: DateInput, options: Intl.DateTimeFormatOptions = DATE_MEDIUM, tz: string = getAppTimezone()): string {
   const withTime = 'timeStyle' in options || 'hour' in options || 'minute' in options
   const d = toDate(value)
   return withTime ? d.toLocaleString('id-ID', { ...options, timeZone: tz }) : d.toLocaleDateString('id-ID', { ...options, timeZone: tz })
@@ -142,7 +166,7 @@ export function formatCalendarDate(value: Date | CalendarDate | string, options:
   return d.toLocaleDateString('id-ID', { ...options, timeZone: 'UTC' })
 }
 /** Singkatan zona untuk label formulir/tampilan: WIB/WITA/WIT untuk zona Indonesia, selain itu "GMT+3". */
-export function zoneLabel(tz: string = APP_TIMEZONE, at: Date = new Date()): string {
+export function zoneLabel(tz: string = getAppTimezone(), at: Date = new Date()): string {
   if (tz === 'Asia/Jakarta' || tz === 'Asia/Pontianak') return 'WIB'
   if (tz === 'Asia/Makassar') return 'WITA'
   if (tz === 'Asia/Jayapura') return 'WIT'

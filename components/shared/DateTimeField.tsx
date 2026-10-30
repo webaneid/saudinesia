@@ -1,12 +1,12 @@
 'use client'
 
 import { useId } from 'react'
-import { APP_TIMEZONE, parseAppDateTime, toAppDateTimeInput, zoneLabel } from '@/lib/time'
+import { getAppTimezone, parseAppDateTime, toAppDateTimeInput, zoneLabel } from '@/lib/time'
 
 /** Nilai kotak (`YYYY-MM-DDTHH:mm`, zona aplikasi) → instan ISO UTC; kosong/tak sah → `null`. */
-export const inputToIso = (v: string, tz: string = APP_TIMEZONE): string | null => parseAppDateTime(v, tz)?.toISOString() ?? null
+export const inputToIso = (v: string, tz: string = getAppTimezone()): string | null => parseAppDateTime(v, tz)?.toISOString() ?? null
 /** Instan ISO UTC → nilai kotak di zona aplikasi; kosong → ''. */
-export const isoToInput = (iso: string | null, tz: string = APP_TIMEZONE): string => (iso ? toAppDateTimeInput(new Date(iso), tz) : '')
+export const isoToInput = (iso: string | null, tz: string = getAppTimezone()): string => (iso ? toAppDateTimeInput(new Date(iso), tz) : '')
 
 type Props = {
   /** Instan (ISO UTC, mis. "2026-10-30T02:24:00.000Z") atau `null`/'' = kosong. */
@@ -24,7 +24,7 @@ type Props = {
  * Input tanggal-jam yang BENAR zonanya (docs/arsitektur-booking-engine-v2.md §5): nilai yang diketik ditafsirkan di zona APLIKASI (bukan zona peramban/perangkat),
  * label zona ("WIB") selalu terlihat, dan yang dikembalikan adalah instan UTC ISO. Nilai awal "sekarang" (mis. waktu konfirmasi bayar) diisi PEMANGGIL: `useState(() => new Date().toISOString())`. Satu-satunya tempat `type="datetime-local"` (dijaga scripts/test-time-guard.ts).
  */
-export function DateTimeField({ value, onChange, label, disabled, required, className, tz = APP_TIMEZONE }: Props) {
+export function DateTimeField({ value, onChange, label, disabled, required, className, tz = getAppTimezone() }: Props) {
   const id = useId()
   const shown = isoToInput(value, tz)
   return (

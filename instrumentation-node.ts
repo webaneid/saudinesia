@@ -21,6 +21,7 @@ export async function registerNode() {
 
   void ensureMinioBucket()
   void repriceOnBoot()
+  void import('@/lib/invoice/settings').then(m => m.loadAppTimezone()) // zona aplikasi dari Pengaturan Invoice (docs/arsitektur-booking-engine-v2.md §6)
   void import('@/lib/time/dbZone').then(m => m.checkDatabaseTimezone()) // hanya memperingatkan: zona sesi DB harus UTC (docs/arsitektur-booking-engine-v2.md §5)
 }
 

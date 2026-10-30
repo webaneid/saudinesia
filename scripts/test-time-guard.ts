@@ -50,7 +50,7 @@ t('toLocaleString(...) dengan opsi tanggal/jam (dateStyle, timeStyle, hour, minu
   assert.deepEqual(violations(/toLocaleString\([^)]*(dateStyle|timeStyle|hour\b|minute\b|month\b|weekday\b)/), [])
 })
 
-t('tak ada offset zona yang ditanam (7 * 3_600_000, +07:00, +0700, UTC+7) — zona hanya APP_TIMEZONE', () => {
+t('tak ada offset zona yang ditanam (7 * 3_600_000, +07:00, +0700, UTC+7) — zona hanya getAppTimezone() (setelan)', () => {
   assert.deepEqual(violations(/\b7 \* 3_?600_?000|3_?600_?000 \* 7|\b7 \* 60 \* 60 \* 1000|[T\d]\+07:?00|UTC\+7\b|\bWIB_MS\b/), [])
 })
 

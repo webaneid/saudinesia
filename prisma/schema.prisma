@@ -376,7 +376,7 @@ model Muthowif {
 model MuthowifServicePrice {
   id        String   @id @default(uuid())
   // Penjaga singleton oleh DB: unik + CHECK (singleton) di migrasi ⇒ paling banyak SATU baris (docs/arsitektur-harga-terpadu.md §1.2-14, §16).
-  singleton Boolean  @default(true) @unique
+  singleton Boolean  @unique @default(true)
   updatedAt DateTime @updatedAt
 
   @@map("muthowif_service_price")
@@ -623,12 +623,12 @@ model PackageCateringOption {
 // ─── CATERING & TOURS ─────────────────────────────────────────
 
 model CateringOption {
-  id                    String  @id @default(uuid())
-  name                  String
-  boardType             String
-  menuStyle             String
-  description           String? // teks kaya (JSON dokumen Tiptap atau teks polos) — docs/arsitektur-editor-teks.md §9
-  isActive              Boolean @default(true)
+  id          String  @id @default(uuid())
+  name        String
+  boardType   String
+  menuStyle   String
+  description String? // teks kaya (JSON dokumen Tiptap atau teks polos) — docs/arsitektur-editor-teks.md §9
+  isActive    Boolean @default(true)
 
   bookingCatering    BookingCatering[]
   includedInPackages Package[] // paket umroh yang mengunci opsi ini sbg katering "included" (docs/arsitektur-paket-umroh.md §4)
@@ -752,8 +752,6 @@ model TourPackageHotelOption {
   @@map("tour_package_hotel_options")
 }
 
-
-
 // ─── BOOKINGS ─────────────────────────────────────────────────
 
 model Booking {
@@ -770,23 +768,23 @@ model Booking {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  user  User   @relation(fields: [userId], references: [id])
+  user User @relation(fields: [userId], references: [id])
 
-  pilgrims      BookingPilgrim[]
-  hotels        BookingHotel[]
-  transports    BookingTransport[]
-  flights       BookingFlight[]
-  muthowif      BookingMuthowif[]
-  catering      BookingCatering[]
-  tourPackages  BookingTourPackage[]
-  services      BookingService[]
-  haji          BookingHaji[]
+  pilgrims       BookingPilgrim[]
+  hotels         BookingHotel[]
+  transports     BookingTransport[]
+  flights        BookingFlight[]
+  muthowif       BookingMuthowif[]
+  catering       BookingCatering[]
+  tourPackages   BookingTourPackage[]
+  services       BookingService[]
+  haji           BookingHaji[]
   priceSnapshots PriceSnapshot[]
   adjustments    BookingAdjustment[]
   costActuals    CostActual[]
-  payments      Payment[]
-  refunds       Refund[]
-  notifications NotificationLog[]
+  payments       Payment[]
+  refunds        Refund[]
+  notifications  NotificationLog[]
 
   @@index([userId])
   @@index([status])
@@ -1001,7 +999,6 @@ model BookingHaji {
   @@map("booking_haji")
 }
 
-
 // ─── PAYMENTS & REFUNDS ───────────────────────────────────────
 
 model Payment {
@@ -1110,10 +1107,10 @@ model Vendor {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @default(now()) @updatedAt
 
-  address    Address?          @relation(fields: [addressId], references: [id])
-  categories VendorCategory[] // many-to-many implisit; minimal 1 (divalidasi API)
-  costs      ProductCost[]
-  preferred  PreferredVendor[]
+  address     Address?          @relation(fields: [addressId], references: [id])
+  categories  VendorCategory[] // many-to-many implisit; minimal 1 (divalidasi API)
+  costs       ProductCost[]
+  preferred   PreferredVendor[]
   costActuals CostActual[]
 
   @@unique([nameKey, countryCode])
@@ -1170,24 +1167,24 @@ model ProductCost {
 /// CHECK di migrasi: sellIdr = COALESCE(manualSellIdr, autoSellIdr), minimal salah satunya terisi, semua nominal >= 0.
 /// Untung = sellIdr - costIdr (turunan, tidak disimpan). costIdr null = modal belum diisi / belum lengkap.
 model PricePoint {
-  id            String   @id @default(uuid())
-  ownerType     String   // sama dengan ProductCost.productType: visa|flight|hotel|transport|muthowif|package|tour_package|haji
+  id            String    @id @default(uuid())
+  ownerType     String // sama dengan ProductCost.productType: visa|flight|hotel|transport|muthowif|package|tour_package|haji
   ownerId       String
-  variantKey    String   @default("") // "" | "days:<min>-<max>" (tier hari Visa)
-  unit          String   // person|room_night|vehicle|person_day|package
-  costIdr       Decimal? @db.Decimal(14, 2)
-  autoSellIdr   Decimal? @db.Decimal(14, 2)
-  manualSellIdr Decimal? @db.Decimal(14, 2)
-  sellIdr       Decimal  @db.Decimal(14, 2)
-  marginPctUsed Decimal? @db.Decimal(5, 2)
+  variantKey    String    @default("") // "" | "days:<min>-<max>" (tier hari Visa)
+  unit          String // person|room_night|vehicle|person_day|package
+  costIdr       Decimal?  @db.Decimal(14, 2)
+  autoSellIdr   Decimal?  @db.Decimal(14, 2)
+  manualSellIdr Decimal?  @db.Decimal(14, 2)
+  sellIdr       Decimal   @db.Decimal(14, 2)
+  marginPctUsed Decimal?  @db.Decimal(5, 2)
   roundingUsed  Int?
-  fxRateIds     Json     @default("[]")
-  vendorIds     Json     @default("[]")
+  fxRateIds     Json      @default("[]")
+  vendorIds     Json      @default("[]")
   manualNote    String?
-  manualBy      String?   // User.id pengatur harga manual terakhir (tanpa FK — jejak audit; riwayat lengkap di PriceChange)
+  manualBy      String? // User.id pengatur harga manual terakhir (tanpa FK — jejak audit; riwayat lengkap di PriceChange)
   manualAt      DateTime?
-  computedAt    DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  computedAt    DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   @@unique([ownerType, ownerId, variantKey])
   @@index([ownerType, ownerId])
@@ -1202,7 +1199,7 @@ model PriceChange {
   ownerType  String
   ownerId    String
   variantKey String   @default("")
-  kind       String   // manual_set | manual_clear | cost_set | visa_override_migrated
+  kind       String // manual_set | manual_clear | cost_set | visa_override_migrated
   oldSellIdr Decimal? @db.Decimal(14, 2)
   newSellIdr Decimal? @db.Decimal(14, 2)
   oldCostIdr Decimal? @db.Decimal(14, 2)
@@ -1216,12 +1213,12 @@ model PriceChange {
 }
 
 model PricingRule {
-  id                String   @id @default(uuid())
-  productType       String   @default("global") // "global" = default semua tipe (kunci sentinel — lib/pricing/pricingHelpers.ts), "visa" = override khusus tipe itu
-  defaultMarginPercent  Decimal  @db.Decimal(5, 2)
-  roundingIncrement Int      @default(50000)
-  warnBelowPercent  Decimal  @default(0) @db.Decimal(5, 2) // ambang "margin tipis" untuk Kesehatan Margin; 0 = hanya peringatkan yang rugi (jual < modal)
-  updatedAt         DateTime @updatedAt
+  id                   String   @id @default(uuid())
+  productType          String   @default("global") // "global" = default semua tipe (kunci sentinel — lib/pricing/pricingHelpers.ts), "visa" = override khusus tipe itu
+  defaultMarginPercent Decimal  @db.Decimal(5, 2)
+  roundingIncrement    Int      @default(50000)
+  warnBelowPercent     Decimal  @default(0) @db.Decimal(5, 2) // ambang "margin tipis" untuk Kesehatan Margin; 0 = hanya peringatkan yang rugi (jual < modal)
+  updatedAt            DateTime @updatedAt
 
   @@unique([productType])
   @@map("pricing_rules")
@@ -1339,9 +1336,10 @@ model Address {
   village  AddressVillage?  @relation(fields: [villageId], references: [id])
 
   // Back-relation 1:1 — docs/arsitektur-alamat.md §9. Tiap entity beda tipe, tidak di-share.
-  user   User?
-  vendor Vendor?
-  hotel  Hotel?
+  user            User?
+  vendor          Vendor?
+  hotel           Hotel?
+  invoiceSettings InvoiceSettings? // alamat perusahaan di Pengaturan Invoice (docs/arsitektur-booking-engine-v2.md §6)
 
   @@map("addresses")
 }
@@ -1375,34 +1373,33 @@ model ProductImage {
   @@map("product_images")
 }
 
-
 /// Harga DIBEKUKAN saat dipesan (docs/arsitektur-harga-terpadu.md §17): satu baris per bagian yang dijual. Ditulis HANYA oleh lib/pricing/engine/snapshot.ts;
 /// beku sungguhan (trigger DB menolak UPDATE; koreksi = baris `penyesuaian` baru). Invarian I4: Booking.totalAmount = Σ totalSellIdr. Tanpa data pribadi.
 model PriceSnapshot {
-  id           String   @id @default(uuid())
-  bookingId    String
-  itemType     String // kunci item booking: hotel | transport | muthowif | catering | tourPackage | haji | visa
-  itemId       String // id baris Booking* (visa: id VisaApplication) — polimorfik, sejalan adapter "Opsi B"
-  lineKey      String   @default("main") // main | komponen:<nama> | kendaraan | hotel:<id> | pilihan:* | penyesuaian
-  ownerType    String? // jejak titik harga asal (kunci alami, tanpa FK: titik harga boleh dibuat ulang)
-  ownerId      String?
-  variantKey   String   @default("")
-  itemLabel    String // judul SATU item (sama di semua baris item itu) — dipakai invoice
-  itemDetail   String   @default("")
-  itemQty      Int // jumlah yang ditampilkan invoice (kamar, penumpang, orang, ...)
-  description  String // judul baris ini
-  qty          Decimal  @db.Decimal(12, 2)
-  unit         String
-  unitCostIdr  Decimal? @db.Decimal(14, 2) // null = modal belum diketahui saat dipesan
-  unitSellIdr  Decimal  @db.Decimal(14, 2)
-  totalCostIdr Decimal? @db.Decimal(14, 2)
-  totalSellIdr Decimal  @db.Decimal(14, 2)
+  id                  String   @id @default(uuid())
+  bookingId           String
+  itemType            String // kunci item booking: hotel | transport | muthowif | catering | tourPackage | haji | visa
+  itemId              String // id baris Booking* (visa: id VisaApplication) — polimorfik, sejalan adapter "Opsi B"
+  lineKey             String   @default("main") // main | komponen:<nama> | kendaraan | hotel:<id> | pilihan:* | penyesuaian
+  ownerType           String? // jejak titik harga asal (kunci alami, tanpa FK: titik harga boleh dibuat ulang)
+  ownerId             String?
+  variantKey          String   @default("")
+  itemLabel           String // judul SATU item (sama di semua baris item itu) — dipakai invoice
+  itemDetail          String   @default("")
+  itemQty             Int // jumlah yang ditampilkan invoice (kamar, penumpang, orang, ...)
+  description         String // judul baris ini
+  qty                 Decimal  @db.Decimal(12, 2)
+  unit                String
+  unitCostIdr         Decimal? @db.Decimal(14, 2) // null = modal belum diketahui saat dipesan
+  unitSellIdr         Decimal  @db.Decimal(14, 2)
+  totalCostIdr        Decimal? @db.Decimal(14, 2)
+  totalSellIdr        Decimal  @db.Decimal(14, 2)
   /// Rekomendasi: total harga OTOMATIS baris ini (HPP + margin bawaan saat dipesan), terlepas dari harga manual. NULL = baris lama; baris `penyesuaian` tingkat-booking = 0.
   recommendedTotalIdr Decimal? @db.Decimal(14, 2)
-  mode         String // auto | manual
-  fxRateIds    Json     @default("[]")
-  vendorIds    Json     @default("[]")
-  takenAt      DateTime @default(now())
+  mode                String // auto | manual
+  fxRateIds           Json     @default("[]")
+  vendorIds           Json     @default("[]")
+  takenAt             DateTime @default(now())
 
   booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   costActuals CostActual[]
@@ -1416,21 +1413,21 @@ model PriceSnapshot {
 /// (itemType booking, itemId = id baris ini) dan pembaruan Booking.totalAmount dalam satu transaksi terkunci. `label` tampil di invoice; `reason` INTERNAL (tak pernah ke jamaah).
 /// Dibatalkan lewat baris pembalik (`reversesId`) — tak ada UPDATE/DELETE.
 model BookingAdjustment {
-  id           String   @id @default(uuid())
-  bookingId    String
-  amountIdr    Decimal  @db.Decimal(14, 2) // bertanda: negatif = diskon, positif = biaya tambahan
-  label        String
-  reason       String?
+  id                   String    @id @default(uuid())
+  bookingId            String
+  amountIdr            Decimal   @db.Decimal(14, 2) // bertanda: negatif = diskon, positif = biaya tambahan
+  label                String
+  reason               String?
   /// Jejak edit catatan (SEC-101): staf + waktu edit TERAKHIR; NULL = belum pernah diedit sejak dibuat. Berpasangan (CHECK DB). Hanya diisi lib/booking/adjustments.ts#updateAdjustmentReason.
   reasonEditedByUserId String? // staf (tanpa FK, sama dengan byUserId)
   reasonEditedAt       DateTime?
-  totalBefore  Decimal  @db.Decimal(14, 2)
-  totalAfter   Decimal  @db.Decimal(14, 2)
-  costKnownIdr Decimal  @db.Decimal(14, 2) // HPP awal yang diketahui saat dibuat (Σ modal baris bermodal)
-  belowCost    Boolean // total akhir < HPP awal — PERINGATAN internal, tidak memblokir (Fase 8); konsistensi dengan total/HPP dijaga CHECK DB
-  reversesId   String?  @unique
-  byUserId     String // staf
-  createdAt    DateTime @default(now())
+  totalBefore          Decimal   @db.Decimal(14, 2)
+  totalAfter           Decimal   @db.Decimal(14, 2)
+  costKnownIdr         Decimal   @db.Decimal(14, 2) // HPP awal yang diketahui saat dibuat (Σ modal baris bermodal)
+  belowCost            Boolean // total akhir < HPP awal — PERINGATAN internal, tidak memblokir (Fase 8); konsistensi dengan total/HPP dijaga CHECK DB
+  reversesId           String?   @unique
+  byUserId             String // staf
+  createdAt            DateTime  @default(now())
 
   booking    Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   reverses   BookingAdjustment? @relation("AdjustmentReversal", fields: [reversesId], references: [id], onDelete: Restrict)
@@ -1469,4 +1466,130 @@ model CostActual {
   @@index([snapshotId])
   @@index([vendorId])
   @@map("cost_actuals")
+}
+
+// ─── PENGATURAN INVOICE (docs/arsitektur-booking-engine-v2.md §6, Fase 2) ─────────────────
+// SATU baris berkunci `id = 'global'` (CHECK di DB). Semua nilai adalah SARAN/bawaan — admin bebas mengubah per invoice (keputusan D4). Kolom waktu baru memakai
+// timestamptz (aturan "Waktu & zona waktu" CLAUDE.md). Kunci API gateway TIDAK di sini (env).
+enum TaxMode {
+  added // pajak DITAMBAHKAN di atas harga (bawaan — harga katalog belum termasuk pajak, K5)
+  included // harga sudah termasuk pajak
+
+  @@map("tax_mode")
+}
+
+model InvoiceSettings {
+  id String @id // selalu 'global'
+
+  // Penomoran (lib/invoice/numbering.ts)
+  numberPrefix      String  @default("INV") @db.VarChar(12)
+  numberPattern     String  @default("{PREFIX}-{YYYY}-{SEQ}") @db.VarChar(60)
+  numberPadding     Int     @default(4)
+  numberResetYearly Boolean @default(true)
+
+  // Waktu & tenggat
+  appTimezone                String  @default("Asia/Jakarta") @db.VarChar(64)
+  defaultDueDays             Int     @default(4) // saran jatuh tempo (hari sejak tanggal invoice); tak mengikat
+  expireDaysBeforeReference  Int     @default(7) // hangus N hari sebelum tanggal acuan bila belum ada uang masuk; 0 = nonaktif
+  minimumFirstPaymentPercent Decimal @default(0) @db.Decimal(5, 2) // 0 = tak ada batas
+
+  // Kode unik transfer/QRIS
+  uniqueCodeEnabled Boolean @default(true)
+  uniqueCodeMin     Int     @default(100)
+  uniqueCodeMax     Int     @default(999)
+
+  // Metode bayar (yang aktif tampil di halaman bayar) + MDR gateway yang dibebankan ke pelanggan
+  methodBankTransfer Boolean @default(true)
+  methodQris         Boolean @default(false)
+  methodIpaymu       Boolean @default(false)
+  methodXendit       Boolean @default(false)
+  gatewaySandbox     Boolean @default(true)
+  ipaymuFeePercent   Decimal @default(0) @db.Decimal(5, 2)
+  ipaymuFeeFlatIdr   Int     @default(0)
+  xenditFeePercent   Decimal @default(0) @db.Decimal(5, 2)
+  xenditFeeFlatIdr   Int     @default(0)
+
+  // Profil perusahaan (kop invoice)
+  companyName      String?  @db.VarChar(160)
+  companyTaxId     String?  @db.VarChar(40) // NPWP
+  companyPhone     String?  @db.VarChar(40)
+  companyEmail     String?  @db.VarChar(160)
+  companyWebsite   String?  @db.VarChar(200)
+  companyAddressId String?  @unique
+  companyAddress   Address? @relation(fields: [companyAddressId], references: [id])
+
+  // Teks kaya (JSON Tiptap sebagai string, divalidasi richTextField)
+  termsDoc      String? @db.Text // Syarat & Ketentuan
+  footerNoteDoc String? @db.Text // Catatan kaki invoice
+
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+  updatedById String? // staf terakhir yang mengubah
+
+  @@map("invoice_settings")
+}
+
+model BankAccount {
+  id            String   @id @default(uuid())
+  bankName      String   @db.VarChar(80)
+  accountNumber String   @db.VarChar(40)
+  accountHolder String   @db.VarChar(120)
+  branch        String?  @db.VarChar(120)
+  isActive      Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  @@unique([bankName, accountNumber])
+  @@map("bank_accounts")
+}
+
+model QrisAccount {
+  id         String   @id @default(uuid())
+  name       String   @db.VarChar(80)
+  emvPayload String?  @db.Text // payload QRIS statis (dibaca otomatis dari gambar di Fase 8)
+  isActive   Boolean  @default(true)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("qris_accounts")
+}
+
+model TaxRule {
+  id           String   @id @default(uuid())
+  name         String   @db.VarChar(60) // "PPN"
+  ratePercent  Decimal  @db.Decimal(6, 3) // 0 = tak dipakai
+  basisPercent Decimal  @default(100) @db.Decimal(6, 3) // dasar pengenaan (% dari harga; mis. "DPP nilai lain")
+  mode         TaxMode  @default(added)
+  isActive     Boolean  @default(true)
+  sortOrder    Int      @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("tax_rules")
+}
+
+// Penghitung nomor invoice: satu baris per kunci ('all' atau tahun). Dinaikkan atomik di dalam transaksi penerbitan (tanpa lompat — rollback ikut membatalkan).
+model InvoiceSequence {
+  key        String   @id
+  lastNumber Int      @default(0)
+  updatedAt  DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("invoice_sequences")
+}
+
+// Jejak perubahan Pengaturan Invoice (SEC-109): append-only (trigger di DB). Siapa, kapan, apa; rahasia disamarkan (nomor rekening 4 digit terakhir, payload QRIS hanya panjang).
+// `staffId` tanpa FK (jejak harus tetap ada walau akun staf berubah).
+model SettingsAudit {
+  id       String   @id @default(uuid())
+  at       DateTime @default(now()) @db.Timestamptz(3)
+  staffId  String
+  entity   String   @db.VarChar(40) // invoice_settings | bank_account | qris_account | tax_rule
+  entityId String   @db.VarChar(64)
+  action   String   @db.VarChar(16) // create | update | delete | toggle
+  summary  Json
+
+  @@index([entity, entityId, at])
+  @@index([at])
+  @@map("settings_audit")
 }

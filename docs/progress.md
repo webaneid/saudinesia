@@ -854,7 +854,7 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0 recheck, §5 zona waktu, §10 fase); ADR-0004 (Proposed).
 - [x] Fase 0 — dokumen arsitektur + ADR-0004 + aturan waktu di `CLAUDE.md` (2026-10-30)
 - [x] Fase 1 — Waktu & fondasi (`lib/time/`, `DateTimeField`, migrasi `toLocale*`/`+7 jam`/getter lokal, DB UTC ditegakkan + `TZ=UTC`, `test-time` matriks 4 TZ + penemu sumber) — selesai 2026-10-30; kebijakan pembatalan kini hari kalender (§5.9)
-- [ ] Fase 2 — Pengaturan Invoice (penomoran, pajak, perusahaan, rekening, QRIS, bawaan)
+- [x] Fase 2 — Pengaturan Invoice (penomoran tanpa lompat, pajak, perusahaan + logo, rekening, QRIS, metode bayar, kode unik, S&K, zona waktu aplikasi sebagai setelan) — selesai 2026-10-30 (§6.1)
 - [ ] Fase 3 — Siklus hidup booking (status baru, `referenceDate`, draf, hangus)
 - [ ] Fase 4 — Inti engine (aturan visa per produk + `allowVisaWithoutBundle`, item tiket + Paket Umroh)
 - [ ] Fase 5 — Form booking admin (draf, popup modul→produk, pratinjau, terbit, form jamaah)
