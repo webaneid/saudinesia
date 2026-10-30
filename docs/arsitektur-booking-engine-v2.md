@@ -33,7 +33,7 @@ Prinsip:
 
 | # | Keputusan |
 |---|-----------|
-| D1 | **Tanggal keberangkatan menempel di item**, bukan di booking. Satu booking boleh punya tiket pergi dan pulang (dua item), beberapa paket, atau tambahan susulan (mis. mobil di Makkah). Visa = 1 per jamaah; Paket = 1 keberangkatan per item paket, boleh banyak item. **Tanggal acuan booking = tanggal item paling awal** (turunan). |
+| D1 | **Tanggal keberangkatan menempel di item**, bukan di booking. Satu booking boleh punya tiket pergi dan pulang (dua item), beberapa paket, atau tambahan susulan (mis. mobil di Makkah). Visa = 1 per jamaah, dan **punya tanggal rencana keberangkatan** (`VisaApplication.plannedTravelDate`, `@db.Date`; bawaan mengikuti tiket pergi di booking yang sama, bisa diedit — visa umumnya bebas tetapi disesuaikan dengan tiket); Paket = 1 keberangkatan per item paket, boleh banyak item. **Tanggal acuan booking = tanggal item paling awal** (turunan). |
 | D2 | **Tidak ada batas order** (boleh memesan kapan saja, bahkan mendadak). |
 | D3 | **Admin lebih dulu**: form booking admin → draf tersimpan → pratinjau → terbitkan. **Draf tersimpan di database** (bisa dilanjutkan, tak hilang saat tab ditutup). Setelah terbit, **form data jamaah muncul langsung** (wajib diisi; boleh dilanjutkan nanti, ada indikator kelengkapan). |
 | D4 | **Jatuh tempo**: bawaan di Pengaturan Invoice (mis. 2/4/10 hari) sebagai **saran**; saat pratinjau bisa diedit; **tidak mengikat** — setelah lewat tetap bisa dibayar dan admin bisa membatalkan atau memperpanjang. Untuk booking dari front-end, jatuh tempo bawaan dipasang otomatis dan admin bisa mengubahnya. |
@@ -49,7 +49,7 @@ Prinsip:
 | D14 | **Pajak**: daftar pajak di Pengaturan Invoice (PPN, tarif 0 = tak dipakai; mode harga katalog **termasuk** atau **ditambah** pajak); tampil di baris paling akhir invoice; dibebankan ke pelanggan; NPWP perusahaan (PT). **PPh 23 ditunda** (pemotongan oleh pelanggan badan). PPN masukan dari vendor **tidak** dicatat (hanya keluaran). |
 | D15 | **MDR gateway dibebankan ke pelanggan** (setelan per gateway: persen + tetap), tampil sebagai baris "Biaya layanan" di halaman bayar; di buku kas menjadi komponen terpisah, sedangkan biaya asli dari gateway menjadi uang keluar. |
 | D16 | **Peran**: semua admin boleh melakukan semuanya untuk sementara (peran admin belum dirancang; satu titik kebijakan `lib/booking/policy.ts`, pola `lib/pricing/policy.ts`). |
-| D17 | **Buku kas** (akun kas + entri append-only) ditulis sejak awal oleh engine; menu **Keuangan** (Buku Kas, Saldo Rekening, Arus Kas, PPN, Laba per Booking, Bagi Hasil, Transfer Antar Akun) menyusul (Fase 12). **Bagi hasil sementara hanya developer, bawaan 5%** (setelan; sisanya hak klien) — dasar perhitungan lihat §12 K1. Laporan PPN bulanan dan ekspor CSV = pengembangan berikutnya. |
+| D17 | **Buku kas** (akun kas + entri append-only) ditulis sejak awal oleh engine; menu **Keuangan** (Buku Kas, Saldo Rekening, Arus Kas, PPN, Laba per Booking, Bagi Hasil, Transfer Antar Akun) menyusul (Fase 12). **Bagi hasil sementara hanya developer** (sisanya hak klien), berupa **setelan** `ProfitShareRule[]` (nama penerima, **dasar: laba per booking _atau_ omzet per transaksi**, persen); satu aturan awal "Developer" dengan usulan 5% — **dasar dan jumlah BELUM disepakati**, ditetapkan saat Fase 12 (K1). Laporan PPN bulanan dan ekspor CSV = pengembangan berikutnya. |
 | D18 | **Satu booking = satu invoice yang diperbarui terus** (bukan invoice tambahan). Nomor invoice: awalan custom + format di Pengaturan Invoice. |
 | D19 | **Zona waktu** ditegakkan (§5) — pemilik meminta pengingat permanen: salah zona waktu saat membuat fitur baru sudah sering terjadi. |
 
@@ -64,7 +64,7 @@ Item booking dan adapter kuota (`lib/quota/adapters/`), harga beku (`price_point
 - `Booking.departureDate/returnDate` jadi turunan (`referenceDate` = tanggal item paling awal, dihitung dan disimpan sebagai kolom cache `@db.Date` untuk kueri; `null` bila tak ada item bertanggal). Migrasi fail-closed dengan pemetaan status lama: `awaiting_payment`/`payment_review` → `active`, `confirmed` → `active` + `confirmedAt`, `active`/`completed`/`cancelled` tetap.
 
 ### 3.3 Invoice (1:1 dengan booking)
-`Invoice`: `bookingId` unik, `number` (urut tanpa lompat, dari setelan), `issuedAt` (instan) dan `invoiceDate` (tanggal tampil, bisa diedit), `dueDate` (`@db.Date`, tanggal kalender zona aplikasi), `revision`, `publicToken` (256 bit acak, **dapat dicabut/diganti** admin; **T2:** disimpan apa adanya di kolom unik — ia kunci URL, bukan kata sandi, dilindungi rate limit dan dapat dicabut; pola Facport `order.id`; keputusan akhir K6), `taxSnapshot` (daftar pajak beku: nama, tarif, dasar, mode), `termsSnapshot`, `companySnapshot` (profil perusahaan saat terbit, untuk audit), `notes`. Baris pajak dihitung ulang tiap revisi.
+`Invoice`: `bookingId` unik, `number` (urut tanpa lompat, dari setelan), `issuedAt` (instan) dan `invoiceDate` (tanggal tampil, bisa diedit), `dueDate` (`@db.Date`, tanggal kalender zona aplikasi), `revision`, `linkVersion` (int; tautan publik = token turunan HMAC dari `invoiceId + linkVersion`, **tak disimpan**, dapat dicabut dengan menaikkan versi — usulan K6), `taxSnapshot` (daftar pajak beku: nama, tarif, dasar, mode), `termsSnapshot`, `companySnapshot` (profil perusahaan saat terbit, untuk audit), `notes`. Baris pajak dihitung ulang tiap revisi.
 
 Tagihan = Σ baris item (snapshot) + Σ penyesuaian (diskon/biaya/negosiasi) + pajak (bila mode "ditambah"); `Booking.totalAmount` tetap = Σ snapshot (invarian I4 `docs/arsitektur-harga-terpadu.md` §17) **sebelum pajak**; pajak dihitung di invoice dan disimpan sebagai `Invoice.taxTotal` — laporan laba memakai pendapatan sebelum pajak.
 
@@ -86,7 +86,7 @@ Mengikuti `bantuanku/docs/arsitektur-buku-kas.md` §3 disesuaikan: `CashAccount`
 ## 4. Aturan
 
 ### 4.1 Ketergantungan produk (visa) — D5
-- `VisaProduct.requiredComponents` (kolom ada) diperluas nilainya: `flight`, `hotel`, `transport_to_hotel` (jenis `transport` tertentu — K2), UI admin pada editor visa (centang), diperbarui di `docs/arsitektur-visa.md`.
+- `VisaProduct.requiredComponents` (kolom ada) diperluas menjadi daftar objek: `{type:'flight'}`, `{type:'hotel'}`, `{type:'transport', categories?:string[], tripIds?:string[]}`. Untuk transport, aturan memilih **jurusan** dari modul Transport yang ada (`TransportTrip.category` teks bebas admin — mis. `airport`, `intercity`, `city_tour` — atau trip tertentu); tanpa filter = transport apa pun. "Transport ke hotel" = kategori `airport` (mencakup arah bandara→hotel dan hotel→bandara; pilih trip tertentu bila hanya satu arah). UI admin pada editor visa (centang + pemilih kategori/trip dari data nyata), diperbarui di `docs/arsitektur-visa.md`.
 - Evaluasi di **satu fungsi server** `lib/booking/rules.ts` (`evaluateBookingRules(draft)` → daftar pelanggaran/penjelasan) dipakai admin, front-end, dan jalur API; `requiredComponents` dibaca untuk **setiap produk visa dalam booking**; terpenuhi oleh item sejenis di booking itu **atau** oleh Paket yang memuatnya (mode `included`; `user_choice` belum terpilih = belum terpenuhi).
 - `User.allowVisaWithoutBundle = true` → pelanggaran visa diturunkan jadi **peringatan** (booking boleh dilanjutkan). Aturan lain (kuota, tanggal di periode harga) tetap keras.
 - Hasil aturan ditampilkan di form (apa yang kurang, tombol "tambah tiket/hotel"), bukan sekadar galat 422.
@@ -107,7 +107,7 @@ Mengikuti `bantuanku/docs/arsitektur-buku-kas.md` §3 disesuaikan: `CashAccount`
 Admin membatalkan → dialog menampilkan terbayar/tagihan, daftar pembayaran, dan pilihan: **buat refund** (jumlah dapat diedit), **tahan sebagai pemasukan lain**, atau **tunda** (booking `cancelled`, keputusan uang menyusul — muncul di daftar "uang belum diselesaikan"). Kuota dilepas (`cancelBooking`). Kode unik tidak ikut refund.
 
 ### 4.6 Tanggal acuan dan item bertanggal
-`referenceDate` = `min` dari tanggal mulai item (hotel `checkIn`, transport `travelDate`, muthowif `startDate`, ziarah `tourDate`, tiket `departureDate`, paket: tanggal berangkat paket, haji: `departureDate`, visa: tanggal rencana bila diisi). Tiket pergi dan pulang = dua item; keduanya boleh pada satu booking.
+`referenceDate` = `min` dari tanggal mulai item (hotel `checkIn`, transport `travelDate`, muthowif `startDate`, ziarah `tourDate`, tiket `departureDate`, paket: tanggal berangkat paket, haji: `departureDate`, visa: `plannedTravelDate`). Tiket pergi dan pulang = dua item; keduanya boleh pada satu booking.
 
 ## 5. Zona waktu (aturan wajib — D19)
 
@@ -130,7 +130,7 @@ Admin membatalkan → dialog menampilkan terbayar/tagihan, daftar pembayaran, da
 - **Profil perusahaan**: logo (`MediaField`/MinIO), nama, alamat (`AddressPicker`), telepon, email, situs.
 - **Rekening bank[]**: bank, nomor, atas nama, cabang, aktif, urutan; **QRIS[]**: nama, gambar, payload EMV (dibaca otomatis), aktif.
 - **Metode bayar**: aktifkan transfer/QRIS/iPaymu/Xendit; per gateway: MDR (% + tetap, dibebankan ke pelanggan), mode sandbox/produksi. **Kunci API di env**, bukan database.
-- **Kode unik**: aktif, rentang. **Syarat & Ketentuan** (teks kaya, `richTextField`) dan catatan kaki invoice. **Bagi hasil developer** (%, bawaan 5).
+- **Kode unik**: aktif, rentang. **Syarat & Ketentuan** (teks kaya, `richTextField`) dan catatan kaki invoice. **Bagi hasil** (`ProfitShareRule[]`: penerima, dasar laba/omzet, persen — nilai belum disepakati, K1).
 
 ## 7. Halaman dan alur
 - **Admin → Booking → Baru**: pilih/ buat pelanggan (Tambah Pelanggan inline) → tambah produk (popup: pilih modul → daftar produk modul itu → atur tanggal/jumlah per item) → jumlah jamaah → pratinjau invoice (aturan visa, total, pajak, jatuh tempo bisa diedit) → **simpan draf** / **Terbitkan** → langsung ke form data jamaah. Daftar draf di menu Booking.
@@ -142,7 +142,7 @@ Admin membatalkan → dialog menampilkan terbayar/tagihan, daftar pembayaran, da
 Sumber: `/Users/webane/sites/facport/apps/api/src/lib/qris-emv.ts` (parser TLV, CRC16-CCITT, `buildDynamicQris`, `isValidQrisPayload`), `qris-decode.ts` (`jsqr` + `sharp`), tesnya, `docs/decisions/adr-0022-payment-manual-qris-transfer.md`, `adr-0025-invoice-manajemen-admin-dan-link-publik.md`, `docs/phases/phase-42-qris-auto-decode.md`. Porting = salin logika murni + tes (adaptasi TypeScript strict proyek ini), bukan ketergantungan antarproyek. `jsqr` adalah dependensi baru → tinjau (pemelihara, lisensi, `bun audit`) di fase itu. Catatan riset ADR-0022: gateway di jalajogja tidak pernah benar-benar terintegrasi — iPaymu/Xendit di sini adalah implementasi pertama yang sungguhan dan membutuhkan akun sandbox + kunci dari pemilik.
 
 ## 9. Keamanan dan integritas (diperiksa tiap fase)
-- Invoice publik: token acak ≥ 256 bit, rate limit per IP dan per token, respons seragam tak ada/dicabut, filter field ketat (tes: tak ada modal/HPP/catatan), `noindex`, unggah bukti memeriksa isi berkas (MIME dari isi, ≤ 5 MB) ke bucket privat, tanpa sesi.
+- Invoice publik: token turunan HMAC ≥ 256 bit (usulan K6; kunci turunan dari rahasia env, bukan `JWT_SECRET` mentah — pola `lib/auth/google.ts`), dapat dicabut (`linkVersion`), rate limit per IP dan per token, respons seragam tak ada/dicabut, filter field ketat (tes: tak ada modal/HPP/catatan), `noindex`, unggah bukti memeriksa isi berkas (MIME dari isi, ≤ 5 MB) ke bucket privat, tanpa sesi.
 - Pembayaran: kunci baris booking saat verifikasi (pola `lib/payments/process.ts`), idempotensi posting buku kas (`UNIQUE (refType, refId, component)`), webhook gateway: tanda tangan diverifikasi atas **badan mentah**, `externalId` unik, jumlah dan status dicocokkan dengan pembayaran yang ada (tak mempercayai jumlah dari webhook sebagai kredit tanpa pencocokan), batas waktu stempel untuk mencegah replay.
 - Semua penulisan uang append-only; koreksi pembalik; log perubahan tanpa data pribadi mentah; kolom/tabel baru berisi catatan staf yang bisa memuat nama WAJIB dibersihkan di `lib/account/deletion.ts` (pemindai `scripts/test-deletion.ts`).
 - `.strict()` Zod di semua route; peran lewat `lib/booking/policy.ts`; jejak siapa/kapan di semua tindakan.
@@ -170,13 +170,13 @@ Fase 9–10 membutuhkan akun sandbox dan kunci dari pemilik. Kuota (penahanan sa
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 
-## 12. Keputusan terbuka
-- **K1 — dasar bagi hasil developer 5%**: dari **laba** per booking (pendapatan sebelum pajak − biaya vendor aktual) — asumsi kerja; atau dari pendapatan? Dan kapan dianggap "terhitung" (lunas / semua vendor dibayar / setelah keberangkatan)? Dibahas saat Fase 12.
-- **K2 — "transport ke hotel"**: komponen aturan visa = jenis transport tertentu (mis. kategori `airport_hotel`) atau transport apa pun? Dibahas di Fase 4.
-- **K3 — tanggal rencana visa**: apakah visa punya tanggal rencana (untuk tanggal acuan) atau hanya mengikuti item lain?
-- **K4 — setoran PPN**: batas setor/lapor yang dipakai pengingat (umumnya akhir bulan berikutnya) — **dikonfirmasi akuntan** sebelum Fase 12.
-- **K5 — harga katalog termasuk atau belum termasuk pajak** untuk data yang ada (setelan memungkinkan keduanya; default saat pajak 0 tidak berpengaruh).
-- **K6 — `publicToken`**: disimpan apa adanya (T2) vs hash saja; keputusan akhir di Fase 6 bersama tinjauan keamanan.
+## 12. Keputusan terbuka dan yang sudah ditetapkan
+- **K1 — bagi hasil**: dasar (laba per booking **atau** omzet per transaksi), jumlah/persen, dan kapan "terhitung" **belum disepakati** → dibuat sebagai setelan (`ProfitShareRule[]`), diputuskan saat Fase 12.
+- ~~K2 — transport ke hotel~~ **Ditetapkan (2026-10-30):** memakai jurusan modul Transport (kategori/trip) — §4.1.
+- ~~K3 — tanggal visa~~ **Ditetapkan:** visa punya tanggal rencana keberangkatan (`plannedTravelDate`), bawaan dari tiket — D1.
+- **K4 — setoran PPN** (pengingat/jadwal setor-lapor): **ditunda**, dievaluasi nanti bersama akuntan (Fase 12+).
+- ~~K5 — pajak vs harga katalog~~ **Ditetapkan:** harga katalog **belum termasuk pajak** → mode bawaan pajak = **ditambahkan** pada invoice.
+- **K6 — tautan invoice publik** — **USULAN (menunggu konfirmasi pemilik):** (a) **tanpa login** untuk *melihat dan membayar* (pelanggan bisa menerima tautan lewat WhatsApp; pembayar boleh orang lain; akun hasil Tambah Pelanggan belum tentu diaktifkan); (b) token **turunan HMAC** (`HMAC(kunci turunan env, invoiceId + linkVersion)`), **tidak ada token tersimpan** di database; admin dapat menyalin ulang tautan kapan saja dan **mencabutnya** dengan menaikkan `linkVersion`; (c) data minimal di halaman publik (tanpa nomor paspor/KTP/modal/laba/catatan staf); (d) **mengisi/melihat data pribadi jamaah** (paspor, KTP) TIDAK lewat tautan publik, tetapi lewat **login** pelanggan atau **tautan data jamaah terpisah berumur pendek** yang diterbitkan admin; (e) verifikasi admin tetap mencegah unggahan palsu mengkredit uang. Menggantikan T2 (token disimpan apa adanya).
 
 ## 13. Referensi
 `docs/arsitektur-booking.md` (engine v1, fondasi), `docs/arsitektur-harga-terpadu.md` (harga, snapshot, penyesuaian, laporan), `docs/arsitektur-visa.md` (§9 varian, `requiredComponents`), `docs/arsitektur-paket-umroh.md`, `docs/arsitektur-tiket-pesawat.md`, `docs/arsitektur-manifest.md`, `docs/arsitektur-vendor.md`, `docs/decisions/adr-0004-booking-engine-v2.md`; di luar repo: `facport/docs/decisions/adr-0022…`, `adr-0025…`, `bantuanku/docs/arsitektur-buku-kas.md`.
