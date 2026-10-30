@@ -34,6 +34,7 @@ services:
     # DIKOSONGKAN di sini — satu salinan rahasia DB yang tak perlu terbaca proses web yang dihadapkan ke internet (SEC-10).
     environment:
       POSTGRES_PASSWORD: ""
+      TZ: UTC
     <<: *hardening
     # Non-root (user `bun`) dan tak butuh capability apa pun — port 3000 bukan port istimewa.
     cap_drop: [ALL]

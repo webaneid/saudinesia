@@ -15,6 +15,7 @@ import { FilterBar } from '@/components/shared/data-table/FilterBar'
 import { FilterSelect } from '@/components/shared/data-table/FilterSelect'
 import { Pagination } from '@/components/shared/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/shared/data-table/RowActions'
+import { formatCalendarDate } from '@/lib/time'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -58,7 +59,7 @@ export default async function DashboardPage({ params, searchParams }: Props) {
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const columns: Column<BookingRow>[] = [
     { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
-    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{new Date(b.departureDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span> },
+    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{formatCalendarDate(b.departureDate)}</span> },
     { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{b._count.pilgrims} jamaah</span> },
     { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(Number(b.totalAmount))}</span> },
     {

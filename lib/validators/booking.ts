@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
+import { daysBetween } from '@/lib/time'
 
 // docs/arsitektur-booking.md §6 Step 5 — items[] generik menggantikan field tetap
 // (hotelMakkah/hotelMadinah/transports/muthowif/catering/tourPackages). Satu keranjang campur
@@ -99,7 +100,7 @@ export const createBookingSchema = z.object({
 }).superRefine(async (data, ctx) => {
   // Kuantitas yang menentukan harga TIDAK boleh bebas dari klien: malam/hari harus sama dengan selisih tanggalnya (audit keamanan Fase 4, H1) —
   // tanpa ini `nights: 1` untuk 14 malam hanya dibayar satu malam, dan rentang muthowif terbalik melewati pemeriksaan kapasitas.
-  const dayDiff = (a: string, b: string) => Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000)
+  const dayDiff = daysBetween // tanggal kalender (`z.string().date()`): selisih hari tanpa pengaruh zona/DST
   data.items.forEach((item, i) => {
     if (item.itemType === 'hotel') {
       const nights = dayDiff(item.checkIn, item.checkOut)

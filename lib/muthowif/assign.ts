@@ -1,12 +1,13 @@
 import type { Prisma } from '@prisma/client'
 import { reserveMuthowifQuota, confirmMuthowifQuota } from '@/lib/quota'
+import { calendarDateOf, dbDateOf, eachDay } from '@/lib/time'
 
 type Tx = Prisma.TransactionClient
 
 const PAID_STATUSES = ['confirmed', 'active', 'completed']
 
 function* daysInRange(start: Date, end: Date) {
-  for (const d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) yield new Date(d)
+  for (const day of eachDay(calendarDateOf(start), calendarDateOf(end))) yield dbDateOf(day)
 }
 
 /**

@@ -14,6 +14,7 @@ import { DocumentGrid } from '@/components/shared/media/DocumentGrid'
 import { getDocumentRequirements } from '@/lib/documents/getRequirements'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
+import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -99,7 +100,7 @@ export default async function BookingDetailPage({ params }: Props) {
           </div>
           {deadline && (
             <p className="text-sm text-amber-700">
-              Batas waktu: <span className="font-bold">{new Date(deadline).toLocaleString('id-ID', { dateStyle: 'full', timeStyle: 'short' })}</span>
+              Batas waktu: <span className="font-bold">{formatInstant(deadline, DATETIME_FULL)}</span>
             </p>
           )}
           <div className="rounded-lg bg-white/70 p-4 space-y-2 text-sm">
@@ -137,8 +138,8 @@ export default async function BookingDetailPage({ params }: Props) {
       <div className="rounded-xl border bg-card p-5 space-y-4">
         <h2 className="font-semibold">Detail Perjalanan</h2>
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <div><p className="text-muted-foreground">Berangkat</p><p className="font-semibold">{new Date(booking.departureDate).toLocaleDateString('id-ID', { dateStyle: 'long' })}</p></div>
-          <div><p className="text-muted-foreground">Kembali</p><p className="font-semibold">{new Date(booking.returnDate).toLocaleDateString('id-ID', { dateStyle: 'long' })}</p></div>
+          <div><p className="text-muted-foreground">Berangkat</p><p className="font-semibold">{formatCalendarDate(booking.departureDate, DATE_LONG)}</p></div>
+          <div><p className="text-muted-foreground">Kembali</p><p className="font-semibold">{formatCalendarDate(booking.returnDate, DATE_LONG)}</p></div>
           <div><p className="text-muted-foreground">Jumlah Jamaah</p><p className="font-semibold">{booking.pilgrims.length} orang</p></div>
           <div><p className="text-muted-foreground">Musim</p><p className="font-semibold capitalize">{booking.season}</p></div>
         </div>
@@ -167,7 +168,7 @@ export default async function BookingDetailPage({ params }: Props) {
             <div key={tp.id} className="flex justify-between text-sm">
               <div>
                 <p className="font-medium">{tp.tourPackage.name}</p>
-                <p className="text-muted-foreground">{new Date(tp.tourDate).toLocaleDateString('id-ID')} · {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}</p>
+                <p className="text-muted-foreground">{formatCalendarDate(tp.tourDate, DATE_NUMERIC)} · {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}</p>
               </div>
               <p className="font-semibold">{formatRupiah(Number(tp.totalPrice))}</p>
             </div>

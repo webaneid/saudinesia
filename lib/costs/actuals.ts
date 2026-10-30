@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 import { VendorNotUsableError, assertVendorUsable } from '@/lib/vendors/integrity'
+import { addDays, calendarDateOf, dbDateOf, isCalendarDate, todayInApp } from '@/lib/time'
 
 // PENGELUARAN AKTUAL ke vendor (docs/arsitektur-harga-terpadu.md §20, 7C). SATU-SATUNYA penulis `cost_actuals`. Modal di snapshot adalah RENCANA (HPP awal); di sini dicatat uang yang benar-benar
 // keluar supaya terlihat di mana HPP meleset. Aturan catatan dievaluasi per BARIS rencana (snapshot): selisih = Σ aktual aktif − modal rencana; catatan wajib bila baris dinyatakan lunas dan selisih
@@ -57,12 +58,11 @@ function normalize(i: Pick<ActualInput, 'component' | 'currency' | 'amount' | 'a
     if (i.amountIdr == null || !Number.isFinite(i.amountIdr) || i.amountIdr <= 0 || i.amountIdr > MAX_AMOUNT) throw new CostActualError(400, 'Mata uang asing: isi jumlah rupiah yang benar-benar keluar')
     amountIdr = round2(i.amountIdr)
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(i.paidAt) || Number.isNaN(Date.parse(`${i.paidAt}T00:00:00Z`)) || new Date(`${i.paidAt}T00:00:00Z`).toISOString().slice(0, 10) !== i.paidAt) throw new CostActualError(400, 'Tanggal bayar harus berformat YYYY-MM-DD')
-  const today = new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10)
-  if (i.paidAt < '2000-01-01' || i.paidAt > new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10)) throw new CostActualError(400, 'Tanggal bayar tidak wajar')
+  if (!isCalendarDate(i.paidAt)) throw new CostActualError(400, 'Tanggal bayar harus berformat YYYY-MM-DD')
+  if (i.paidAt < '2000-01-01' || i.paidAt > addDays(todayInApp(), 1)) throw new CostActualError(400, 'Tanggal bayar tidak wajar')
   const varianceNote = i.varianceNote?.trim() || null
   if (varianceNote && varianceNote.length > 500) throw new CostActualError(400, 'Catatan maksimal 500 karakter')
-  return { component, currency, amount, amountIdr, paidAt: new Date(`${i.paidAt}T00:00:00Z`), varianceNote }
+  return { component, currency, amount, amountIdr, paidAt: dbDateOf(i.paidAt), varianceNote }
 }
 
 async function usableVendor(vendorId: string, db?: Parameters<typeof assertVendorUsable>[1]): Promise<void> {
@@ -120,7 +120,7 @@ export async function updateCostActual(bookingId: string, id: string, patch: Act
     if (vendorId !== current.vendorId) await usableVendor(vendorId, tx)
     const n = normalize({
       component: patch.component ?? current.component, currency: patch.currency ?? current.currency, amount: patch.amount ?? Number(current.amount),
-      amountIdr: patch.amountIdr ?? Number(current.amountIdr), paidAt: patch.paidAt ?? current.paidAt.toISOString().slice(0, 10),
+      amountIdr: patch.amountIdr ?? Number(current.amountIdr), paidAt: patch.paidAt ?? calendarDateOf(current.paidAt),
       varianceNote: patch.varianceNote !== undefined ? patch.varianceNote : current.varianceNote,
     })
     await tx.costActual.update({ where: { id }, data: { vendorId, ...n, ...(patch.isSettled !== undefined ? { isSettled: patch.isSettled } : {}) } })
@@ -161,7 +161,7 @@ export async function listCostActuals(bookingId: string): Promise<{ lines: PlanL
   const names = new Map(users.map(u => [u.id, u.fullName]))
   const view = (a: (typeof actuals)[number]): ActualEntryView => ({
     id: a.id, vendorId: a.vendorId, vendorName: a.vendor.name, component: a.component, currency: a.currency, amount: Number(a.amount), amountIdr: Number(a.amountIdr),
-    paidAt: a.paidAt.toISOString().slice(0, 10), isSettled: a.isSettled, varianceNote: a.varianceNote, recordedBy: a.recordedBy, recordedByName: names.get(a.recordedBy) ?? null,
+    paidAt: calendarDateOf(a.paidAt), isSettled: a.isSettled, varianceNote: a.varianceNote, recordedBy: a.recordedBy, recordedByName: names.get(a.recordedBy) ?? null,
     createdAt: a.createdAt.toISOString(), voided: a.voidedAt !== null, voidReason: a.voidReason,
   })
   const bySnap = new Map<string, typeof actuals>()

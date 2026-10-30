@@ -13,6 +13,7 @@ import { ResendInviteButton } from './ResendInviteButton'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Card } from '@/components/admin/ui/Card'
+import { formatCalendarDate, formatInstant } from '@/lib/time'
 
 // Detail Pelanggan (docs/arsitektur-pelanggan.md §3) — hanya lihat. Akun non-pilgrim (staf) → 404.
 
@@ -21,7 +22,8 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-const dt = (d: Date) => d.toLocaleDateString('id-ID', { dateStyle: 'medium' })
+const dt = (d: Date) => formatInstant(d) // INSTAN (dibuat/diverifikasi) di zona aplikasi
+const day = (d: Date) => formatCalendarDate(d) // TANGGAL KALENDER (`@db.Date`)
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -45,7 +47,7 @@ export default async function AdminCustomerDetail({ params, searchParams }: Prop
   const bookingColumns: Column<(typeof c.bookings)[number]>[] = [
     { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
     { key: 'ordered', header: 'Dipesan', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{dt(b.createdAt)}</span> },
-    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[12px] text-admin-muted">{dt(b.departureDate)}</span> },
+    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[12px] text-admin-muted">{day(b.departureDate)}</span> },
     { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(b.totalAmount)}</span> },
     { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status as keyof typeof BOOKING_STATUS]?.label ?? b.status}</Badge> },
     { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },

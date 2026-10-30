@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { DOC_LABEL } from '@/lib/constants/booking'
 import type { DocumentItem } from './useDocuments'
+import { DATE_SHORT_MONTH, formatInstant } from '@/lib/time'
 
 type Props = {
   docType: string
@@ -26,7 +27,7 @@ function formatBytes(bytes: number | null): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatInstant(iso, DATE_SHORT_MONTH)
 }
 
 function isImage(fileName: string): boolean {

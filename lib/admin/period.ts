@@ -1,14 +1,10 @@
-// Murni — pilihan periode laporan (WIB) untuk filter "Periode" (docs/arsitektur-tabel.md §2.3). Dulu disalin di dua halaman laporan.
+// Murni — pilihan periode laporan (zona aplikasi, lib/time) untuk filter "Periode" (docs/arsitektur-tabel.md §2.3). Dulu disalin di dua halaman laporan.
+import { addDays, todayInApp } from '@/lib/time'
 export type PeriodPreset = { key: string; label: string; from: string; to: string }
 
-const WIB_MS = 7 * 3_600_000
-/** Tanggal kalender WIB (YYYY-MM-DD) dari satu instan. */
-export const wibDate = (d: Date): string => new Date(d.getTime() + WIB_MS).toISOString().slice(0, 10)
-export const addDays = (iso: string, n: number): string => new Date(Date.parse(`${iso}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10)
-
-/** Bulan ini, Bulan lalu, 90 hari, Tahun ini — dihitung dari `now` (WIB). */
+/** Bulan ini, Bulan lalu, 90 hari, Tahun ini — dihitung dari `now` di zona aplikasi. */
 export function periodPresets(now: Date = new Date()): PeriodPreset[] {
-  const today = wibDate(now)
+  const today = todayInApp(now)
   const month = today.slice(0, 8) // "YYYY-MM-"
   const lastMonthEnd = addDays(`${month}01`, -1)
   return [

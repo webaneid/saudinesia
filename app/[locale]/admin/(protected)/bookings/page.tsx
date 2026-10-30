@@ -15,6 +15,7 @@ import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { formatCalendarDate } from '@/lib/time'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -81,7 +82,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     },
     {
       key: 'departure', header: 'Berangkat',
-      cell: b => <span className="text-[12px] text-admin-muted">{new Date(b.departureDate).toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span>,
+      cell: b => <span className="text-[12px] text-admin-muted">{formatCalendarDate(b.departureDate)}</span>,
     },
     {
       key: 'total', header: 'Total', hideBelowLg: true,

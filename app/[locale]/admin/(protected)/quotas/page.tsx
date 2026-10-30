@@ -8,6 +8,7 @@ import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { addDays, calendarDateOf, dbDateOf, formatCalendarDate, todayInApp } from '@/lib/time'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -46,8 +47,8 @@ export default async function AdminQuotas({ params, searchParams }: Props) {
   const sp = await searchParams
   const list = parseListParams(sp)
 
-  const today = new Date(); today.setHours(0, 0, 0, 0)
-  const windowEnd = new Date(today); windowEnd.setDate(windowEnd.getDate() + POOL_WINDOW_DAYS)
+  const today = todayInApp() // 'YYYY-MM-DD' zona aplikasi
+  const windowEnd = addDays(today, POOL_WINDOW_DAYS)
 
   const hotelOptions = await prisma.hotel.findMany({ orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { id: true, name: true } })
   const hotelId = hotelOptions.some(h => h.id === sp.hotel) ? (sp.hotel as string) : undefined
@@ -68,23 +69,23 @@ export default async function AdminQuotas({ params, searchParams }: Props) {
     // Kapasitas pool = SUM live dailyCapacity muthowif aktif (docs/arsitektur-muthowif.md §9.2)
     prisma.muthowif.aggregate({ where: { isActive: true }, _sum: { dailyCapacity: true } }),
     prisma.muthowifPoolAvailability.findMany({
-      where: { date: { gte: today, lte: windowEnd } },
+      where: { date: { gte: dbDateOf(today), lte: dbDateOf(windowEnd) } },
       orderBy: { date: 'asc' },
     }),
   ])
   const { items: hotels, meta } = hotelPage
 
   const totalCapacity = capacitySum._sum.dailyCapacity ?? 0
-  const poolByDate = new Map(poolRows.map(p => [p.date.toISOString().slice(0, 10), p]))
+  const poolByDate = new Map(poolRows.map(p => [calendarDateOf(p.date), p]))
   const muthowifPool: PoolRow[] = Array.from({ length: POOL_WINDOW_DAYS + 1 }, (_, i) => {
-    const date = new Date(today); date.setDate(date.getDate() + i)
-    const key = date.toISOString().slice(0, 10)
+    const key = addDays(today, i)
+    const date = dbDateOf(key)
     const row = poolByDate.get(key)
     return { date, pendingCount: row?.pendingCount ?? 0, bookedCount: row?.bookedCount ?? 0 }
   }).filter(r => r.pendingCount > 0 || r.bookedCount > 0)
 
   const poolColumns: Column<PoolRow>[] = [
-    { key: 'date', header: 'Tanggal', mobile: 'title', cell: p => <span className="text-[13px] font-medium">{p.date.toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span> },
+    { key: 'date', header: 'Tanggal', mobile: 'title', cell: p => <span className="text-[13px] font-medium">{formatCalendarDate(p.date)}</span> },
     { key: 'pending', header: 'Pending', align: 'right', cell: p => <span className="font-medium tabular-nums text-admin-gold-strong">{p.pendingCount}</span> },
     { key: 'booked', header: 'Booked', align: 'right', cell: p => <span className="font-medium tabular-nums text-admin-accent-strong">{p.bookedCount}</span> },
     {

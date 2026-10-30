@@ -12,6 +12,7 @@ import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
+import { formatInstant } from '@/lib/time'
 
 // Daftar Pelanggan (docs/arsitektur-pelanggan.md): akun pemesan (role pilgrim). Semua peran admin boleh MELIHAT; mengubah status akun tetap di Sistem → Pengguna (superadmin).
 
@@ -61,7 +62,7 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
         </>
       ),
     },
-    { key: 'joined', header: 'Daftar', hideBelowLg: true, cell: c => <span className="text-[12px] text-admin-muted">{c.createdAt.toLocaleDateString('id-ID', { dateStyle: 'medium' })}</span> },
+    { key: 'joined', header: 'Daftar', hideBelowLg: true, cell: c => <span className="text-[12px] text-admin-muted">{formatInstant(c.createdAt)}</span> },
     { key: 'bookings', header: 'Pesanan', cell: c => <span className="text-[12px] font-medium tabular-nums">{c.bookingCount}</span> },
     { key: 'paid', header: 'Total dibayar', hideBelowLg: true, cell: c => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(c.paidIdr)}</span> },
     {

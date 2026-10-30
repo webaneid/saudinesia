@@ -6,6 +6,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
 import { formatRupiah } from '@/lib/utils'
+import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
 
 // Satu kartu harga untuk SEMUA produk (docs/arsitektur-harga-terpadu.md §6, §16): Modal · Harga Jual · Untung seragam, mode Otomatis/Manual, peringatan, atur / kembalikan
 // harga manual, riwayat. Sumbernya satu: GET /api/v1/admin/pricing/points (titik harga). Rincian MODAL tetap editor biayanya masing-masing (di atas/di samping kartu ini);
@@ -256,7 +257,7 @@ function ChangeHistory({ changes }: { changes: Change[] }) {
               {variantLabel(c.variantKey) ? ` · ${variantLabel(c.variantKey)}` : ''}
               {c.kind === 'cost_set' ? ` · modal ${rp(c.oldCostIdr)} → ${rp(c.newCostIdr)}` : ` · ${rp(c.oldSellIdr)} → ${rp(c.newSellIdr)}`}
               {c.note ? ` · “${c.note}”` : ''}
-              <span className="ml-1 opacity-70">{new Date(c.at).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+              <span className="ml-1 opacity-70">{formatInstant(c.at, DATETIME_MEDIUM)}</span>
             </li>
           ))}
         </ul>

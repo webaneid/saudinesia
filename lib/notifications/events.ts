@@ -1,4 +1,5 @@
 import { waTemplates } from '@/lib/notifications/templates/whatsapp'
+import { DATETIME_LONG, formatInstant } from '@/lib/time'
 
 // Semua kejadian notifikasi di SATU union (docs/arsitektur-notifikasi.md §3–4). Menambah kejadian = tambah satu varian di sini;
 // `waMessage` dan `emailContent` (lib/email/templates.ts) memakai `switch` yang lengkap, jadi kompiler memaksa kedua kanal diisi.
@@ -41,7 +42,7 @@ export function waMessage(e: NotificationEvent): string | null {
   }
 }
 
-/** Format batas waktu untuk pesan (zona WIB, bahasa Indonesia) — satu tempat, dipakai route dan cron. */
+/** Format batas waktu untuk pesan (zona aplikasi, bahasa Indonesia) — satu tempat, dipakai route dan cron. */
 export function formatDeadline(d: Date): string {
-  return d.toLocaleString('id-ID', { timeZone: 'Asia/Jakarta', dateStyle: 'long', timeStyle: 'short' })
+  return formatInstant(d, DATETIME_LONG)
 }

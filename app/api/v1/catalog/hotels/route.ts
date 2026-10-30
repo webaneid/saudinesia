@@ -4,6 +4,7 @@ import { getProductImages } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { addDays, dbDateOf, todayInApp } from '@/lib/time'
 
 const querySchema = z.object({
   city:      z.enum(['makkah', 'madinah']).optional(),
@@ -19,8 +20,9 @@ export async function GET(request: Request) {
     if (!parsed.success) return NextResponse.json(err('Parameter tidak valid'), { status: 400 })
 
     const { city, stars, check_in, check_out } = parsed.data
-    const checkIn  = check_in  ? new Date(check_in)  : new Date()
-    const checkOut = check_out ? new Date(check_out) : new Date(Date.now() + 7 * 86_400_000)
+    const today = todayInApp()
+    const checkIn  = dbDateOf(check_in  ?? today)
+    const checkOut = dbDateOf(check_out ?? addDays(today, 7))
 
     // Harga & kuota di-resolve dari HotelRoomSchedule (lewat HotelPricePeriod) yang periodenya
     // mencakup checkIn/checkOut — bukan lagi detectSeason() (docs/arsitektur-hotel.md §10.1 poin 2,

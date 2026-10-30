@@ -20,6 +20,7 @@ import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -58,7 +59,7 @@ type HotelService = {
 }
 
 function formatDate(d: string) {
-  return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })
+  return formatCalendarDate(d, DATE_SHORT_MONTH)
 }
 
 export default function HotelDetailPage() {

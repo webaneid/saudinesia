@@ -11,6 +11,7 @@ import { Card } from '@/components/admin/ui/Card'
 import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
+import { startOfDayInApp, todayInApp } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -24,7 +25,7 @@ export default async function AdminOverview({ params }: Props) {
     prisma.booking.count({ where: { status: 'payment_review' } }),
     prisma.visaApplication.count({ where: { status: 'pending_documents' } }),
     prisma.booking.count({
-      where: { status: 'confirmed', updatedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) } },
+      where: { status: 'confirmed', updatedAt: { gte: startOfDayInApp(todayInApp()) } },
     }),
   ])
 

@@ -14,6 +14,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Modal } from '@/components/admin/ui/Modal'
 import { ShieldCheck } from 'lucide-react'
+import { DATE_NUMERIC, formatInstant } from '@/lib/time'
 
 type DeletionRequest = {
   id: string
@@ -117,7 +118,7 @@ export default function DeletionRequestsPage() {
         </>
       ),
     },
-    { key: 'requested', header: 'Diajukan', cell: req => <span className="text-[12px] text-admin-muted">{new Date(req.requestedAt).toLocaleDateString('id-ID')}</span> },
+    { key: 'requested', header: 'Diajukan', cell: req => <span className="text-[12px] text-admin-muted">{formatInstant(req.requestedAt, DATE_NUMERIC)}</span> },
     { key: 'status', header: 'Status', cell: req => <Badge tone={DELETION_REQUEST_TONE[req.status] ?? 'neutral'}>{STATUS_LABEL[req.status]}</Badge> },
     { key: 'by', header: 'Diproses Oleh', cell: req => <span className="text-[12px] text-admin-muted">{req.processedBy?.fullName ?? '—'}</span> },
     {

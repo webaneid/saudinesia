@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/db'
 import type { PriceOwner } from '../types'
 import { resolveSingle } from './shared'
+import { calendarDateOf } from '@/lib/time'
 
 // Modul dasar satu-varian: Tiket Pesawat, Hotel (jadwal kamar), Transport (rute×kendaraan), Muthowif (singleton).
 // Modal = ProductCost × kurs; jual = margin tipe produk → pembulatan (computeSellPrice).
@@ -11,7 +12,7 @@ export const flightOwner: PriceOwner = {
   existing: async ids => (await prisma.flightSchedule.findMany({ where: { id: { in: ids } }, select: { id: true } })).map(r => r.id),
   describe: async ids => {
     const rows = await prisma.flightSchedule.findMany({ where: { id: { in: ids } }, include: { route: true } })
-    return new Map(rows.map(r => [r.id, { label: `Tiket ${r.route.origin} → ${r.route.destination} (${r.departureFrom.toISOString().slice(0, 10)})`, href: `/admin/products/flight/${r.id}` }]))
+    return new Map(rows.map(r => [r.id, { label: `Tiket ${r.route.origin} → ${r.route.destination} (${calendarDateOf(r.departureFrom)})`, href: `/admin/products/flight/${r.id}` }]))
   },
   resolve: id => resolveSingle('flight', id, 'person'),
 }
@@ -22,7 +23,7 @@ export const hotelOwner: PriceOwner = {
   existing: async ids => (await prisma.hotelRoomSchedule.findMany({ where: { id: { in: ids } }, select: { id: true } })).map(r => r.id),
   describe: async ids => {
     const rows = await prisma.hotelRoomSchedule.findMany({ where: { id: { in: ids } }, include: { roomType: true, period: { include: { hotel: true } } } })
-    return new Map(rows.map(r => [r.id, { label: `${r.period.hotel.name} — ${r.roomType.name} (${r.period.periodStart.toISOString().slice(0, 10)} s/d ${r.period.periodEnd.toISOString().slice(0, 10)})`, href: `/admin/products/hotels/${r.period.hotelId}` }]))
+    return new Map(rows.map(r => [r.id, { label: `${r.period.hotel.name} — ${r.roomType.name} (${calendarDateOf(r.period.periodStart)} s/d ${calendarDateOf(r.period.periodEnd)})`, href: `/admin/products/hotels/${r.period.hotelId}` }]))
   },
   resolve: id => resolveSingle('hotel', id, 'room_night'),
 }

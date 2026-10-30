@@ -1,6 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { periodBounds, ReportInputError } from './profit'
+import { APP_TIMEZONE } from '@/lib/time'
 
 // LAPORAN SELISIH HPP vs AKTUAL (docs/arsitektur-harga-terpadu.md §20, 7D): di mana modal rencana (snapshot, HPP awal) meleset dari uang yang benar-benar keluar (cost_actuals).
 // Dasar periode = tanggal PESANAN menurut WIB (sama dengan laporan untung §19), SEMUA status (uang yang sudah keluar tetap biaya walau pesanan batal). SQL ber-parameter ($queryRaw: agregat
@@ -68,7 +69,7 @@ export async function getVarianceReport(p: VarianceParams): Promise<VarianceRepo
         COALESCE(SUM(a.amount) FILTER (WHERE a."snapshotId" IS NULL OR NOT EXISTS (SELECT 1 FROM ln WHERE ln.snapshot_id = a."snapshotId")), 0)::float8 AS without_plan
       FROM act a`),
     run<SliceAgg & { item_type: string }>(Prisma.sql`SELECT item_type, COUNT(*)::int AS lines, COALESCE(SUM(plan), 0)::float8 AS plan, COALESCE(SUM(actual), 0)::float8 AS actual FROM ln WHERE settled GROUP BY item_type ORDER BY ABS(SUM(actual) - SUM(plan)) DESC, item_type`),
-    run<SliceAgg & { month: string }>(Prisma.sql`SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Jakarta'), 'YYYY-MM') AS month, COUNT(*)::int AS lines, COALESCE(SUM(plan), 0)::float8 AS plan, COALESCE(SUM(actual), 0)::float8 AS actual FROM ln WHERE settled GROUP BY 1 ORDER BY 1`),
+    run<SliceAgg & { month: string }>(Prisma.sql`SELECT to_char(date_trunc('month', created_at AT TIME ZONE 'UTC' AT TIME ZONE ${APP_TIMEZONE}), 'YYYY-MM') AS month, COUNT(*)::int AS lines, COALESCE(SUM(plan), 0)::float8 AS plan, COALESCE(SUM(actual), 0)::float8 AS actual FROM ln WHERE settled GROUP BY 1 ORDER BY 1`),
     run<{ vendor_id: string; spend: number; entries: number }>(Prisma.sql`SELECT a."vendorId" AS vendor_id, SUM(a.amount)::float8 AS spend, COUNT(*)::int AS entries FROM act a GROUP BY 1 ORDER BY SUM(a.amount) DESC, 1`),
     run<{ component: string; spend: number; entries: number }>(Prisma.sql`SELECT a."component" AS component, SUM(a.amount)::float8 AS spend, COUNT(*)::int AS entries FROM act a GROUP BY 1 ORDER BY SUM(a.amount) DESC, 1`),
   ])

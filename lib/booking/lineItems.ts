@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError } from './errors'
+import { calendarDateOf } from '@/lib/time'
 import type { CreateBookingInput, BookingItemInput } from '@/lib/validators/booking'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import type { TourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
@@ -15,7 +16,7 @@ const DEFAULT_DURATION_PROBE_DAY = 1
 export type TourPackageResolved = { breakdown: TourPackageBreakdown; transportQuotaId: string | null }
 
 const day = (d: string | Date): string => {
-  const iso = new Date(d).toISOString().slice(0, 10)
+  const iso = typeof d === 'string' ? d.slice(0, 10) : calendarDateOf(d) // tanggal kalender (`z.string().date()` atau `@db.Date`)
   return `${iso.slice(8, 10)}-${iso.slice(5, 7)}-${iso.slice(0, 4)}`
 }
 

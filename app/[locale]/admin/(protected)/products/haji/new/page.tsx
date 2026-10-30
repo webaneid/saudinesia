@@ -8,11 +8,12 @@ import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { HAJI_TYPES } from '@/lib/constants/haji'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { yearInApp } from '@/lib/time'
 
 export default function NewHajiPage() {
   const { locale } = useParams() as { locale: string }
   const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/haji', id => `/${locale}/admin/products/haji/${id}`, 'Produk haji gagal dibuat.')
-  const [form, setForm] = useState({ name: '', hajiType: 'furoda', year: new Date().getFullYear() + 1, departureDate: '', returnDate: '', durationDays: 40, totalQuota: 50, description: '', includes: '' })
+  const [form, setForm] = useState({ name: '', hajiType: 'furoda', year: yearInApp() + 1, departureDate: '', returnDate: '', durationDays: 40, totalQuota: 50, description: '', includes: '' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
