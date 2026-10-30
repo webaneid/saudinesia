@@ -849,3 +849,18 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] Tabel seragam — Fase 5 (penjaga otomatis `test-table-consistency` yang menemukan pelanggaran sendiri; `useConfirm` menggantikan sisa `window.confirm`; aturan di `CLAUDE.md`) selesai 2026-10-30. **Seluruh rencana tabel seragam (Fase 1–5) selesai.**
 - [x] Hapus prototipe `/campaigns` (dasbor donasi statis, di luar produk) + token Tailwind legacy miliknya — selesai 2026-10-30 atas keputusan pemilik. Pengecualian `<table>` di tes kini kosong.
 - [x] Pembersihan sisa booking lama (keputusan pemilik 2026-10-30: booking engine akan dibuat baru) — dihapus: `PilgrimForm`, `DocumentUploader`, `Footer`, `LocaleSwitcher`, `lib/validators/contact.ts`, `docs/m4-plan.md`, halaman jamaah `/bookings` & `/groups` (TODO), model `Group`/`GroupMember`/`BookingVisa` + `Booking.groupId` (migrasi `20261102090000` fail-closed), dependensi `@tiptap/extension-image`/`-link`/`@types/jszip` (`@tiptap/pm` dipertahankan: peer wajib).
+
+## Booking Engine v2 (admin lebih dulu, invoice, pembayaran bertahap, buku kas) — dirancang 2026-10-30
+Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0 recheck, §5 zona waktu, §10 fase); ADR-0004 (Proposed).
+- [x] Fase 0 — dokumen arsitektur + ADR-0004 + aturan waktu di `CLAUDE.md` (2026-10-30)
+- [ ] Fase 1 — Waktu & fondasi (`lib/time/`, `DateTimeField`, migrasi `toLocale*`/`+7 jam`, DB UTC ditegakkan, `test-time` matriks TZ)
+- [ ] Fase 2 — Pengaturan Invoice (penomoran, pajak, perusahaan, rekening, QRIS, bawaan)
+- [ ] Fase 3 — Siklus hidup booking (status baru, `referenceDate`, draf, hangus)
+- [ ] Fase 4 — Inti engine (aturan visa per produk + `allowVisaWithoutBundle`, item tiket + Paket Umroh)
+- [ ] Fase 5 — Form booking admin (draf, popup modul→produk, pratinjau, terbit, form jamaah)
+- [ ] Fase 6 — Invoice terbit (penomoran, pajak, revisi, void snapshot T1, invoice publik + PDF baru)
+- [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
+- [ ] Fase 8 — QRIS dinamis (porting Facport)
+- [ ] Fase 9 — iPaymu · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
+- [ ] Fase 11 — Front-end pelanggan memakai engine
+- [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking + bagi hasil developer, Transfer Antar Akun)
