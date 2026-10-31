@@ -114,3 +114,8 @@ export async function revokeInvoiceLink(bookingId: string): Promise<{ linkVersio
   return { linkVersion: inv.linkVersion }
 }
 
+/** Cabut SEMUA tautan invoice publik milik satu akun (penghapusan akun UU PDP) — di transaksi penghapusan yang sama. */
+export async function revokeInvoiceLinksOfUser(tx: Tx, userId: string): Promise<void> {
+  await tx.invoice.updateMany({ where: { booking: { userId } }, data: { linkVersion: { increment: 1 } } })
+}
+

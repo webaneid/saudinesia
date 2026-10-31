@@ -11,7 +11,7 @@ import { formatRupiah } from '@/lib/utils'
 // Tautan salah/dicabut → 404 seragam. Header no-store/noindex/no-referrer: next.config.ts. Pembayaran dari halaman ini = Fase 7.
 
 export const dynamic = 'force-dynamic'
-export const metadata: Metadata = { title: 'Invoice', robots: { index: false, follow: false } }
+export const metadata: Metadata = { title: 'Invoice', robots: { index: false, follow: false }, referrer: 'no-referrer' }
 
 type Props = { params: Promise<{ locale: string; token: string }> }
 

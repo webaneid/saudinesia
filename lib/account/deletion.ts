@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { unusablePasswordHash } from '@/lib/auth/googleAccounts'
 import { deleteObject as deleteStoredObject, deleteObjectsByPrefix } from '@/lib/storage/minio'
 import { sweepErasedAccount } from '@/lib/account/erasureSweep'
+import { revokeInvoiceLinksOfUser } from '@/lib/invoice/issue'
 import { sendEmail, type EmailInput, type EmailResult } from '@/lib/email/resend'
 import { accountDeletedEmail, deletionRejectedEmail, deletionRequestedEmail } from '@/lib/email/accountTemplates'
 
@@ -180,6 +181,8 @@ export async function executeDeletion(
       await tx.costActual.updateMany({ where: { booking: { userId } }, data: { component: '[dihapus]' } }) // komponen = teks bebas staf (bisa memuat nama)
       // Catatan alasan revisi booking (Fase 6b) = teks bebas staf, bisa menyebut nama pemesan/jamaah → penanda. Ringkasan revisi tak memuat data pribadi (label produk, "Jamaah ke-N").
       await tx.bookingRevision.updateMany({ where: { booking: { userId }, reason: { not: null } }, data: { reason: '[dihapus]' } })
+      // Tautan invoice publik (Fase 6c) yang beredar di luar ikut dicabut: dokumen transaksi akun yang dihapus tak lagi bisa dibuka lewat tautan lama.
+      await revokeInvoiceLinksOfUser(tx, userId)
       // Baris log dipertahankan untuk audit pengiriman; penerima & isi pesan tidak.
       await tx.notificationLog.updateMany({ where: { userId }, data: { recipient: '[dihapus]', messagePreview: null, error: null } })
       await tx.authToken.deleteMany({ where: { OR: [{ userId }, { email: u.email }] } })

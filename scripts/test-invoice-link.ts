@@ -13,6 +13,7 @@ import { revokeInvoiceLink } from '@/lib/invoice/issue'
 import { loadPublicInvoice } from '@/lib/invoice/publicView'
 import { sendInvoiceNotification } from '@/lib/invoice/notifyInvoice'
 import { waMessage } from '@/lib/notifications/events'
+import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -49,8 +50,13 @@ await t('TOKEN: tautan benar → booking; satu karakter diubah / id invoice lain
   const a = await published(); const b = await published()
   const ta = invoiceLinkToken(await invOf(a))
   assert.deepEqual((await resolveInvoiceToken(ta))?.bookingId, a)
-  const last = ta.at(-1) === 'A' ? 'B' : 'A'
-  assert.equal(await resolveInvoiceToken(ta.slice(0, -1) + last), null)
+  const mid = ta.length - 20 // karakter di TENGAH tanda tangan (karakter terakhir base64url hanya membawa 4 bit)
+  assert.equal(await resolveInvoiceToken(ta.slice(0, mid) + (ta[mid] === 'A' ? 'B' : 'A') + ta.slice(mid + 1)), null)
+  // Ejaan NON-kanonik dari tanda tangan yang sama (2 bit terakhir diubah) ditolak — satu tautan = satu string (kunci batas laju tak bisa digandakan).
+  const sigLast = ta.at(-1)!
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_'
+  const base = alphabet.indexOf(sigLast) & ~3
+  for (let i = 0; i < 4; i++) { const ch = alphabet[base + i]!; if (ch !== sigLast) assert.equal(await resolveInvoiceToken(ta.slice(0, -1) + ch), null, `non-kanonik ${ch}`) }
   const [, sig] = ta.split('.')
   assert.equal(await resolveInvoiceToken(`${(await invOf(b)).id.replace(/-/g, '')}.${sig}`), null, 'tanda tangan invoice A tak berlaku untuk invoice B')
   for (const bad of ['', 'x', `${ta}x`, ta.replace('.', ''), `${'0'.repeat(32)}.${sig}`, '../../etc/passwd']) assert.equal(await resolveInvoiceToken(bad), null, bad)
@@ -89,11 +95,17 @@ await t('NOTIFIKASI: `invoice_issued` WhatsApp memuat tautan https saja; log not
   assert.ok(msg && msg.includes('INV-1'))
   const bad = waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: null, path: null })
   assert.ok(bad && !/invoice\//.test(bad))
+  const insecure = waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: null, path: '/id/invoice/x' })
+  assert.ok(insecure && (process.env.NODE_ENV === 'development' || !/http:\/\//.test(insecure)), 'tautan http tak dikirim di luar development')
+  if (process.env.NODE_ENV !== 'development') {
+    assert.doesNotMatch(waTemplates.invoiceIssued('INV-1', 'SND-1', 'Rp 1', '-', 'http://contoh.test/id/invoice/x'), /http:/, 'templat menolak tautan http')
+    assert.match(waTemplates.invoiceIssued('INV-1', 'SND-1', 'Rp 1', '-', 'https://contoh.test/id/invoice/x'), /https:\/\/contoh\.test/)
+  }
   const tok = `${'a'.repeat(32)}.${'B'.repeat(43)}`
   assert.equal(redactInvoiceLinks(`lihat https://x.test/id/invoice/${tok} ya`), 'lihat https://x.test/id/invoice/[tautan] ya')
   const id = await published()
-  assert.equal(await sendInvoiceNotification(id, { dedupe: false }), true)
-  assert.equal(await sendInvoiceNotification('00000000-0000-4000-8000-000000000000', { dedupe: false }), false)
+  assert.ok(Array.isArray(await sendInvoiceNotification(id, { dedupe: false })))
+  assert.equal(await sendInvoiceNotification('00000000-0000-4000-8000-000000000000', { dedupe: false }), null)
   const logs = await prisma.notificationLog.findMany({ where: { bookingId: id, type: 'invoice_issued' } })
   assert.ok(logs.length >= 1, 'notifikasi tercatat')
   for (const l of logs) assert.ok(!/[0-9a-f]{32}\.[A-Za-z0-9_-]{43}/.test(`${l.messagePreview ?? ''}${l.recipient}`), 'token tak boleh masuk log')
@@ -109,6 +121,9 @@ await t('PENJAGA: halaman & PDF publik noindex/no-store/no-referrer; satu pembua
   assert.match(read('app/api/v1/admin/bookings/drafts/[id]/publish/route.ts'), /sendInvoiceNotification\(r\.id, \{ dedupe: true \}\)/)
   assert.match(read('app/api/v1/bookings/route.ts'), /sendInvoiceNotification\(booking\.id, \{ dedupe: true \}\)/)
   assert.match(read('lib/notifications/notify.ts'), /redactInvoiceLinks\(wa\)/)
+  assert.match(read('lib/account/deletion.ts'), /await revokeInvoiceLinksOfUser\(tx, userId\)/, 'hapus akun mencabut tautan invoice')
+  assert.match(read('app/[locale]/invoice/[token]/page.tsx'), /referrer: 'no-referrer'/)
+  assert.match(read('Caddyfile'), /\?Referrer-Policy/, 'Caddy tak menimpa Referrer-Policy aplikasi')
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────

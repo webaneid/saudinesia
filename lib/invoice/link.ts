@@ -36,10 +36,14 @@ export async function resolveInvoiceToken(token: string): Promise<{ bookingId: s
   const inv = await prisma.invoice.findUnique({ where: { id: invoiceId }, select: { id: true, linkVersion: true, bookingId: true, booking: { select: { status: true } } } })
   if (!inv || inv.booking.status === 'draft') return null
   const given = Buffer.from(m[2]!, 'base64url')
+  if (given.toString('base64url') !== m[2]) return null // hanya bentuk KANONIK (karakter terakhir base64url membawa 4 bit; 4 ejaan → satu MAC)
   const expected = mac(inv.id, inv.linkVersion)
   if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null
   return { bookingId: inv.bookingId, invoiceId: inv.id }
 }
+
+/** Bentuk token benar (bukan bukti keabsahan) — pemuat publik menghitung batas laju per token hanya untuk token berbentuk benar. */
+export const isTokenShaped = (token: string) => TOKEN_RE.test(token)
 
 /** Samarkan tautan invoice dalam teks yang disimpan (log notifikasi) — token adalah kredensial pembaca. */
 export const redactInvoiceLinks = (text: string) => text.replace(/\/invoice\/[0-9a-f]{32}\.[A-Za-z0-9_-]{43}/g, '/invoice/[tautan]')

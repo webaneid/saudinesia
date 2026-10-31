@@ -39,7 +39,12 @@ export function InvoiceLinkActions({ bookingId }: { bookingId: string }) {
   })
   const send = async () => {
     if (!(await ask({ title: 'Kirim ulang invoice ke pelanggan?', body: 'Email (alamat terverifikasi) dan WhatsApp (nomor terverifikasi) berisi tautan invoice terkini.', confirmLabel: 'Kirim', tone: 'primary' }))) return
-    await run('send', async () => { await call('/send', 'POST'); return 'Invoice dikirim ulang (email/WhatsApp terverifikasi).' })
+    await run('send', async () => {
+      const d = await call('/send', 'POST') as { channels: Array<{ channel: string; status: string }> }
+      const sent = d.channels.filter(c => c.status === 'sent').map(c => (c.channel === 'email' ? 'email' : 'WhatsApp'))
+      if (sent.length === 0) throw new Error('Tidak ada kanal yang terkirim (email/WhatsApp pelanggan belum terverifikasi atau gateway mati) — salin tautan dan kirim sendiri.')
+      return `Invoice dikirim ulang lewat ${sent.join(' dan ')}.`
+    })
   }
   const revoke = async () => {
     if (!(await ask({ title: 'Cabut tautan invoice?', body: 'Semua tautan lama berhenti berfungsi. Tautan baru langsung berlaku — salin atau kirim ulang ke pelanggan.', confirmLabel: 'Cabut tautan' }))) return

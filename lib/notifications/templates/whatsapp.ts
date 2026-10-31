@@ -14,7 +14,7 @@ export const waTemplates = {
     `Verifikasi nomor ini untuk akun ${maskedEmail} sudah dilepas. Nomor ini tidak lagi menerima notifikasi WhatsApp Saudinesia untuk akun tersebut (email tetap dipakai). Untuk memakai nomor ini lagi, verifikasi ulang dari akun Anda.`,
 
   invoiceIssued: (number: string, code: string, total: string, due: string, url: string | null) =>
-    `Invoice *${number}* untuk booking *${code}* sudah terbit.\nTotal tagihan: *${total}*\nJatuh tempo: *${due}*${url && /^https?:\/\//.test(url) ? `\n\nLihat & unduh invoice:\n${url}` : ''}`,
+    `Invoice *${number}* untuk booking *${code}* sudah terbit.\nTotal tagihan: *${total}*\nJatuh tempo: *${due}*${url && (/^https:\/\//.test(url) || (process.env.NODE_ENV === 'development' && /^http:\/\//.test(url))) ? `\n\nLihat & unduh invoice:\n${url}` : ''}`,
 
   bookingSubmitted: (code: string, deadline: string) =>
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,
