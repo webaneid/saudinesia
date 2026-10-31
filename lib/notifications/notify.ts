@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { prisma } from '@/lib/db'
+import { redactInvoiceLinks } from '@/lib/invoice/link'
 import { whatsapp } from '@/lib/whatsapp/client'
 import { sendEmail } from '@/lib/email/resend'
 import { emailContent } from '@/lib/email/templates'
@@ -58,7 +59,8 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   const wa = waMessage(event)
   if (wa && user.whatsapp) {
     const phone = user.whatsapp
-    tasks.push(deliver('whatsapp', phone, wa.slice(0, 200), async () => {
+    // Tautan invoice = kredensial pembaca: disamarkan sebelum masuk log (pesan yang DIKIRIM tetap utuh).
+    tasks.push(deliver('whatsapp', phone, redactInvoiceLinks(wa).slice(0, 200), async () => {
       // WhatsApp HANYA ke nomor yang sudah dibuktikan milik pemilik akun (ADR-0002) — menutup risiko pesan ke nomor orang lain (SEC-32).
       // Nomor belum terverifikasi: email saja (email tak terpengaruh).
       if (!user.whatsappVerifiedAt || user.verifiedWhatsapp !== phone) return { status: 'skipped' as const, reason: 'Nomor WhatsApp belum terverifikasi' }

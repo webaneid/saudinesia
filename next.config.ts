@@ -13,6 +13,18 @@ const nextConfig: NextConfig = {
     loader: 'custom',
     loaderFile: './lib/storage/minio-loader.ts',
   },
+  // Invoice publik (tautan bertoken, docs/arsitektur-booking-engine-v2.md §10.4 6c): jangan diindeks, jangan disimpan cache, jangan bocorkan tautan lewat Referer.
+  async headers() {
+    const privateDoc = [
+      { key: 'Cache-Control', value: 'private, no-store' },
+      { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+      { key: 'Referrer-Policy', value: 'no-referrer' },
+    ]
+    return [
+      { source: '/:locale/invoice/:token*', headers: privateDoc },
+      { source: '/api/v1/invoice/:token*', headers: privateDoc },
+    ]
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '6mb', // allow up to 5 MB uploads + multipart overhead

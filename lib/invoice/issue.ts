@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/db'
 import { addDays, calendarDateOf, dbDateOf, endOfDayExclusiveInApp, todayInApp } from '@/lib/time'
 import { formatAddressLine } from '@/lib/address/format'
 import { paymentDeadlineFor } from '@/lib/booking/lifecycle'
@@ -103,5 +104,13 @@ export async function reviseInvoice(tx: Tx, bookingId: string, opts: { invoiceDa
   })
   await tx.booking.update({ where: { id: bookingId }, data: { paymentDeadline: new Date(endOfDayExclusiveInApp(dueDate).getTime() - 1) } })
   return { revision: next.revision, taxBefore: Number(inv.taxAddedIdr), taxAfter: tax.addedIdr }
+}
+
+/** Cabut tautan invoice publik: versi tautan +1 → semua tautan lama mati, tautan baru (versi berikutnya) berlaku (lib/invoice/link.ts). */
+export async function revokeInvoiceLink(bookingId: string): Promise<{ linkVersion: number } | null> {
+  const r = await prisma.invoice.updateMany({ where: { bookingId }, data: { linkVersion: { increment: 1 } } })
+  if (r.count === 0) return null
+  const inv = await prisma.invoice.findUniqueOrThrow({ where: { bookingId }, select: { linkVersion: true } })
+  return { linkVersion: inv.linkVersion }
 }
 
