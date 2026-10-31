@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
+import { billOf } from '@/lib/invoice/bill'
 import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -37,9 +38,12 @@ export default async function BookingDetailPage({ params }: Props) {
       packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
+      invoice:    { select: { number: true, taxAddedIdr: true, taxIncludedIdr: true } },
     },
   })
   if (!booking) notFound()
+  // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts). Status lunas/sisa tetap mengikuti alur v1 sampai Fase 7.
+  const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice })
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
@@ -121,7 +125,7 @@ export default async function BookingDetailPage({ params }: Props) {
             </div>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-amber-900">{formatRupiah(Number(booking.totalAmount))}</p>
+            <p className="text-2xl font-bold text-amber-900">{formatRupiah(bill.grandTotal)}</p>
           </div>
           {st === 'awaiting_payment' && (
             <Button asChild className="w-full">
@@ -241,8 +245,11 @@ export default async function BookingDetailPage({ params }: Props) {
 
       {/* Total */}
       <div className="rounded-xl border bg-card p-5 flex justify-between items-center">
-        <p className="font-semibold">Total Booking</p>
-        <p className="text-2xl font-bold text-primary">{formatRupiah(Number(booking.totalAmount))}</p>
+        <div>
+          <p className="font-semibold">Total Tagihan</p>
+          {booking.invoice && <p className="text-xs text-muted-foreground">Invoice {booking.invoice.number}{bill.taxAdded > 0 ? ` · termasuk pajak ${formatRupiah(bill.taxAdded)}` : ''}</p>}
+        </div>
+        <p className="text-2xl font-bold text-primary">{formatRupiah(bill.grandTotal)}</p>
       </div>
     </div>
   )

@@ -1,12 +1,10 @@
 import { existsSync } from 'fs'
 import path from 'path'
 import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from '@react-pdf/renderer'
-import { getPaymentConfig } from '@/lib/constants/payment'
 import type { InvoiceData } from '@/lib/pdf/invoiceData'
 
-// docs/arsitektur-booking.md §6 Step 7 — satu fungsi render generik, menerima bentuk seragam
-// dari buildInvoiceData() (lib/pdf/invoiceData.ts). Logo opsional — file statis public/logo.png,
-// kalau belum ada invoice tetap render teks-only (tidak error).
+// Satu fungsi render generik atas bentuk seragam dari buildInvoiceData() (lib/pdf/invoiceData.ts). Kop, pajak, rekening, dan S&K berasal dari invoice BEKU
+// (docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a). Logo: logo Pengaturan Invoice (lib/pdf/logo.ts, dikirim pemanggil), selain itu public/logo.png, selain itu teks saja.
 const LOGO_PATH = path.join(process.cwd(), 'public', 'logo.png')
 
 const STATUS_COLOR: Record<string, string> = {
@@ -59,11 +57,16 @@ const styles = StyleSheet.create({
   footer: { marginTop: 32, borderTopWidth: 1, borderTopColor: '#e5e7eb', paddingTop: 12 },
   footerTitle: { fontSize: 8, fontWeight: 700, marginBottom: 4 },
   footerLine: { fontSize: 8, color: '#4b5563', marginBottom: 2 },
+  revision: { fontSize: 8, color: '#6b7280', textAlign: 'right', marginBottom: 4 },
+  terms: { fontSize: 7, color: '#4b5563', lineHeight: 1.4 },
 })
 
-function InvoiceDocument({ data }: { data: InvoiceData }) {
-  const { businessName, businessAddress, businessWa, banks } = getPaymentConfig()
-  const hasLogo = existsSync(LOGO_PATH)
+const pct = (n: number) => `${Number(n.toFixed(3))}%`.replace('.', ',')
+
+function InvoiceDocument({ data, logo }: { data: InvoiceData; logo: Buffer | null }) {
+  const company = data.company
+  const businessName = company.name ?? 'Saudinesia'
+  const logoSrc = logo ?? (existsSync(LOGO_PATH) ? LOGO_PATH : null)
   const statusColor = STATUS_COLOR[data.statusLabel] ?? '#6b7280'
   const balanceDueColor = data.balanceDue > 0 ? '#b91c1c' : '#15803d'
 
@@ -72,14 +75,18 @@ function InvoiceDocument({ data }: { data: InvoiceData }) {
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
           <View>
-            {hasLogo && <Image src={LOGO_PATH} style={styles.logo} />}
+            {logoSrc && <Image src={logoSrc} style={styles.logo} />}
             <Text style={styles.businessName}>{businessName}</Text>
-            {businessAddress && <Text style={styles.mutedLine}>{businessAddress}</Text>}
-            {businessWa && <Text style={styles.mutedLine}>P: {businessWa}</Text>}
+            {company.address && <Text style={styles.mutedLine}>{company.address}</Text>}
+            {company.phone && <Text style={styles.mutedLine}>Telp: {company.phone}</Text>}
+            {company.email && <Text style={styles.mutedLine}>{company.email}</Text>}
+            {company.website && <Text style={styles.mutedLine}>{company.website}</Text>}
+            {company.taxId && <Text style={styles.mutedLine}>NPWP: {company.taxId}</Text>}
           </View>
           <View>
             <Text style={styles.invoiceTitle}>INVOICE</Text>
             <Text style={styles.invoiceNumber}>{data.invoiceNumber}</Text>
+            {data.revision > 1 && <Text style={styles.revision}>Revisi ke-{data.revision}</Text>}
             <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
               <Text style={styles.statusText}>{data.statusLabel}</Text>
             </View>
@@ -146,10 +153,22 @@ function InvoiceDocument({ data }: { data: InvoiceData }) {
             <Text style={styles.totalsLabel}>Subtotal</Text>
             <Text style={styles.totalsValue}>{formatRupiahPdf(data.subtotal)}</Text>
           </View>
+          {data.taxLines.map((t, i) => (
+            <View key={i} style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>{t.name} {pct(t.ratePercent)}{t.basisPercent !== 100 ? ` × DPP ${pct(t.basisPercent)}` : ''}{t.mode === 'included' ? ' (termasuk)' : ''}</Text>
+              <Text style={styles.totalsValue}>{formatRupiahPdf(t.amountIdr)}</Text>
+            </View>
+          ))}
           <View style={styles.grandTotalRow}>
             <Text style={styles.grandTotalLabel}>Total</Text>
             <Text style={styles.grandTotalValue}>{formatRupiahPdf(data.totalAmount)}</Text>
           </View>
+          {data.paid > 0 && (
+            <View style={styles.totalsRow}>
+              <Text style={styles.totalsLabel}>Terbayar</Text>
+              <Text style={styles.totalsValue}>{formatRupiahPdf(data.paid)}</Text>
+            </View>
+          )}
           <View style={styles.totalsRow}>
             <Text style={styles.totalsLabel}>Sisa Tagihan</Text>
             <Text style={[styles.balanceDueValue, { color: balanceDueColor }]}>{formatRupiahPdf(data.balanceDue)}</Text>
@@ -158,20 +177,28 @@ function InvoiceDocument({ data }: { data: InvoiceData }) {
 
         <View style={styles.footer}>
           <Text style={styles.footerTitle}>Cara Pembayaran</Text>
-          {banks.map(b => (
-            <Text key={b.bankName} style={styles.footerLine}>
-              Transfer via Bank {b.bankName} — {b.accountNumber} a.n. {b.accountName}
+          {data.banks.map(b => (
+            <Text key={`${b.bankName}-${b.accountNumber}`} style={styles.footerLine}>
+              Transfer via Bank {b.bankName} — {b.accountNumber} a.n. {b.accountHolder}{b.branch ? ` (${b.branch})` : ''}
             </Text>
           ))}
           <Text style={[styles.footerLine, { marginTop: 4, fontStyle: 'italic' }]}>
             Pembayaran dianggap sah setelah dikonfirmasi oleh tim {businessName}.
           </Text>
         </View>
+
+        {data.terms !== '' && (
+          <View style={styles.footer}>
+            <Text style={styles.footerTitle}>Syarat & Ketentuan</Text>
+            <Text style={styles.terms}>{data.terms}</Text>
+          </View>
+        )}
+        {data.footerNote !== '' && <Text style={[styles.terms, { marginTop: 12 }]}>{data.footerNote}</Text>}
       </Page>
     </Document>
   )
 }
 
-export async function generateInvoicePdf(data: InvoiceData): Promise<Buffer> {
-  return renderToBuffer(<InvoiceDocument data={data} />)
+export async function generateInvoicePdf(data: InvoiceData, logo: Buffer | null = null): Promise<Buffer> {
+  return renderToBuffer(<InvoiceDocument data={data} logo={logo} />)
 }

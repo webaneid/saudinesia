@@ -7,18 +7,18 @@ interface PaymentActionsProps {
   bookingId: string
   paymentId: string
   buktiPath: string | null
-  /** Total pesanan — bawaan jumlah yang dikonfirmasi. */
-  totalAmount: number
+  /** Total TAGIHAN (subtotal + pajak ditambahkan, lib/invoice/bill.ts) — bawaan jumlah yang dikonfirmasi. */
+  billTotal: number
 }
 
-export function PaymentActions({ bookingId: _, paymentId, buktiPath, totalAmount }: PaymentActionsProps) {
+export function PaymentActions({ bookingId: _, paymentId, buktiPath, billTotal }: PaymentActionsProps) {
   const [loading, setLoading] = useState(false)
   const [done,    setDone]    = useState(false)
   const [error,   setError]   = useState('')
-  const [amount,  setAmount]  = useState(String(totalAmount))
+  const [amount,  setAmount]  = useState(String(billTotal))
   const [notes,   setNotes]   = useState('')
-  const over = Number(amount) > totalAmount
-  const under = Number(amount) < totalAmount
+  const over = Number(amount) > billTotal
+  const under = Number(amount) < billTotal
 
   async function act(action: 'confirm' | 'reject') {
     setLoading(true); setError('')

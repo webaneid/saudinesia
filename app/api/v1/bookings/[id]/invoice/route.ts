@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { getSession, ADMIN_ROLES } from '@/lib/auth/session'
 import { invoiceBookingInclude, buildInvoiceData } from '@/lib/pdf/invoiceData'
 import { generateInvoicePdf } from '@/lib/pdf/invoice'
+import { loadInvoiceLogo } from '@/lib/pdf/logo'
 import { err } from '@/lib/validators'
 
 type Params = { params: Promise<{ id: string }> }
@@ -30,7 +31,7 @@ export async function GET(_req: Request, { params }: Params) {
 
   try {
     const data = await buildInvoiceData(booking)
-    const pdfBuffer = await generateInvoicePdf(data)
+    const pdfBuffer = await generateInvoicePdf(data, await loadInvoiceLogo())
 
     return new NextResponse(new Blob([Uint8Array.from(pdfBuffer)]), {
       status: 200,

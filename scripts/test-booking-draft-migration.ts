@@ -1,5 +1,5 @@
 // Uji migrasi draf booking (prisma/migrations/20261107090000_booking_draft, docs/arsitektur-booking-engine-v2.md §10.3): ADITIF — booking lama utuh dengan draft NULL,
-// CHECK "draft hanya selama status draft", visa_applications.plannedTravelDate DATE nullable; dan DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini).
+// CHECK "draft hanya selama status draft", visa_applications.plannedTravelDate DATE nullable; uji drift TERBARU pindah ke scripts/test-invoices-migration.ts.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -127,13 +127,6 @@ await t('CHECK: isi draf hanya boleh pada booking berstatus draft dan harus obje
     await assert.rejects(() => db.$executeRawUnsafe(`UPDATE bookings SET status = 'active' WHERE "bookingCode" = 'B1'`), /bookings_draft_only_in_draft|check/i, 'terbit tanpa mengosongkan draft ditolak')
     await db.$executeRawUnsafe(`UPDATE bookings SET status = 'active', draft = NULL WHERE "bookingCode" = 'B1'`)
   } finally { await db.$disconnect() }
-})
-
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────

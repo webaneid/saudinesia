@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { billOf, billSelect } from '@/lib/invoice/bill'
 import { displayStatusOf, statusSelect, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { paginate, type ListParams, type PageMeta } from '@/lib/admin/pagination'
 import { getCountryName } from '@/lib/constants/countries'
@@ -127,7 +128,7 @@ export async function getCustomer(id: string, bookingList: ListParams = { page: 
       () => prisma.booking.count({ where: { userId: id } }),
       range => prisma.booking.findMany({
         where: { userId: id }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], ...range,
-        select: { id: true, bookingCode: true, totalAmount: true, createdAt: true, ...statusSelect },
+        select: { id: true, bookingCode: true, createdAt: true, ...billSelect, ...statusSelect },
       }),
     ),
     prisma.payment.groupBy({ by: ['status'], where: { booking: { userId: id } }, _count: true, _sum: { amount: true } }),
@@ -145,7 +146,7 @@ export async function getCustomer(id: string, bookingList: ListParams = { page: 
     allowVisaWithoutBundle: u.allowVisaWithoutBundle,
     address,
     bookingCount: agg.get(id)?.bookingCount ?? 0, paidIdr: agg.get(id)?.paidIdr ?? 0,
-    bookings: bookingsPage.items.map(b => ({ id: b.id, bookingCode: b.bookingCode, status: displayStatusOf(b), departureDate: b.departureDate, totalAmount: Number(b.totalAmount), createdAt: b.createdAt })), bookingsMeta: bookingsPage.meta,
+    bookings: bookingsPage.items.map(b => ({ id: b.id, bookingCode: b.bookingCode, status: displayStatusOf(b), departureDate: b.departureDate, totalAmount: billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal, createdAt: b.createdAt })), bookingsMeta: bookingsPage.meta,
     payments: { confirmedIdr: Number(pay('confirmed')?._sum.amount ?? 0), confirmedCount: pay('confirmed')?._count ?? 0, pendingCount: pay('pending')?._count ?? 0, rejectedCount: pay('rejected')?._count ?? 0 },
   }
 }

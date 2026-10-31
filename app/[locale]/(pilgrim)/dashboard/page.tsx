@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
+import { billOf, billSelect } from '@/lib/invoice/bill'
 import { Plus, FileText } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -23,7 +24,7 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } }; payments: { select: { id: true } } } }>
+type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } }; payments: { select: { id: true } }; invoice: { select: { taxAddedIdr: true; taxIncludedIdr: true } } } }>
 
 // Draf adalah urusan admin (belum diterbitkan) — tak pernah tampil ke jamaah, juga bukan pilihan filter.
 const PILGRIM_STATUS_FILTERS = STATUS_FILTERS.filter(s => s !== 'draft')
@@ -52,7 +53,7 @@ export default async function DashboardPage({ params, searchParams }: Props) {
     range => prisma.booking.findMany({
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
-      include: { _count: { select: { pilgrims: true } }, payments: statusSelect.payments },
+      include: { _count: { select: { pilgrims: true } }, payments: statusSelect.payments, invoice: billSelect.invoice },
       ...range,
     }),
   )
@@ -63,7 +64,7 @@ export default async function DashboardPage({ params, searchParams }: Props) {
     { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
     { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{b.departureDate ? formatCalendarDate(b.departureDate) : '-'}</span> },
     { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{b._count.pilgrims} jamaah</span> },
-    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(Number(b.totalAmount))}</span> },
+    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
     {
       key: 'status', header: 'Status',
       cell: b => {

@@ -3,6 +3,7 @@ import { Plus } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
+import { billOf, billSelect } from '@/lib/invoice/bill'
 import { escapeLike } from '@/lib/utils/search'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
 import { displayStatusOf, isStatusFilter, statusSelect, statusWhere } from '@/lib/booking/lifecycle'
@@ -25,7 +26,7 @@ type Props = {
 }
 
 type BookingRow = Prisma.BookingGetPayload<{
-  include: { user: { select: { fullName: true; phone: true } }; _count: { select: { pilgrims: true } }; payments: { select: { id: true } } }
+  include: { user: { select: { fullName: true; phone: true } }; _count: { select: { pilgrims: true } }; payments: { select: { id: true } }; invoice: { select: { taxAddedIdr: true; taxIncludedIdr: true } } }
 }>
 
 export default async function AdminBookings({ params, searchParams }: Props) {
@@ -53,7 +54,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
       where,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
       ...range,
-      include: { user: { select: { fullName: true, phone: true } }, _count: { select: { pilgrims: true } }, payments: statusSelect.payments },
+      include: { user: { select: { fullName: true, phone: true } }, _count: { select: { pilgrims: true } }, payments: statusSelect.payments, invoice: billSelect.invoice },
     }),
   )
 
@@ -85,7 +86,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     },
     {
       key: 'total', header: 'Total', hideBelowLg: true,
-      cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(Number(b.totalAmount))}</span>,
+      cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span>,
     },
     {
       key: 'status', header: 'Status',

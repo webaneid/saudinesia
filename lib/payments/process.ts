@@ -2,6 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { quotaAdapters } from '@/lib/quota/adapters'
 import { resolveConfirmedAmount } from './confirmAmount'
+import { billOf } from '@/lib/invoice/bill'
 
 // Konfirmasi / penolakan pembayaran oleh admin (satu-satunya pemroses). Dalam SATU transaksi yang mengunci baris booking, status payment/booking DIBACA ULANG di dalam kunci: konfirmasi/penolakan
 // ganda atau paralel (dua admin, dobel klik) tak boleh menimpa jumlah yang sudah final, menjalankan konfirmasi kuota dua kali, menghidupkan booking yang sudah batal, atau membuka penyesuaian total
@@ -19,11 +20,12 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
     if (!head) return { kind: 'not_found' }
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${head.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } })
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } } } })
     if (payment.status !== 'pending' || booking.status !== 'active' || booking.confirmedAt !== null) return { kind: 'conflict' }
 
     if (input.action === 'confirm') {
-      const confirmedAmount = resolveConfirmedAmount(Number(booking.totalAmount), { amount: input.amount, notes: input.notes })
+      // Patokan = TAGIHAN (subtotal + pajak ditambahkan, lib/invoice/bill.ts), bukan Σ harga sebelum pajak.
+      const confirmedAmount = resolveConfirmedAmount(billOf(booking).grandTotal, { amount: input.amount, notes: input.notes })
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: confirmedAmount, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: new Date() } })
       await tx.booking.update({ where: { id: booking.id }, data: { confirmedAt: new Date(), confirmedById: input.byUserId } })
       // Loop generik via adapter registry (docs/arsitektur-booking.md §6 Step 1) — tidak mungkin lagi ada tipe yang "terlupa" seperti insiden Muthowif kemarin.

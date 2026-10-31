@@ -7,6 +7,9 @@ import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from
 import { getPaymentConfig } from '@/lib/constants/payment'
 import { ArrowLeft, FileDown } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
+import { InvoiceBox } from './InvoiceBox'
+import { billOf } from '@/lib/invoice/bill'
+import type { TaxLine } from '@/lib/invoice/tax'
 import { VisaActions } from './VisaActions'
 import { PilgrimDataForm } from './PilgrimDataForm'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
@@ -39,7 +42,8 @@ export default async function AdminBookingDetail({ params }: Props) {
       flights:    { include: { flightSchedule: { include: { route: true } } } },
       packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
-      payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
+      payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] },
+      invoice:    true,
     },
   })
   if (!booking) notFound()
@@ -75,6 +79,7 @@ export default async function AdminBookingDetail({ params }: Props) {
   const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
   const cfg     = BOOKING_STATUS[st]
   const payment = booking.payments[0]
+  const bill    = billOf(booking)
 
   const STATUS_BADGE: Record<string, string> = {
     payment_review:   'admin-badge-blue',
@@ -117,7 +122,7 @@ export default async function AdminBookingDetail({ params }: Props) {
 
       {/* Payment confirmation */}
       {(st === 'payment_review' || st === 'awaiting_payment') && payment && (
-        <PaymentActions bookingId={id} paymentId={payment.id} buktiPath={payment.buktiTransferPath} totalAmount={Number(booking.totalAmount)} />
+        <PaymentActions bookingId={id} paymentId={payment.id} buktiPath={payment.buktiTransferPath} billTotal={bill.grandTotal} />
       )}
 
       {/* Services summary */}
@@ -139,10 +144,9 @@ export default async function AdminBookingDetail({ params }: Props) {
           <p className="text-[13px] text-admin-ink/80">
             Musim: <span className="font-medium text-admin-ink capitalize">{booking.season}</span>
           </p>
-          <p className="text-[14px] font-bold text-admin-ink pt-1 tabular-nums">
-            Total: {formatRupiah(Number(booking.totalAmount))}
-          </p>
         </div>
+
+        <InvoiceBox bookingId={booking.id} bill={bill} invoice={booking.invoice && { ...booking.invoice, taxLines: booking.invoice.taxLines as TaxLine[] }} />
 
         {booking.hotels.length > 0 && (
           <div className="admin-card p-4 space-y-2">
