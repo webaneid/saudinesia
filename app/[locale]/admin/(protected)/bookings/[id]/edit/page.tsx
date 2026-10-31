@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Eye, History, Loader2, Package, Plus, Tag, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, Eye, History, Loader2, Package, Pencil, Plus, Tag, Trash2, Users } from 'lucide-react'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
@@ -49,6 +49,7 @@ export default function BookingRevisionPage({ params }: Props) {
   const [modal, setModal] = useState(false)
   const [modalModule, setModalModule] = useState<ModuleKey | undefined>(undefined)
   const [priceOpen, setPriceOpen] = useState<number | null>(null)
+  const [editIndex, setEditIndex] = useState<number | null>(null)
   const [previewing, setPreviewing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -117,6 +118,8 @@ export default function BookingRevisionPage({ params }: Props) {
 
   function onAdd(r: AddResult) {
     touched()
+    // Ubah item lama: rujukannya (`ref`) tetap — mesin revisi memperlakukannya sebagai GANTI (kuota lama dilepas, versi baru ditahan); label lama dibuang supaya ringkasan dari katalog.
+    if (r.kind === 'item' && editIndex !== null) { setItems(xs => xs.map((x, j) => (j === editIndex ? { ...x, item: r.item, label: undefined, detail: undefined } : x))); setEditIndex(null); return }
     if (r.kind === 'item') { setItems(xs => [...xs, { item: r.item }]); return }
     setPilgrims(ps => [...ps, ...Array.from({ length: r.count }, () => ({ visaProductId: r.visaProductId, ...(r.days ? { selectedDurationDays: r.days } : {}) }))])
   }
@@ -126,7 +129,7 @@ export default function BookingRevisionPage({ params }: Props) {
 
   const main = (
     <>
-      <MetaBox title="Produk" icon={Package} collapsible={false} aside={<Button size="sm" onClick={() => { setModalModule(undefined); setModal(true) }}><Plus className="size-4" /> Tambah produk</Button>}
+      <MetaBox title="Produk" icon={Package} collapsible={false} aside={<Button size="sm" onClick={() => { setEditIndex(null); setModalModule(undefined); setModal(true) }}><Plus className="size-4" /> Tambah produk</Button>}
         description="Menghapus atau mengubah produk melepas kuotanya; produk baru menahan kuota saat revisi disimpan.">
         {items.length === 0 ? <p className="m-0 text-sm text-admin-muted">Tidak ada produk.</p> : (
           <ul className="m-0 list-none divide-y divide-admin-line p-0">
@@ -140,6 +143,7 @@ export default function BookingRevisionPage({ params }: Props) {
                       <p className="m-0 text-xs text-admin-muted">{MODULE_LABEL[moduleOf(it.item)]} · {d.detail}</p>
                     </div>
                     <div className="flex shrink-0 items-center gap-1">
+                      <button type="button" aria-label={`Ubah ${d.title}`} onClick={() => { setEditIndex(i); setModalModule(undefined); setModal(true) }} className="rounded p-1 text-admin-muted hover:text-admin-ink"><Pencil className="size-4" /></button>
                       <button type="button" aria-label={`Harga khusus ${d.title}`} onClick={() => setPriceOpen(priceOpen === i ? null : i)} className="rounded p-1 text-admin-muted hover:text-admin-ink"><Tag className="size-4" /></button>
                       <button type="button" aria-label={`Hapus ${d.title}`} onClick={() => { touched(); setItems(xs => xs.filter((_, j) => j !== i)) }} className="rounded p-1 text-admin-muted hover:text-admin-danger"><Trash2 className="size-4" /></button>
                     </div>
@@ -194,7 +198,7 @@ export default function BookingRevisionPage({ params }: Props) {
             {error.violations.length > 0 && (
               <ul className="m-0 list-disc space-y-1 pl-5 text-admin-ink">
                 {error.violations.map((v, i) => (
-                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => { setModalModule(MISSING_MODULE[v.missing]); setModal(true) }}>tambah {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
+                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => { setEditIndex(null); setModalModule(MISSING_MODULE[v.missing]); setModal(true) }}>tambah {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
                 ))}
               </ul>
             )}
@@ -257,7 +261,8 @@ export default function BookingRevisionPage({ params }: Props) {
   return (
     <>
       <EditorShell backHref={`/${locale}/admin/bookings/${id}`} backLabel="Detail booking" title={<>Edit booking</>} main={main} sidebar={sidebar} />
-      <AddItemModal open={modal} onClose={() => setModal(false)} catalog={catalog} load={load} defaultPeople={pilgrims.length} initialModule={modalModule} onAdd={onAdd} />
+      <AddItemModal open={modal} onClose={() => { setModal(false); setEditIndex(null) }} catalog={catalog} load={load} defaultPeople={pilgrims.length} initialModule={modalModule}
+        initialItem={editIndex !== null ? items[editIndex]?.item : undefined} onAdd={onAdd} />
     </>
   )
 }

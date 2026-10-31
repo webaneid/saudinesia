@@ -199,7 +199,7 @@ await t('BASI: expectedRevision lama → 409; booking BATAL → 409', async () =
   await assert.rejects(() => reviseBooking(id2, x, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 409)
 })
 
-await t('TERKONFIRMASI (R2): tanpa alasan → 422; dengan alasan: hapus hotel melepas BOOKED (bukan pending), tambah transport langsung BOOKED', async () => {
+await t('TERKONFIRMASI (R2): tanpa alasan → 422; dengan alasan: hapus hotel melepas BOOKED (bukan pending), tambah transport DITAHAN PENDING (tidak langsung booked); batal sesudahnya melepas masing-masing sesuai status barisnya', async () => {
   const id = await published({ ...DRAFT, items: [FL(2), HT(1)] })
   const pay = await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'transfer', status: 'pending' } })
   assert.equal((await processPayment(pay.id, { action: 'confirm', byUserId: staff.id })).kind, 'done')
@@ -210,8 +210,17 @@ await t('TERKONFIRMASI (R2): tanpa alasan → 422; dengan alasan: hapus hotel me
   await assert.rejects(() => reviseBooking(id, input, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /alasan/.test(e.message))
   await reviseBooking(id, { ...input, reason: 'jamaah batal menginap' }, staff.id)
   assert.deepEqual(await rooms(), { pendingQuota: r0.pendingQuota, bookedQuota: r0.bookedQuota - 1 })
-  assert.deepEqual(await vseats(), { pendingSeats: v0.pendingSeats, bookedSeats: v0.bookedSeats + 2 })
+  assert.deepEqual(await vseats(), { pendingSeats: v0.pendingSeats + 2, bookedSeats: v0.bookedSeats }, 'produk baru ditahan pending, bukan booked (koreksi pemilik)')
+  const rowsAfter = await prisma.booking.findUniqueOrThrow({ where: { id }, include: { flights: true, transports: true } })
+  assert.deepEqual([rowsAfter.flights.every(f => f.quotaConfirmed), rowsAfter.transports.every(x => !x.quotaConfirmed)], [true, true], 'status kuota per baris')
   await i4(id)
+  const s0 = await seats()
+  await prisma.$transaction(async tx => {
+    const b = await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })
+    await cancelBooking(tx, b, 'uji')
+  })
+  assert.deepEqual(await seats(), { pendingSeats: s0.pendingSeats, bookedSeats: s0.bookedSeats - 2 }, 'tiket (terkonfirmasi) melepas booked')
+  assert.deepEqual(await vseats(), v0, 'transport tambahan (pending) melepas pending')
 })
 
 await t('BATAL booking TERKONFIRMASI melepas kursi BOOKED (bug lama: pending dikurangi → minus, kursi tak kembali)', async () => {

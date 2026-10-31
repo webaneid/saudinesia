@@ -21,6 +21,8 @@ type Props = {
   defaultPeople: number
   /** Modul yang langsung terpilih (mis. dari tautan "tambah tiket pesawat" pada pelanggaran aturan visa). */
   initialModule?: ModuleKey
+  /** Mode UBAH: item yang diedit — isian terisi dari item ini, modul terkunci, hasilnya menggantikan item tersebut. */
+  initialItem?: DraftItem
   onAdd: (r: AddResult) => void
 }
 
@@ -29,7 +31,8 @@ const num = (v: string) => Math.max(0, Math.trunc(Number(v) || 0))
 const span = (a: string, b: string) => (a && b ? daysBetween(a as CalendarDate, b as CalendarDate) : 0)
 const fmt = (iso: string) => formatCalendarDate(iso)
 
-export function AddItemModal({ open, onClose, catalog, load, defaultPeople, initialModule, onAdd }: Props) {
+export function AddItemModal({ open, onClose, catalog, load, defaultPeople, initialModule, initialItem, onAdd }: Props) {
+  const editing = !!initialItem
   const [module, setModule] = useState<ModuleKey | ''>('')
   const [pick, setPick] = useState('')
   const [people, setPeople] = useState(String(defaultPeople))
@@ -40,8 +43,37 @@ export function AddItemModal({ open, onClose, catalog, load, defaultPeople, init
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { if (module) void load(module) }, [module, load])
-  useEffect(() => { if (open) { setModule(initialModule ?? ''); reset() } }, [open, initialModule]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!open) return
+    if (initialItem) { prefill(initialItem); return }
+    setModule(initialModule ?? ''); reset()
+  }, [open, initialModule, initialItem]) // eslint-disable-line react-hooks/exhaustive-deps
   function reset() { setPick(''); setStart(''); setEnd(''); setRooms('1'); setExtra({}); setError(null); setPeople(String(defaultPeople)) }
+
+  /** Isi formulir dari item yang sudah ada (mode ubah). */
+  function prefill(it: DraftItem) {
+    reset()
+    const s = (m: ModuleKey, p: string, o: { people?: number; start?: string; end?: string; rooms?: number; extra?: Record<string, string> } = {}) => {
+      setModule(m); setPick(p)
+      if (o.people) setPeople(String(o.people))
+      setStart(o.start ?? ''); setEnd(o.end ?? '')
+      if (o.rooms) setRooms(String(o.rooms))
+      setExtra(Object.fromEntries(Object.entries(o.extra ?? {}).filter(([, v]) => !!v)))
+    }
+    switch (it.itemType) {
+      case 'flight': return s('flight', it.flightScheduleId, { people: it.numPassengers, start: it.departureDate })
+      case 'hotel': return s('hotel', it.hotelRoomScheduleId, { start: it.checkIn, end: it.checkOut, rooms: it.numRooms })
+      case 'transport': return s('transport', it.transportQuotaId, { people: it.numPassengers, extra: { pickup: it.pickupDetail ?? '', dropoff: it.dropoffDetail ?? '' } })
+      case 'muthowif': return s('muthowif', 'muthowif', { people: it.numPeople, start: it.startDate, end: it.endDate })
+      case 'catering': return s('catering', it.cateringOptionId, { people: it.numPeople, start: it.startDate, end: it.endDate })
+      case 'tourPackage': return s('tourPackage', it.tourPackageId, { people: it.numPeople, start: it.tourDate, rooms: it.chosenHotelNumRooms, extra: { quota: it.transportQuotaId ?? '', hotel: it.chosenHotelRoomScheduleId ?? '' } })
+      case 'package': return s('package', it.packageId, { people: it.numPeople, start: it.departureDate, extra: {
+        hotelMakkah: it.choices.hotelMakkahScheduleId ?? '', hotelMadinah: it.choices.hotelMadinahScheduleId ?? '', transport: it.choices.transportPricingId ?? '',
+        visa: it.choices.visaProductId ?? '', flight: it.choices.flightScheduleId ?? '', catering: it.choices.cateringOptionId ?? '',
+      } })
+      case 'haji': return // tak dapat diedit lewat form admin
+    }
+  }
 
   const n = num(people)
   const setX = (k: string, v: string) => setExtra(e => ({ ...e, [k]: v }))
@@ -127,9 +159,9 @@ export function AddItemModal({ open, onClose, catalog, load, defaultPeople, init
   const label = (t: string, el: React.ReactNode) => <label className="block space-y-1"><span className="text-xs text-admin-muted">{t}</span>{el}</label>
 
   return (
-    <Modal open={open} title="Tambah produk" onClose={onClose}>
+    <Modal open={open} title={editing ? 'Ubah produk' : 'Tambah produk'} onClose={onClose}>
       <div className="space-y-3">
-        {label('Modul', <ChoiceSelect ariaLabel="Modul" value={module} onChange={v => { setModule(v as ModuleKey | ''); reset() }} options={MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} placeholder="— pilih modul —" />)}
+        {label('Modul', <ChoiceSelect ariaLabel="Modul" value={module} disabled={editing} onChange={v => { setModule(v as ModuleKey | ''); reset() }} options={MODULES.filter(m => !editing || m !== 'visa').map(m => ({ id: m, label: MODULE_LABEL[m] }))} placeholder="— pilih modul —" />)}
         {module && label('Produk', <ChoiceSelect ariaLabel="Produk" value={pick} onChange={v => { setPick(v); setError(null) }} options={options} placeholder={options.length ? '— pilih produk —' : 'Memuat / belum ada produk'} />)}
 
         {module === 'flight' && label(`Tanggal terbang${flight ? ` (${fmt(flight.from)} – ${fmt(flight.to)})` : ''}`, <input type="date" className="admin-inp" min={flight?.from} max={flight?.to} value={start} onChange={e => setStart(e.target.value)} />)}
@@ -171,7 +203,7 @@ export function AddItemModal({ open, onClose, catalog, load, defaultPeople, init
         {error && <p role="alert" className="m-0 text-[12px] font-medium text-admin-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button variant="ghost" size="sm" onClick={onClose}>Batal</Button>
-          <Button size="sm" onClick={add} disabled={!pick}>Tambahkan</Button>
+          <Button size="sm" onClick={add} disabled={!pick}>{editing ? 'Simpan perubahan' : 'Tambahkan'}</Button>
         </div>
       </div>
     </Modal>

@@ -1,6 +1,6 @@
 // Uji migrasi revisi booking (prisma/migrations/20261109090000_booking_revisions, docs/arsitektur-booking-engine-v2.md §10.4 6b): ADITIF (snapshot lama utuh, belum void),
 // trigger beku T1 (UPDATE hanya boleh mengisi kolom void SEKALI; kolom lain/void ulang/void sebagian ditolak), booking_revisions append-only (hanya `reason` dapat
-// dibersihkan), CHECK; dan DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini).
+// dibersihkan), CHECK; uji drift TERBARU pindah ke scripts/test-item-quota-confirmed-migration.ts.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -152,13 +152,6 @@ await t('booking_revisions APPEND-ONLY: hanya `reason` dapat dibersihkan; ubah t
     await assert.rejects(() => db.$executeRawUnsafe(INS(3, 'lain')), /check|23514/i)
     await assert.rejects(() => db.$executeRawUnsafe(INS(4, 'items', `'{}'`)), /check|23514/i)
   } finally { await db.$disconnect() }
-})
-
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────

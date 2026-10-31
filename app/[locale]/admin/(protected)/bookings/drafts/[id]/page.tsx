@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Eye, Loader2, Package, Plus, Send, Trash2, Users } from 'lucide-react'
+import { AlertTriangle, Eye, Loader2, Package, Pencil, Plus, Send, Trash2, Users } from 'lucide-react'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
@@ -37,7 +37,8 @@ export default function DraftEditorPage({ params }: Props) {
   const loading = useRef(new Set<ModuleKey>())
   const [modal, setModal] = useState(false)
   const [modalModule, setModalModule] = useState<ModuleKey | undefined>(undefined)
-  const openModal = (m?: ModuleKey) => { setModalModule(m); setModal(true) }
+  const [editIndex, setEditIndex] = useState<number | null>(null)
+  const openModal = (m?: ModuleKey) => { setEditIndex(null); setModalModule(m); setModal(true) }
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -78,6 +79,7 @@ export default function DraftEditorPage({ params }: Props) {
   }
 
   function onAdd(r: AddResult) {
+    if (r.kind === 'item' && editIndex !== null) { change({ ...draft!, items: draft!.items.map((x, j) => (j === editIndex ? r.item : x)) }); setEditIndex(null); return }
     if (r.kind === 'item') { change({ ...draft!, items: [...draft!.items, r.item] }); return }
     // Visa per jamaah: isi jamaah yang belum punya visa lebih dulu, tambah jamaah bila kurang.
     const pilgrims = [...draft!.pilgrims]
@@ -160,9 +162,14 @@ export default function DraftEditorPage({ params }: Props) {
                       <p className="m-0 text-sm font-semibold text-admin-ink">{d.title}</p>
                       <p className="m-0 text-xs text-admin-muted">{MODULE_LABEL[moduleOf(it)]} · {d.detail}</p>
                     </div>
-                    <button type="button" aria-label={`Hapus ${d.title}`} onClick={() => change({ ...draft, items: draft.items.filter((_, j) => j !== i) })} className="rounded p-1 text-admin-muted hover:text-admin-danger">
-                      <Trash2 className="size-4" />
-                    </button>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <button type="button" aria-label={`Ubah ${d.title}`} onClick={() => { setEditIndex(i); setModal(true) }} className="rounded p-1 text-admin-muted hover:text-admin-ink">
+                        <Pencil className="size-4" />
+                      </button>
+                      <button type="button" aria-label={`Hapus ${d.title}`} onClick={() => change({ ...draft, items: draft.items.filter((_, j) => j !== i) })} className="rounded p-1 text-admin-muted hover:text-admin-danger">
+                        <Trash2 className="size-4" />
+                      </button>
+                    </div>
                   </li>
                 )
               })}
@@ -256,7 +263,8 @@ export default function DraftEditorPage({ params }: Props) {
   return (
     <>
       <EditorShell backHref={`/${locale}/admin/bookings`} backLabel="Daftar Booking" title={<>Draf {loaded.bookingCode}</>} main={main} sidebar={sidebar} />
-      <AddItemModal open={modal} onClose={() => setModal(false)} catalog={catalog} load={load} defaultPeople={people} initialModule={modalModule} onAdd={onAdd} />
+      <AddItemModal open={modal} onClose={() => { setModal(false); setEditIndex(null) }} catalog={catalog} load={load} defaultPeople={people} initialModule={modalModule}
+        initialItem={editIndex !== null ? draft.items[editIndex] : undefined} onAdd={onAdd} />
     </>
   )
 }

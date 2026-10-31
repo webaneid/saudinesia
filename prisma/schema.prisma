@@ -347,6 +347,9 @@ model FlightSchedule {
 model BookingFlight {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed   Boolean  @default(false)
   flightScheduleId String
   departureDate    DateTime @db.Date // tanggal keberangkatan aktual yang dipilih jamaah (dalam rentang schedule)
   numPassengers    Int      @default(1)
@@ -900,6 +903,9 @@ model Document {
 model BookingHotel {
   id                  String   @id @default(uuid())
   bookingId           String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed      Boolean  @default(false)
   hotelRoomScheduleId String
   checkIn             DateTime @db.Date
   checkOut            DateTime @db.Date
@@ -918,6 +924,9 @@ model BookingHotel {
 model BookingTransport {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed   Boolean  @default(false)
   transportQuotaId String
   travelDate       DateTime @db.Date
   numPassengers    Int      @default(1)
@@ -933,15 +942,18 @@ model BookingTransport {
 }
 
 model BookingMuthowif {
-  id         String    @id @default(uuid())
-  bookingId  String
-  muthowifId String? // nullable — null = belum di-assign admin (docs/arsitektur-muthowif.md §9)
-  startDate  DateTime  @db.Date
-  endDate    DateTime  @db.Date
-  numDays    Int
-  numPeople  Int
-  totalPrice Decimal   @db.Decimal(14, 2)
-  assignedAt DateTime?
+  id             String    @id @default(uuid())
+  bookingId      String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed Boolean   @default(false)
+  muthowifId     String? // nullable — null = belum di-assign admin (docs/arsitektur-muthowif.md §9)
+  startDate      DateTime  @db.Date
+  endDate        DateTime  @db.Date
+  numDays        Int
+  numPeople      Int
+  totalPrice     Decimal   @db.Decimal(14, 2)
+  assignedAt     DateTime?
 
   booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   muthowif Muthowif? @relation(fields: [muthowifId], references: [id])
@@ -968,6 +980,9 @@ model BookingCatering {
 model BookingTourPackage {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed   Boolean  @default(false)
   tourPackageId    String
   // Kendaraan — dipakai untuk mode included (auto-resolve, §12.6) MAUPUN user_choice (dipilih
   // pilgrim di wizard). Null kalau transportMode = none.
@@ -1005,11 +1020,14 @@ model BookingService {
 }
 
 model BookingHaji {
-  id            String  @id @default(uuid())
-  bookingId     String
-  hajiProductId String
-  numPersons    Int     @default(1)
-  totalPrice    Decimal @db.Decimal(14, 2)
+  id             String  @id @default(uuid())
+  bookingId      String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed Boolean @default(false)
+  hajiProductId  String
+  numPersons     Int     @default(1)
+  totalPrice     Decimal @db.Decimal(14, 2)
 
   booking     Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   hajiProduct HajiProduct @relation(fields: [hajiProductId], references: [id])
@@ -1022,6 +1040,9 @@ model BookingHaji {
 model BookingPackage {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
+  /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
+  quotaConfirmed   Boolean  @default(false)
   packageId        String
   departureDate    DateTime @db.Date
   returnDate       DateTime @db.Date

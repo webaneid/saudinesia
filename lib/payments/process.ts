@@ -31,13 +31,15 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: confirmedAmount, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: new Date() } })
       await tx.booking.update({ where: { id: booking.id }, data: { confirmedAt: new Date(), confirmedById: input.byUserId } })
       // Loop generik via adapter registry (docs/arsitektur-booking.md §6 Step 1) — tidak mungkin lagi ada tipe yang "terlupa" seperti insiden Muthowif kemarin.
-      for (const h of booking.hotels) await quotaAdapters.hotel.confirm(tx, h)
-      for (const t of booking.transports) await quotaAdapters.transport.confirm(tx, t)
-      for (const tp of booking.tourPackages) await quotaAdapters.tourPackage.confirm(tx, tp)
-      for (const bm of booking.muthowif) await quotaAdapters.muthowif.confirm(tx, bm)
-      for (const bh of booking.haji) await quotaAdapters.haji.confirm(tx, bh)
-      for (const bf of booking.flights) await quotaAdapters.flight.confirm(tx, bf)
-      for (const bp of booking.packages) await quotaAdapters.package.confirm(tx, bp)
+      // Hanya baris yang kuotanya BELUM dikonfirmasi (status per baris), lalu ditandai — konfirmasi ganda tak pernah memindahkan kuota dua kali.
+      const pending = <T extends { quotaConfirmed: boolean }>(rows: T[]) => rows.filter(r => !r.quotaConfirmed)
+      for (const h of pending(booking.hotels)) { await quotaAdapters.hotel.confirm(tx, h); await tx.bookingHotel.update({ where: { id: h.id }, data: { quotaConfirmed: true } }) }
+      for (const t of pending(booking.transports)) { await quotaAdapters.transport.confirm(tx, t); await tx.bookingTransport.update({ where: { id: t.id }, data: { quotaConfirmed: true } }) }
+      for (const tp of pending(booking.tourPackages)) { await quotaAdapters.tourPackage.confirm(tx, tp); await tx.bookingTourPackage.update({ where: { id: tp.id }, data: { quotaConfirmed: true } }) }
+      for (const bm of pending(booking.muthowif)) { await quotaAdapters.muthowif.confirm(tx, bm); await tx.bookingMuthowif.update({ where: { id: bm.id }, data: { quotaConfirmed: true } }) }
+      for (const bh of pending(booking.haji)) { await quotaAdapters.haji.confirm(tx, bh); await tx.bookingHaji.update({ where: { id: bh.id }, data: { quotaConfirmed: true } }) }
+      for (const bf of pending(booking.flights)) { await quotaAdapters.flight.confirm(tx, bf); await tx.bookingFlight.update({ where: { id: bf.id }, data: { quotaConfirmed: true } }) }
+      for (const bp of pending(booking.packages)) { await quotaAdapters.package.confirm(tx, bp); await tx.bookingPackage.update({ where: { id: bp.id }, data: { quotaConfirmed: true } }) }
     } else {
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'rejected', notes: input.notes ?? null } })
       // Status tampilan kembali "menunggu pembayaran" dengan sendirinya (turunan: tak ada lagi payment `pending`) — tak ada kolom yang diubah di booking.

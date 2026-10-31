@@ -166,30 +166,22 @@ const itemDelegate = (tx: Tx, t: ItemType) => ({
   tourPackage: tx.bookingTourPackage, flight: tx.bookingFlight, package: tx.bookingPackage,
 } as const)[t]
 
-async function releaseRow(tx: Tx, b: State, c: CurrentItem, confirmed: boolean) {
-  const o = { confirmed }
+/** Lepas kuota satu baris item sesuai STATUS BARIS ITU (`quotaConfirmed`: `booked` vs `pending`). */
+async function releaseRow(tx: Tx, b: State, c: CurrentItem) {
   const id = c.ref.itemId
-  switch (c.ref.itemType) {
-    case 'hotel': return quotaAdapters.hotel.release(tx, b.hotels.find(r => r.id === id)!, o)
-    case 'transport': return quotaAdapters.transport.release(tx, b.transports.find(r => r.id === id)!, o)
-    case 'muthowif': return quotaAdapters.muthowif.release(tx, b.muthowif.find(r => r.id === id)!, o)
-    case 'catering': return
-    case 'tourPackage': return quotaAdapters.tourPackage.release(tx, b.tourPackages.find(r => r.id === id)!, o)
-    case 'flight': return quotaAdapters.flight.release(tx, b.flights.find(r => r.id === id)!, o)
-    case 'package': return quotaAdapters.package.release(tx, b.packages.find(r => r.id === id)!, o)
+  const rel = <T extends { id: string; quotaConfirmed: boolean }>(rows: T[], fn: (tx: Tx, row: T, o: { confirmed: boolean }) => Promise<void>) => {
+    const row = rows.find(r => r.id === id)!
+    return fn(tx, row, { confirmed: row.quotaConfirmed })
   }
-}
-
-/** Booking dikonfirmasi: kuota item BARU langsung dikonfirmasi (sama dengan item lama yang sudah `booked`). */
-async function confirmNewRows(tx: Tx, bookingId: string, before: Set<string>) {
-  const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, flights: true, packages: true } })
-  const fresh = <T extends { id: string }>(rows: T[]) => rows.filter(r => !before.has(r.id))
-  for (const r of fresh(b.hotels)) await quotaAdapters.hotel.confirm(tx, r)
-  for (const r of fresh(b.transports)) await quotaAdapters.transport.confirm(tx, r)
-  for (const r of fresh(b.muthowif)) await quotaAdapters.muthowif.confirm(tx, r)
-  for (const r of fresh(b.tourPackages)) await quotaAdapters.tourPackage.confirm(tx, r)
-  for (const r of fresh(b.flights)) await quotaAdapters.flight.confirm(tx, r)
-  for (const r of fresh(b.packages)) await quotaAdapters.package.confirm(tx, r)
+  switch (c.ref.itemType) {
+    case 'hotel': return rel(b.hotels, quotaAdapters.hotel.release)
+    case 'transport': return rel(b.transports, quotaAdapters.transport.release)
+    case 'muthowif': return rel(b.muthowif, quotaAdapters.muthowif.release)
+    case 'catering': return
+    case 'tourPackage': return rel(b.tourPackages, quotaAdapters.tourPackage.release)
+    case 'flight': return rel(b.flights, quotaAdapters.flight.release)
+    case 'package': return rel(b.packages, quotaAdapters.package.release)
+  }
 }
 
 /**
@@ -254,7 +246,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
 
   // 1. hapus / ganti: lepas kuota, void baris harga, hapus baris item
   for (const c of [...p.removed, ...p.writes.flatMap(w => (w.replaces ? [w.replaces] : []))]) {
-    await releaseRow(tx, b, c, confirmed)
+    await releaseRow(tx, b, c)
     await voidItemLines(tx, { bookingId, itemType: c.ref.itemType, itemId: c.ref.itemId, byUserId, reason: voidReason, revision })
     await (itemDelegate(tx, c.ref.itemType) as unknown as { delete: (a: { where: { id: string } }) => Promise<unknown> }).delete({ where: { id: c.ref.itemId } })
   }
@@ -266,7 +258,6 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   for (const pg of p.pilgrimRemoves) await tx.bookingPilgrim.delete({ where: { id: pg.id } }) // dokumen 0 (R3); visa ikut terhapus (cascade)
 
   // 3. tambah / ganti (versi baru) + visa jamaah baru/ganti — mesin pesan yang sama
-  const before = new Set([b.hotels, b.transports, b.muthowif, b.tourPackages, b.flights, b.packages].flatMap(rows => rows.map(r => r.id)))
   const flights = [...p.kept.map(k => k.cur.item), ...p.writes.map(w => w.item)].flatMap(i => (i.itemType === 'flight' || i.itemType === 'package' ? [i.departureDate] : []))
   const plannedTravel = flights.length > 0 ? [...flights].sort()[0]! : undefined
   const written: ItemMeta[] = []
@@ -274,7 +265,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
     await reserveItems(tx, prepared.writes)
     await writeBookingItems(tx, bookingId, { ...prepared.writes.data, plannedTravelDate: plannedTravel }, prepared.writes.tours, prepared.writes.packages, written)
   }
-  if (confirmed) await confirmNewRows(tx, bookingId, before)
+  // Produk baru SELALU ditahan `pending` (koreksi pemilik 2026-11-01) — juga pada booking yang sudah dikonfirmasi; dikonfirmasi saat pembayarannya diverifikasi.
   await syncPackageVisas(tx, bookingId, prepared.full, p.full.items, plannedTravel ? dbDateOf(plannedTravel) : null)
 
   // 4. harga khusus per item (R4): selisih terhadap harga item (tanpa harga khusus lamanya)

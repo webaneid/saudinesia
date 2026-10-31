@@ -25,7 +25,7 @@ export async function assignMuthowifToBooking(tx: Tx, bookingMuthowifId: string,
   const muthowif = await tx.muthowif.findUniqueOrThrow({ where: { id: muthowifId } })
   if (!muthowif.isActive) throw new Error('Muthowif tidak aktif')
 
-  const alreadyPaid = bm.booking.confirmedAt !== null || bm.booking.status === 'completed' // sudah dikonfirmasi (lunas menurut alur v1)
+  const alreadyPaid = bm.quotaConfirmed // kuota baris ini sudah dikonfirmasi (status per baris — produk tambahan revisi bisa masih pending)
 
   for (const date of daysInRange(bm.startDate, bm.endDate)) {
     await reserveMuthowifQuota(tx, muthowifId, date, bm.numPeople)
