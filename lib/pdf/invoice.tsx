@@ -62,6 +62,8 @@ const styles = StyleSheet.create({
 })
 
 const pct = (n: number) => `${Number(n.toFixed(3))}%`.replace('.', ',')
+// Font standar PDF (Helvetica, WinAnsi) tak punya glyph panah — "CGK → JED" tercetak "CGK ’ JED". Diganti tanda yang tersedia hanya di dokumen PDF.
+const pdfText = (s: string) => s.replace(/[→⇒➝➔]/g, '–')
 
 function InvoiceDocument({ data, logo }: { data: InvoiceData; logo: Buffer | null }) {
   const company = data.company
@@ -139,8 +141,8 @@ function InvoiceDocument({ data, logo }: { data: InvoiceData; logo: Buffer | nul
           </View>
           {data.lineItems.map((li, i) => (
             <View key={i} style={styles.tableRow} wrap={false}>
-              <Text style={styles.colItem}>{li.label}</Text>
-              <Text style={styles.colDesc}>{li.description}</Text>
+              <Text style={styles.colItem}>{pdfText(li.label)}</Text>
+              <Text style={styles.colDesc}>{pdfText(li.description)}</Text>
               <Text style={styles.colQty}>{li.qty}</Text>
               <Text style={styles.colPrice}>{formatRupiahPdf(li.unitPrice)}</Text>
               <Text style={styles.colTotal}>{formatRupiahPdf(li.amount)}</Text>

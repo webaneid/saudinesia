@@ -23,6 +23,8 @@ type Props<T extends { id: string; isActive: boolean }, F> = {
   renderFields: (form: F, set: (patch: Partial<F>) => void) => ReactNode
   /** Galat validasi sisi klien (null = lanjut kirim); server tetap memvalidasi ulang. */
   precheck?: (form: F) => string | null
+  /** Bentuk isian → isi permintaan (mis. teks angka → number). Bawaan: isian apa adanya. */
+  toBody?: (form: F) => unknown
   /** Dipanggil setelah daftar berubah (tambah/ubah/hapus/aktif) — induk dapat memperbarui peringatan. */
   onChanged?: (rows: T[]) => void
 }
@@ -31,7 +33,7 @@ type Props<T extends { id: string; isActive: boolean }, F> = {
  * Kotak daftar kecil dengan CRUD lengkap (rekening bank, akun QRIS, aturan pajak): tambah/ubah lewat modal, aktif/nonaktif dan hapus lewat aksi ikon berkonfirmasi.
  * Tersimpan LANGSUNG ke server (bukan bagian tombol Simpan halaman); setiap galat server ditampilkan.
  */
-export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ title, icon, description, apiBase, noun, emptyText, summary, blank, toForm, renderFields, precheck, onChanged }: Props<T, F>) {
+export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ title, icon, description, apiBase, noun, emptyText, summary, blank, toForm, renderFields, precheck, toBody, onChanged }: Props<T, F>) {
   const [rows, setRows] = useState<T[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ id: string | null; form: F } | null>(null)
@@ -54,7 +56,7 @@ export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ ti
     if (pre) { setFormError(pre); return }
     setSaving(true); setFormError(null)
     try {
-      const r = await fetch(editing.id ? `${apiBase}/${editing.id}` : apiBase, { method: editing.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(editing.form) })
+      const r = await fetch(editing.id ? `${apiBase}/${editing.id}` : apiBase, { method: editing.id ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(toBody ? toBody(editing.form) : editing.form) })
       if (!r.ok) {
         const j: { error?: string } | null = await r.json().catch(() => null)
         setFormError(j?.error ?? `${noun} gagal disimpan.`)

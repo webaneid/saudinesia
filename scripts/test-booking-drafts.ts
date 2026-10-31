@@ -216,6 +216,20 @@ await t('pengeluaran vendor TIDAK bisa dicatat pada draf (draf dapat dihapus sun
   assert.equal(await prisma.costActual.count({ where: { bookingId: did } }), 0)
 })
 
+await t('KODE BOOKING: setelah draf di TENGAH dihapus, booking baru tetap dapat dibuat (urut tertinggi + 1, bukan jumlah + 1); 6 pembuatan SERENTAK → 6 kode berbeda', async () => {
+  const a = await newDraft(); const b = await newDraft(); const c = await newDraft()
+  const codes = await prisma.booking.findMany({ where: { id: { in: [a, b, c] } }, select: { bookingCode: true } })
+  assert.ok((await deleteDraft(b)).ok)
+  const d = await createDraft(customer.id)
+  assert.ok(d.ok, JSON.stringify(d)); if (!d.ok) return
+  drafts.push(d.id)
+  const top = Math.max(...codes.map(x => Number(x.bookingCode.split('-')[2])))
+  assert.equal(Number(d.bookingCode.split('-')[2]), top + 1)
+  const many = await Promise.all(Array.from({ length: 6 }, () => createDraft(customer.id)))
+  assert.ok(many.every(r => r.ok), JSON.stringify(many))
+  assert.equal(new Set(many.map(r => r.ok && r.bookingCode)).size, 6)
+})
+
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 await t('PENJAGA: satu mesin pesan (route jamaah + draf memakai prepareBooking/writeBooking); pratinjau selalu rollback; terbit mengunci & membaca ulang; route admin memakai requireBookingManage', () => {
   const engine = read('lib/booking/create.ts'); const dr = read('lib/booking/drafts.ts'); const route = read('app/api/v1/bookings/route.ts')

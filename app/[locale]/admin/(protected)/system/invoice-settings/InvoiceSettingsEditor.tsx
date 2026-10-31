@@ -267,6 +267,8 @@ function TaxBox() {
       summary={t => <><p className="m-0 font-semibold text-admin-ink">{t.name} — {t.ratePercent}%</p><p className="m-0 text-[11px] text-admin-muted">Dasar {t.basisPercent}% · {t.mode === 'added' ? 'ditambahkan ke harga' : 'sudah termasuk harga'}</p></>}
       blank={{ name: '', ratePercent: '0', basisPercent: '100', mode: 'added', isActive: true, sortOrder: 0 }}
       toForm={t => ({ name: t.name, ratePercent: String(t.ratePercent), basisPercent: String(t.basisPercent), mode: t.mode, isActive: t.isActive, sortOrder: t.sortOrder })}
+      // Isian angka disimpan sebagai teks (agar bisa dikosongkan saat mengetik); server mengharapkan number — kosong dikirim null (ditolak "harus angka").
+      toBody={f => ({ ...f, ratePercent: f.ratePercent.trim() === '' ? null : Number(f.ratePercent), basisPercent: f.basisPercent.trim() === '' ? null : Number(f.basisPercent) })}
       renderFields={(f, set) => (
         <>
           <FormField label="Nama pajak" htmlFor="tx-name" required><input id="tx-name" className={inp} maxLength={60} value={f.name} onChange={e => set({ name: e.target.value })} /></FormField>

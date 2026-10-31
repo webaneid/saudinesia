@@ -118,13 +118,13 @@ const inv = (name: string) => query(name, `select b."bookingCode" as code, i.num
   i."taxAddedIdr"::float as tax, i."taxLines" as lines, i.revision as rev, i."companySnapshot"->>'name' as co, i."bankSnapshot" as banks, i."termsDoc" as terms
   from invoices i join bookings b on b.id = i."bookingId" order by i."sequenceKey", i.sequence`)
 
-await t('BACKFILL reset tahunan: satu invoice per booking terbit (draf tidak), urut tanggal dibuat per TAHUN ZONA APLIKASI (31 Des 18.00 UTC = 1 Jan WIB), jatuh tempo = tanggal batas bayar WIB, pajak 0, kop + rekening AKTIF beku; penghitung = nomor terakhir', async () => {
+await t('BACKFILL reset tahunan: satu invoice per booking terbit (draf tidak), urut tanggal dibuat per TAHUN ZONA APLIKASI (31 Des 18.00 UTC = 1 Jan WIB), jatuh tempo = tanggal batas bayar WIB, pajak 0, kop + rekening AKTIF beku; penghitung = nomor terakhir, penghitung hantu → 0', async () => {
   const r = await scenario([USER, SETTINGS('{PREFIX}-{YYYY}-{SEQ}', 4, true),
     BK('C1', 'active', '2026-03-01 02:00', '2026-03-05 16:59:59.999'),
     BK('C2', 'cancelled', '2026-05-01 02:00', null),
     BK('C3', 'active', '2026-12-31 18:00', '2027-01-04 16:59:59.999'),
     BK('C4', 'draft', '2026-04-01 02:00', null),
-    `INSERT INTO invoice_sequences (key, "lastNumber", "updatedAt") VALUES ('2026', 9, now());`].join('\n'))
+    `INSERT INTO invoice_sequences (key, "lastNumber", "updatedAt") VALUES ('2026', 9, now()), ('2025', 6, now()), ('all', 4, now());`].join('\n'))
   assert.equal(r.code, 0, `migrasi harus berhasil:\n${r.out.slice(-600)}`)
   const rows = await inv(r.name)
   assert.deepEqual(rows.map(x => [x.code, x.number, x.k, x.seq, x.d, x.due]), [
@@ -136,7 +136,8 @@ await t('BACKFILL reset tahunan: satu invoice per booking terbit (draf tidak), u
     assert.deepEqual([x.tax, x.lines, x.rev, x.co, x.terms], [0, [], 1, 'PT Uji', 'S&K'])
     assert.deepEqual(x.banks, [{ bankName: 'BSI', accountNumber: '111', accountHolder: 'PT Uji', branch: null }])
   }
-  assert.deepEqual(await query(r.name, `select key, "lastNumber" as n from invoice_sequences order by key`), [{ key: '2026', n: 2 }, { key: '2027', n: 1 }])
+  // Penghitung tanpa invoice (sisa uji/alokasi hantu sebelum tabel ini ada) → 0: invoice pertama tahun itu bernomor 1, tanpa lompatan.
+  assert.deepEqual(await query(r.name, `select key, "lastNumber" as n from invoice_sequences order by key`), [{ key: '2025', n: 0 }, { key: '2026', n: 2 }, { key: '2027', n: 1 }, { key: 'all', n: 0 }])
 })
 
 await t('BACKFILL tanpa reset tahunan: kunci "all", {SEQ} melebihi lebar tetap utuh (tak dipotong), {YY}/{MM} dari tanggal dibuat', async () => {

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { requireSession } from '@/lib/auth/session'
 import { createBookingSchema } from '@/lib/validators/booking'
-import { generateBookingCode } from '@/lib/utils/bookingCode'
+import { withBookingCode } from '@/lib/utils/bookingCode'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { notify } from '@/lib/notifications/notify'
@@ -59,13 +59,12 @@ export async function POST(request: Request) {
     }
 
     const data = parsed.data
-    const bookingCode = await generateBookingCode()
     // Jatuh tempo = `defaultDueDays` dari Pengaturan Invoice (saran, tidak mengikat — D4); invoice terbit LANGSUNG bersama booking (keputusan pemilik K6-c).
     const { defaultDueDays } = await getInvoiceSettings()
 
     // Resolusi + aturan visa di luar transaksi, lalu kuota + item + snapshot di dalam — mesin yang SAMA dengan penerbitan draf admin (lib/booking/create.ts).
     const prepared = await prepareBooking({ items: data.items, pilgrims: data.pilgrims, departureDate: data.departureDate, totalPilgrims: data.totalPilgrims }, session.userId)
-    const booking = await retrySerializable(() => prisma.$transaction(async (tx) => {
+    const booking = await withBookingCode(bookingCode => retrySerializable(() => prisma.$transaction(async (tx) => {
       const bk = await tx.booking.create({
         data: {
           bookingCode,
@@ -80,7 +79,7 @@ export async function POST(request: Request) {
       await writeBooking(tx, prepared, bk.id)
       await issueInvoice(tx, bk.id, { dueDays: defaultDueDays, byUserId: null })
       return tx.booking.findUniqueOrThrow({ where: { id: bk.id }, select: { id: true, bookingCode: true, paymentDeadline: true } })
-    }, { isolationLevel: 'Serializable' }))
+    }, { isolationLevel: 'Serializable' })))
 
     // Konfirmasi pesanan (WhatsApp + email) — sebelumnya template WA `bookingSubmitted` ada tapi tidak pernah dipanggil.
     // Best-effort setelah transaksi commit; notify() tidak pernah melempar dan tidak memblokir respons.

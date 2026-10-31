@@ -14,8 +14,8 @@ const pct = (n: number) => `${Number(n.toFixed(3))}%`
 
 // Kotak Invoice di detail booking (docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a): nomor, tanggal, jatuh tempo, rincian tagihan dari SATU pembaca (`billOf`).
 export function InvoiceBox({ bookingId, invoice, bill }: Props) {
-  const row = (label: string, value: string, strong = false) => (
-    <div className={`flex items-baseline justify-between gap-3 text-[13px] ${strong ? 'font-bold text-admin-ink' : 'text-admin-ink/80'}`}>
+  const row = (label: string, value: string, strong = false, key?: string | number) => (
+    <div key={key} className={`flex items-baseline justify-between gap-3 text-[13px] ${strong ? 'font-bold text-admin-ink' : 'text-admin-ink/80'}`}>
       <span>{label}</span><span className="tabular-nums">{value}</span>
     </div>
   )
@@ -39,7 +39,7 @@ export function InvoiceBox({ bookingId, invoice, bill }: Props) {
       )}
       <div className="space-y-1 border-t border-admin-line pt-2">
         {row('Subtotal', formatRupiah(bill.subtotal))}
-        {invoice?.taxLines.map(t => row(`${t.name} ${pct(t.ratePercent)}${t.basisPercent !== 100 ? ` × ${pct(t.basisPercent)} DPP` : ''}${t.mode === 'included' ? ' (termasuk dalam harga)' : ''}`, formatRupiah(t.amountIdr)))}
+        {invoice?.taxLines.map((t, i) => row(`${t.name} ${pct(t.ratePercent)}${t.basisPercent !== 100 ? ` × ${pct(t.basisPercent)} DPP` : ''}${t.mode === 'included' ? ' (termasuk dalam harga)' : ''}`, formatRupiah(t.amountIdr), false, i))}
         {row('Total tagihan', formatRupiah(bill.grandTotal), true)}
         {row('Terbayar', formatRupiah(bill.paid))}
         {row(bill.balance < 0 ? 'Kelebihan bayar' : 'Sisa', formatRupiah(Math.abs(bill.balance)), true)}

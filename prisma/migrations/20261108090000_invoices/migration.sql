@@ -87,7 +87,9 @@ SELECT gen_random_uuid()::text, n."id",
        timezone('UTC', now())
 FROM n CROSS JOIN s;
 
--- Penghitung diselaraskan ke nomor terakhir per kunci (belum ada invoice sebelum migrasi ini, jadi nomor dimulai dari 1 tanpa lompatan).
+-- Penghitung diselaraskan ke nomor terakhir per kunci. Sebelum migrasi ini TIDAK ADA invoice yang pernah terbit (alokator belum punya pemanggil), jadi nilai
+-- penghitung yang sudah ada (mis. sisa uji) adalah nomor hantu — dikembalikan ke 0 supaya invoice pertama bernomor 1, tanpa lompatan.
+UPDATE "invoice_sequences" SET "lastNumber" = 0, "updatedAt" = timezone('UTC', now()) WHERE "key" NOT IN (SELECT DISTINCT "sequenceKey" FROM "invoices");
 INSERT INTO "invoice_sequences" ("key", "lastNumber", "updatedAt")
 SELECT "sequenceKey", max("sequence"), timezone('UTC', now()) FROM "invoices" GROUP BY "sequenceKey"
 ON CONFLICT ("key") DO UPDATE SET "lastNumber" = EXCLUDED."lastNumber", "updatedAt" = EXCLUDED."updatedAt";
@@ -106,4 +108,7 @@ BEGIN
   SELECT count(*) INTO behind FROM (SELECT "sequenceKey", max("sequence") m FROM "invoices" GROUP BY "sequenceKey") g
     LEFT JOIN "invoice_sequences" q ON q."key" = g."sequenceKey" WHERE q."lastNumber" IS DISTINCT FROM g.m;
   IF behind > 0 THEN RAISE EXCEPTION 'invoices: penghitung tidak sama dengan nomor terakhir di % kunci', behind; END IF;
+  IF EXISTS (SELECT 1 FROM "invoice_sequences" q WHERE q."lastNumber" <> 0 AND NOT EXISTS (SELECT 1 FROM "invoices" i WHERE i."sequenceKey" = q."key")) THEN
+    RAISE EXCEPTION 'invoices: penghitung tanpa invoice tidak nol';
+  END IF;
 END $$;
