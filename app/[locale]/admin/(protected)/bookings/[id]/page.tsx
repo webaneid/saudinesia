@@ -1,7 +1,6 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
-import { formatRupiah } from '@/lib/utils'
 import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
 import { ArrowLeft, FileDown, Pencil } from 'lucide-react'
@@ -178,7 +177,7 @@ export default async function AdminBookingDetail({ params }: Props) {
                 <span className="font-medium text-admin-ink">{bp.package.name}</span>
                 {' — '}
                 <span>{formatCalendarDate(bp.departureDate, DATE_NUMERIC)} – {formatCalendarDate(bp.returnDate, DATE_NUMERIC)}</span>
-                <span className="text-admin-muted ml-2 text-[12px]">{bp.numPeople} orang · {formatRupiah(Number(bp.totalPrice))}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">{bp.numPeople} orang</span>
               </p>
             ))}
           </div>
@@ -192,7 +191,7 @@ export default async function AdminBookingDetail({ params }: Props) {
                 <span className="font-medium text-admin-ink">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</span>
                 {' — '}
                 <span>{formatCalendarDate(bf.departureDate, DATE_NUMERIC)}</span>
-                <span className="text-admin-muted ml-2 text-[12px]">{bf.numPassengers} penumpang · {formatRupiah(Number(bf.totalPrice))}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">{bf.numPassengers} penumpang</span>
               </p>
             ))}
           </div>
@@ -207,7 +206,7 @@ export default async function AdminBookingDetail({ params }: Props) {
                 {' — '}
                 <span>{formatCalendarDate(tp.tourDate, DATE_NUMERIC)}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">
-                  {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''} · {formatRupiah(Number(tp.totalPrice))}
+                  {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}
                 </span>
               </p>
             ))}

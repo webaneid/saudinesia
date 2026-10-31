@@ -218,6 +218,14 @@ export async function writeCustomPriceLine(db: Db, o: { bookingId: string; itemT
   })
 }
 
+/** Harga JUAL per item (Σ baris berlaku item itu, termasuk harga khusus) — kunci `itemType:itemId`. Hanya jual: aman untuk halaman jamaah (modal tak pernah keluar). */
+export async function itemSellTotals(db: Db, bookingId: string): Promise<Map<string, number>> {
+  const rows = await db.priceSnapshot.findMany({ where: { bookingId, voidedAt: null }, select: { itemType: true, itemId: true, totalSellIdr: true } })
+  const m = new Map<string, number>()
+  for (const r of rows) m.set(`${r.itemType}:${r.itemId}`, (m.get(`${r.itemType}:${r.itemId}`) ?? 0) + cents(Number(r.totalSellIdr)))
+  return new Map([...m].map(([k, v]) => [k, v / 100]))
+}
+
 /** Σ jual baris snapshot BERLAKU (belum di-void) + Σ modal baris yang modalnya diketahui (HPP awal). */
 export async function bookingSnapshotTotals(db: Db, bookingId: string): Promise<{ sellIdr: number; costKnownIdr: number }> {
   const agg = await db.priceSnapshot.aggregate({ where: { bookingId, voidedAt: null }, _sum: { totalSellIdr: true, totalCostIdr: true } }) // baris di-void revisi tak berlaku (T1)
@@ -251,7 +259,7 @@ export async function bookingPriceSummary(db: Db, bookingId: string): Promise<Bo
     sell += cents(Number(r.totalSellIdr))
     if (r.totalCostIdr != null) cost += cents(Number(r.totalCostIdr))
     if (r.itemType === 'booking') continue // diskon/biaya tambahan tingkat pesanan: bukan modal, bukan rekomendasi
-    if (r.totalCostIdr == null && r.lineKey !== 'penyesuaian') costUnknown++
+    if (r.totalCostIdr == null && !r.lineKey.startsWith('penyesuaian')) costUnknown++ // selisih paket & harga khusus item: modalnya ada di baris item
     if (r.recommendedTotalIdr != null) rec += cents(Number(r.recommendedTotalIdr))
     else if (r.mode === 'auto') rec += cents(Number(r.totalSellIdr))
     else recUnknown++

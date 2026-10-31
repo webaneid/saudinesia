@@ -166,8 +166,8 @@ export default function BookingRevisionPage({ params }: Props) {
             const name = p.pilgrimId ? `Jamaah ke-${p.position}` : 'Jamaah baru'
             const visaLocked = !!p.locked || !!p.visaFromPackage
             return (
-              <li key={p.pilgrimId ?? `baru-${i}`} className="grid grid-cols-[minmax(0,1fr)_5rem_2rem] items-center gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_5rem_2rem]">
-                <span className="col-span-3 text-xs font-semibold text-admin-muted sm:col-span-1">{name}</span>
+              <li key={p.pilgrimId ?? `baru-${i}`} className="grid grid-cols-[minmax(0,1fr)_5rem_2rem] items-center gap-x-2 gap-y-1">
+                <span className="col-span-3 text-xs font-semibold text-admin-muted">{name}</span>
                 {p.visaFromPackage
                   ? <span className="text-xs text-admin-muted">Visa dari paket</span>
                   : <ChoiceSelect ariaLabel={`Visa ${name}`} size="sm" value={p.visaProductId ?? ''} placeholder="— tanpa visa —" options={visaOptions} disabled={visaLocked}
@@ -178,7 +178,7 @@ export default function BookingRevisionPage({ params }: Props) {
                   onClick={() => { touched(); setPilgrims(xs => xs.filter((_, j) => j !== i)) }} className="rounded p-1 text-admin-muted hover:text-admin-danger disabled:opacity-40">
                   <Trash2 className="size-4" />
                 </button>
-                {p.locked && <span className="col-span-3 text-[11px] text-admin-muted sm:col-span-4">{p.lockReason} — urus lewat modul Visa.</span>}
+                {p.locked && <span className="col-span-3 text-[11px] text-admin-muted">{p.lockReason} — urus lewat modul Visa.</span>}
               </li>
             )
           })}

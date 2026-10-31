@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
+import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
 import type { BankSnapshot } from '@/lib/invoice/issue'
 import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -45,6 +46,9 @@ export default async function BookingDetailPage({ params }: Props) {
   if (!booking) notFound()
   // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts). Status lunas/sisa tetap mengikuti alur v1 sampai Fase 7.
   const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice })
+  // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.
+  const sells = await itemSellTotals(prisma, booking.id)
+  const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
   // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF); setelan env lama hanya cadangan untuk booking tanpa invoice.
   const payTo = booking.invoice
     ? (booking.invoice.bankSnapshot as BankSnapshot[])
@@ -166,7 +170,7 @@ export default async function BookingDetailPage({ params }: Props) {
                 <p className="font-medium">{h.hotelRoomSchedule.period.hotel.name}</p>
                 <p className="text-muted-foreground capitalize">{h.hotelRoomSchedule.period.hotel.city} · {h.nights} malam · {h.numRooms} kamar {h.hotelRoomSchedule.roomType.name}</p>
               </div>
-              <p className="font-semibold">{formatRupiah(Number(h.totalPrice))}</p>
+              <p className="font-semibold">{formatRupiah(sellOf('hotel', h.id))}</p>
             </div>
           ))}
         </div>
@@ -181,7 +185,7 @@ export default async function BookingDetailPage({ params }: Props) {
                 <p className="font-medium">{bp.package.name}</p>
                 <p className="text-muted-foreground">{formatCalendarDate(bp.departureDate, DATE_NUMERIC)} – {formatCalendarDate(bp.returnDate, DATE_NUMERIC)} · {bp.numPeople} orang</p>
               </div>
-              <p className="font-semibold">{formatRupiah(Number(bp.totalPrice))}</p>
+              <p className="font-semibold">{formatRupiah(sellOf('package', bp.id))}</p>
             </div>
           ))}
         </div>
@@ -196,7 +200,7 @@ export default async function BookingDetailPage({ params }: Props) {
                 <p className="font-medium">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</p>
                 <p className="text-muted-foreground">{formatCalendarDate(bf.departureDate, DATE_NUMERIC)} · {bf.numPassengers} penumpang</p>
               </div>
-              <p className="font-semibold">{formatRupiah(Number(bf.totalPrice))}</p>
+              <p className="font-semibold">{formatRupiah(sellOf('flight', bf.id))}</p>
             </div>
           ))}
         </div>
@@ -211,7 +215,7 @@ export default async function BookingDetailPage({ params }: Props) {
                 <p className="font-medium">{tp.tourPackage.name}</p>
                 <p className="text-muted-foreground">{formatCalendarDate(tp.tourDate, DATE_NUMERIC)} · {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}</p>
               </div>
-              <p className="font-semibold">{formatRupiah(Number(tp.totalPrice))}</p>
+              <p className="font-semibold">{formatRupiah(sellOf('tourPackage', tp.id))}</p>
             </div>
           ))}
         </div>
