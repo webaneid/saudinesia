@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { requireSession } from '@/lib/auth/session'
@@ -99,6 +100,11 @@ export async function POST(request: Request) {
       if (error.message.includes('insufficient') || error.message.includes('capacity')) {
         return NextResponse.json(err(error.message), { status: 409 })
       }
+    }
+    // Id produk/jadwal yang tidak ada → masukan salah, bukan galat server (SEC-130); dua pesanan serentak pada kuota yang sama → coba lagi (SEC-83).
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2025') return NextResponse.json(err('Produk yang dipilih tidak ditemukan lagi'), { status: 422 })
+      if (error.code === 'P2034') return NextResponse.json(err('Kuota sedang diperebutkan — coba lagi'), { status: 409 })
     }
     console.error('[bookings/POST]', error instanceof Error ? error.name : error)
     return NextResponse.json(err('Internal server error'), { status: 500 })

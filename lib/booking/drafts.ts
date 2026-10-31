@@ -33,9 +33,10 @@ export function readDraft(json: unknown): BookingDraft {
 }
 
 export async function createDraft(customerId: string): Promise<{ ok: true; id: string; bookingCode: string } | DraftError> {
-  const customer = await prisma.user.findUnique({ where: { id: customerId }, select: { role: true, email: true } })
+  const customer = await prisma.user.findUnique({ where: { id: customerId }, select: { role: true, email: true, isActive: true } })
   if (!customer || customer.role !== 'pilgrim') return { ok: false, status: 404, message: 'Pelanggan tidak ditemukan' }
   if (isDeletedAccount(customer.email)) return { ok: false, status: 409, message: 'Akun pelanggan ini sudah dihapus' }
+  if (!customer.isActive) return { ok: false, status: 409, message: 'Akun pelanggan ini nonaktif' }
   const b = await prisma.booking.create({
     data: { bookingCode: await generateBookingCode(), userId: customerId, status: 'draft', season: 'regular', totalAmount: 0, draft: EMPTY as Prisma.InputJsonValue },
     select: { id: true, bookingCode: true },
@@ -51,12 +52,16 @@ async function lockDraft(tx: Tx, id: string): Promise<{ status: string; draft: u
   return rows[0] ?? null
 }
 
+/** `expectedUpdatedAt` dari klien ≠ versi terkunci → basi. Tanpa nilai = tak diperiksa. */
+const isStale = (expectedUpdatedAt: string | undefined, actual: Date) =>
+  expectedUpdatedAt !== undefined && new Date(expectedUpdatedAt).getTime() !== actual.getTime()
+
 /** Simpan isi draf. `expectedUpdatedAt` (opsional) mencegah dua tab saling menimpa diam-diam (409). */
 export async function saveDraft(id: string, draft: BookingDraft, expectedUpdatedAt?: string): Promise<{ ok: true; updatedAt: Date } | DraftError> {
   return prisma.$transaction(async (tx) => {
     const row = await lockDraft(tx, id)
     if (!row || row.status !== 'draft') return { ok: false as const, status: 404 as const, message: 'Draf tidak ditemukan' }
-    if (expectedUpdatedAt && new Date(expectedUpdatedAt).getTime() !== row.updatedAt.getTime()) {
+    if (isStale(expectedUpdatedAt, row.updatedAt)) {
       return { ok: false as const, status: 409 as const, message: 'Draf sudah diubah di tempat lain — muat ulang halaman' }
     }
     const b = await tx.booking.update({ where: { id }, data: { draft: draft as Prisma.InputJsonValue }, select: { updatedAt: true } })
@@ -106,7 +111,7 @@ export async function previewDraft(id: string): Promise<{ ok: true; preview: Dra
 }
 
 /** Terbitkan: draf dikunci, mesin pesan menulis item ke baris yang sama, status `draft → active`, isi draf dikosongkan, jatuh tempo ditetapkan (D4). Atomik. */
-export async function publishDraft(id: string, input: { dueDays?: number }): Promise<{ ok: true; id: string; bookingCode: string } | DraftError> {
+export async function publishDraft(id: string, input: { dueDays?: number; expectedUpdatedAt?: string }): Promise<{ ok: true; id: string; bookingCode: string } | DraftError> {
   const b = await prisma.booking.findUnique({ where: { id }, select: { status: true, userId: true, draft: true } })
   if (!b || b.status !== 'draft') return { ok: false, status: 404, message: 'Draf tidak ditemukan' }
   const draft = readDraft(b.draft)
@@ -118,7 +123,16 @@ export async function publishDraft(id: string, input: { dueDays?: number }): Pro
       const row = await lockDraft(tx, id)
       // Status DAN isi dibaca ulang di dalam kunci: terbit ganda / draf yang diubah sesudah dibaca tak boleh terbit dengan isi lama.
       if (!row || row.status !== 'draft') return { ok: false as const, status: 409 as const, message: 'Draf ini sudah diterbitkan atau dihapus' }
-      if (JSON.stringify(readDraft(row.draft)) !== JSON.stringify(draft)) return { ok: false as const, status: 409 as const, message: 'Draf berubah saat diterbitkan — pratinjau ulang' }
+      if (JSON.stringify(readDraft(row.draft)) !== JSON.stringify(draft) || isStale(input.expectedUpdatedAt, row.updatedAt)) {
+        return { ok: false as const, status: 409 as const, message: 'Draf sudah berubah sejak dipratinjau — muat ulang lalu pratinjau lagi' }
+      }
+      // Pemilik dibaca di dalam kunci barisnya: akun yang dihapus (UU PDP) atau dinonaktifkan sesudah draf dibuat tak boleh menerima booking baru.
+      // Penghapusan akun mengunci baris pengguna yang sama dan menghapus drafnya (lib/account/deletion.ts), jadi keduanya terserialkan.
+      const owner = await tx.$queryRaw<Array<{ email: string; isActive: boolean }>>( // Prisma ORM tak punya SELECT … FOR SHARE
+        Prisma.sql`SELECT "email", "isActive" FROM "users" WHERE "id" = ${row.userId} FOR SHARE`,
+      )
+      if (!owner[0] || isDeletedAccount(owner[0].email)) return { ok: false as const, status: 409 as const, message: 'Akun pelanggan ini sudah dihapus' }
+      if (!owner[0].isActive) return { ok: false as const, status: 409 as const, message: 'Akun pelanggan ini nonaktif — aktifkan dulu sebelum menerbitkan' }
       await writeBooking(tx, prepared, id)
       const dated = await tx.booking.findUniqueOrThrow({ where: { id }, select: { departureDate: true } })
       const done = await tx.booking.update({

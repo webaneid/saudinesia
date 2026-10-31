@@ -6,7 +6,7 @@ import { publishDraft } from '@/lib/booking/drafts'
 import { authFailureResponse } from '@/lib/admin/errors'
 
 type Ctx = { params: Promise<{ id: string }> }
-const schema = z.object({ dueDays: z.number().int().min(0).max(365).optional() }).strict()
+const schema = z.object({ dueDays: z.number().int().min(0).max(365).optional(), expectedUpdatedAt: z.string().datetime().optional() }).strict()
 
 // Terbitkan draf (lib/booking/drafts.ts): kuota ditahan, harga dibekukan, status aktif. Belum ada notifikasi ke pelanggan (keputusan K5-1 — Fase 6, bersama invoice publik).
 export async function POST(req: Request, { params }: Ctx) {

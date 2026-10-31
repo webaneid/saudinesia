@@ -13,6 +13,7 @@ import { createDraft, deleteDraft, previewDraft, publishDraft, readDraft, saveDr
 import { bookingDraftSchema, type BookingDraft } from '@/lib/validators/booking'
 import { completeness, validateFieldValues, type FieldDef } from '@/lib/manifest/values'
 import { calendarDateOf, todayInApp, addDays } from '@/lib/time'
+import { createCostActual, CostActualError } from '@/lib/costs/actuals'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -172,6 +173,47 @@ await t('HAPUS draf: hapus sungguhan (baris hilang); id booking aktif → 404; C
   assert.equal(await prisma.booking.count({ where: { id: did } }), 0)
   assert.ok(await prisma.booking.count({ where: { userId: customer.id, status: 'active' } }) > 0, 'ada booking aktif hasil uji terbit')
   await assert.rejects(() => prisma.$executeRawUnsafe(`UPDATE bookings SET draft = '{"items":[]}' WHERE status = 'active' AND "userId" = '${customer.id}'`), /bookings_draft_only_in_draft|check/i)
+})
+
+await t('TERBIT terikat versi yang dipratinjau: expectedUpdatedAt basi (tab lain menyimpan) → 409 tanpa menahan kursi; versi terkini → terbit', async () => {
+  const did = await newDraft()
+  const seen = (await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { updatedAt: true } })).updatedAt.toISOString()
+  assert.ok((await saveDraft(did, { ...DRAFT, dueDays: 7 })).ok) // tab lain
+  const s0 = await seats()
+  const stale = await publishDraft(did, { expectedUpdatedAt: seen })
+  assert.ok(!stale.ok && stale.status === 409, JSON.stringify(stale))
+  assert.equal(await seats(), s0)
+  assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id: did } })).status, 'draft')
+  const now = (await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { updatedAt: true } })).updatedAt.toISOString()
+  assert.ok((await publishDraft(did, { expectedUpdatedAt: now })).ok)
+  await prisma.flightSchedule.update({ where: { id: flight.id }, data: { pendingSeats: s0 } })
+})
+await t('TERBIT ditolak untuk akun NONAKTIF atau TERHAPUS (UU PDP) sesudah draf dibuat — 409, draf tetap draf, kursi tak tertahan; buat draf untuk akun nonaktif → 409', async () => {
+  const other = await prisma.user.create({ data: { email: `${tag}-lain@example.test`, passwordHash: 'x', fullName: 'Pelanggan Lain', role: 'pilgrim', isActive: true } })
+  try {
+    const c = await createDraft(other.id); assert.ok(c.ok)
+    assert.ok((await saveDraft(c.id, DRAFT)).ok)
+    const s0 = await seats()
+    await prisma.user.update({ where: { id: other.id }, data: { isActive: false } })
+    assert.equal(await createDraft(other.id).then(r => !r.ok && r.status), 409)
+    const off = await publishDraft(c.id, {})
+    assert.ok(!off.ok && off.status === 409 && /nonaktif/.test(off.message), JSON.stringify(off))
+    await prisma.user.update({ where: { id: other.id }, data: { isActive: true, email: `deleted-${other.id}@deleted.invalid` } })
+    const gone = await publishDraft(c.id, {})
+    assert.ok(!gone.ok && gone.status === 409 && /dihapus/.test(gone.message), JSON.stringify(gone))
+    assert.deepEqual([(await prisma.booking.findUniqueOrThrow({ where: { id: c.id } })).status, await seats()], ['draft', s0])
+  } finally {
+    await prisma.booking.deleteMany({ where: { userId: other.id } })
+    await prisma.user.delete({ where: { id: other.id } })
+  }
+})
+await t('pengeluaran vendor TIDAK bisa dicatat pada draf (draf dapat dihapus sungguhan → jejak uang keluar akan hilang) → 409', async () => {
+  const did = await newDraft()
+  await assert.rejects(
+    () => createCostActual({ bookingId: did, vendorId: vendor.id, component: 'tiket', currency: 'IDR', amount: 1000, paidAt: todayInApp(), byUserId: staff.id }),
+    (e: unknown) => e instanceof CostActualError && e.status === 409,
+  )
+  assert.equal(await prisma.costActual.count({ where: { bookingId: did } }), 0)
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────

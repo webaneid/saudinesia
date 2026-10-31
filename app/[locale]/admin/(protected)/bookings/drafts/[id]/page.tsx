@@ -86,16 +86,17 @@ export default function DraftEditorPage({ params }: Props) {
     change({ ...draft!, pilgrims })
   }
 
-  async function save(): Promise<boolean> {
+  /** Simpan; berhasil → versi tersimpan (`updatedAt`) untuk dikirim saat terbit, gagal → null. */
+  async function save(): Promise<string | null> {
     setSaving(true); setProblem(null)
     try {
       const res = await fetch(`/api/v1/admin/bookings/drafts/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft, expectedUpdatedAt: loaded!.updatedAt }) })
       const json = await res.json().catch(() => null)
-      if (!res.ok) { setProblem({ message: json?.error ?? 'Draf gagal disimpan.', violations: [] }); return false }
+      if (!res.ok) { setProblem({ message: json?.error ?? 'Draf gagal disimpan.', violations: [] }); return null }
       setLoaded(l => (l ? { ...l, updatedAt: json.data.updatedAt } : l)); setSnapshot(JSON.stringify(draft)); setSaved(true)
-      return true
+      return json.data.updatedAt as string
     } catch {
-      setProblem({ message: 'Tidak dapat menghubungi server.', violations: [] }); return false
+      setProblem({ message: 'Tidak dapat menghubungi server.', violations: [] }); return null
     } finally { setSaving(false) }
   }
 
@@ -113,10 +114,13 @@ export default function DraftEditorPage({ params }: Props) {
   }
 
   async function publish() {
-    if (dirty && !(await save())) return
+    // Terbit terikat ke versi yang terlihat di tab ini: bila tab lain menyimpan isi berbeda sesudahnya, server menolak (409) alih-alih menerbitkan isi itu.
+    const version = dirty ? await save() : loaded!.updatedAt
+    if (!version) return
     setPublishing(true); setProblem(null)
     try {
-      const res = await fetch(`/api/v1/admin/bookings/drafts/${id}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(draft!.dueDays !== undefined ? { dueDays: draft!.dueDays } : {}) })
+      const body = { expectedUpdatedAt: version, ...(draft!.dueDays !== undefined && { dueDays: draft!.dueDays }) }
+      const res = await fetch(`/api/v1/admin/bookings/drafts/${id}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => null)
       if (!res.ok) { setProblem({ message: json?.error ?? 'Booking gagal diterbitkan.', violations: json?.meta?.violations ?? [] }); return }
       setSnapshot(JSON.stringify(draft))

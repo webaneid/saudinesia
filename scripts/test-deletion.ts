@@ -176,6 +176,14 @@ await t('blocker: akun staf (bukan jamaah) ditolak lewat jalur UU PDP', async ()
   assert.equal((await prisma.user.findUnique({ where: { id: s.userId } }))?.email, s.email)
 })
 
+await t('draf booking admin (belum terbit): TIDAK menahan penghapusan dan IKUT DIHAPUS sungguhan — tak tersisa untuk diterbitkan ke akun anonim', async () => {
+  const s = await seed()
+  const draft = await prisma.booking.create({ data: { bookingCode: `BK-${uniq()}`, userId: s.userId, status: 'draft', season: 'regular', totalAmount: new Decimal(0), draft: { items: [], pilgrims: [{}] } } })
+  assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, fakeDeps().deps)).ok, true)
+  assert.equal(await prisma.booking.count({ where: { id: draft.id } }), 0, 'draf terhapus')
+  assert.equal(await prisma.booking.count({ where: { id: s.bookingId } }), 1, 'booking terbit tetap ada (pembukuan)')
+})
+
 await t('konfirmasi email: salah → ditolak tanpa menyentuh apa pun; benar (huruf besar/spasi diabaikan) → lolos', async () => {
   const s = await seed(); const f = fakeDeps()
   for (const bad of ['salah@example.test', '', s.email.slice(0, -1)]) {

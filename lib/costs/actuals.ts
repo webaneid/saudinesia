@@ -90,8 +90,10 @@ export async function createCostActual(input: ActualInput & { byUserId: string }
   const n = normalize(input)
   return prisma.$transaction(async tx => {
     await usableVendor(input.vendorId, tx)
-    const booking = await tx.booking.findUnique({ where: { id: input.bookingId }, select: { id: true } })
+    const booking = await tx.booking.findUnique({ where: { id: input.bookingId }, select: { id: true, status: true } })
     if (!booking) throw new CostActualError(404, 'Pesanan tidak ditemukan')
+    // Draf belum terbit dan dapat dihapus sungguhan (lib/booking/drafts.ts) — uang keluar dicatat pada pesanan terbit saja.
+    if (booking.status === 'draft') throw new CostActualError(409, 'Pesanan masih draf — terbitkan dulu sebelum mencatat pengeluaran')
     if (input.snapshotId) {
       // kunci baris rencana: dua pengeluaran paralel pada baris yang sama tak boleh sama-sama lolos pemeriksaan selisih
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${input.snapshotId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
