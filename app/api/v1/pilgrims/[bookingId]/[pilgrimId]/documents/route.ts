@@ -136,16 +136,28 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(err('Unauthorized'), { status: 401 })
   }
 
-  const doc = await prisma.document.create({
-    data: {
-      bookingPilgrimId: pilgrimId,
-      docType,
-      fileName:      file.name,
-      filePath:      objectKey,
-      fileSizeBytes: file.size,
-    },
-    select: { id: true, docType: true, fileName: true, fileSizeBytes: true, uploadedAt: true },
+  // Revisi booking dapat MENGHAPUS jamaah (docs/arsitektur-booking-engine-v2.md §10.4 6b, R3: hanya bila belum ada dokumen) di bawah kunci FOR UPDATE baris booking.
+  // Baris dokumen ditulis di bawah kunci FOR SHARE baris booking yang sama: revisi dan unggahan terserialkan — revisi melihat dokumen ini (R3 menolak hapus), atau
+  // unggahan melihat jamaah sudah tiada. Pada kasus kedua berkas yang baru diunggah dibuang, supaya scan paspor/KTP tak tertinggal tanpa pemilik di MinIO.
+  const doc = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "bookings" WHERE "id" = ${bookingId} FOR SHARE` // Prisma ORM tak punya SELECT … FOR SHARE
+    const still = await tx.bookingPilgrim.findFirst({ where: { id: pilgrimId, bookingId }, select: { id: true } })
+    if (!still) return null
+    return tx.document.create({
+      data: {
+        bookingPilgrimId: pilgrimId,
+        docType,
+        fileName:      file.name,
+        filePath:      objectKey,
+        fileSizeBytes: file.size,
+      },
+      select: { id: true, docType: true, fileName: true, fileSizeBytes: true, uploadedAt: true },
+    })
   })
+  if (!doc) {
+    await deleteObject(objectKey).catch(() => {})
+    return NextResponse.json(err('Jamaah tidak ditemukan'), { status: 404 })
+  }
 
   // Auto-advance: check all required docs are now uploaded
   const requiredTypes = requirements

@@ -8,7 +8,7 @@ import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import type { TourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import {
   compositeLines, lineFromPoint, lineTotalSell, peekCost, sumSell, takePoint, takeVisaTier, writeSnapshots,
-  type CompositePart, type PendingItem, type SnapshotLine,
+  type CompositePart, type ItemMeta, type PendingItem, type SnapshotLine,
 } from '@/lib/pricing/engine/snapshot'
 
 // Hari probe kalau jamaah tidak memilih durasi spesifik — sama alasan dengan DEFAULT_PROBE_DAY di lib/pricing/engine/owners/visa.ts (bukan hardcode angka bisnis).
@@ -32,6 +32,8 @@ type Item<T extends BookingItemInput['itemType']> = Extract<BookingItemInput, { 
  */
 export async function writeBookingItems(
   tx: Prisma.TransactionClient, bookingId: string, data: BookingInput, tourResolved: readonly TourPackageResolved[], packageResolved: readonly PackageResolved[] = [],
+  /** Diisi metadata item yang ditulis, URUT `data.items` lalu visa per jamaah (revisi memakai id baris baru untuk harga khusus). */
+  written?: ItemMeta[],
 ): Promise<number> {
   const pending: PendingItem[] = []
   const add = (meta: PendingItem['meta'], lines: SnapshotLine[]) => pending.push({ meta, lines })
@@ -202,9 +204,11 @@ export async function writeBookingItems(
   // ── Pilgrims + Visa applications ───────────────────────────────────────────────────────────────────────────────────
   // visaProductId opsional per jamaah (docs/arsitektur-booking.md §6 Step 6a): tanpa visa = tanpa VisaApplication dan tanpa sumbangan harga. Harga visa = tier
   // titik harga yang memuat lama tinggal (harga manual menang); modal/jejak kurs-vendor beku ada di `price_snapshots`.
-  const plannedTravelDate = flightDates.length > 0 ? dbDateOf([...flightDates].sort()[0]!) : null
+  const travel = flightDates.length > 0 ? [...flightDates].sort()[0]! : data.plannedTravelDate
+  const plannedTravelDate = travel ? dbDateOf(travel) : null
   for (const p of data.pilgrims) {
-    const pilgrim = await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: (p.fieldValues ?? {}) as Prisma.InputJsonValue } })
+    // Revisi: jamaah yang sudah ada hanya mendapat visa baru (data pribadinya tak disentuh).
+    const pilgrim = p.pilgrimId ? { id: p.pilgrimId } : await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: (p.fieldValues ?? {}) as Prisma.InputJsonValue } })
     if (!p.visaProductId) {
       const fromPackage = packageVisaSlots.shift()
       if (fromPackage) {
@@ -234,6 +238,7 @@ export async function writeBookingItems(
     add({ itemType: 'visa', itemId: application.id, label, detail: p.selectedDurationDays ? `${p.selectedDurationDays} hari` : '', qty: 1 }, [line])
   }
 
+  if (written) written.push(...pending.map(x => x.meta))
   return writeSnapshots(tx, bookingId, pending)
 }
 

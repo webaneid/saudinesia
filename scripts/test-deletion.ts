@@ -572,7 +572,7 @@ await t('SEC-57 penjaga sumber: unggah dokumen memeriksa ulang pemilik sebelum m
   const up = readFileSync('app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts', 'utf8')
   const post = up.slice(up.indexOf('export async function POST'))
   const guard = post.search(/if \(!owner\?\.isActive\) \{[\s\S]*?deleteObject\(objectKey\)[\s\S]*?return NextResponse\.json\(err\('Unauthorized'\), \{ status: 401 \}\)/)
-  assert.ok(guard > 0 && guard < post.indexOf('prisma.document.create'), 'pemilik nonaktif → buang berkas + 401, SEBELUM document.create')
+  assert.ok(guard > 0 && guard < post.indexOf('document.create'), 'pemilik nonaktif → buang berkas + 401, SEBELUM document.create') // baris ditulis lewat tx.document.create di bawah kunci booking (Fase 6b)
   assert.match(readFileSync('instrumentation-node.ts', 'utf8'), /startErasureSweepJob\(\)/)
   const sw = readFileSync('lib/account/erasureSweep.ts', 'utf8')
   assert.ok(sw.includes('ERASED_EMAIL.test') && sw.includes("status: 'completed'"))
@@ -603,6 +603,8 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'Refund.approvedById': 'dipertahankan (staf yang menyetujui refund)',
     'InvoiceSettings.updatedById': 'dipertahankan (staf terakhir yang mengubah pengaturan)',
     'Invoice.issuedById': 'dipertahankan (staf yang menerbitkan invoice; NULL untuk jalur jamaah — tak pernah menunjuk akun jamaah)',
+    'BookingRevision.byUserId': 'dipertahankan (staf yang merevisi booking; catatan `reason` dibersihkan — bookingRevision.updateMany)',
+    'PriceSnapshot.voidedById': 'dipertahankan (staf yang membatalkan baris harga lewat revisi)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')

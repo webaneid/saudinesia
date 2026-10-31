@@ -27,6 +27,7 @@ function base(p: VarianceParams) {
         COALESCE((SELECT bool_or(x."isSettled") FROM act x WHERE x."snapshotId" = s."id"), false) AS settled,
         (SELECT string_agg(x."varianceNote", ' | ') FROM act x WHERE x."snapshotId" = s."id" AND x."varianceNote" IS NOT NULL) AS notes
       FROM "price_snapshots" s JOIN b ON b."id" = s."bookingId"
+      -- void-ok: baris yang dibatalkan revisi TETAP dihitung bila sudah ada uang keluar ke vendor untuknya (uang sungguh keluar; selisihnya nyata)
       WHERE s."totalCostIdr" IS NOT NULL AND EXISTS (SELECT 1 FROM act x WHERE x."snapshotId" = s."id")
     )`
 }

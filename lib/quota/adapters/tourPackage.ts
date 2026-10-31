@@ -14,10 +14,10 @@ export const tourPackageAdapter: QuotaAdapter<BookingTourPackage> = {
       await confirmHotelQuota(tx, row.chosenHotelRoomScheduleId, row.chosenHotelNumRooms)
     }
   },
-  release: async (tx, row) => {
-    if (row.transportQuotaId) await releaseTransportQuota(tx, row.transportQuotaId, row.numPeople)
+  release: async (tx, row, o) => {
+    if (row.transportQuotaId) await releaseTransportQuota(tx, row.transportQuotaId, row.numPeople, o.confirmed)
     if (row.chosenHotelRoomScheduleId && row.chosenHotelNumRooms) {
-      await releaseHotelQuota(tx, row.chosenHotelRoomScheduleId, row.chosenHotelNumRooms)
+      await releaseHotelQuota(tx, row.chosenHotelRoomScheduleId, row.chosenHotelNumRooms, o.confirmed)
     }
   },
 }

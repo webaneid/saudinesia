@@ -191,9 +191,44 @@ export async function writeAdjustmentLine(db: Db, o: { bookingId: string; adjust
   })
 }
 
-/** Σ jual semua baris snapshot booking + Σ modal baris yang modalnya diketahui (HPP awal). */
+// ── revisi (T1, docs/arsitektur-booking-engine-v2.md §10.4 6b) ─────────────────────────────────────────────────────────────────────────────────────────
+
+/** Batalkan (void) baris BERLAKU satu item booking — baris tetap ada sebagai jejak; trigger DB hanya mengizinkan pengisian kolom void sekali. `lineKeyPrefix` = hanya baris berawalan itu. */
+export async function voidItemLines(db: Db, o: { bookingId: string; itemType: string; itemId: string; byUserId: string; reason: string; revision: number; lineKeyPrefix?: string }): Promise<number> {
+  const r = await db.priceSnapshot.updateMany({
+    where: { bookingId: o.bookingId, itemType: o.itemType, itemId: o.itemId, voidedAt: null, ...(o.lineKeyPrefix ? { lineKey: { startsWith: o.lineKeyPrefix } } : {}) },
+    data: { voidedAt: new Date(), voidedById: o.byUserId, voidReason: o.reason, voidRevision: o.revision },
+  })
+  return r.count
+}
+
+/** Awalan baris harga KHUSUS item (R4): selisih harga khusus terhadap harga item; berawalan `penyesuaian` (boleh negatif, modal 0 — HPP asli tetap di baris item). */
+export const CUSTOM_PRICE_PREFIX = 'penyesuaian-harga:'
+
+/** Tulis baris harga khusus item (selisih ≠ 0). Judul/rincian item disalin dari baris item supaya invoice tetap menyatukannya; deskripsi netral (catatan staf TIDAK masuk snapshot). */
+export async function writeCustomPriceLine(db: Db, o: { bookingId: string; itemType: string; itemId: string; revision: number; amountIdr: number; itemLabel: string; itemDetail: string; itemQty: number }): Promise<void> {
+  const amount = cents(o.amountIdr) / 100
+  if (amount === 0) return
+  await db.priceSnapshot.create({
+    data: {
+      bookingId: o.bookingId, itemType: o.itemType, itemId: o.itemId, lineKey: `${CUSTOM_PRICE_PREFIX}r${o.revision}`, variantKey: '',
+      itemLabel: o.itemLabel, itemDetail: o.itemDetail, itemQty: o.itemQty, description: 'Penyesuaian harga', qty: 1, unit: 'item',
+      unitCostIdr: null, unitSellIdr: amount, totalCostIdr: null, totalSellIdr: amount, recommendedTotalIdr: 0, mode: 'manual',
+    },
+  })
+}
+
+/** Harga JUAL per item (Σ baris berlaku item itu, termasuk harga khusus) — kunci `itemType:itemId`. Hanya jual: aman untuk halaman jamaah (modal tak pernah keluar). */
+export async function itemSellTotals(db: Db, bookingId: string): Promise<Map<string, number>> {
+  const rows = await db.priceSnapshot.findMany({ where: { bookingId, voidedAt: null }, select: { itemType: true, itemId: true, totalSellIdr: true } })
+  const m = new Map<string, number>()
+  for (const r of rows) m.set(`${r.itemType}:${r.itemId}`, (m.get(`${r.itemType}:${r.itemId}`) ?? 0) + cents(Number(r.totalSellIdr)))
+  return new Map([...m].map(([k, v]) => [k, v / 100]))
+}
+
+/** Σ jual baris snapshot BERLAKU (belum di-void) + Σ modal baris yang modalnya diketahui (HPP awal). */
 export async function bookingSnapshotTotals(db: Db, bookingId: string): Promise<{ sellIdr: number; costKnownIdr: number }> {
-  const agg = await db.priceSnapshot.aggregate({ where: { bookingId }, _sum: { totalSellIdr: true, totalCostIdr: true } })
+  const agg = await db.priceSnapshot.aggregate({ where: { bookingId, voidedAt: null }, _sum: { totalSellIdr: true, totalCostIdr: true } }) // baris di-void revisi tak berlaku (T1)
   return { sellIdr: Number(agg._sum.totalSellIdr ?? 0), costKnownIdr: Number(agg._sum.totalCostIdr ?? 0) }
 }
 
@@ -216,7 +251,7 @@ export type BookingPriceSummary = {
  */
 export async function bookingPriceSummary(db: Db, bookingId: string): Promise<BookingPriceSummary> {
   const rows = await db.priceSnapshot.findMany({
-    where: { bookingId },
+    where: { bookingId, voidedAt: null }, // baris di-void revisi tak berlaku (T1)
     select: { itemType: true, lineKey: true, mode: true, totalCostIdr: true, totalSellIdr: true, recommendedTotalIdr: true },
   })
   let sell = 0, cost = 0, rec = 0, costUnknown = 0, recUnknown = 0
@@ -224,7 +259,7 @@ export async function bookingPriceSummary(db: Db, bookingId: string): Promise<Bo
     sell += cents(Number(r.totalSellIdr))
     if (r.totalCostIdr != null) cost += cents(Number(r.totalCostIdr))
     if (r.itemType === 'booking') continue // diskon/biaya tambahan tingkat pesanan: bukan modal, bukan rekomendasi
-    if (r.totalCostIdr == null && r.lineKey !== 'penyesuaian') costUnknown++
+    if (r.totalCostIdr == null && !r.lineKey.startsWith('penyesuaian')) costUnknown++ // selisih paket & harga khusus item: modalnya ada di baris item
     if (r.recommendedTotalIdr != null) rec += cents(Number(r.recommendedTotalIdr))
     else if (r.mode === 'auto') rec += cents(Number(r.totalSellIdr))
     else recUnknown++

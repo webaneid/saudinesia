@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client'
-import { addDays, dbDateOf, todayInApp } from '@/lib/time'
+import { addDays, calendarDateOf, dbDateOf, endOfDayExclusiveInApp, todayInApp } from '@/lib/time'
 import { formatAddressLine } from '@/lib/address/format'
 import { paymentDeadlineFor } from '@/lib/booking/lifecycle'
 import { allocateInvoiceNumber } from './numbering'
@@ -82,13 +82,26 @@ export const frozenTaxRules = (lines: unknown): TaxRuleInput[] =>
   })
 
 /**
- * Subtotal booking berubah (penyesuaian/diskon total) → JUMLAH pajak dihitung ulang dengan aturan BEKU invoice (bukan aturan terkini): tarif yang berlaku saat terbit
- * tetap dipakai, tetapi dasarnya mengikuti tagihan sekarang. Dipanggil di transaksi yang sama dengan perubahan `Booking.totalAmount`. Booking tanpa invoice → tak ada yang diubah.
+ * Revisi invoice (Fase 6b): pajak dihitung ulang dengan tarif BEKU atas subtotal terkini, tanggal invoice/jatuh tempo opsional diganti (batas bayar ikut), nomor revisi +1.
+ * Dipanggil di transaksi yang sama dengan perubahan isi/total booking. Mengembalikan revisi BARU dan pajak ditambahkan sebelum/sesudah (untuk log revisi).
  */
-export async function retaxInvoice(tx: Tx, bookingId: string): Promise<void> {
-  const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { totalAmount: true, invoice: { select: { id: true, taxLines: true } } } })
-  if (!b.invoice) return
-  const tax = computeTax(Number(b.totalAmount), frozenTaxRules(b.invoice.taxLines))
-  await tx.invoice.update({ where: { id: b.invoice.id }, data: { taxLines: tax.lines as Prisma.InputJsonValue, taxAddedIdr: tax.addedIdr, taxIncludedIdr: tax.includedIdr } })
+export async function reviseInvoice(tx: Tx, bookingId: string, opts: { invoiceDate?: string; dueDate?: string } = {}): Promise<{ revision: number; taxBefore: number; taxAfter: number }> {
+  const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { totalAmount: true, invoice: { select: { id: true, taxLines: true, taxAddedIdr: true, revision: true, invoiceDate: true, dueDate: true } } } })
+  if (!b.invoice) throw new InvoiceError('Booking ini belum punya invoice')
+  const inv = b.invoice
+  const invoiceDate = opts.invoiceDate ?? calendarDateOf(inv.invoiceDate)
+  const dueDate = opts.dueDate ?? calendarDateOf(inv.dueDate)
+  if (dueDate < invoiceDate) throw new InvoiceError('Jatuh tempo tidak boleh sebelum tanggal invoice')
+  const tax = computeTax(Number(b.totalAmount), frozenTaxRules(inv.taxLines))
+  const next = await tx.invoice.update({
+    where: { id: inv.id },
+    data: {
+      taxLines: tax.lines as Prisma.InputJsonValue, taxAddedIdr: tax.addedIdr, taxIncludedIdr: tax.includedIdr,
+      invoiceDate: dbDateOf(invoiceDate), dueDate: dbDateOf(dueDate), revision: { increment: 1 },
+    },
+    select: { revision: true },
+  })
+  await tx.booking.update({ where: { id: bookingId }, data: { paymentDeadline: new Date(endOfDayExclusiveInApp(dueDate).getTime() - 1) } })
+  return { revision: next.revision, taxBefore: Number(inv.taxAddedIdr), taxAfter: tax.addedIdr }
 }
 

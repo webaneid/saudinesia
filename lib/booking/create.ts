@@ -17,9 +17,12 @@ import { ItemNotBookableError } from './errors'
 /** Masukan pesan. Jalur jamaah membawa `departureDate` booking (dipakai Paket Ziarah tanpa `tourDate`); draf admin tidak (tanggal menempel di item, D1). */
 export type BookingInput = {
   items: BookingItemInput[]
-  pilgrims: Array<{ fieldValues?: Record<string, unknown>; visaProductId?: string; selectedDurationDays?: number }>
+  /** `pilgrimId` = jamaah yang SUDAH ada (revisi: ganti visa) — tak dibuat ulang, hanya visanya yang ditulis. */
+  pilgrims: Array<{ fieldValues?: Record<string, unknown>; visaProductId?: string; selectedDurationDays?: number; pilgrimId?: string }>
   departureDate?: string
   totalPilgrims?: number
+  /** Rencana tanggal berangkat visa bila item yang ditulis tak memuat tiket (revisi: tiket sudah ada di booking). */
+  plannedTravelDate?: string
 }
 
 export type PreparedBooking = {
@@ -38,7 +41,7 @@ export class RuleViolationError extends Error {
  * Resolusi di LUAR transaksi (bacaan saja): kendaraan Paket Ziarah, isi Paket Umroh, aturan visa untuk pemilik booking.
  * Melempar `RuleViolationError` (aturan tak dilonggarkan) atau `ItemNotBookableError` (item tak dapat dijual).
  */
-export async function prepareBooking(data: BookingInput, ownerId: string): Promise<PreparedBooking> {
+export async function prepareBooking(data: BookingInput, ownerId: string, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
   // Kendaraan Paket Ziarah: mode included → kuota kendaraan dicari dari tanggal tur; user_choice → kuota yang dikirim (docs/arsitektur-ziarah.md §12.6).
   const tours = await Promise.all(data.items.flatMap(i => (i.itemType === 'tourPackage' ? [i] : [])).map(async (tp) => {
     const breakdown = await computeTourPackageBreakdown(tp.tourPackageId)
@@ -57,6 +60,8 @@ export async function prepareBooking(data: BookingInput, ownerId: string): Promi
     return { breakdown, transportQuotaId }
   }))
   const packages = await Promise.all(data.items.flatMap(i => (i.itemType === 'package' ? [resolvePackageItem(i)] : [])))
+  // Revisi menulis SUBSET item; aturan visa dievaluasi atas isi booking LENGKAP lewat pemanggilan terpisah (rules: true) — bukan atas subset.
+  if (opts.rules === false) return { data, tours, packages, warnings: [] }
   const violations = await visaRuleViolations(data, ownerId, packages, tours)
   const blocking = blockingViolations(violations)
   if (blocking.length > 0) throw new RuleViolationError(blocking)
@@ -68,6 +73,15 @@ export async function prepareBooking(data: BookingInput, ownerId: string): Promi
  * simpan total = Σ snapshot (invarian I4). Mengembalikan total.
  */
 export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBooking, bookingId: string): Promise<number> {
+  await reserveItems(tx, p)
+  const total = await writeBookingItems(tx, bookingId, p.data, p.tours, p.packages)
+  await recomputeBookingDates(tx, bookingId)
+  await tx.booking.update({ where: { id: bookingId }, data: { totalAmount: total } })
+  return total
+}
+
+/** Tahan kuota setiap item masukan (melempar "insufficient" → 409). Dipakai pesan baru dan revisi (item yang ditambah). */
+export async function reserveItems(tx: Prisma.TransactionClient, p: PreparedBooking): Promise<void> {
   let tourIdx = 0
   let packageIdx = 0
   for (const item of p.data.items) {
@@ -106,8 +120,4 @@ export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBook
       }
     }
   }
-  const total = await writeBookingItems(tx, bookingId, p.data, p.tours, p.packages)
-  await recomputeBookingDates(tx, bookingId)
-  await tx.booking.update({ where: { id: bookingId }, data: { totalAmount: total } })
-  return total
 }

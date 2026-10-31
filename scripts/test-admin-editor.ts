@@ -10,7 +10,7 @@ const read = (p: string) => readFileSync(p, 'utf8')
 const ADMIN = 'app/[locale]/admin/(protected)/'
 
 // Halaman edit bespoke yang memakai EditorShell langsung (halaman dengan banyak kotak komponen yang tersimpan sendiri-sendiri).
-const SHELL_PAGES = ['products/packages/[id]', 'products/hotels/[id]', 'products/tour-packages/[id]']
+const SHELL_PAGES = ['products/packages/[id]', 'products/hotels/[id]', 'products/tour-packages/[id]', 'bookings/[id]/edit']
 // Halaman edit berbasis EditPage (yang sendirinya EditorShell) + useEditEntity: formulir tunggal + Foto + Hapus.
 const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/transport/vehicles/[id]', 'products/haji/[id]']
 

@@ -1,6 +1,6 @@
 // Uji migrasi invoice (prisma/migrations/20261108090000_invoices, docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a): booking terbit lama diberi TEPAT SATU invoice bernomor
 // (pola/awalan/lebar dari invoice_settings, tahun & tanggal di zona aplikasi, urut tanggal dibuat, tanpa lompat), penghitung diselaraskan, draf tanpa invoice, pajak 0,
-// kop/rekening beku; fail-closed tanpa setelan; CHECK; dan DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini).
+// kop/rekening beku; fail-closed tanpa setelan; CHECK. Uji drift TERBARU pindah ke scripts/test-booking-revisions-migration.ts.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -174,13 +174,6 @@ await t('CHECK + UNIK: jatuh tempo < tanggal invoice, revisi 0, pajak negatif, b
     ]
     for (const sql of bad) await assert.rejects(() => db.$executeRawUnsafe(sql), /check|unique|duplicate|violates|23505|23514|already exists/i, sql)
   } finally { await db.$disconnect() }
-})
-
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma', async () => {
-  const r = await scenarioWith(async () => ({}))
-  assert.equal(r.code, 0, r.out.slice(-300))
-  const d = diff(r.name)
-  assert.equal(d.code, 0, `drift skema:\n${d.out.slice(-800)}`)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────

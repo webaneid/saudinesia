@@ -75,7 +75,7 @@ async function usableVendor(vendorId: string, db?: Parameters<typeof assertVendo
 /** Periksa baris rencana setelah mutasi (di dalam transaksi); melempar → rollback. */
 async function assertLineConsistent(tx: Prisma.TransactionClient, snapshotId: string | null): Promise<void> {
   if (!snapshotId) return
-  const snap = await tx.priceSnapshot.findUnique({ where: { id: snapshotId }, select: { totalCostIdr: true, description: true } })
+  const snap = await tx.priceSnapshot.findUnique({ where: { id: snapshotId }, select: { totalCostIdr: true, description: true } }) // void-ok: aturan selisih per baris yang dirujuk pengeluaran
   if (!snap) return
   const entries = (await tx.costActual.findMany({ where: { snapshotId, voidedAt: null }, select: { amountIdr: true, isSettled: true, varianceNote: true } }))
     .map(e => ({ amountIdr: Number(e.amountIdr), isSettled: e.isSettled, varianceNote: e.varianceNote }))
@@ -96,9 +96,10 @@ export async function createCostActual(input: ActualInput & { byUserId: string }
     if (booking.status === 'draft') throw new CostActualError(409, 'Pesanan masih draf — terbitkan dulu sebelum mencatat pengeluaran')
     if (input.snapshotId) {
       // kunci baris rencana: dua pengeluaran paralel pada baris yang sama tak boleh sama-sama lolos pemeriksaan selisih
-      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${input.snapshotId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
-      const snap = await tx.priceSnapshot.findUnique({ where: { id: input.snapshotId }, select: { bookingId: true, lineKey: true } })
+      await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${input.snapshotId} FOR UPDATE`) // void-ok: kunci;  Prisma ORM tak punya SELECT … FOR UPDATE
+      const snap = await tx.priceSnapshot.findUnique({ where: { id: input.snapshotId }, select: { bookingId: true, lineKey: true, voidedAt: true } })
       if (!snap || snap.bookingId !== input.bookingId) throw new CostActualError(404, 'Baris rencana tidak ditemukan pada pesanan ini')
+      if (snap.voidedAt) throw new CostActualError(409, 'Baris ini sudah dibatalkan oleh revisi pesanan — catat pada baris yang berlaku')
       if (snap.lineKey.startsWith('penyesuaian')) throw new CostActualError(400, 'Baris penyesuaian harga tidak memiliki modal — pilih baris komponen/produk')
     }
     const row = await tx.costActual.create({
@@ -113,7 +114,7 @@ export async function updateCostActual(bookingId: string, id: string, patch: Act
   const head = await prisma.costActual.findUnique({ where: { id }, select: { bookingId: true, snapshotId: true } }) // hanya untuk tahu baris rencana yang dikunci
   if (!head || head.bookingId !== bookingId) throw new CostActualError(404, 'Pengeluaran tidak ditemukan')
   await prisma.$transaction(async tx => {
-    if (head.snapshotId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${head.snapshotId} FOR UPDATE`) // lihat createCostActual
+    if (head.snapshotId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${head.snapshotId} FOR UPDATE`) // void-ok: kunci;  lihat createCostActual
     // Baca ULANG di dalam kunci: dua PUT paralel tak saling menimpa field yang tak mereka ubah; vendor diperiksa di transaksi yang sama.
     const current = await tx.costActual.findUnique({ where: { id } })
     if (!current || current.bookingId !== bookingId) throw new CostActualError(404, 'Pengeluaran tidak ditemukan')
@@ -137,7 +138,7 @@ export async function voidCostActual(bookingId: string, id: string, input: { rea
   const current = await prisma.costActual.findUnique({ where: { id }, select: { snapshotId: true, bookingId: true } })
   if (!current || current.bookingId !== bookingId) throw new CostActualError(404, 'Pengeluaran tidak ditemukan')
   await prisma.$transaction(async tx => {
-    if (current.snapshotId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${current.snapshotId} FOR UPDATE`)
+    if (current.snapshotId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${current.snapshotId} FOR UPDATE`) /* void-ok: kunci */
     const res = await tx.costActual.updateMany({ where: { id, voidedAt: null }, data: { voidedAt: new Date(), voidedBy: input.byUserId, voidReason: reason } })
     if (res.count === 0) throw new CostActualError(409, 'Pengeluaran sudah dibatalkan')
     await assertLineConsistent(tx, current.snapshotId)
@@ -156,7 +157,7 @@ export type PlanLineView = {
 /** Baris rencana (yang bermodal) + pengeluaran aktualnya, dan pengeluaran tanpa rujukan baris. INTERNAL admin. */
 export async function listCostActuals(bookingId: string): Promise<{ lines: PlanLineView[]; loose: ActualEntryView[] }> {
   const [snaps, actuals] = await Promise.all([
-    prisma.priceSnapshot.findMany({ where: { bookingId }, orderBy: [{ itemType: 'asc' }, { lineKey: 'asc' }] }),
+    prisma.priceSnapshot.findMany({ where: { bookingId }, orderBy: [{ itemType: 'asc' }, { lineKey: 'asc' }] }), // void-ok: disaring di bawah (void hanya bila berpengeluaran)
     prisma.costActual.findMany({ where: { bookingId }, include: { vendor: { select: { name: true } } }, orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }] }),
   ])
   const users = await prisma.user.findMany({ where: { id: { in: [...new Set(actuals.map(a => a.recordedBy))] } }, select: { id: true, fullName: true } })
@@ -169,12 +170,13 @@ export async function listCostActuals(bookingId: string): Promise<{ lines: PlanL
   const bySnap = new Map<string, typeof actuals>()
   for (const a of actuals) if (a.snapshotId) bySnap.set(a.snapshotId, [...(bySnap.get(a.snapshotId) ?? []), a])
   const lines: PlanLineView[] = snaps
-    .filter(s => !s.lineKey.startsWith('penyesuaian') && (s.totalCostIdr != null || bySnap.has(s.id)))
+    // void-ok: baris yang dibatalkan revisi hanya tampil bila sudah punya pengeluaran (uang keluar tetap tercatat); label diberi tanda.
+    .filter(s => !s.lineKey.startsWith('penyesuaian') && (s.voidedAt ? bySnap.has(s.id) : (s.totalCostIdr != null || bySnap.has(s.id))))
     .map(s => {
       const es = bySnap.get(s.id) ?? []
       const st = lineState(s.totalCostIdr == null ? null : Number(s.totalCostIdr), es.filter(e => !e.voidedAt).map(e => ({ amountIdr: Number(e.amountIdr), isSettled: e.isSettled, varianceNote: e.varianceNote })))
       return {
-        snapshotId: s.id, itemType: s.itemType, label: s.description, planIdr: s.totalCostIdr == null ? null : Number(s.totalCostIdr),
+        snapshotId: s.id, itemType: s.itemType, label: s.voidedAt ? `${s.description} (dibatalkan revisi ke-${s.voidRevision})` : s.description, planIdr: s.totalCostIdr == null ? null : Number(s.totalCostIdr),
         plannedVendorIds: Array.isArray(s.vendorIds) ? (s.vendorIds as unknown[]).filter((v): v is string => typeof v === 'string') : [],
         actualIdr: st.actualIdr, varianceIdr: st.varianceIdr, settled: st.settled, needsNote: st.needsNote && !st.hasNote, entries: es.map(view),
       }

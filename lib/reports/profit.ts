@@ -60,6 +60,7 @@ function base(p: ReportParams) {
         END AS cost,
         CASE WHEN b.total > 0 THEN LEAST(1, GREATEST(0, (b.paid - b.refunded) / b.total)) ELSE 0 END AS ratio
       FROM "price_snapshots" s JOIN b ON b."id" = s."bookingId"
+      WHERE s."voidedAt" IS NULL -- baris yang dibatalkan revisi bukan penjualan (T1)
     )`
 }
 
