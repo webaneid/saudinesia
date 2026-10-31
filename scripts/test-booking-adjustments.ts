@@ -106,12 +106,16 @@ await t('masukan: total akhir ≤ 0 → 422; jumlah 0/NaN/Infinity/melebihi bata
   await rejectsAdj(() => adjustBookingTotal({ bookingId: '00000000-0000-4000-8000-000000000000', amountIdr: -1000, label: 'X', byUserId: staff.id }), 404, /tidak ditemukan/)
   assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 })
 })
-await t('HANYA saat menunggu pembayaran: payment_review / confirmed / cancelled → 409 dan tak ada yang berubah', async () => {
-  for (const status of ['payment_review', 'confirmed', 'cancelled'] as const) {
-    const id = await mkBooking(status)
-    await rejectsAdj(() => adjustBookingTotal({ bookingId: id, amountIdr: -1000, label: 'X', byUserId: staff.id }), 409, /menunggu pembayaran/)
-    assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 })
-  }
+await t('R2 (Fase 6b): setiap booking AKTIF boleh disesuaikan — bukti menunggu tanpa catatan boleh; DIKONFIRMASI tanpa catatan → 422, dengan catatan boleh; BATAL → 409', async () => {
+  const review = await mkBooking('payment_review')
+  assert.equal((await adjustBookingTotal({ bookingId: review, amountIdr: -1000, label: 'X', byUserId: staff.id })).totalAfter, 1_499_000)
+  const confirmed = await mkBooking('confirmed')
+  await rejectsAdj(() => adjustBookingTotal({ bookingId: confirmed, amountIdr: -1000, label: 'X', byUserId: staff.id }), 422, /catatan alasan/)
+  assert.deepEqual(await state(confirmed), { total: 1_500_000, sum: 1_500_000, lines: 2 })
+  assert.equal((await adjustBookingTotal({ bookingId: confirmed, amountIdr: -1000, label: 'X', reason: 'nego setelah konfirmasi', byUserId: staff.id })).totalAfter, 1_499_000)
+  const cancelled = await mkBooking('cancelled')
+  await rejectsAdj(() => adjustBookingTotal({ bookingId: cancelled, amountIdr: -1000, label: 'X', reason: 'uji', byUserId: staff.id }), 409, /pesanan aktif/)
+  assert.deepEqual(await state(cancelled), { total: 1_500_000, sum: 1_500_000, lines: 2 })
 })
 await t('total ≠ Σ snapshot (data rusak) → ditolak 409, bukan diperparah', async () => {
   const id = await mkBooking()
@@ -131,15 +135,12 @@ await t('PEMBATALAN lewat baris pembalik: total kembali, snapshot bertambah satu
   const b = await adjustBookingTotal({ bookingId: other, amountIdr: -5000, label: 'Lain', byUserId: staff.id })
   await assert.rejects(() => reverseAdjustment({ bookingId: id, adjustmentId: b.adjustmentId, byUserId: staff.id }), (e: unknown) => e instanceof AdjustmentError && e.status === 404)
 })
-await t('pembatalan memerlukan menunggu-bayar; membatalkan diskon di bawah HPP menaikkan total (tak butuh catatan baru)', async () => {
+await t('pembatalan penyesuaian pada booking DIKONFIRMASI butuh catatan (R2); membatalkan diskon di bawah HPP menaikkan total', async () => {
   const id = await mkBooking()
   const a = await adjustBookingTotal({ bookingId: id, amountIdr: -400_000, label: 'Nego', reason: 'kesepakatan', byUserId: staff.id })
-  await prisma.booking.update({ where: { id }, data: legacyBookingState('payment_review') })
-  await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'bank_transfer', status: 'pending' } }) // bukti menunggu verifikasi = payment `pending`
-  await rejectsAdj(() => reverseAdjustment({ bookingId: id, adjustmentId: a.adjustmentId, byUserId: staff.id }), 409, /menunggu pembayaran/)
-  await prisma.booking.update({ where: { id }, data: legacyBookingState('awaiting_payment') })
-  await prisma.payment.deleteMany({ where: { bookingId: id, status: 'pending' } })
-  const rev = await reverseAdjustment({ bookingId: id, adjustmentId: a.adjustmentId, byUserId: staff.id })
+  await prisma.booking.update({ where: { id }, data: legacyBookingState('confirmed') })
+  await rejectsAdj(() => reverseAdjustment({ bookingId: id, adjustmentId: a.adjustmentId, byUserId: staff.id }), 422, /catatan alasan/)
+  const rev = await reverseAdjustment({ bookingId: id, adjustmentId: a.adjustmentId, reason: 'nego dibatalkan', byUserId: staff.id })
   assert.deepEqual([rev.totalAfter, rev.belowCost], [1_500_000, false])
 })
 await t('PARALEL: 6 penyesuaian −10.000 bersamaan → total turun tepat 60.000 dan Σ snapshot = total (baris booking terkunci)', async () => {
@@ -299,7 +300,7 @@ await t('ATUR TOTAL (Fase 8C): turun ke bawah rekomendasi → lunak; ke bawah HP
   const hist = await listAdjustments(id)
   assert.deepEqual(hist.map(h => [h.label, h.amountIdr]), [['Biaya tambahan', 800_000], ['Nego akhir', -300_000], ['Diskon', -200_000]])
 })
-await t('ATUR TOTAL: yang ditolak hanya total ≤ 0 / bukan angka (422/400, tak ada yang berubah), status selain menunggu pembayaran (409), pesanan tak ada (404); batas wajar', async () => {
+await t('ATUR TOTAL: yang ditolak hanya total ≤ 0 / bukan angka (422/400, tak ada yang berubah), status selain aktif (409), pesanan tak ada (404); batas wajar', async () => {
   const id = await mkBooking()
   for (const bad of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: bad, byUserId: staff.id }), 422, /lebih dari 0/)
   await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 9_000_000_000_000, byUserId: staff.id }), 400, /Total melebihi batas wajar/)
@@ -310,8 +311,8 @@ await t('ATUR TOTAL: yang ditolak hanya total ≤ 0 / bukan angka (422/400, tak 
   await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_000_000, reason: 'x'.repeat(501), byUserId: staff.id }), 400, /maksimal 500/)
   await rejectsAdj(() => setBookingTotal({ bookingId: id, totalIdr: 1_000_000, label: 'L'.repeat(121), byUserId: staff.id }), 400, /Label/)
   assert.deepEqual(await state(id), { total: 1_500_000, sum: 1_500_000, lines: 2 + 2 })
-  const review = await mkBooking('payment_review')
-  await rejectsAdj(() => setBookingTotal({ bookingId: review, totalIdr: 1_000_000, byUserId: staff.id }), 409, /menunggu pembayaran/)
+  const gone = await mkBooking('cancelled')
+  await rejectsAdj(() => setBookingTotal({ bookingId: gone, totalIdr: 1_000_000, byUserId: staff.id }), 409, /pesanan aktif/)
   await rejectsAdj(() => setBookingTotal({ bookingId: '00000000-0000-0000-0000-000000000000', totalIdr: 1_000_000, byUserId: staff.id }), 404, /tidak ditemukan/)
 })
 await t('ATUR TOTAL: dua orang mengatur bersamaan dari total yang sama → keduanya berhasil berurutan (selisih dihitung dari total terkini di dalam kunci), Σ snapshot = total akhir = salah satu nilai yang diminta; baris booking dikunci (diuji deterministik)', async () => {

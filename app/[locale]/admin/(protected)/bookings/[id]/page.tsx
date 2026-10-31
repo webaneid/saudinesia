@@ -4,9 +4,10 @@ import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
 import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
-import { ArrowLeft, FileDown } from 'lucide-react'
+import { ArrowLeft, FileDown, Pencil } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
 import { InvoiceBox } from './InvoiceBox'
+import { RevisionHistory } from './RevisionHistory'
 import { billOf } from '@/lib/invoice/bill'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { VisaActions } from './VisaActions'
@@ -78,6 +79,9 @@ export default async function AdminBookingDetail({ params }: Props) {
   const cfg     = BOOKING_STATUS[st]
   const payment = booking.payments[0]
   const bill    = billOf(booking)
+  const revRows = await prisma.bookingRevision.findMany({ where: { bookingId: id }, orderBy: [{ revision: 'desc' }, { id: 'desc' }], take: 100 }) // riwayat satu booking: 100 terbaru
+  const revStaff = new Map((await prisma.user.findMany({ where: { id: { in: [...new Set(revRows.map(r => r.byUserId))] } }, select: { id: true, fullName: true }, take: 100 })).map(u => [u.id, u.fullName]))
+  const revisions = revRows.map(r => ({ ...r, totalBefore: Number(r.totalBefore), totalAfter: Number(r.totalAfter), taxBefore: Number(r.taxBefore), taxAfter: Number(r.taxAfter), byName: revStaff.get(r.byUserId) ?? null }))
 
   const STATUS_BADGE: Record<string, string> = {
     payment_review:   'admin-badge-blue',
@@ -113,6 +117,12 @@ export default async function AdminBookingDetail({ params }: Props) {
           className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-admin-line px-3 py-1.5 text-[12px] font-medium text-admin-ink/80 hover:text-admin-ink hover:bg-white hover:shadow-admin transition-colors">
           <FileDown className="h-3.5 w-3.5" /> Unduh Invoice
         </a>
+        {booking.status === 'active' && booking.invoice && (
+          <Link href={`/${locale}/admin/bookings/${booking.id}/edit`}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-admin-line px-3 py-1.5 text-[12px] font-medium text-admin-ink/80 hover:text-admin-ink hover:bg-white hover:shadow-admin transition-colors">
+            <Pencil className="h-3.5 w-3.5" /> Edit booking
+          </Link>
+        )}
         <span className={STATUS_BADGE[st] ?? 'admin-badge-gray'}>
           {cfg.label}
         </span>
@@ -232,6 +242,7 @@ export default async function AdminBookingDetail({ params }: Props) {
       {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
       <BookingPriceCard bookingId={id} status={st} />
       {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
+      <RevisionHistory rows={revisions} />
 
       {/* Dokumen per jamaah */}
       {booking.pilgrims.length > 0 && (

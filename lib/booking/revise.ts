@@ -4,14 +4,15 @@ import type { BookingItemInput, BookingRevisionInput } from '@/lib/validators/bo
 import { calendarDateOf, dbDateOf } from '@/lib/time'
 import { quotaAdapters } from '@/lib/quota/adapters'
 import { CUSTOM_PRICE_PREFIX, bookingSnapshotTotals, voidItemLines, writeCustomPriceLine, type ItemMeta } from '@/lib/pricing/engine/snapshot'
-import { reviseInvoice } from '@/lib/invoice/issue'
+import { InvoiceError, reviseInvoice } from '@/lib/invoice/issue'
 import { billOf } from '@/lib/invoice/bill'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
-import { prepareBooking, reserveItems, type BookingInput, type PreparedBooking } from './create'
+import { prepareBooking, reserveItems, RuleViolationError, type BookingInput, type PreparedBooking } from './create'
 import { writeBookingItems } from './lineItems'
 import { recomputeBookingDates } from './dates'
 import { recordRevision, type RevisionChange } from './revisionLog'
-import { retrySerializable } from './serializable'
+import { isSerializationConflict, retrySerializable } from './serializable'
+import { ItemNotBookableError } from './errors'
 import type { RuleViolation } from './rules'
 
 // Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, keputusan pemilik R1–R4). Masukan = isi booking LENGKAP sesudah edit; mesin menghitung selisihnya:
@@ -374,3 +375,15 @@ export async function revisionEditorState(bookingId: string): Promise<RevisionEd
     }),
   }
 }
+
+/** Galat revisi → respons (status + pesan + pelanggaran aturan). `null` = galat tak terduga (route menjawab 500 + log). */
+export function revisionFailure(e: unknown): { status: number; error: string; violations?: RuleViolation[] } | null {
+  if (e instanceof RevisionError) return { status: e.status, error: e.message }
+  if (e instanceof RuleViolationError) return { status: 422, error: e.message, violations: e.violations }
+  if (e instanceof ItemNotBookableError || e instanceof InvoiceError) return { status: 422, error: e.message }
+  if (e instanceof Error && /insufficient|capacity/.test(e.message)) return { status: 409, error: 'Kuota tidak mencukupi untuk perubahan ini' }
+  if (isSerializationConflict(e)) return { status: 409, error: 'Booking sedang diproses di tempat lain — muat ulang lalu coba lagi' }
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') return { status: 422, error: 'Ada produk yang tidak ditemukan lagi — pilih ulang' }
+  return null
+}
+
