@@ -35,6 +35,8 @@ export default function DraftEditorPage({ params }: Props) {
   const [catalog, setCatalog] = useState<Catalog>({})
   const loading = useRef(new Set<ModuleKey>())
   const [modal, setModal] = useState(false)
+  const [modalModule, setModalModule] = useState<ModuleKey | undefined>(undefined)
+  const openModal = (m?: ModuleKey) => { setModalModule(m); setModal(true) }
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [publishing, setPublishing] = useState(false)
@@ -140,7 +142,7 @@ export default function DraftEditorPage({ params }: Props) {
 
   const main = (
     <>
-      <MetaBox title="Produk" icon={Package} collapsible={false} aside={<Button size="sm" onClick={() => setModal(true)}><Plus className="size-4" /> Tambah produk</Button>}>
+      <MetaBox title="Produk" icon={Package} collapsible={false} aside={<Button size="sm" onClick={() => openModal()}><Plus className="size-4" /> Tambah produk</Button>}>
         {draft.items.length === 0
           ? <p className="m-0 text-sm text-admin-muted">Belum ada produk. Visa dipasang per jamaah di kotak Jamaah.</p>
           : (
@@ -171,8 +173,8 @@ export default function DraftEditorPage({ params }: Props) {
           </label>
           <ul className="m-0 list-none space-y-2 p-0">
             {draft.pilgrims.map((p, i) => (
-              <li key={i} className="grid items-center gap-2 sm:grid-cols-[6rem_1fr_7rem]">
-                <span className="text-xs font-semibold text-admin-muted">Jamaah {i + 1}</span>
+              <li key={i} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 sm:grid-cols-[5rem_minmax(0,1fr)_5rem]">
+                <span className="col-span-2 text-xs font-semibold text-admin-muted sm:col-span-1">Jamaah {i + 1}</span>
                 <ChoiceSelect ariaLabel={`Visa jamaah ${i + 1}`} size="sm" value={p.visaProductId ?? ''} placeholder="— tanpa visa —" options={visaOptions}
                   onChange={v => change({ ...draft, pilgrims: draft.pilgrims.map((x, j) => (j === i ? (v ? { ...x, visaProductId: v } : {}) : x)) })} />
                 <input type="number" min={1} className="admin-inp" aria-label={`Lama tinggal jamaah ${i + 1}`} placeholder="hari" disabled={!p.visaProductId} value={p.selectedDurationDays ?? ''}
@@ -191,7 +193,7 @@ export default function DraftEditorPage({ params }: Props) {
             {problem.violations.length > 0 && (
               <ul className="m-0 list-disc space-y-1 pl-5 text-admin-ink">
                 {problem.violations.map((v, i) => (
-                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => setModal(true)}>tambah {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
+                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => openModal(MISSING_MODULE[v.missing])}>tambah {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
                 ))}
               </ul>
             )}
@@ -240,7 +242,7 @@ export default function DraftEditorPage({ params }: Props) {
   return (
     <>
       <EditorShell backHref={`/${locale}/admin/bookings`} backLabel="Daftar Booking" title={<>Draf {loaded.bookingCode}</>} main={main} sidebar={sidebar} />
-      <AddItemModal open={modal} onClose={() => setModal(false)} catalog={catalog} load={load} defaultPeople={people} onAdd={onAdd} />
+      <AddItemModal open={modal} onClose={() => setModal(false)} catalog={catalog} load={load} defaultPeople={people} initialModule={modalModule} onAdd={onAdd} />
     </>
   )
 }

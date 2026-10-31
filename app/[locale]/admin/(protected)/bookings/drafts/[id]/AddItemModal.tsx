@@ -19,6 +19,8 @@ type Props = {
   catalog: Catalog
   load: (m: ModuleKey) => Promise<void>
   defaultPeople: number
+  /** Modul yang langsung terpilih (mis. dari tautan "tambah tiket pesawat" pada pelanggaran aturan visa). */
+  initialModule?: ModuleKey
   onAdd: (r: AddResult) => void
 }
 
@@ -27,7 +29,7 @@ const num = (v: string) => Math.max(0, Math.trunc(Number(v) || 0))
 const span = (a: string, b: string) => (a && b ? daysBetween(a as CalendarDate, b as CalendarDate) : 0)
 const fmt = (iso: string) => formatCalendarDate(iso)
 
-export function AddItemModal({ open, onClose, catalog, load, defaultPeople, onAdd }: Props) {
+export function AddItemModal({ open, onClose, catalog, load, defaultPeople, initialModule, onAdd }: Props) {
   const [module, setModule] = useState<ModuleKey | ''>('')
   const [pick, setPick] = useState('')
   const [people, setPeople] = useState(String(defaultPeople))
@@ -38,7 +40,7 @@ export function AddItemModal({ open, onClose, catalog, load, defaultPeople, onAd
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => { if (module) void load(module) }, [module, load])
-  useEffect(() => { if (open) { setModule(''); reset() } }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (open) { setModule(initialModule ?? ''); reset() } }, [open, initialModule]) // eslint-disable-line react-hooks/exhaustive-deps
   function reset() { setPick(''); setStart(''); setEnd(''); setRooms('1'); setExtra({}); setError(null); setPeople(String(defaultPeople)) }
 
   const n = num(people)

@@ -43,7 +43,7 @@ type Placement = { top?: number; bottom?: number; left: number; minWidth: number
 
 // Combobox pencarian generik (docs/arsitektur-combobox.md) — satu-satunya dropdown pencarian untuk form (kontak, alamat, vendor, manifest).
 // Kotak terpilih = tombol setinggi `Input`; daftar = popover berlatar PADAT (tidak transparan) berisi kotak cari + pilihan
-// dengan ikon/penanda di depan, teks pendamping di kanan, centang pada yang terpilih. Daftar dipasang lewat portal (`position: fixed` di atas segalanya)
+// dengan ikon/penanda di depan, teks pendamping di kanan, centang pada yang terpilih. Daftar dipasang lewat portal (`position: fixed` di atas segalanya; di dalam `<dialog>` modal: ke dialog itu)
 // sehingga tidak pernah terpotong kartu/panel `overflow-hidden` induknya; selalu selebar isinya (min selebar kotak), membuka ke atas bila
 // ruang di bawah sempit (tinggi daftar menyesuaikan sisa ruang), dan bergeser ke kiri bila meluap layar. Warna merek admin dibawa lewat `brand-scope`. Dua mode: filter lokal atau
 // pencarian server-side (`onSearch`). Navigasi keyboard penuh (panah/Home/End/Enter/Esc/Tab) dengan pola ARIA combobox + listbox.
@@ -216,7 +216,9 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
             ))}
           </ul>
         </div>,
-        document.body,
+        // Di dalam `<dialog>` modal (showModal → top layer), daftar yang dipasang ke body tertutup dialog dan tak bisa diklik, berapa pun z-index-nya —
+        // jadi pasang ke dialog terbuka terdekat. `position: fixed` tetap relatif ke viewport (dialog tidak bertransformasi).
+        triggerRef.current?.closest('dialog[open]') ?? document.body,
       )}
     </div>
   )
