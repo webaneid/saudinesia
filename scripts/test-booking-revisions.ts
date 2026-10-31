@@ -239,6 +239,35 @@ await t('ATUR TOTAL dilonggarkan (R2): booking terkonfirmasi tanpa catatan → 4
   await i4(id)
 })
 
+await t('PASCA-AUDIT: kelebihan bayar & bukti menunggu → PENGINGAT (tak menolak); total di atas batas wajar → 422; harga khusus / tanggal di luar rentang ditolak skema; total ≠ Σ baris sebelum revisi → 409', async () => {
+  const id = await published({ ...DRAFT, items: [FL(2), HT(1)] })
+  const b0 = await full(id)
+  const pay = await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'transfer', status: 'pending' } })
+  await processPayment(pay.id, { action: 'confirm', byUserId: staff.id }) // lunas = tagihan penuh
+  await prisma.payment.create({ data: { bookingId: id, amount: 1000, method: 'transfer', status: 'pending' } })
+  const input = await base(id); input.items = input.items.filter(i => i.item.itemType !== 'hotel'); input.reason = 'hotel batal'
+  const r = await reviseBooking(id, input, staff.id)
+  assert.ok(r.notices.some(n => /kelebihan bayar/.test(n)) && r.notices.some(n => /menunggu verifikasi/.test(n)), JSON.stringify(r.notices))
+  assert.ok(billOf(b0).grandTotal > 0)
+  const b = await base(id)
+  assert.equal(bookingRevisionSchema.safeParse({ ...b, items: [{ ...b.items[0]!, customSellIdr: 6_000_000_000, priceNote: 'uji' }] }).success, false)
+  assert.equal(bookingRevisionSchema.safeParse({ ...b, invoiceDate: '2090-01-01', dueDate: '2090-01-02' }).success, false)
+  assert.equal(bookingRevisionSchema.safeParse({ ...b, dueDate: '2099-01-01' }).success, false)
+  const big = await base(id); big.reason = 'uji'; big.items[0] = { ...big.items[0]!, customSellIdr: 5_000_000_000, priceNote: 'uji batas' }
+  big.items.push({ item: HT(1), customSellIdr: 5_000_000_000, priceNote: 'uji batas' })
+  await assert.rejects(() => reviseBooking(id, big, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /batas wajar/.test(e.message))
+  await prisma.booking.update({ where: { id }, data: { totalAmount: 1 } })
+  const drift = await base(id); drift.reason = 'uji'; drift.items.push({ item: TR })
+  await assert.rejects(() => reviseBooking(id, drift, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 409 && /rincian harga/.test(e.message))
+})
+await t('PASCA-AUDIT (Medium): unggah dokumen menulis baris di bawah kunci FOR SHARE booking dan MEMBUANG berkas bila jamaah sudah dihapus revisi (tak ada objek yatim)', () => {
+  const up = read('app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts')
+  const post = up.slice(up.indexOf('export async function POST'))
+  assert.match(post, /FOR SHARE/)
+  assert.ok(post.indexOf('FOR SHARE') < post.indexOf('tx.document.create'), 'kunci sebelum menulis baris')
+  assert.match(post, /if \(!doc\) \{\s*await deleteObject\(objectKey\)/)
+})
+
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 function files(dir: string): string[] {
   return readdirSync(join(root, dir)).flatMap(f => {

@@ -26,7 +26,7 @@ type Pilgrim = BookingRevisionInput['pilgrims'][number] & { position?: number; l
 type Change = { kind: string; label: string; detail?: string }
 type Preview = {
   lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>
-  totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; warnings: Violation[]
+  totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; warnings: Violation[]; notices: string[]
 }
 
 const MISSING_MODULE: Record<string, ModuleKey> = { flight: 'flight', hotel: 'hotel', transport: 'transport' }
@@ -202,6 +202,7 @@ export default function BookingRevisionPage({ params }: Props) {
         )}
         {preview ? (
           <div className="space-y-3 text-sm">
+            {preview.notices.map((n, i) => <p key={i} className="m-0 flex items-start gap-1.5 rounded-lg bg-admin-warning/10 p-2 text-xs text-admin-ink"><AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {n}</p>)}
             <ul className="m-0 list-none space-y-1 p-0" aria-label="Perubahan">
               {preview.changes.map((c, i) => (
                 <li key={i} className="flex flex-wrap items-baseline gap-2"><Badge tone="neutral">{CHANGE_LABEL[c.kind] ?? c.kind}</Badge><span className="font-medium text-admin-ink">{c.label}</span>{c.detail && <span className="text-xs text-admin-muted">{c.detail}</span>}</li>

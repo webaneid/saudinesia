@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { prisma } from '@/lib/db'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
-import { daysBetween } from '@/lib/time'
+import { addDays, daysBetween, todayInApp } from '@/lib/time'
+import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 
 // docs/arsitektur-booking.md §6 Step 5 — items[] generik menggantikan field tetap
 // (hotelMakkah/hotelMadinah/transports/muthowif/catering/tourPackages). Satu keranjang campur
@@ -242,7 +243,7 @@ export const REVISABLE_ITEM_TYPES = ['hotel', 'transport', 'muthowif', 'catering
 const revisionItemSchema = z.object({
   ref: z.object({ itemType: z.enum(REVISABLE_ITEM_TYPES), itemId: z.string().uuid() }).strict().optional(),
   item: bookingItemSchema,
-  customSellIdr: z.number().positive('Harga khusus harus lebih dari 0').max(10_000_000_000).nullable().optional(),
+  customSellIdr: z.number().positive('Harga khusus harus lebih dari 0').max(MAX_PRICE_IDR, 'Harga khusus melebihi batas wajar').nullable().optional(),
   priceNote: z.string().trim().max(300).optional(),
 }).strict()
 export const bookingRevisionSchema = z.object({
@@ -265,6 +266,10 @@ export const bookingRevisionSchema = z.object({
     if (it.customSellIdr != null && (it.priceNote?.length ?? 0) < 3) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Harga khusus wajib disertai catatan (minimal 3 karakter)', path: ['items', i, 'priceNote'] })
   })
   if (d.dueDate < d.invoiceDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jatuh tempo tidak boleh sebelum tanggal invoice', path: ['dueDate'] })
+  // Rentang wajar (zona aplikasi): tanggal invoice ±1 tahun dari hari ini, jatuh tempo ≤ 365 hari sesudahnya (sejalan dengan `dueDays` 0–365 saat terbit).
+  const today = todayInApp()
+  if (d.invoiceDate < addDays(today, -366) || d.invoiceDate > addDays(today, 366)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal invoice di luar rentang wajar (±1 tahun dari hari ini)', path: ['invoiceDate'] })
+  if (d.dueDate > addDays(d.invoiceDate, 365)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jatuh tempo paling lama 365 hari sesudah tanggal invoice', path: ['dueDate'] })
   const refs = d.items.flatMap(i => (i.ref ? [i.ref.itemId] : []))
   if (new Set(refs).size !== refs.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Item yang sama dikirim dua kali', path: ['items'] })
   const pids = d.pilgrims.flatMap(p => (p.pilgrimId ? [p.pilgrimId] : []))

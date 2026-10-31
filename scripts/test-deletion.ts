@@ -572,7 +572,7 @@ await t('SEC-57 penjaga sumber: unggah dokumen memeriksa ulang pemilik sebelum m
   const up = readFileSync('app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts', 'utf8')
   const post = up.slice(up.indexOf('export async function POST'))
   const guard = post.search(/if \(!owner\?\.isActive\) \{[\s\S]*?deleteObject\(objectKey\)[\s\S]*?return NextResponse\.json\(err\('Unauthorized'\), \{ status: 401 \}\)/)
-  assert.ok(guard > 0 && guard < post.indexOf('prisma.document.create'), 'pemilik nonaktif → buang berkas + 401, SEBELUM document.create')
+  assert.ok(guard > 0 && guard < post.indexOf('document.create'), 'pemilik nonaktif → buang berkas + 401, SEBELUM document.create') // baris ditulis lewat tx.document.create di bawah kunci booking (Fase 6b)
   assert.match(readFileSync('instrumentation-node.ts', 'utf8'), /startErasureSweepJob\(\)/)
   const sw = readFileSync('lib/account/erasureSweep.ts', 'utf8')
   assert.ok(sw.includes('ERASED_EMAIL.test') && sw.includes("status: 'completed'"))

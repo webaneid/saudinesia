@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import type { BookingItemInput, BookingRevisionInput } from '@/lib/validators/booking'
 import { calendarDateOf, dbDateOf } from '@/lib/time'
+import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
+import { formatRupiah } from '@/lib/utils'
 import { quotaAdapters } from '@/lib/quota/adapters'
 import { CUSTOM_PRICE_PREFIX, bookingSnapshotTotals, voidItemLines, writeCustomPriceLine, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { InvoiceError, reviseInvoice } from '@/lib/invoice/issue'
@@ -214,17 +216,17 @@ async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBoo
   }
   const free = b.pilgrims.filter(p => !p.visaApplication)
   for (const [v, n] of slots) {
-    for (let i = keep.get(v) ?? 0; i < n; i++) {
-      const p = free.shift()
-      if (!p) return // jamaah lebih sedikit dari kursi paket: sisa slot visa tak dipasangkan (sama dengan pesan baru)
-      const vp = await tx.visaProduct.findUnique({ where: { id: v }, select: { visaType: true } })
-      if (!vp) throw new RevisionError(422, 'Produk visa paket tidak tersedia')
+    const missing = n - (keep.get(v) ?? 0)
+    if (missing <= 0 || free.length === 0) continue // jamaah lebih sedikit dari kursi paket: sisa slot visa tak dipasangkan (sama dengan pesan baru)
+    const vp = await tx.visaProduct.findUnique({ where: { id: v }, select: { visaType: true } })
+    if (!vp) throw new RevisionError(422, 'Produk visa paket tidak tersedia')
+    for (const p of free.splice(0, missing)) {
       await tx.visaApplication.create({ data: { bookingPilgrimId: p.id, visaProductId: v, visaType: vp.visaType, status: 'pending_documents', plannedTravelDate } })
     }
   }
 }
 
-export type RevisionResult = { revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[] }
+export type RevisionResult = { revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]; /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[] }
 
 async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byUserId: string, prepared: { full: PreparedBooking; writes: PreparedBooking }, planned: Plan): Promise<RevisionResult> {
   // $queryRaw: Prisma ORM tak punya SELECT … FOR UPDATE — revisi, atur total, konfirmasi bayar, dan batal pada booking yang sama diserialkan.
@@ -246,6 +248,8 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   }
   const revision = b.invoice.revision + 1
   const totalBefore = Number(b.totalAmount)
+  // I4 sebelum mengubah apa pun: penyimpangan lama dilaporkan, bukan "disembuhkan" diam-diam oleh penjumlahan ulang (pola lib/booking/adjustments.ts).
+  if (cents((await bookingSnapshotTotals(tx, bookingId)).sellIdr) !== cents(totalBefore)) throw new RevisionError(409, 'Total pesanan tidak sama dengan jumlah rincian harga — hubungi pengembang sebelum merevisi')
   const voidReason = `revisi ke-${revision}`
 
   // 1. hapus / ganti: lepas kuota, void baris harga, hapus baris item
@@ -304,13 +308,21 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   // 6. total (I4: Σ baris berlaku), tanggal acuan, invoice (pajak beku, revisi +1), riwayat
   const { sellIdr } = await bookingSnapshotTotals(tx, bookingId)
   if (!(sellIdr > 0)) throw new RevisionError(422, 'Total sesudah revisi harus lebih dari 0 — batalkan booking bila memang tak berbayar')
+  if (sellIdr > MAX_PRICE_IDR && sellIdr > totalBefore) throw new RevisionError(422, 'Total sesudah revisi melebihi batas wajar — periksa kembali harga/jumlahnya')
   await tx.booking.update({ where: { id: bookingId }, data: { totalAmount: sellIdr } })
   await recomputeBookingDates(tx, bookingId)
   const inv = await reviseInvoice(tx, bookingId, { invoiceDate: input.invoiceDate, dueDate: input.dueDate })
   if (inv.revision !== revision) throw new Error('nomor revisi invoice tidak berurutan') // tak terjangkau: booking terkunci
   const fullReason = [reason, ...priceNotes].filter(Boolean).join('\n') || null
   await recordRevision(tx, { bookingId, revision, kind: 'items', reason: fullReason, summary: p.changes, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, byUserId })
-  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings }
+  // Uang yang sudah masuk / menunggu verifikasi TIDAK diubah revisi (prinsip 3) — admin diingatkan; refund & ledger = Fase 7.
+  const pays = await tx.payment.findMany({ where: { bookingId, status: { in: ['confirmed', 'pending'] } }, select: { status: true, amount: true } })
+  const paid = pays.filter(x => x.status === 'confirmed').reduce((sum, x) => sum + cents(Number(x.amount)), 0) / 100
+  const grandAfter = (cents(sellIdr) + cents(inv.taxAfter)) / 100
+  const notices: string[] = []
+  if (paid > grandAfter) notices.push(`Sudah dibayar ${formatRupiah(paid)} — melebihi tagihan baru ${formatRupiah(grandAfter)} (kelebihan bayar; refund dicatat terpisah).`)
+  if (pays.some(x => x.status === 'pending')) notices.push('Ada bukti transfer yang menunggu verifikasi — jumlahnya mungkin tak lagi sama dengan tagihan baru.')
+  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices }
 }
 
 /** Rencana + resolusi di LUAR transaksi (bacaan saja): aturan visa atas isi LENGKAP sesudah revisi, resolusi item yang akan ditulis. */
