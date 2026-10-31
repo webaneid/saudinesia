@@ -2,7 +2,8 @@ import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError } from './errors'
 import { packageLines, type PackageResolved } from './packageItem'
 import { calendarDateOf, dbDateOf } from '@/lib/time'
-import type { CreateBookingInput, BookingItemInput } from '@/lib/validators/booking'
+import type { BookingItemInput } from '@/lib/validators/booking'
+import type { BookingInput } from './create'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import type { TourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import {
@@ -30,7 +31,7 @@ type Item<T extends BookingItemInput['itemType']> = Extract<BookingItemInput, { 
  * Lem sementara menunggu perombakan booking engine: yang bertahan hanyalah kontrak `price_snapshots` + `engine/snapshot.ts`.
  */
 export async function writeBookingItems(
-  tx: Prisma.TransactionClient, bookingId: string, data: CreateBookingInput, tourResolved: readonly TourPackageResolved[], packageResolved: readonly PackageResolved[] = [],
+  tx: Prisma.TransactionClient, bookingId: string, data: BookingInput, tourResolved: readonly TourPackageResolved[], packageResolved: readonly PackageResolved[] = [],
 ): Promise<number> {
   const pending: PendingItem[] = []
   const add = (meta: PendingItem['meta'], lines: SnapshotLine[]) => pending.push({ meta, lines })
@@ -38,6 +39,8 @@ export async function writeBookingItems(
   let packageIdx = 0
   // Slot visa dari paket (visa included/dipilih): jamaah TANPA visa sendiri dipasangkan berurutan; harganya sudah di baris paket (§10.2).
   const packageVisaSlots: string[] = []
+  // Rencana tanggal berangkat visa (D1): bawaan = tiket pergi paling awal di booking ini (tiket mandiri atau paket bertiket).
+  const flightDates: string[] = []
 
   for (const item of data.items) {
     switch (item.itemType) {
@@ -57,7 +60,7 @@ export async function writeBookingItems(
           data: {
             bookingId, hotelRoomScheduleId: item.hotelRoomScheduleId,
             checkIn: new Date(item.checkIn), checkOut: new Date(item.checkOut),
-            nights: item.nights, numRooms: item.numRooms, numGuests: data.totalPilgrims,
+            nights: item.nights, numRooms: item.numRooms, numGuests: data.totalPilgrims ?? data.pilgrims.length,
             pricePerNight: point.sellIdr, totalPrice: lineTotalSell(line),
           },
         })
@@ -127,7 +130,9 @@ export async function writeBookingItems(
         if (transportQuotaId) {
           tourDate = (await tx.transportQuota.findUniqueOrThrow({ where: { id: transportQuotaId }, select: { travelDate: true } })).travelDate
         } else {
-          tourDate = new Date(data.departureDate)
+          const d = item.tourDate ?? data.departureDate
+          if (!d) throw new ItemNotBookableError('Tanggal paket ziarah wajib diisi')
+          tourDate = new Date(d)
         }
         const row = await tx.bookingTourPackage.create({
           data: {
@@ -163,6 +168,7 @@ export async function writeBookingItems(
           throw new ItemNotBookableError(`Tanggal terbang di luar periode jadwal tiket (${day(sch.departureFrom)} – ${day(sch.departureTo)})`)
         }
         const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'tiket pesawat')
+        flightDates.push(item.departureDate)
         const label = `Tiket ${sch.route.origin} → ${sch.route.destination}`
         const line = lineFromPoint(point, { description: label, qty: item.numPassengers, unit: 'person' })
         const row = await tx.bookingFlight.create({
@@ -186,6 +192,7 @@ export async function writeBookingItems(
           },
         })
         if (r.visaProductId) for (let i = 0; i < item.numPeople; i++) packageVisaSlots.push(r.visaProductId)
+        if (r.flightScheduleId) flightDates.push(r.departureDate)
         add({ itemType: 'package', itemId: row.id, label: r.name, detail: `${day(r.departureDate)} – ${day(r.returnDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
         break
       }
@@ -195,21 +202,22 @@ export async function writeBookingItems(
   // ── Pilgrims + Visa applications ───────────────────────────────────────────────────────────────────────────────────
   // visaProductId opsional per jamaah (docs/arsitektur-booking.md §6 Step 6a): tanpa visa = tanpa VisaApplication dan tanpa sumbangan harga. Harga visa = tier
   // titik harga yang memuat lama tinggal (harga manual menang); modal/jejak kurs-vendor beku ada di `price_snapshots`.
+  const plannedTravelDate = flightDates.length > 0 ? dbDateOf([...flightDates].sort()[0]!) : null
   for (const p of data.pilgrims) {
-    const pilgrim = await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: p.fieldValues as Prisma.InputJsonValue } })
+    const pilgrim = await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: (p.fieldValues ?? {}) as Prisma.InputJsonValue } })
     if (!p.visaProductId) {
       const fromPackage = packageVisaSlots.shift()
       if (fromPackage) {
         const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
         if (!vp) throw new ItemNotBookableError('Produk visa paket tidak tersedia')
         // Tanpa baris harga: visa ini sudah dibayar lewat baris paket (Σ snapshot tetap = total).
-        await tx.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaProductId: fromPackage, visaType: vp.visaType, status: 'pending_documents' } })
+        await tx.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaProductId: fromPackage, visaType: vp.visaType, status: 'pending_documents', plannedTravelDate } })
       }
       continue
     }
 
-    const visaProduct = await tx.visaProduct.findUnique({ where: { id: p.visaProductId }, select: { name: true, visaType: true } })
-    if (!visaProduct) throw new ItemNotBookableError('Produk visa tidak tersedia')
+    const visaProduct = await tx.visaProduct.findUnique({ where: { id: p.visaProductId }, select: { name: true, visaType: true, isActive: true } })
+    if (!visaProduct || !visaProduct.isActive) throw new ItemNotBookableError('Produk visa tidak tersedia')
     const point = await takeVisaTier(tx, p.visaProductId, p.selectedDurationDays ?? DEFAULT_DURATION_PROBE_DAY, 'visa')
     const label = /visa/i.test(visaProduct.name) ? visaProduct.name : `Visa ${visaProduct.name}`
     const line = lineFromPoint(point, { description: label, qty: 1, unit: 'person' })
@@ -220,6 +228,7 @@ export async function writeBookingItems(
         visaType: visaProduct.visaType, // fallback/display, lihat docs/arsitektur-visa.md §2
         status: 'pending_documents',
         selectedDurationDays: p.selectedDurationDays ?? null,
+        plannedTravelDate,
       },
     })
     add({ itemType: 'visa', itemId: application.id, label, detail: p.selectedDurationDays ? `${p.selectedDurationDays} hari` : '', qty: 1 }, [line])

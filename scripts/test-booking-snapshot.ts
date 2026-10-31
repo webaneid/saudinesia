@@ -478,11 +478,15 @@ await t('PENJAGA SUMBER: hanya engine/snapshot.ts menulis price_snapshots; route
   // I5: modal/untung beku hanya boleh keluar lewat jalur admin yang diperiksa policy (Fase 6). Hari ini TIDAK ADA route/halaman/komponen yang menyentuh snapshot.
   const readers = [...walk(join(root, 'app')), ...walk(join(root, 'components'))].filter(f => /priceSnapshots?\b/.test(readFileSync(f, 'utf8')))
   assert.deepEqual(readers.map(f => f.slice(root.length)), [], 'snapshot (berisi modal) tak boleh dibaca dari app/ atau components/')
-  const route = readFileSync(join(root, 'app/api/v1/bookings/route.ts'), 'utf8')
-  for (const forbidden of [/requireSellPrice/, /computeSellPrice/, /computeCateringBookingPrice/, /baseTotal|totalForVehicle|hotelChoicePrice/, /\btotalAmount \+=/, /pricePoint\./]) {
-    assert.doesNotMatch(route, forbidden, `route booking tidak boleh memuat ${forbidden}`)
+  // Jalur pesan (route jamaah + penerbitan draf admin) = mesin bersama lib/booking/create.ts; tak satu pun menghitung harga sendiri.
+  for (const f of ['app/api/v1/bookings/route.ts', 'lib/booking/create.ts', 'lib/booking/drafts.ts']) {
+    const src = readFileSync(join(root, f), 'utf8')
+    for (const forbidden of [/requireSellPrice/, /computeSellPrice/, /computeCateringBookingPrice/, /baseTotal|totalForVehicle|hotelChoicePrice/, /\btotalAmount \+=/, /pricePoint\./]) {
+      assert.doesNotMatch(src, forbidden, `${f} tidak boleh memuat ${forbidden}`)
+    }
   }
-  assert.match(route, /writeBookingItems\(tx, bk\.id, data, tourPackageResolved, packageResolved\)/)
+  assert.match(readFileSync(join(root, 'lib/booking/create.ts'), 'utf8'), /const total = await writeBookingItems\(tx, bookingId, p\.data, p\.tours, p\.packages\)/)
+  assert.match(readFileSync(join(root, 'app/api/v1/bookings/route.ts'), 'utf8'), /await writeBooking\(tx, prepared, bk\.id\)/)
   const invoice = readFileSync(join(root, 'lib/pdf/invoiceData.ts'), 'utf8')
   assert.doesNotMatch(invoice, /\.totalPrice|\.unitPrice|\.pricePerNight|sellPriceSnapshot|\.hotels|\.transports|\.tourPackages/, 'invoice hanya membaca price_snapshots')
   const items = readFileSync(join(root, 'lib/booking/lineItems.ts'), 'utf8')

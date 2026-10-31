@@ -45,6 +45,8 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   z.object({
     itemType: z.literal('tourPackage'),
     tourPackageId:             z.string().uuid(),
+    // Tanggal tur (D1: tanggal menempel di item). Bila kosong, jalur jamaah memakai `departureDate` booking (perilaku lama).
+    tourDate:                  z.string().date().optional(),
     transportQuotaId:          z.string().uuid().optional(),
     numPeople:                 z.number().int().min(1),
     chosenHotelRoomScheduleId: z.string().uuid().optional(),
@@ -120,20 +122,7 @@ export const createBookingSchema = z.object({
   // dipercaya dari client sama sekali (sebelumnya field individual sudah dihitung ulang, cuma
   // angka agregat ini yang masih lolos dari client).
 }).superRefine(async (data, ctx) => {
-  // Kuantitas yang menentukan harga TIDAK boleh bebas dari klien: malam/hari harus sama dengan selisih tanggalnya (audit keamanan Fase 4, H1) —
-  // tanpa ini `nights: 1` untuk 14 malam hanya dibayar satu malam, dan rentang muthowif terbalik melewati pemeriksaan kapasitas.
-  const dayDiff = daysBetween // tanggal kalender (`z.string().date()`): selisih hari tanpa pengaruh zona/DST
-  data.items.forEach((item, i) => {
-    if (item.itemType === 'hotel') {
-      const nights = dayDiff(item.checkIn, item.checkOut)
-      if (nights < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal check-out harus setelah check-in', path: ['items', i, 'checkOut'] })
-      else if (item.nights !== nights) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jumlah malam tidak sesuai dengan tanggal check-in/check-out', path: ['items', i, 'nights'] })
-    } else if (item.itemType === 'muthowif' || item.itemType === 'catering') {
-      const days = dayDiff(item.startDate, item.endDate) + 1
-      if (days < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal selesai tidak boleh sebelum tanggal mulai', path: ['items', i, 'endDate'] })
-      else if (item.numDays !== days) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jumlah hari tidak sesuai dengan rentang tanggal', path: ['items', i, 'numDays'] })
-    }
-  })
+  checkItemQuantities(data.items, ctx)
 
   // docs/arsitektur-booking.md §6 Step 6a — visaProductId opsional per pilgrim. Query VisaProduct/
   // ManifestFieldRequirement HANYA untuk pilgrim yang benar-benar pilih visa; pilgrim tanpa visa
@@ -203,5 +192,46 @@ export const createBookingSchema = z.object({
   })
 })
 
+
+/**
+ * Kuantitas yang menentukan harga TIDAK boleh bebas dari klien: malam/hari harus sama dengan selisih tanggalnya (audit keamanan Fase 4, H1) —
+ * tanpa ini `nights: 1` untuk 14 malam hanya dibayar satu malam, dan rentang muthowif terbalik melewati pemeriksaan kapasitas. Dipakai jalur jamaah dan draf admin.
+ */
+function checkItemQuantities(items: readonly BookingItemInput[], ctx: z.RefinementCtx, base: (string | number)[] = ['items']): void {
+  const dayDiff = daysBetween // tanggal kalender (`z.string().date()`): selisih hari tanpa pengaruh zona/DST
+  items.forEach((item, i) => {
+    if (item.itemType === 'hotel') {
+      const nights = dayDiff(item.checkIn, item.checkOut)
+      if (nights < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal check-out harus setelah check-in', path: [...base, i, 'checkOut'] })
+      else if (item.nights !== nights) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jumlah malam tidak sesuai dengan tanggal check-in/check-out', path: [...base, i, 'nights'] })
+    } else if (item.itemType === 'muthowif' || item.itemType === 'catering') {
+      const days = dayDiff(item.startDate, item.endDate) + 1
+      if (days < 1) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Tanggal selesai tidak boleh sebelum tanggal mulai', path: [...base, i, 'endDate'] })
+      else if (item.numDays !== days) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jumlah hari tidak sesuai dengan rentang tanggal', path: [...base, i, 'numDays'] })
+    }
+  })
+}
+
 export type CreateBookingInput = z.infer<typeof createBookingSchema>
 export type BookingItemInput = z.infer<typeof bookingItemSchema>
+
+// ── Draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3) ──────────────────────────────────────────────────────
+// Isi draf = item + jamaah (jumlah dan visa per jamaah saja — data jamaah diisi SETELAH terbit, D3). Tanggal menempel di item (D1), jadi tak ada tanggal booking.
+// `.strict()` di setiap tingkat: kolom liar (harga, total, status) ditolak — draf tak pernah membawa angka harga.
+export const draftPilgrimSchema = z.object({
+  visaProductId:        z.string().uuid().optional(),
+  selectedDurationDays: z.number().int().min(1).max(365).optional(),
+}).strict()
+
+export const bookingDraftSchema = z.object({
+  items:    z.array(bookingItemSchema).max(50).default([]),
+  pilgrims: z.array(draftPilgrimSchema).min(1, 'Minimal 1 jamaah').max(2000),
+  /** Jatuh tempo (hari dari terbit) — bawaan Pengaturan Invoice, dapat diedit (D4). */
+  dueDays:  z.number().int().min(0).max(365).optional(),
+}).strict().superRefine((d, ctx) => {
+  checkItemQuantities(d.items, ctx)
+  // Haji di luar form admin (§10.3 butir 8; "Visa Haji" belum ada — CLAUDE.md): draf menolaknya, bukan diam-diam.
+  d.items.forEach((it, i) => { if (it.itemType === 'haji') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Haji belum dapat dipesan lewat form booking admin', path: ['items', i] }) })
+})
+
+export type BookingDraft = z.infer<typeof bookingDraftSchema>

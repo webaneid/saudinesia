@@ -214,7 +214,7 @@ await t('riwayat kurs/vendor beku Visa dipindah ke snapshot (hanya yang kosong);
     const bk = await db.booking.create({ data: { bookingCode: `K${Date.now()}`, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 3_000_000 }, select: { id: true } })
     const mk = async (hist: { fx: string[]; vendor: string[] } | null, snapVendors: string[]) => {
       const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
-      const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh' } })
+      const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh' }, select: { id: true } })
       if (hist) await setLegacy(db, 'visa_applications', va.id, { exchangeRateIdsUsed: hist.fx, vendorIdsUsed: hist.vendor })
       // SQL mentah: klien Prisma proyek mengenal kolom snapshot yang lebih baru (rekomendasi, Fase 8A) daripada DB pra-migrasi ini.
       await db.$executeRawUnsafe(`INSERT INTO price_snapshots (id, "bookingId", "itemType", "itemId", "itemLabel", "itemQty", description, qty, unit, "unitSellIdr", "totalSellIdr", mode, "vendorIds") VALUES (gen_random_uuid()::text, '${bk.id}', 'visa', '${va.id}', 'Visa', 1, 'Visa', 1, 'person', 1000000, 1000000, 'auto', '${JSON.stringify(snapVendors)}'::jsonb)`)

@@ -356,10 +356,12 @@ await t('KEBIJAKAN PELANGGAN: ubah → kolom + satu jejak audit (sebelum/sesudah
 await t('PENJAGA: aturan visa hanya di rules.ts (validator tak lagi membaca requiredComponents); route POST menolak 422 + meta.violations SEBELUM transaksi; kursi tiket/paket ditahan', () => {
   assert.ok(!read('lib/validators/booking.ts').includes('requiredComponents'), 'superRefine lama dihapus')
   const route = read('app/api/v1/bookings/route.ts')
-  assert.ok(route.indexOf('blockingViolations(') < route.indexOf('prisma.$transaction'), 'aturan dievaluasi sebelum kuota ditahan')
-  assert.match(route, /status: 422/); assert.match(route, /meta: \{ violations \}/)
-  assert.match(route, /case 'flight':\s*\n\s*await reserveFlightQuota\(tx, item\.flightScheduleId, item\.numPassengers\)/)
-  assert.match(route, /if \(r\.flightScheduleId\) await reserveFlightQuota\(tx, r\.flightScheduleId, item\.numPeople\)/)
+  const engine = read('lib/booking/create.ts')
+  assert.ok(route.indexOf('prepareBooking(') < route.indexOf('prisma.$transaction'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
+  assert.match(engine, /if \(blocking\.length > 0\) throw new RuleViolationError\(blocking\)/)
+  assert.match(route, /status: 422/); assert.match(route, /meta: \{ violations: error\.violations \}/)
+  assert.match(engine, /case 'flight':\s*\n\s*await reserveFlightQuota\(tx, item\.flightScheduleId, item\.numPassengers\)/)
+  assert.match(engine, /if \(r\.flightScheduleId\) await reserveFlightQuota\(tx, r\.flightScheduleId, item\.numPeople\)/)
   for (const f of ['lib/booking/cancel.ts', 'lib/payments/process.ts']) {
     const s = read(f); assert.ok(s.includes('quotaAdapters.flight.') && s.includes('quotaAdapters.package.'), f)
   }

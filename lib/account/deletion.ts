@@ -148,6 +148,8 @@ export async function executeDeletion(
       const blockers = await blockersFor(tx, userId, u.role, rq.requestedAt)
       if (blockers.length > 0) throw new Abort({ ok: false, reason: 'blocked', blockers })
 
+      // Draf booking admin (belum terbit: tanpa item, uang, atau riwayat) dihapus sungguhan — draf yang tersisa bisa diterbitkan lalu diisi PII baru.
+      await tx.booking.deleteMany({ where: { userId, status: 'draft' } })
       const counts = await countsFor(tx, userId, u.addressId)
 
       // Objek MinIO sekarang (syarat sudah final). Gagal → Abort → rollback.
