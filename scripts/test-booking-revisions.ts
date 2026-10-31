@@ -18,6 +18,7 @@ import { processPayment } from '@/lib/payments/process'
 import { billOf } from '@/lib/invoice/bill'
 import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
 import { bookingRevisionSchema, type BookingDraft, type BookingRevisionInput } from '@/lib/validators/booking'
+import { addDays, todayInApp } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -90,11 +91,11 @@ async function i4(id: string) {
 }
 const DRAFT: BookingDraft = { items: [FL(2)], pilgrims: [{ visaProductId: visa.id }, { visaProductId: visa.id }], dueDays: 3 }
 
-await t('TANPA PERUBAHAN → 422; skema: harga khusus tanpa catatan / rujukan ganda / jatuh tempo sebelum tanggal invoice DITOLAK', async () => {
+await t('TANPA PERUBAHAN → 422; harga khusus BARU tanpa catatan → 422; skema: rujukan ganda / jatuh tempo sebelum tanggal invoice DITOLAK', async () => {
   const id = await published(DRAFT)
   await assert.rejects(async () => reviseBooking(id, await base(id), staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422)
   const b = await base(id)
-  assert.equal(bookingRevisionSchema.safeParse({ ...b, items: [{ ...b.items[0]!, customSellIdr: 1 }] }).success, false)
+  await assert.rejects(async () => reviseBooking(id, { ...b, items: [{ ...b.items[0]!, customSellIdr: 1 }] }, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /catatan/.test(e.message))
   assert.equal(bookingRevisionSchema.safeParse({ ...b, items: [b.items[0]!, b.items[0]!] }).success, false)
   assert.equal(bookingRevisionSchema.safeParse({ ...b, dueDate: '2000-01-01' }).success, false)
   assert.equal(bookingRevisionSchema.safeParse({ ...b, total: 1 }).success, false, '.strict()')
@@ -107,6 +108,7 @@ await t('TAMBAH hotel: kuota pending +2 kamar, total & pajak beku dihitung ulang
   input.items.push({ item: HT(2) }) // 3 malam × 2 kamar × 1.200.000 = 7.200.000
   const pv = await previewRevision(id, input, staff.id)
   assert.deepEqual([pv.totalBefore, pv.totalAfter, pv.taxAfter, pv.revision, pv.grandAfter], [14_400_000, 21_600_000, 2_376_000, 2, 23_976_000])
+  assert.deepEqual(pv.itemTotals, [12_000_000, 7_200_000], 'total per item urut masukan (editor baris)')
   assert.deepEqual(await rooms(), r0, 'pratinjau tak menahan kuota')
   assert.equal((await prisma.invoice.findUniqueOrThrow({ where: { bookingId: id } })).revision, 1, 'pratinjau tak menaikkan revisi')
   const r = await reviseBooking(id, input, staff.id)
@@ -148,6 +150,9 @@ await t('HARGA KHUSUS (R4): item tiket 10.000.000 → baris penyesuaian item (mo
   const custom = await prisma.priceSnapshot.findFirstOrThrow({ where: { bookingId: id, lineKey: { startsWith: 'penyesuaian-harga:' } } })
   assert.deepEqual([num(custom.totalSellIdr), custom.totalCostIdr, custom.mode], [-2_000_000, null, 'manual'])
   assert.match((await prisma.bookingRevision.findFirstOrThrow({ where: { bookingId: id } })).reason ?? '', /nego rombongan/)
+  const keep = await base(id); keep.invoiceDate = todayInApp(); keep.dueDate = addDays(todayInApp(), 9) // harga khusus lama dikirim ulang TANPA catatan → tetap sah (tak ditulis ulang)
+  await reviseBooking(id, keep, staff.id)
+  assert.equal((await prisma.priceSnapshot.findUniqueOrThrow({ where: { id: custom.id } })).voidedAt, null, 'harga khusus tak berubah tidak di-void')
   const again = await base(id)
   assert.equal(again.items[0]!.customSellIdr, 10_000_000, 'editor memuat harga khusus')
   again.items[0] = { ...again.items[0]!, customSellIdr: null }

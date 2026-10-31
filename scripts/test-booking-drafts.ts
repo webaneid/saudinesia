@@ -119,6 +119,18 @@ await t('PRATINJAU: baris + total = mesin pesan; SEMUA tulisan di-rollback (tak 
   const b = await prisma.booking.findUniqueOrThrow({ where: { id: did } })
   assert.deepEqual([b.status, n(b.totalAmount), b.departureDate], ['draft', 0, null])
 })
+await t('PRATINJAU isi belum disimpan (editor baris): override dipakai, total per item urut masukan, draf tersimpan TIDAK berubah', async () => {
+  const did = await newDraft()
+  const before = await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { draft: true, updatedAt: true } })
+  const r = await previewDraft(did, { ...DRAFT, items: [fl('2090-06-10', 1), fl('2090-06-12', 3)] })
+  assert.ok(r.ok, JSON.stringify(r))
+  if (!r.ok) return
+  assert.deepEqual(r.preview.itemTotals, [6_000_000, 18_000_000])
+  assert.equal(r.preview.total, 4 * 6_000_000 + 2 * 1_200_000)
+  const after = await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { draft: true, updatedAt: true } })
+  assert.deepEqual([readDraft(after.draft), after.updatedAt.getTime()], [readDraft(before.draft), before.updatedAt.getTime()])
+  assert.deepEqual(await residue(did), { flights: 0, pilgrims: 0, snapshots: 0 })
+})
 await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kurang → 409; draf tanpa produk → 422; tanggal di luar periode → 422', async () => {
   const noFlight = await newDraft({ items: [], pilgrims: [{ visaProductId: visa.id }] })
   const v = await previewDraft(noFlight)

@@ -8,6 +8,7 @@ import { InvoiceError, issueInvoice, taxFor } from '@/lib/invoice/issue'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
+import { itemSellTotals, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
 import { ItemNotBookableError } from './errors'
 import { isSerializationConflict, retrySerializable } from './serializable'
@@ -92,25 +93,31 @@ export type DraftPreview = {
   grandTotal: number
   dueDays: number
   warnings: RuleViolation[]
+  /** Harga jual tiap item, URUT `draft.items` (editor baris menampilkannya sebagai subtotal baris). */
+  itemTotals: number[]
 }
 
 class Rollback extends Error { constructor(public readonly result: DraftPreview) { super('rollback') } }
 
 /** Akibat terbit, TANPA terbit: angka, baris invoice, pelanggaran aturan, dan galat kuota sama persis dengan saat terbit; seluruh tulisan di-rollback. */
-export async function previewDraft(id: string): Promise<{ ok: true; preview: DraftPreview } | DraftError> {
+/** `override` = isi draf yang BELUM disimpan (editor baris memperbarui total otomatis saat mengetik) — divalidasi skema yang sama oleh route; tak ada yang disimpan. */
+export async function previewDraft(id: string, override?: BookingDraft): Promise<{ ok: true; preview: DraftPreview } | DraftError> {
   const b = await prisma.booking.findUnique({ where: { id }, select: { status: true, userId: true, draft: true } })
   if (!b || b.status !== 'draft') return { ok: false, status: 404, message: 'Draf tidak ditemukan' }
-  const draft = readDraft(b.draft)
+  const draft = override ?? readDraft(b.draft)
   if (draft.items.length === 0 && draft.pilgrims.every(p => !p.visaProductId)) return { ok: false, status: 422, message: 'Tambahkan minimal satu produk' }
   const dueDays = draft.dueDays ?? (await getInvoiceSettings()).defaultDueDays
   try {
     const prepared = await prepareBooking(draftInput(draft), b.userId)
     await prisma.$transaction(async (tx) => {
-      await writeBooking(tx, prepared, id)
+      const written: ItemMeta[] = []
+      await writeBooking(tx, prepared, id, written)
       const full = await tx.booking.findUniqueOrThrow({ where: { id }, include: invoiceBookingInclude })
       const inv = await buildInvoiceData(full)
       const tax = await taxFor(tx, inv.subtotal)
-      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings })
+      const sells = await itemSellTotals(tx, id)
+      const itemTotals = draft.items.map((_, i) => { const m = written[i]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
+      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings, itemTotals })
     }, { isolationLevel: 'Serializable' })
     throw new Error('pratinjau tidak di-rollback') // tak terjangkau: transaksi di atas selalu melempar Rollback
   } catch (e) {

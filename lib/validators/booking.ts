@@ -238,7 +238,7 @@ export const bookingDraftSchema = z.object({
 export type BookingDraft = z.infer<typeof bookingDraftSchema>
 
 // Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b): isi booking LENGKAP sesudah edit. Item lama membawa `ref` (baris yang sudah ada), item baru tanpa `ref`;
-// jamaah lama membawa `pilgrimId`. Harga tetap dihitung server — `customSellIdr` hanya harga KHUSUS item (R4) dengan catatan wajib; tak ada angka harga lain dari klien.
+// jamaah lama membawa `pilgrimId`. Harga tetap dihitung server — `customSellIdr` hanya harga KHUSUS item (R4) — catatan wajib saat harga khusus DITETAPKAN/DIUBAH (diperiksa `lib/booking/revise.ts`, bukan di sini: harga khusus lama yang dikirim ulang tanpa perubahan tak perlu catatan baru); tak ada angka harga lain dari klien.
 export const REVISABLE_ITEM_TYPES = ['hotel', 'transport', 'muthowif', 'catering', 'tourPackage', 'flight', 'package'] as const
 const revisionItemSchema = z.object({
   ref: z.object({ itemType: z.enum(REVISABLE_ITEM_TYPES), itemId: z.string().uuid() }).strict().optional(),
@@ -263,7 +263,6 @@ export const bookingRevisionSchema = z.object({
   d.items.forEach((it, i) => {
     if (it.item.itemType === 'haji') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Haji belum dapat diedit lewat form booking admin', path: ['items', i] })
     if (it.ref && it.ref.itemType !== it.item.itemType) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jenis item tidak cocok dengan rujukannya', path: ['items', i, 'ref'] })
-    if (it.customSellIdr != null && (it.priceNote?.length ?? 0) < 3) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Harga khusus wajib disertai catatan (minimal 3 karakter)', path: ['items', i, 'priceNote'] })
   })
   if (d.dueDate < d.invoiceDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jatuh tempo tidak boleh sebelum tanggal invoice', path: ['dueDate'] })
   // Rentang wajar (zona aplikasi): tanggal invoice ±1 tahun dari hari ini, jatuh tempo ≤ 365 hari sesudahnya (sejalan dengan `dueDays` 0–365 saat terbit).

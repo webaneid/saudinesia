@@ -5,7 +5,7 @@ import { calendarDateOf, dbDateOf } from '@/lib/time'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 import { formatRupiah } from '@/lib/utils'
 import { quotaAdapters } from '@/lib/quota/adapters'
-import { CUSTOM_PRICE_PREFIX, bookingSnapshotTotals, voidItemLines, writeCustomPriceLine, type ItemMeta } from '@/lib/pricing/engine/snapshot'
+import { CUSTOM_PRICE_PREFIX, bookingSnapshotTotals, itemSellTotals, voidItemLines, writeCustomPriceLine, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { InvoiceError, reviseInvoice } from '@/lib/invoice/issue'
 import { billOf } from '@/lib/invoice/bill'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
@@ -218,9 +218,13 @@ async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBoo
   }
 }
 
-export type RevisionResult = { revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]; /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[] }
+export type RevisionResult = {
+  revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]
+  /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[]
+  /** Harga jual tiap item SESUDAH revisi, URUT `input.items` (subtotal baris di editor). */ itemTotals: number[]
+}
 
-async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byUserId: string, prepared: { full: PreparedBooking; writes: PreparedBooking }, planned: Plan): Promise<RevisionResult> {
+async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byUserId: string, prepared: { full: PreparedBooking; writes: PreparedBooking }, planned: Plan, opts: { requireReason: boolean } = { requireReason: true }): Promise<RevisionResult> {
   // $queryRaw: Prisma ORM tak punya SELECT … FOR UPDATE — revisi, atur total, konfirmasi bayar, dan batal pada booking yang sama diserialkan.
   const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${bookingId} FOR UPDATE`)
   if (locked.length === 0) throw new RevisionError(404, 'Booking tidak ditemukan')
@@ -235,7 +239,8 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
 
   const confirmed = b.confirmedAt !== null
   const reason = input.reason?.trim() || null
-  if ((confirmed || b.payments.length > 0) && (reason?.length ?? 0) < 3) {
+  // Pratinjau tak menuntut alasan (editor menampilkan total sambil mengetik); SIMPAN tetap menuntutnya (R2).
+  if (opts.requireReason && (confirmed || b.payments.length > 0) && (reason?.length ?? 0) < 3) {
     throw new RevisionError(422, 'Booking sudah dikonfirmasi atau sudah ada pembayaran — isi alasan revisi (minimal 3 karakter)')
   }
   const revision = b.invoice.revision + 1
@@ -278,6 +283,8 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
     const kept = p.kept.find(k => k.index === index)
     if (!kept && want === null) continue // item baru/ganti tanpa harga khusus
     if (kept && (kept.cur.customSellIdr === null ? want === null || cents(want) === cents(kept.cur.priceIdr) : want !== null && cents(want) === cents(kept.cur.customSellIdr))) continue
+    // Catatan wajib hanya saat harga khusus DITETAPKAN/DIUBAH (yang tak berubah dilewati di atas) — editor tak perlu mengetik ulang catatan lama.
+    if (want !== null && (input.items[index]!.priceNote?.length ?? 0) < 3) throw new RevisionError(422, 'Harga khusus wajib disertai catatan (minimal 3 karakter)')
     await voidItemLines(tx, { bookingId, itemType: ref.itemType, itemId: ref.itemId, byUserId, reason: voidReason, revision, lineKeyPrefix: CUSTOM_PRICE_PREFIX })
     const lines = await tx.priceSnapshot.findMany({ where: { bookingId, itemType: ref.itemType, itemId: ref.itemId, voidedAt: null }, select: { totalSellIdr: true, itemLabel: true, itemDetail: true, itemQty: true } })
     const base = lines.reduce((s, l) => s + cents(Number(l.totalSellIdr)), 0) / 100
@@ -313,7 +320,9 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   const notices: string[] = []
   if (paid > grandAfter) notices.push(`Sudah dibayar ${formatRupiah(paid)} — melebihi tagihan baru ${formatRupiah(grandAfter)} (kelebihan bayar; refund dicatat terpisah).`)
   if (pays.some(x => x.status === 'pending')) notices.push('Ada bukti transfer yang menunggu verifikasi — jumlahnya mungkin tak lagi sama dengan tagihan baru.')
-  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices }
+  const sells = await itemSellTotals(tx, bookingId)
+  const itemTotals = input.items.map((_, i) => { const r = itemIdOf.get(i); return r ? sells.get(`${r.itemType}:${r.itemId}`) ?? 0 : 0 })
+  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices, itemTotals }
 }
 
 /** Rencana + resolusi di LUAR transaksi (bacaan saja): aturan visa atas isi LENGKAP sesudah revisi, resolusi item yang akan ditulis. */
@@ -343,7 +352,7 @@ export async function previewRevision(bookingId: string, input: BookingRevisionI
     await prisma.$transaction(async tx => {
       const before = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: invoiceBookingInclude })
       const grandBefore = billOf(before).grandTotal
-      const r = await apply(tx, bookingId, input, byUserId, prepared, planned)
+      const r = await apply(tx, bookingId, input, byUserId, prepared, planned, { requireReason: false })
       const after = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: invoiceBookingInclude })
       const inv = await buildInvoiceData(after)
       throw new Rollback({ ...r, lines: inv.lineItems, grandBefore, grandAfter: billOf(after).grandTotal })
