@@ -56,6 +56,18 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         facts: [['Kode booking', e.code], ...(e.deadline ? ([['Batas pembayaran', e.deadline]] as [string, string][]) : [])],
         cta: bookingCta,
       }
+    case 'invoice_issued':
+      return {
+        subject: `Invoice ${e.number} — booking ${e.code}`,
+        preheader: `Total tagihan ${e.total}${e.dueDate ? `, jatuh tempo ${e.dueDate}` : ''}.`,
+        heading: 'Invoice Anda sudah terbit',
+        paragraphs: [
+          `Halo ${ctx.name}, invoice untuk booking Anda sudah kami terbitkan.`,
+          'Silakan lakukan pembayaran ke rekening yang tercantum di invoice, lalu kirim bukti transfer kepada kami. Tautan invoice dapat diteruskan kepada pihak yang membayar.',
+        ],
+        facts: [['Nomor invoice', e.number], ['Kode booking', e.code], ['Total tagihan', e.total], ...(e.dueDate ? ([['Jatuh tempo', e.dueDate]] as [string, string][]) : [])],
+        cta: e.path ? { label: 'Lihat invoice', path: e.path } : bookingCta,
+      }
     case 'payment_reminder_d1':
     case 'payment_reminder_d0':
       return {

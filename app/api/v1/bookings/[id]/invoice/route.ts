@@ -37,6 +37,7 @@ export async function GET(_req: Request, { params }: Params) {
       status: 200,
       headers: {
         'Content-Type':        'application/pdf',
+        'Cache-Control':       'private, no-store', // dokumen berisi data pribadi (SEC-80)
         'Content-Disposition': `inline; filename="${data.invoiceNumber}.pdf"`,
       },
     })

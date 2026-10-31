@@ -5,6 +5,9 @@ import { SETTINGS_ID } from '@/lib/invoice/settings'
 
 // Logo kop invoice = logo TERKINI di Pengaturan Invoice (merek, bukan data tagihan; tak dibekukan). Media universal menyimpan webp,
 // sedangkan @react-pdf hanya menerima PNG/JPEG → dikonversi ke PNG kecil. Gagal apa pun (tak ada logo, MinIO mati, berkas rusak) → null: invoice tetap terbit tanpa logo.
+// Disimpan di memori per kunci objek (logo jarang berganti; kunci baru = logo baru): unduhan PDF berulang tak mengambil MinIO + sharp setiap kali (SEC-80).
+let cached: { key: string; png: Buffer } | null = null
+
 export async function loadInvoiceLogo(): Promise<Buffer | null> {
   try {
     const img = await prisma.productImage.findFirst({
@@ -13,7 +16,10 @@ export async function loadInvoiceLogo(): Promise<Buffer | null> {
       select: { key: true },
     })
     if (!img) return null
-    return await sharp(await getObjectBuffer(img.key)).resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+    if (cached?.key === img.key) return cached.png
+    const png = await sharp(await getObjectBuffer(img.key)).resize({ width: 320, height: 320, fit: 'inside', withoutEnlargement: true }).png().toBuffer()
+    cached = { key: img.key, png }
+    return png
   } catch (e) {
     console.error('[invoice-logo] logo tidak dapat dimuat:', e instanceof Error ? e.name : 'unknown')
     return null

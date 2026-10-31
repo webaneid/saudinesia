@@ -100,11 +100,15 @@ export async function buildInvoiceData(booking: InvoiceBooking): Promise<Invoice
   const pilgrimByVisa = new Map(booking.pilgrims.flatMap(p => (p.visaApplication ? [[p.visaApplication.id, p] as const] : [])))
   const lineItems: InvoiceLineItem[] = []
   const ordered = [...groups.values()].sort((a, b) => ITEM_ORDER.indexOf(a.type) - ITEM_ORDER.indexOf(b.type))
+  // Definisi field dimuat SEKALI per produk visa (bukan per baris — booking bisa memuat ribuan jamaah; tautan publik bisa memicunya tanpa login).
+  const fieldsByProduct = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const g of ordered) {
     let label = g.label
     if (g.type === 'visa') {
       const p = pilgrimByVisa.get(g.itemId)
-      const fields = p?.visaApplication?.visaProductId ? await getManifestFieldRequirements('visa', p.visaApplication.visaProductId) : []
+      const productId = p?.visaApplication?.visaProductId
+      if (productId && !fieldsByProduct.has(productId)) fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId))
+      const fields = productId ? fieldsByProduct.get(productId)! : []
       const rawName = p ? getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name') : null
       label = `${g.label} — ${typeof rawName === 'string' && rawName ? rawName : 'Jamaah'}`
     }

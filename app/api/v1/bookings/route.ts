@@ -7,13 +7,12 @@ import { createBookingSchema } from '@/lib/validators/booking'
 import { withBookingCode } from '@/lib/utils/bookingCode'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
-import { notify } from '@/lib/notifications/notify'
-import { formatDeadline } from '@/lib/notifications/events'
 import { ok, err } from '@/lib/validators'
 import { ItemNotBookableError } from '@/lib/booking/errors'
 import { prepareBooking, writeBooking, RuleViolationError } from '@/lib/booking/create'
 import { displayStatusOf, statusSelect } from '@/lib/booking/lifecycle'
 import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
+import { sendInvoiceNotification } from '@/lib/invoice/notifyInvoice'
 import { isSerializationConflict, retrySerializable } from '@/lib/booking/serializable'
 import { billOf, billSelect } from '@/lib/invoice/bill'
 
@@ -78,17 +77,12 @@ export async function POST(request: Request) {
       })
       await writeBooking(tx, prepared, bk.id)
       await issueInvoice(tx, bk.id, { dueDays: defaultDueDays, byUserId: null })
-      return tx.booking.findUniqueOrThrow({ where: { id: bk.id }, select: { id: true, bookingCode: true, paymentDeadline: true } })
+      return tx.booking.findUniqueOrThrow({ where: { id: bk.id }, select: { id: true, bookingCode: true } })
     }, { isolationLevel: 'Serializable' })))
 
-    // Konfirmasi pesanan (WhatsApp + email) — sebelumnya template WA `bookingSubmitted` ada tapi tidak pernah dipanggil.
-    // Best-effort setelah transaksi commit; notify() tidak pernah melempar dan tidak memblokir respons.
-    void notify({
-      userId: session.userId,
-      bookingId: booking.id,
-      event: { type: 'booking_submitted', code: booking.bookingCode, deadline: formatDeadline(booking.paymentDeadline!) },
-      dedupe: true,
-    })
+    // Konfirmasi pesanan = notifikasi invoice terbit berisi tautan invoice publik (Fase 6c, menggantikan `booking_submitted` supaya tak dobel).
+    // Best-effort setelah transaksi commit; tidak pernah melempar dan tidak memblokir respons.
+    void sendInvoiceNotification(booking.id, { dedupe: true })
 
     return NextResponse.json(ok({ bookingId: booking.id, bookingCode: booking.bookingCode }), { status: 201 })
   } catch (error) {

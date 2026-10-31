@@ -32,6 +32,9 @@ export const LIMITS = {
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
   customerCreateAdmin: { limit: 60, windowSec: 3600 }, // akun pelanggan baru dari panel admin, per admin (tiap akun bisa memicu satu email undangan)
   customerInviteAdmin: { limit: 30, windowSec: 3600 }, // email undangan (baru/kirim ulang) per admin — pagar di atas batas per alamat
+  invoicePublicIp:    { limit: 60,  windowSec: 600 },  // halaman + PDF invoice publik per IP (token 256-bit tak tertebak; menahan pemindaian & beban PDF)
+  invoicePublicToken: { limit: 120, windowSec: 3600 }, // per tautan — tautan yang tersebar luas tak bisa dipakai membebani server
+  invoiceSendBooking: { limit: 5,   windowSec: 3600 }, // "Kirim ulang invoice" per booking — tiap kirim = email + WhatsApp ke pelanggan
 } as const satisfies Record<string, { limit: number; windowSec: number }>
 
 const MAX_ID_LENGTH = 128

@@ -3,6 +3,7 @@ import { formatRupiah } from '@/lib/utils'
 import { DATE_LONG, formatCalendarDate } from '@/lib/time'
 import type { Bill } from '@/lib/invoice/bill'
 import type { TaxLine } from '@/lib/invoice/tax'
+import { InvoiceLinkActions } from './InvoiceLinkActions'
 
 type Props = {
   bookingId: string
@@ -44,6 +45,7 @@ export function InvoiceBox({ bookingId, invoice, bill }: Props) {
         {row('Terbayar', formatRupiah(bill.paid))}
         {row(bill.balance < 0 ? 'Kelebihan bayar' : 'Sisa', formatRupiah(Math.abs(bill.balance)), true)}
       </div>
+      {invoice && <InvoiceLinkActions bookingId={bookingId} />}
     </div>
   )
 }
