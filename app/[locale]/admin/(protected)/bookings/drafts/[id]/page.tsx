@@ -12,6 +12,7 @@ import { Button } from '@/components/admin/ui/Button'
 import { Badge } from '@/components/admin/ui/Badge'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { formatRupiah } from '@/lib/utils'
+import type { TaxLine } from '@/lib/invoice/tax'
 import type { BookingDraft } from '@/lib/validators/booking'
 import { AddItemModal, type AddResult } from './AddItemModal'
 import { MODULE_LABEL, describeItem, moduleOf, type Catalog, type ModuleKey } from './catalog'
@@ -21,7 +22,7 @@ import { MODULE_LABEL, describeItem, moduleOf, type Catalog, type ModuleKey } fr
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 type Violation = { visaName: string; missing: string; severity: 'error' | 'warning'; message: string }
-type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; dueDays: number; warnings: Violation[] }
+type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; tax: TaxLine[]; taxAdded: number; grandTotal: number; dueDays: number; warnings: Violation[] }
 type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; user: { id: string; fullName: string; email: string; allowVisaWithoutBundle: boolean } }
 
 const MISSING_MODULE: Record<string, ModuleKey> = { flight: 'flight', hotel: 'hotel', transport: 'transport' }
@@ -216,7 +217,16 @@ export default function DraftEditorPage({ params }: Props) {
                 </li>
               ))}
             </ul>
-            <p className="m-0 flex justify-between border-t border-admin-line-strong pt-2 font-bold text-admin-ink"><span>Total</span><span className="text-base font-extrabold tabular-nums">{formatRupiah(preview.total)}</span></p>
+            {preview.tax.length > 0 && (
+              <div className="space-y-1 border-t border-admin-line pt-2 text-sm text-admin-ink/80">
+                <p className="m-0 flex justify-between"><span>Subtotal</span><span className="tabular-nums">{formatRupiah(preview.total)}</span></p>
+                {preview.tax.map((t, i) => (
+                  <p key={i} className="m-0 flex justify-between"><span>{t.name} {t.ratePercent}%{t.mode === 'included' ? ' (termasuk)' : ''}</span><span className="tabular-nums">{formatRupiah(t.amountIdr)}</span></p>
+                ))}
+              </div>
+            )}
+            <p className="m-0 flex justify-between border-t border-admin-line-strong pt-2 font-bold text-admin-ink"><span>Total tagihan</span><span className="text-base font-extrabold tabular-nums">{formatRupiah(preview.grandTotal)}</span></p>
+            <p className="m-0 text-xs text-admin-muted">Nomor invoice dan pajak dibekukan saat diterbitkan.</p>
           </div>
         ) : !problem && <p className="m-0 text-sm text-admin-muted">Tekan "Hitung pratinjau" untuk melihat baris invoice dan total.</p>}
       </MetaBox>

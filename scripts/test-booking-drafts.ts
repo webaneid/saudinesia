@@ -136,7 +136,7 @@ await t('TERBIT: status aktif, draf dikosongkan, kursi ditahan SEKALI, total = p
   const did = await newDraft()
   const s0 = await seats()
   const p = await previewDraft(did)
-  const r = await publishDraft(did, {})
+  const r = await publishDraft(did, { byUserId: staff.id })
   assert.ok(r.ok, JSON.stringify(r))
   const b = await prisma.booking.findUniqueOrThrow({ where: { id: did }, include: { pilgrims: { include: { visaApplication: true } } } })
   assert.deepEqual([b.status, b.draft, n(b.totalAmount)], ['active', null, p.ok ? p.preview.total : -1])
@@ -153,15 +153,15 @@ await t('TERBIT: status aktif, draf dikosongkan, kursi ditahan SEKALI, total = p
 await t('TERBIT ganda: terbit kedua → 404/409 tanpa menahan kuota lagi; dua terbit SERENTAK → tepat satu berhasil; draf yang sudah terbit tak bisa dihapus', async () => {
   const did = await newDraft()
   const s0 = await seats()
-  assert.ok((await publishDraft(did, {})).ok)
-  const again = await publishDraft(did, {})
+  assert.ok((await publishDraft(did, { byUserId: staff.id })).ok)
+  const again = await publishDraft(did, { byUserId: staff.id })
   assert.equal(again.ok, false)
   assert.equal(await seats(), s0 + 2)
   assert.equal((await deleteDraft(did)).ok, false)
   await prisma.flightSchedule.update({ where: { id: flight.id }, data: { pendingSeats: s0 } })
 
   const race = await newDraft()
-  const results = await Promise.all([publishDraft(race, {}), publishDraft(race, {})])
+  const results = await Promise.all([publishDraft(race, { byUserId: staff.id }), publishDraft(race, { byUserId: staff.id })])
   assert.equal(results.filter(x => x.ok).length, 1, JSON.stringify(results))
   assert.equal(await seats(), s0 + 2, 'kuota ditahan sekali')
   assert.equal(await prisma.bookingFlight.count({ where: { bookingId: race } }), 1)
@@ -180,12 +180,12 @@ await t('TERBIT terikat versi yang dipratinjau: expectedUpdatedAt basi (tab lain
   const seen = (await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { updatedAt: true } })).updatedAt.toISOString()
   assert.ok((await saveDraft(did, { ...DRAFT, dueDays: 7 })).ok) // tab lain
   const s0 = await seats()
-  const stale = await publishDraft(did, { expectedUpdatedAt: seen })
+  const stale = await publishDraft(did, { expectedUpdatedAt: seen, byUserId: staff.id })
   assert.ok(!stale.ok && stale.status === 409, JSON.stringify(stale))
   assert.equal(await seats(), s0)
   assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id: did } })).status, 'draft')
   const now = (await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { updatedAt: true } })).updatedAt.toISOString()
-  assert.ok((await publishDraft(did, { expectedUpdatedAt: now })).ok)
+  assert.ok((await publishDraft(did, { expectedUpdatedAt: now, byUserId: staff.id })).ok)
   await prisma.flightSchedule.update({ where: { id: flight.id }, data: { pendingSeats: s0 } })
 })
 await t('TERBIT ditolak untuk akun NONAKTIF atau TERHAPUS (UU PDP) sesudah draf dibuat — 409, draf tetap draf, kursi tak tertahan; buat draf untuk akun nonaktif → 409', async () => {
@@ -196,10 +196,10 @@ await t('TERBIT ditolak untuk akun NONAKTIF atau TERHAPUS (UU PDP) sesudah draf 
     const s0 = await seats()
     await prisma.user.update({ where: { id: other.id }, data: { isActive: false } })
     assert.equal(await createDraft(other.id).then(r => !r.ok && r.status), 409)
-    const off = await publishDraft(c.id, {})
+    const off = await publishDraft(c.id, { byUserId: staff.id })
     assert.ok(!off.ok && off.status === 409 && /nonaktif/.test(off.message), JSON.stringify(off))
     await prisma.user.update({ where: { id: other.id }, data: { isActive: true, email: `deleted-${other.id}@deleted.invalid` } })
-    const gone = await publishDraft(c.id, {})
+    const gone = await publishDraft(c.id, { byUserId: staff.id })
     assert.ok(!gone.ok && gone.status === 409 && /dihapus/.test(gone.message), JSON.stringify(gone))
     assert.deepEqual([(await prisma.booking.findUniqueOrThrow({ where: { id: c.id } })).status, await seats()], ['draft', s0])
   } finally {
@@ -214,6 +214,20 @@ await t('pengeluaran vendor TIDAK bisa dicatat pada draf (draf dapat dihapus sun
     (e: unknown) => e instanceof CostActualError && e.status === 409,
   )
   assert.equal(await prisma.costActual.count({ where: { bookingId: did } }), 0)
+})
+
+await t('KODE BOOKING: setelah draf di TENGAH dihapus, booking baru tetap dapat dibuat (urut tertinggi + 1, bukan jumlah + 1); 6 pembuatan SERENTAK → 6 kode berbeda', async () => {
+  const a = await newDraft(); const b = await newDraft(); const c = await newDraft()
+  const codes = await prisma.booking.findMany({ where: { id: { in: [a, b, c] } }, select: { bookingCode: true } })
+  assert.ok((await deleteDraft(b)).ok)
+  const d = await createDraft(customer.id)
+  assert.ok(d.ok, JSON.stringify(d)); if (!d.ok) return
+  drafts.push(d.id)
+  const top = Math.max(...codes.map(x => Number(x.bookingCode.split('-')[2])))
+  assert.equal(Number(d.bookingCode.split('-')[2]), top + 1)
+  const many = await Promise.all(Array.from({ length: 6 }, () => createDraft(customer.id)))
+  assert.ok(many.every(r => r.ok), JSON.stringify(many))
+  assert.equal(new Set(many.map(r => r.ok && r.bookingCode)).size, 6)
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────

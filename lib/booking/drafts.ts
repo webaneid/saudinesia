@@ -1,14 +1,16 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { bookingDraftSchema, type BookingDraft } from '@/lib/validators/booking'
-import { generateBookingCode } from '@/lib/utils/bookingCode'
+import { withBookingCode } from '@/lib/utils/bookingCode'
 import { detectSeason } from '@/lib/utils/season'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
+import { InvoiceError, issueInvoice, taxFor } from '@/lib/invoice/issue'
+import type { TaxLine } from '@/lib/invoice/tax'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
-import { paymentDeadlineFor } from './lifecycle'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
 import { ItemNotBookableError } from './errors'
+import { isSerializationConflict, retrySerializable } from './serializable'
 import type { RuleViolation } from './rules'
 
 // Draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3). Draf = baris `Booking` berstatus `draft` + masukan pesan di kolom `draft` (JSON) — TANPA item,
@@ -37,10 +39,10 @@ export async function createDraft(customerId: string): Promise<{ ok: true; id: s
   if (!customer || customer.role !== 'pilgrim') return { ok: false, status: 404, message: 'Pelanggan tidak ditemukan' }
   if (isDeletedAccount(customer.email)) return { ok: false, status: 409, message: 'Akun pelanggan ini sudah dihapus' }
   if (!customer.isActive) return { ok: false, status: 409, message: 'Akun pelanggan ini nonaktif' }
-  const b = await prisma.booking.create({
-    data: { bookingCode: await generateBookingCode(), userId: customerId, status: 'draft', season: 'regular', totalAmount: 0, draft: EMPTY as Prisma.InputJsonValue },
+  const b = await withBookingCode(bookingCode => prisma.booking.create({
+    data: { bookingCode, userId: customerId, status: 'draft', season: 'regular', totalAmount: 0, draft: EMPTY as Prisma.InputJsonValue },
     select: { id: true, bookingCode: true },
-  })
+  }))
   return { ok: true, ...b }
 }
 
@@ -81,7 +83,13 @@ export async function deleteDraft(id: string): Promise<{ ok: true } | DraftError
 
 export type DraftPreview = {
   lines: InvoiceLineItem[]
+  /** Σ baris (sebelum pajak). */
   total: number
+  /** Pajak menurut aturan TERKINI (dibekukan saat terbit). */
+  tax: TaxLine[]
+  taxAdded: number
+  /** Yang akan ditagihkan = total + pajak ditambahkan. */
+  grandTotal: number
   dueDays: number
   warnings: RuleViolation[]
 }
@@ -101,7 +109,8 @@ export async function previewDraft(id: string): Promise<{ ok: true; preview: Dra
       await writeBooking(tx, prepared, id)
       const full = await tx.booking.findUniqueOrThrow({ where: { id }, include: invoiceBookingInclude })
       const inv = await buildInvoiceData(full)
-      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, dueDays, warnings: prepared.warnings })
+      const tax = await taxFor(tx, inv.subtotal)
+      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings })
     }, { isolationLevel: 'Serializable' })
     throw new Error('pratinjau tidak di-rollback') // tak terjangkau: transaksi di atas selalu melempar Rollback
   } catch (e) {
@@ -111,7 +120,7 @@ export async function previewDraft(id: string): Promise<{ ok: true; preview: Dra
 }
 
 /** Terbitkan: draf dikunci, mesin pesan menulis item ke baris yang sama, status `draft → active`, isi draf dikosongkan, jatuh tempo ditetapkan (D4). Atomik. */
-export async function publishDraft(id: string, input: { dueDays?: number; expectedUpdatedAt?: string }): Promise<{ ok: true; id: string; bookingCode: string } | DraftError> {
+export async function publishDraft(id: string, input: { dueDays?: number; expectedUpdatedAt?: string; byUserId: string | null }): Promise<{ ok: true; id: string; bookingCode: string; invoiceNumber: string } | DraftError> {
   const b = await prisma.booking.findUnique({ where: { id }, select: { status: true, userId: true, draft: true } })
   if (!b || b.status !== 'draft') return { ok: false, status: 404, message: 'Draf tidak ditemukan' }
   const draft = readDraft(b.draft)
@@ -119,7 +128,7 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
   const dueDays = input.dueDays ?? draft.dueDays ?? (await getInvoiceSettings()).defaultDueDays
   try {
     const prepared = await prepareBooking(draftInput(draft), b.userId)
-    return await prisma.$transaction(async (tx) => {
+    return await retrySerializable(() => prisma.$transaction(async (tx) => {
       const row = await lockDraft(tx, id)
       // Status DAN isi dibaca ulang di dalam kunci: terbit ganda / draf yang diubah sesudah dibaca tak boleh terbit dengan isi lama.
       if (!row || row.status !== 'draft') return { ok: false as const, status: 409 as const, message: 'Draf ini sudah diterbitkan atau dihapus' }
@@ -139,13 +148,14 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
         where: { id },
         data: {
           status: 'active', draft: Prisma.DbNull,
-          paymentDeadline: paymentDeadlineFor(new Date(), dueDays),
           season: dated.departureDate ? await detectSeason(dated.departureDate) : 'regular',
         },
         select: { id: true, bookingCode: true },
       })
-      return { ok: true as const, ...done }
-    }, { isolationLevel: 'Serializable' })
+      // Invoice (nomor, pajak beku, jatuh tempo) terbit di transaksi yang sama — gagal di mana pun = tak ada booking terbit dan tak ada nomor terpakai.
+      const invoice = await issueInvoice(tx, id, { dueDays, byUserId: input.byUserId })
+      return { ok: true as const, ...done, invoiceNumber: invoice.number }
+    }, { isolationLevel: 'Serializable' }))
   } catch (e) {
     return failure(e)
   }
@@ -154,9 +164,10 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
 function failure(e: unknown): DraftError {
   if (e instanceof RuleViolationError) return { ok: false, status: 422, message: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError) return { ok: false, status: 422, message: e.message }
+  if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message }
   if (e instanceof Error && (e.message.includes('insufficient') || e.message.includes('capacity'))) return { ok: false, status: 409, message: e.message }
-  // Bentrok serialisasi (transaksi Serializable): P2034 dari ORM, atau 40001 dari SQL mentah (`SELECT … FOR UPDATE` di lockDraft, P2010) — mis. dua terbit serentak.
-  if (e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2034' || (e.code === 'P2010' && (e.meta as { code?: string } | undefined)?.code === '40001'))) {
+  // Bentrok serialisasi yang masih tersisa setelah diulang (retrySerializable) — mis. tiga terbit serentak pada kursi yang sama.
+  if (isSerializationConflict(e)) {
     return { ok: false, status: 409, message: 'Draf sedang diproses di tempat lain — muat ulang lalu coba lagi' }
   }
   // Id produk/jadwal di draf yang (sudah) tidak ada — draf disimpan bebas, jadi ini masukan, bukan galat server (SEC-130 untuk jalur draf).

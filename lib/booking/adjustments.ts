@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { retaxInvoice } from '@/lib/invoice/issue'
 import { prisma } from '@/lib/db'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 import { bookingPriceSummary, bookingSnapshotTotals, writeAdjustmentLine } from '@/lib/pricing/engine/snapshot'
@@ -67,6 +68,8 @@ async function apply(input: ApplyInput): Promise<AdjustResult> {
     })
     await writeAdjustmentLine(tx, { bookingId: input.bookingId, adjustmentId: row.id, label, amountIdr: amount })
     await tx.booking.update({ where: { id: input.bookingId }, data: { totalAmount: totalAfter } })
+    // Pajak invoice ikut dasar yang baru (tarif beku saat terbit) — tanpa ini tagihan = subtotal baru + pajak lama.
+    await retaxInvoice(tx, input.bookingId)
 
     const afterSummary = await bookingPriceSummary(tx, input.bookingId)
     if (round2(afterSummary.sellIdr) !== totalAfter) throw new Error('Invarian total = Σ snapshot dilanggar setelah penyesuaian') // rollback utuh

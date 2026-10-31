@@ -1,7 +1,14 @@
 import type { Prisma } from '@prisma/client'
 import { displayStatus, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
-import { DATE_SHORT_MONTH_2D, formatInstant } from '@/lib/time'
+import { DATE_SHORT_MONTH_2D, formatCalendarDate, formatInstant } from '@/lib/time'
+import { formatAddressLine } from '@/lib/address/format'
+import { billOf } from '@/lib/invoice/bill'
+import { frozenTaxRules, type BankSnapshot, type CompanySnapshot } from '@/lib/invoice/issue'
+import { computeTax } from '@/lib/invoice/tax'
+import type { TaxLine } from '@/lib/invoice/tax'
+import { plainText } from '@/lib/rich-text/doc'
+import { getPaymentConfig } from '@/lib/constants/payment'
 
 // Invoice dibangun HANYA dari `price_snapshots` (docs/arsitektur-harga-terpadu.md §17, invarian I3/I4/I5): harga yang tertera adalah harga yang DIBEKUKAN saat dipesan —
 // bukan dihitung ulang dan bukan dibaca dari kolom harga item. Hanya JUAL yang masuk ke sini; modal/untung tak pernah keluar ke dokumen pilgrim.
@@ -11,6 +18,7 @@ export const invoiceBookingInclude = {
   priceSnapshots: { orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] },
   pilgrims: { include: { visaApplication: { select: { id: true, visaProductId: true } } } },
   payments: true,
+  invoice: true,
 } satisfies Prisma.BookingInclude
 
 export type InvoiceBooking = Prisma.BookingGetPayload<{ include: typeof invoiceBookingInclude }>
@@ -30,6 +38,18 @@ export type InvoiceData = {
   paidDate:      string | null
   statusLabel:   string
   bookingCode:   string
+  /** > 1 = invoice pernah direvisi (Fase 6b). */
+  revision:      number
+  /** Kop beku saat terbit (atau setelan terkini untuk booking tanpa invoice). */
+  company:       CompanySnapshot
+  banks:         BankSnapshot[]
+  taxLines:      TaxLine[]
+  /** Pajak yang DITAMBAHKAN ke tagihan. */
+  taxAdded:      number
+  /** Σ pembayaran terkonfirmasi. */
+  paid:          number
+  terms:         string
+  footerNote:    string
   buyer: {
     name:    string
     address: string
@@ -38,6 +58,7 @@ export type InvoiceData = {
   }
   lineItems:   InvoiceLineItem[]
   subtotal:    number
+  /** TAGIHAN = subtotal + pajak ditambahkan (lib/invoice/bill.ts). */
   totalAmount: number
   balanceDue:  number
 }
@@ -57,15 +78,6 @@ function formatDate(d: Date): string {
   return formatInstant(d, DATE_SHORT_MONTH_2D)
 }
 
-function buildBuyerAddress(user: InvoiceBooking['user']): string {
-  const addr = user.address
-  if (!addr) return ''
-  if (addr.type === 'domestic') {
-    return [addr.fullAddress, addr.village?.name, addr.district?.name, addr.regency?.name, addr.province?.name, addr.postalCode]
-      .filter(Boolean).join(', ')
-  }
-  return [addr.fullAddress, addr.city, addr.stateRegion, addr.countryCode].filter(Boolean).join(', ')
-}
 
 // Urutan baris di invoice: paket umroh, tiket, hotel, transport, muthowif, katering, paket ziarah, haji, visa; penyesuaian tingkat-booking paling akhir.
 const ITEM_ORDER = ['package', 'flight', 'hotel', 'transport', 'muthowif', 'catering', 'tourPackage', 'haji', 'visa', 'booking']
@@ -107,26 +119,43 @@ export async function buildInvoiceData(booking: InvoiceBooking): Promise<Invoice
     throw new Error(`Invoice ${booking.bookingCode}: Σ snapshot harga (${subtotal}) ≠ total booking (${totalAmount})`)
   }
   const confirmedPayment = booking.payments.find(p => p.status === 'confirmed')
-  // sisa tagihan dari jumlah pembayaran TERKONFIRMASI sebenarnya (bukan sekadar ada/tidaknya pembayaran) — jumlah kurang tak pernah tampil lunas
-  const paid = booking.payments.filter(p => p.status === 'confirmed').reduce((sum, p) => sum + Number(p.amount), 0)
-  const balanceDue = Math.max(0, Math.round((totalAmount - paid) * 100) / 100)
+  // Tagihan, terbayar, dan sisa dari SATU pembaca (lib/invoice/bill.ts): pajak ditambahkan ikut ditagih; jumlah kurang tak pernah tampil lunas.
+  const bill = billOf(booking)
+  const inv = booking.invoice
+  // Pajak tercetak harus = aturan beku × subtotal terkini (dokumen pajak): tak cocok → jangan terbitkan dokumen, sama seperti invarian I4.
+  if (inv) {
+    const expected = computeTax(subtotal, frozenTaxRules(inv.taxLines))
+    if (Math.round(expected.addedIdr * 100) !== Math.round(Number(inv.taxAddedIdr) * 100) || Math.round(expected.includedIdr * 100) !== Math.round(Number(inv.taxIncludedIdr) * 100)) {
+      throw new Error(`Invoice ${inv.number}: pajak tersimpan tidak sesuai subtotal ${subtotal}`)
+    }
+  }
+  // Booking tanpa invoice (hanya pratinjau draf — semua booking terbit punya invoice sejak Fase 6a): kop & rekening dari setelan lama, tanpa pajak.
+  const fallback = getPaymentConfig()
 
   return {
-    invoiceNumber: `INV-${booking.bookingCode}`,
-    invoiceDate:   formatDate(booking.createdAt),
-    dueDate:       booking.paymentDeadline ? formatDate(booking.paymentDeadline) : null,
+    invoiceNumber: inv?.number ?? `INV-${booking.bookingCode}`,
+    invoiceDate:   inv ? formatCalendarDate(inv.invoiceDate, DATE_SHORT_MONTH_2D) : formatDate(booking.createdAt),
+    dueDate:       inv ? formatCalendarDate(inv.dueDate, DATE_SHORT_MONTH_2D) : null,
+    revision:      inv?.revision ?? 1,
+    company:       inv ? (inv.companySnapshot as CompanySnapshot) : { name: fallback.businessName, taxId: null, address: fallback.businessAddress || null, phone: fallback.businessWa || null, email: null, website: null },
+    banks:         inv ? (inv.bankSnapshot as BankSnapshot[]) : fallback.banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null })),
+    taxLines:      inv ? (inv.taxLines as TaxLine[]) : [],
+    taxAdded:      bill.taxAdded,
+    paid:          bill.paid,
+    terms:         plainText(inv?.termsDoc),
+    footerNote:    plainText(inv?.footerNoteDoc),
     paidDate:      confirmedPayment?.confirmedAt ? formatDate(confirmedPayment.confirmedAt) : null,
     statusLabel:   STATUS_LABEL[displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })],
     bookingCode:   booking.bookingCode,
     buyer: {
       name:    booking.user.fullName,
-      address: buildBuyerAddress(booking.user),
+      address: formatAddressLine(booking.user.address),
       phone:   booking.user.phone ?? '',
       email:   booking.user.email,
     },
     lineItems,
     subtotal,
-    totalAmount,
-    balanceDue,
+    totalAmount: bill.grandTotal,
+    balanceDue:  Math.max(0, bill.balance),
   }
 }

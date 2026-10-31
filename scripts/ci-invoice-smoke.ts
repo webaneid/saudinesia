@@ -32,6 +32,17 @@ try {
     data: { bookingId: booking.id, itemType: 'hotel', itemId: 'ci-item', itemLabel: 'Hotel CI', itemDetail: '3 malam', itemQty: 1, description: 'Hotel CI', qty: 1, unit: 'item', unitSellIdr: '5000000', totalSellIdr: '5000000', mode: 'auto' },
   })
 
+  // Invoice beku (Fase 6a): kop, pajak ditambahkan, rekening, S&K — jalur render baru ikut diuji di artefak produksi.
+  await prisma.invoice.create({
+    data: {
+      bookingId: booking.id, number: `CI-INV-${Date.now()}`, sequenceKey: 'ci', sequence: 1, issuedAt: new Date(), invoiceDate: new Date('2026-11-01'), dueDate: new Date('2026-11-05'),
+      taxLines: [{ name: 'PPN', ratePercent: 11, basisPercent: 100, mode: 'added', amountIdr: 550000 }], taxAddedIdr: '550000',
+      companySnapshot: { name: 'PT CI', taxId: '00.000', address: 'Jl. Uji 1', phone: '021', email: 'ci@example.test', website: null },
+      bankSnapshot: [{ bankName: 'BSI', accountNumber: '123', accountHolder: 'PT CI', branch: null }],
+      termsDoc: null, footerNoteDoc: null,
+    },
+  })
+
   const login = await fetch(`${BASE}/api/v1/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }) })
   if (login.status !== 200) fail(`login admin ${login.status}`)
   const cookie = (login.headers.getSetCookie()[0] ?? '').split(';')[0] ?? ''

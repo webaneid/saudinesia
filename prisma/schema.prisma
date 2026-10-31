@@ -799,6 +799,7 @@ model Booking {
   payments       Payment[]
   refunds        Refund[]
   notifications  NotificationLog[]
+  invoice        Invoice?
 
   @@index([userId])
   @@index([status])
@@ -1605,6 +1606,40 @@ model TaxRule {
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 
   @@map("tax_rules")
+}
+
+/// Invoice (docs/arsitektur-booking-engine-v2.md §3.3, §10.4 Fase 6a): TEPAT SATU per booking terbit (D18), ditulis HANYA oleh lib/invoice/issue.ts di transaksi penerbitan.
+/// Nomor dari `allocateInvoiceNumber` (tanpa lompat). Pajak, profil perusahaan, rekening, dan S&K DIBEKUKAN saat terbit — perubahan setelan tak mengubah invoice lama.
+/// Harga item TIDAK disalin ke sini: baris dan subtotal tetap dari `price_snapshots` (invarian I4); di sini hanya yang di atas subtotal (pajak) dan kop dokumen.
+model Invoice {
+  id              String   @id @default(uuid())
+  bookingId       String   @unique
+  number          String   @unique @db.VarChar(80)
+  sequenceKey     String   @db.VarChar(8) // kunci penghitung: tahun zona aplikasi (reset tahunan) atau 'all'
+  sequence        Int
+  issuedAt        DateTime @db.Timestamptz(3)
+  invoiceDate     DateTime @db.Date // tanggal tampil (zona aplikasi saat terbit)
+  dueDate         DateTime @db.Date // jatuh tempo = saran, tak mengikat (D4)
+  revision        Int      @default(1) // dinaikkan tiap edit setelah terbit (Fase 6b)
+  linkVersion     Int      @default(1) // versi tautan publik (Fase 6c); dinaikkan = tautan lama dicabut
+  /// Baris pajak beku: [{ name, ratePercent, basisPercent, mode: 'added'|'included', amountIdr }] — dihitung lib/invoice/tax.ts dari Σ snapshot.
+  taxLines        Json     @default("[]")
+  taxAddedIdr     Decimal  @default(0) @db.Decimal(14, 2) // pajak yang DITAMBAHKAN ke tagihan
+  taxIncludedIdr  Decimal  @default(0) @db.Decimal(14, 2) // porsi pajak di DALAM harga (hanya ditampilkan)
+  /// Kop beku: { name, taxId, address, phone, email, website } — data perusahaan, bukan data pribadi pelanggan. Logo dibaca terkini (merek, bukan data tagihan).
+  companySnapshot Json
+  /// Rekening tujuan beku: [{ bankName, accountNumber, accountHolder, branch }].
+  bankSnapshot    Json     @default("[]")
+  termsDoc        String?  @db.Text
+  footerNoteDoc   String?  @db.Text
+  issuedById      String? // staf yang menerbitkan (tanpa FK, pola byUserId); NULL = jalur jamaah / migrasi
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([sequenceKey, sequence])
+  @@map("invoices")
 }
 
 // Penghitung nomor invoice: satu baris per kunci ('all' atau tahun). Dinaikkan atomik di dalam transaksi penerbitan (tanpa lompat — rollback ikut membatalkan).

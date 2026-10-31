@@ -34,6 +34,8 @@ let n = 0
 async function mkBooking(status: LegacyBookingStatus = 'awaiting_payment', at = new Date('2090-03-10T05:00:00Z')) {
   const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${++n}`, userId: user.id, ...legacyBookingState(status), departureDate: new Date('2091-01-01'), returnDate: new Date('2091-01-10'), season: 'regular', totalAmount: 1_500_000, createdAt: at } })
   bookings.push(b.id)
+  // Setiap booking terbit punya invoice (Fase 6a) — tanpa pajak di sini, jadi tagihan = total.
+  if (b.status !== 'draft') await prisma.invoice.create({ data: { bookingId: b.id, number: b.bookingCode, sequenceKey: tag.slice(-8), sequence: n, issuedAt: at, invoiceDate: new Date('2090-03-10'), dueDate: new Date('2090-03-14'), companySnapshot: {} } })
   if (status === 'payment_review') await prisma.payment.create({ data: { bookingId: b.id, amount: 0, method: 'bank_transfer', status: 'pending' } }) // bukti menunggu verifikasi
   for (const [type, sell, cost] of [['hotel', 1_000_000, 800_000], ['visa', 500_000, 400_000]] as const) {
     await prisma.priceSnapshot.create({ data: { bookingId: b.id, itemType: type, itemId: `${b.id}-${type}`, itemLabel: type === 'hotel' ? 'Hotel Uji' : 'Visa Uji', itemQty: 1, description: type, qty: 1, unit: 'item', unitSellIdr: sell, totalSellIdr: sell, unitCostIdr: cost, totalCostIdr: cost, mode: 'auto' } })
