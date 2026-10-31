@@ -20,10 +20,10 @@ export const muthowifAdapter: QuotaAdapter<BookingMuthowif> = {
       if (row.muthowifId) await confirmMuthowifQuota(tx, row.muthowifId, date, row.numPeople)
     }
   },
-  release: async (tx, row) => {
+  release: async (tx, row, o) => {
     for (const date of eachDate(row.startDate, row.endDate)) {
-      await releasePoolMuthowifQuota(tx, date, row.numPeople)
-      if (row.muthowifId) await releaseMuthowifQuota(tx, row.muthowifId, date, row.numPeople)
+      await releasePoolMuthowifQuota(tx, date, row.numPeople, o.confirmed)
+      if (row.muthowifId) await releaseMuthowifQuota(tx, row.muthowifId, date, row.numPeople, o.confirmed)
     }
   },
 }

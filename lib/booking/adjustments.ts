@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client'
-import { retaxInvoice } from '@/lib/invoice/issue'
+import { reviseInvoice } from '@/lib/invoice/issue'
+import { recordRevision } from './revisionLog'
 import { prisma } from '@/lib/db'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 import { bookingPriceSummary, bookingSnapshotTotals, writeAdjustmentLine } from '@/lib/pricing/engine/snapshot'
@@ -7,7 +8,8 @@ import { evaluatePricing, type PricingEvaluation } from '@/lib/pricing/warnings'
 
 // Diskon / biaya tambahan di TOTAL pesanan (docs/arsitektur-harga-terpadu.md §20, 7B). SATU-SATUNYA penulis `booking_adjustments`. Per perubahan, dalam SATU transaksi yang mengunci baris
 // booking: baris penyesuaian + SATU baris snapshot `penyesuaian` + `Booking.totalAmount` baru (invarian I4: total = Σ snapshot). Tak ada UPDATE/DELETE snapshot — membatalkan = baris pembalik.
-// Hanya saat `awaiting_payment` (belum ada pembayaran berjumlah tetap); di luar itu jalurnya refund, bukan fase ini.
+// Boleh untuk setiap booking `active` (keputusan pemilik R2, docs/arsitektur-booking-engine-v2.md §10.4 6b) — catatan alasan WAJIB bila sudah dikonfirmasi atau ada pembayaran
+// terkonfirmasi. Setiap perubahan menaikkan revisi invoice (pajak dihitung ulang dengan tarif beku) dan tercatat di riwayat revisi.
 // Fase 8 (§21): total boleh berapa pun (> 0) — di bawah rekomendasi atau di bawah HPP hanya menghasilkan PERINGATAN internal di hasilnya, tak pernah penolakan; catatan alasan opsional.
 
 export class AdjustmentError extends Error {
@@ -38,8 +40,12 @@ async function apply(input: ApplyInput): Promise<AdjustResult> {
     // Kunci baris booking: dua penyesuaian paralel tak boleh sama-sama membaca total lama.
     const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${input.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     if (locked.length === 0) throw new AdjustmentError(404, 'Pesanan tidak ditemukan')
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId }, select: { status: true, totalAmount: true, confirmedAt: true, payments: { where: { status: 'pending' }, select: { id: true }, take: 1 } } })
-    if (booking.status !== 'active' || booking.confirmedAt !== null || booking.payments.length > 0) throw new AdjustmentError(409, 'Total hanya dapat disesuaikan saat pesanan menunggu pembayaran. Setelah dibayar, gunakan jalur refund.')
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: input.bookingId }, select: { status: true, totalAmount: true, confirmedAt: true, invoice: { select: { id: true } }, payments: { where: { status: 'confirmed' }, select: { id: true }, take: 1 } } })
+    if (booking.status !== 'active') throw new AdjustmentError(409, 'Total hanya dapat disesuaikan pada pesanan aktif (bukan batal/hangus/selesai).')
+    if (!booking.invoice) throw new AdjustmentError(409, 'Pesanan ini belum punya invoice')
+    if ((booking.confirmedAt !== null || booking.payments.length > 0) && (reasonText?.length ?? 0) < 3) {
+      throw new AdjustmentError(422, 'Pesanan sudah dikonfirmasi atau sudah ada pembayaran — isi catatan alasan (minimal 3 karakter)')
+    }
 
     const before = await bookingSnapshotTotals(tx, input.bookingId)
     const totalBefore = round2(Number(booking.totalAmount))
@@ -68,8 +74,13 @@ async function apply(input: ApplyInput): Promise<AdjustResult> {
     })
     await writeAdjustmentLine(tx, { bookingId: input.bookingId, adjustmentId: row.id, label, amountIdr: amount })
     await tx.booking.update({ where: { id: input.bookingId }, data: { totalAmount: totalAfter } })
-    // Pajak invoice ikut dasar yang baru (tarif beku saat terbit) — tanpa ini tagihan = subtotal baru + pajak lama.
-    await retaxInvoice(tx, input.bookingId)
+    // Pajak invoice ikut dasar yang baru (tarif beku saat terbit) — tanpa ini tagihan = subtotal baru + pajak lama; revisi invoice +1 dan dicatat.
+    const inv = await reviseInvoice(tx, input.bookingId)
+    await recordRevision(tx, {
+      bookingId: input.bookingId, revision: inv.revision, kind: 'total', reason, byUserId: input.byUserId,
+      summary: [{ kind: 'total', label, detail: amount < 0 ? 'diskon' : 'biaya tambahan' }],
+      totalBefore, totalAfter, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter,
+    })
 
     const afterSummary = await bookingPriceSummary(tx, input.bookingId)
     if (round2(afterSummary.sellIdr) !== totalAfter) throw new Error('Invarian total = Σ snapshot dilanggar setelah penyesuaian') // rollback utuh
@@ -84,7 +95,7 @@ export function adjustBookingTotal(input: AdjustInput): Promise<AdjustResult> {
 
 /**
  * Atur TOTAL harga jual pesanan langsung (nego/diskon): selisih terhadap total terkini dihitung di dalam kunci lalu memakai jalur yang sama (satu baris penyesuaian + satu baris snapshot + totalAmount).
- * "Edit" = atur total lagi (baris baru, riwayat utuh). Tidak pernah menolak karena harga rendah — hanya mengembalikan peringatan; yang ditolak hanya total ≤ 0 dan status selain menunggu pembayaran.
+ * "Edit" = atur total lagi (baris baru, riwayat utuh). Tidak pernah menolak karena harga rendah — hanya mengembalikan peringatan; yang ditolak hanya total ≤ 0, status selain aktif, dan tanpa catatan bila sudah dikonfirmasi/dibayar (R2).
  */
 export function setBookingTotal(input: { bookingId: string; totalIdr: number; label?: string | null; reason?: string | null; byUserId: string }): Promise<AdjustResult> {
   return apply({ bookingId: input.bookingId, targetTotalIdr: input.totalIdr, label: input.label?.trim() || undefined, reason: input.reason, byUserId: input.byUserId })

@@ -4,7 +4,7 @@ import type { QuotaAdapter } from './types'
 
 export const transportAdapter: QuotaAdapter<BookingTransport> = {
   confirm: (tx, row) => confirmTransportQuota(tx, row.transportQuotaId, row.numPassengers),
-  release: (tx, row) => releaseTransportQuota(tx, row.transportQuotaId, row.numPassengers),
+  release: (tx, row, o) => releaseTransportQuota(tx, row.transportQuotaId, row.numPassengers, o.confirmed),
 }
 
 // reserve() dipanggil SEBELUM baris BookingTransport ada — argumennya nilai mentah, bukan row.

@@ -33,7 +33,7 @@ export async function getVendorUsage(vendorId: string): Promise<VendorUsage> {
   const [grouped, preferred, snapshots, costActuals] = await Promise.all([
     prisma.productCost.groupBy({ by: ['productType'], where: { vendorId }, _count: { _all: true } }),
     prisma.preferredVendor.count({ where: { vendorId } }),
-    prisma.priceSnapshot.count({ where: { vendorIds: { array_contains: [vendorId] } } }),
+    prisma.priceSnapshot.count({ where: { vendorIds: { array_contains: [vendorId] } } }), // void-ok: rujukan historis (baris void tetap jejak vendor)
     prisma.costActual.count({ where: { vendorId } }),
   ])
   const costsByType = Object.fromEntries(grouped.map(g => [g.productType, g._count._all]))

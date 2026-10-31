@@ -15,7 +15,7 @@ import { getPaymentConfig } from '@/lib/constants/payment'
 // Nama jamaah pada baris Visa ditempel saat render dari manifest (snapshot sengaja tanpa data pribadi, UU PDP).
 export const invoiceBookingInclude = {
   user: { include: { address: { include: { province: true, regency: true, district: true, village: true } } } },
-  priceSnapshots: { orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] },
+  priceSnapshots: { where: { voidedAt: null }, orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] }, // baris di-void revisi tak tampil (T1)
   pilgrims: { include: { visaApplication: { select: { id: true, visaProductId: true } } } },
   payments: true,
   invoice: true,

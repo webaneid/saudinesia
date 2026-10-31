@@ -25,10 +25,12 @@ export async function confirmHotelQuota(tx: Tx, hotelRoomScheduleId: string, roo
   })
 }
 
-export async function releaseHotelQuota(tx: Tx, hotelRoomScheduleId: string, rooms: number): Promise<void> {
+// release*: `confirmed` = booking sudah dikonfirmasi → kuotanya sudah pindah ke `booked*` (lihat confirm*), jadi yang dilepas `booked*`, bukan `pending*` (bug lama: selalu `pending*`,
+// sehingga membatalkan booking terkonfirmasi membuat pending minus dan kursi/kamar tak pernah kembali — docs/arsitektur-booking-engine-v2.md §10.4 6b.3).
+export async function releaseHotelQuota(tx: Tx, hotelRoomScheduleId: string, rooms: number, confirmed = false): Promise<void> {
   await tx.hotelRoomSchedule.update({
     where: { id: hotelRoomScheduleId },
-    data: { pendingQuota: { decrement: rooms } },
+    data: confirmed ? { bookedQuota: { decrement: rooms } } : { pendingQuota: { decrement: rooms } },
   })
 }
 
@@ -52,10 +54,10 @@ export async function confirmTransportQuota(tx: Tx, quotaId: string, seats: numb
   })
 }
 
-export async function releaseTransportQuota(tx: Tx, quotaId: string, seats: number): Promise<void> {
+export async function releaseTransportQuota(tx: Tx, quotaId: string, seats: number, confirmed = false): Promise<void> {
   await tx.transportQuota.update({
     where: { id: quotaId },
-    data: { pendingSeats: { decrement: seats } },
+    data: confirmed ? { bookedSeats: { decrement: seats } } : { pendingSeats: { decrement: seats } },
   })
 }
 
@@ -82,10 +84,10 @@ export async function confirmFlightQuota(tx: Tx, scheduleId: string, seats: numb
   })
 }
 
-export async function releaseFlightQuota(tx: Tx, scheduleId: string, seats: number): Promise<void> {
+export async function releaseFlightQuota(tx: Tx, scheduleId: string, seats: number, confirmed = false): Promise<void> {
   await tx.flightSchedule.update({
     where: { id: scheduleId },
-    data: { pendingSeats: { decrement: seats } },
+    data: confirmed ? { bookedSeats: { decrement: seats } } : { pendingSeats: { decrement: seats } },
   })
 }
 
@@ -104,10 +106,10 @@ export async function reserveMuthowifQuota(tx: Tx, muthowifId: string, date: Dat
   })
 }
 
-export async function releaseMuthowifQuota(tx: Tx, muthowifId: string, date: Date, people: number): Promise<void> {
+export async function releaseMuthowifQuota(tx: Tx, muthowifId: string, date: Date, people: number, confirmed = false): Promise<void> {
   await tx.muthowifAvailability.update({
     where: { muthowifId_date: { muthowifId, date } },
-    data: { pendingCount: { decrement: people } },
+    data: confirmed ? { bookedCount: { decrement: people } } : { pendingCount: { decrement: people } },
   })
 }
 
@@ -152,10 +154,10 @@ export async function reservePoolMuthowifQuota(tx: Tx, date: Date, people: numbe
   })
 }
 
-export async function releasePoolMuthowifQuota(tx: Tx, date: Date, people: number): Promise<void> {
+export async function releasePoolMuthowifQuota(tx: Tx, date: Date, people: number, confirmed = false): Promise<void> {
   await tx.muthowifPoolAvailability.update({
     where: { date },
-    data: { pendingCount: { decrement: people } },
+    data: confirmed ? { bookedCount: { decrement: people } } : { pendingCount: { decrement: people } },
   })
 }
 

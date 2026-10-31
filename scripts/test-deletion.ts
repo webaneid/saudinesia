@@ -603,6 +603,8 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'Refund.approvedById': 'dipertahankan (staf yang menyetujui refund)',
     'InvoiceSettings.updatedById': 'dipertahankan (staf terakhir yang mengubah pengaturan)',
     'Invoice.issuedById': 'dipertahankan (staf yang menerbitkan invoice; NULL untuk jalur jamaah — tak pernah menunjuk akun jamaah)',
+    'BookingRevision.byUserId': 'dipertahankan (staf yang merevisi booking; catatan `reason` dibersihkan — bookingRevision.updateMany)',
+    'PriceSnapshot.voidedById': 'dipertahankan (staf yang membatalkan baris harga lewat revisi)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')

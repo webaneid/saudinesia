@@ -31,10 +31,10 @@ export const hajiAdapter: QuotaAdapter<BookingHaji> = {
       data: { pendingQuota: { decrement: row.numPersons }, bookedQuota: { increment: row.numPersons } },
     })
   },
-  release: async (tx, row) => {
+  release: async (tx, row, o) => {
     await tx.hajiProduct.update({
       where: { id: row.hajiProductId },
-      data: { pendingQuota: { decrement: row.numPersons } },
+      data: o.confirmed ? { bookedQuota: { decrement: row.numPersons } } : { pendingQuota: { decrement: row.numPersons } },
     })
   },
 }

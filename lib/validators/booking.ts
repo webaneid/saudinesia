@@ -235,3 +235,39 @@ export const bookingDraftSchema = z.object({
 })
 
 export type BookingDraft = z.infer<typeof bookingDraftSchema>
+
+// Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b): isi booking LENGKAP sesudah edit. Item lama membawa `ref` (baris yang sudah ada), item baru tanpa `ref`;
+// jamaah lama membawa `pilgrimId`. Harga tetap dihitung server — `customSellIdr` hanya harga KHUSUS item (R4) dengan catatan wajib; tak ada angka harga lain dari klien.
+export const REVISABLE_ITEM_TYPES = ['hotel', 'transport', 'muthowif', 'catering', 'tourPackage', 'flight', 'package'] as const
+const revisionItemSchema = z.object({
+  ref: z.object({ itemType: z.enum(REVISABLE_ITEM_TYPES), itemId: z.string().uuid() }).strict().optional(),
+  item: bookingItemSchema,
+  customSellIdr: z.number().positive('Harga khusus harus lebih dari 0').max(10_000_000_000).nullable().optional(),
+  priceNote: z.string().trim().max(300).optional(),
+}).strict()
+export const bookingRevisionSchema = z.object({
+  /** Revisi invoice yang dilihat editor — beda dengan yang tersimpan → 409 (tak menimpa revisi orang lain). */
+  expectedRevision: z.number().int().min(1),
+  items:    z.array(revisionItemSchema).max(50),
+  pilgrims: z.array(z.object({
+    pilgrimId: z.string().uuid().optional(),
+    visaProductId: z.string().uuid().optional(),
+    selectedDurationDays: z.number().int().min(1).max(365).optional(),
+  }).strict()).min(1, 'Minimal 1 jamaah').max(2000),
+  invoiceDate: z.string().date(),
+  dueDate:     z.string().date(),
+  reason:      z.string().trim().max(1000).optional(),
+}).strict().superRefine((d, ctx) => {
+  checkItemQuantities(d.items.map(i => i.item), ctx)
+  d.items.forEach((it, i) => {
+    if (it.item.itemType === 'haji') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Haji belum dapat diedit lewat form booking admin', path: ['items', i] })
+    if (it.ref && it.ref.itemType !== it.item.itemType) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jenis item tidak cocok dengan rujukannya', path: ['items', i, 'ref'] })
+    if (it.customSellIdr != null && (it.priceNote?.length ?? 0) < 3) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Harga khusus wajib disertai catatan (minimal 3 karakter)', path: ['items', i, 'priceNote'] })
+  })
+  if (d.dueDate < d.invoiceDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jatuh tempo tidak boleh sebelum tanggal invoice', path: ['dueDate'] })
+  const refs = d.items.flatMap(i => (i.ref ? [i.ref.itemId] : []))
+  if (new Set(refs).size !== refs.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Item yang sama dikirim dua kali', path: ['items'] })
+  const pids = d.pilgrims.flatMap(p => (p.pilgrimId ? [p.pilgrimId] : []))
+  if (new Set(pids).size !== pids.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jamaah yang sama dikirim dua kali', path: ['pilgrims'] })
+})
+export type BookingRevisionInput = z.infer<typeof bookingRevisionSchema>

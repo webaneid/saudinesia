@@ -800,6 +800,7 @@ model Booking {
   refunds        Refund[]
   notifications  NotificationLog[]
   invoice        Invoice?
+  revisions      BookingRevision[]
 
   @@index([userId])
   @@index([status])
@@ -1415,30 +1416,36 @@ model ProductImage {
 /// Harga DIBEKUKAN saat dipesan (docs/arsitektur-harga-terpadu.md §17): satu baris per bagian yang dijual. Ditulis HANYA oleh lib/pricing/engine/snapshot.ts;
 /// beku sungguhan (trigger DB menolak UPDATE; koreksi = baris `penyesuaian` baru). Invarian I4: Booking.totalAmount = Σ totalSellIdr. Tanpa data pribadi.
 model PriceSnapshot {
-  id                  String   @id @default(uuid())
+  id                  String    @id @default(uuid())
   bookingId           String
   itemType            String // kunci item booking: hotel | transport | muthowif | catering | tourPackage | haji | visa
   itemId              String // id baris Booking* (visa: id VisaApplication) — polimorfik, sejalan adapter "Opsi B"
-  lineKey             String   @default("main") // main | komponen:<nama> | kendaraan | hotel:<id> | pilihan:* | penyesuaian
+  lineKey             String    @default("main") // main | komponen:<nama> | kendaraan | hotel:<id> | pilihan:* | penyesuaian
   ownerType           String? // jejak titik harga asal (kunci alami, tanpa FK: titik harga boleh dibuat ulang)
   ownerId             String?
-  variantKey          String   @default("")
+  variantKey          String    @default("")
   itemLabel           String // judul SATU item (sama di semua baris item itu) — dipakai invoice
-  itemDetail          String   @default("")
+  itemDetail          String    @default("")
   itemQty             Int // jumlah yang ditampilkan invoice (kamar, penumpang, orang, ...)
   description         String // judul baris ini
-  qty                 Decimal  @db.Decimal(12, 2)
+  qty                 Decimal   @db.Decimal(12, 2)
   unit                String
-  unitCostIdr         Decimal? @db.Decimal(14, 2) // null = modal belum diketahui saat dipesan
-  unitSellIdr         Decimal  @db.Decimal(14, 2)
-  totalCostIdr        Decimal? @db.Decimal(14, 2)
-  totalSellIdr        Decimal  @db.Decimal(14, 2)
+  unitCostIdr         Decimal?  @db.Decimal(14, 2) // null = modal belum diketahui saat dipesan
+  unitSellIdr         Decimal   @db.Decimal(14, 2)
+  totalCostIdr        Decimal?  @db.Decimal(14, 2)
+  totalSellIdr        Decimal   @db.Decimal(14, 2)
   /// Rekomendasi: total harga OTOMATIS baris ini (HPP + margin bawaan saat dipesan), terlepas dari harga manual. NULL = baris lama; baris `penyesuaian` tingkat-booking = 0.
-  recommendedTotalIdr Decimal? @db.Decimal(14, 2)
+  recommendedTotalIdr Decimal?  @db.Decimal(14, 2)
   mode                String // auto | manual
-  fxRateIds           Json     @default("[]")
-  vendorIds           Json     @default("[]")
-  takenAt             DateTime @default(now())
+  fxRateIds           Json      @default("[]")
+  vendorIds           Json      @default("[]")
+  takenAt             DateTime  @default(now())
+  /// Dibatalkan oleh revisi (T1, docs/arsitektur-booking-engine-v2.md §10.4 6b): baris tetap ada sebagai jejak, tetapi TIDAK berlaku (tak dijumlah, tak tampil di invoice).
+  /// Satu-satunya UPDATE yang diizinkan trigger DB: mengisi keempat kolom ini sekali (NULL → nilai). Invarian I4: Booking.totalAmount = Σ baris berlaku (voidedAt NULL).
+  voidedAt            DateTime? @db.Timestamptz(3)
+  voidedById          String? // staf (tanpa FK, pola byUserId)
+  voidReason          String?
+  voidRevision        Int? // revisi invoice yang membatalkan baris ini
 
   booking     Booking      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   costActuals CostActual[]
@@ -1606,6 +1613,29 @@ model TaxRule {
   updatedAt    DateTime @updatedAt @db.Timestamptz(3)
 
   @@map("tax_rules")
+}
+
+/// Riwayat revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, D13): siapa, kapan, mengapa, apa yang berubah. Append-only, ditulis HANYA oleh
+/// lib/booking/revise.ts (revisi isi) dan lib/booking/adjustments.ts (atur total). `summary` = daftar perubahan TANPA data pribadi (label produk, jumlah, "Jamaah ke-3").
+/// `reason` = catatan staf (internal; bisa menyebut nama → dibersihkan lib/account/deletion.ts). `revision` = nomor revisi invoice SESUDAH perubahan ini.
+model BookingRevision {
+  id          String   @id @default(uuid())
+  bookingId   String
+  revision    Int
+  kind        String   @db.VarChar(16) // items | total
+  reason      String?
+  summary     Json     @default("[]")
+  totalBefore Decimal  @db.Decimal(14, 2) // Σ baris berlaku SEBELUM (sebelum pajak)
+  totalAfter  Decimal  @db.Decimal(14, 2)
+  taxBefore   Decimal  @db.Decimal(14, 2) // pajak ditambahkan sebelum
+  taxAfter    Decimal  @db.Decimal(14, 2)
+  byUserId    String // staf (tanpa FK, pola byUserId)
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, revision])
+  @@map("booking_revisions")
 }
 
 /// Invoice (docs/arsitektur-booking-engine-v2.md §3.3, §10.4 Fase 6a): TEPAT SATU per booking terbit (D18), ditulis HANYA oleh lib/invoice/issue.ts di transaksi penerbitan.
