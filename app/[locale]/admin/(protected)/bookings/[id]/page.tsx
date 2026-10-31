@@ -4,7 +4,6 @@ import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
 import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
-import { getPaymentConfig } from '@/lib/constants/payment'
 import { ArrowLeft, FileDown } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
 import { InvoiceBox } from './InvoiceBox'
@@ -28,7 +27,6 @@ type Props = { params: Promise<{ locale: string; id: string }> }
 export default async function AdminBookingDetail({ params }: Props) {
   const { locale, id } = await params
   const session = await requireAdminPage(locale)
-  const { banks, businessName } = getPaymentConfig()
 
   const booking = await prisma.booking.findUnique({
     where: { id },

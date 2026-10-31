@@ -14,6 +14,8 @@ import { computeTax } from '@/lib/invoice/tax'
 import { billOf } from '@/lib/invoice/bill'
 import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
 import { processPayment } from '@/lib/payments/process'
+import { setBookingTotal } from '@/lib/booking/adjustments'
+import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
 import { PaymentAmountError } from '@/lib/payments/confirmAmount'
 import { addDays, calendarDateOf, dateInApp, todayInApp, endOfDayExclusiveInApp } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
@@ -158,6 +160,34 @@ await t('KONFIRMASI PEMBAYARAN memakai TAGIHAN (termasuk pajak): bawaan = total 
   const done = await processPayment(p1.id, { action: 'confirm', byUserId: staff.id })
   assert.equal(done.kind, 'done')
   assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { id: p1.id } })).amount), 6_660_000)
+})
+
+await t('PENYESUAIAN TOTAL sesudah terbit → pajak DIHITUNG ULANG dengan tarif BEKU (bukan tarif terkini): diskon menurunkan pajak, tagihan & PDF konsisten; pajak tersimpan yang tak cocok → PDF menolak terbit', async () => {
+  const did = await newDraft(DRAFT(1)) // 6.000.000, PPN 11% = 660.000
+  assert.ok((await publishDraft(did, { byUserId: staff.id })).ok)
+  await prisma.taxRule.update({ where: { id: ppn.id }, data: { ratePercent: 12 } }) // aturan terkini berubah — invoice tetap 11%
+  await setBookingTotal({ bookingId: did, totalIdr: 5_000_000, reason: 'nego', byUserId: staff.id })
+  const inv = await invoiceOf(did)
+  assert.deepEqual([Number(inv.taxAddedIdr), (inv.taxLines as Array<{ ratePercent: number; amountIdr: number }>)[0]], [550_000, { name: `${tag} PPN`, ratePercent: 11, basisPercent: 100, mode: 'added', amountIdr: 550_000 }])
+  const b = await prisma.booking.findUniqueOrThrow({ where: { id: did }, include: invoiceBookingInclude })
+  assert.equal(billOf(b).grandTotal, 5_550_000)
+  const data = await buildInvoiceData(b)
+  assert.deepEqual([data.subtotal, data.taxAdded, data.totalAmount], [5_000_000, 550_000, 5_550_000])
+  await prisma.$executeRawUnsafe(`UPDATE invoices SET "taxAddedIdr" = 1 WHERE "bookingId" = '${did}'`)
+  await assert.rejects(async () => buildInvoiceData(await prisma.booking.findUniqueOrThrow({ where: { id: did }, include: invoiceBookingInclude })), /pajak tersimpan tidak sesuai/)
+  await prisma.taxRule.update({ where: { id: ppn.id }, data: { ratePercent: 11 } })
+})
+await t('KONFIRMASI tanpa invoice → konflik (tak menebak pajak 0); NOMOR BENTROK dengan nomor lama → 422 jelas, penghitung tak maju, booking tetap draf', async () => {
+  const lone = await prisma.booking.create({ data: { bookingCode: `${tag}-X`, userId: customer.id, status: 'active', season: 'regular', totalAmount: 100 } })
+  const pay = await prisma.payment.create({ data: { bookingId: lone.id, amount: 0, method: 'transfer', status: 'pending' } })
+  assert.equal((await processPayment(pay.id, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
+  const s0 = await seqNow()
+  const clash = `UJI-${year}-${String(s0 + 1).padStart(4, '0')}`
+  await prisma.invoice.create({ data: { bookingId: lone.id, number: clash, sequenceKey: 'uji', sequence: 1, issuedAt: new Date(), invoiceDate: new Date(), dueDate: new Date(), companySnapshot: {} } })
+  const did = await newDraft(DRAFT(1))
+  const r = await publishDraft(did, { byUserId: staff.id })
+  assert.ok(!r.ok && r.status === 422 && /pola nomor/.test(r.message), JSON.stringify(r))
+  assert.deepEqual([await seqNow(), (await prisma.booking.findUniqueOrThrow({ where: { id: did } })).status], [s0, 'draft'])
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────

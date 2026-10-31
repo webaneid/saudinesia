@@ -24,6 +24,8 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
     if (payment.status !== 'pending' || booking.status !== 'active' || booking.confirmedAt !== null) return { kind: 'conflict' }
 
     if (input.action === 'confirm') {
+      // Tanpa invoice tak ada tagihan yang pasti (pajak tak diketahui) — jangan menebak 0; sejak Fase 6a setiap booking terbit punya invoice.
+      if (!booking.invoice) return { kind: 'conflict' }
       // Patokan = TAGIHAN (subtotal + pajak ditambahkan, lib/invoice/bill.ts), bukan Σ harga sebelum pajak.
       const confirmedAmount = resolveConfirmedAmount(billOf(booking).grandTotal, { amount: input.amount, notes: input.notes })
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: confirmedAmount, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: new Date() } })

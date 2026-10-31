@@ -6,6 +6,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
+import type { BankSnapshot } from '@/lib/invoice/issue'
 import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,7 @@ type Props = { params: Promise<{ locale: string; id: string }> }
 
 export default async function BookingDetailPage({ params }: Props) {
   const { locale, id } = await params
-  const { banks, businessName } = getPaymentConfig()
+  const { banks } = getPaymentConfig()
   const session = await getSession()
   if (!session) redirect(`/${safeLocale(locale)}/login`)
 
@@ -38,12 +39,16 @@ export default async function BookingDetailPage({ params }: Props) {
       packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
-      invoice:    { select: { number: true, taxAddedIdr: true, taxIncludedIdr: true } },
+      invoice:    { select: { number: true, taxAddedIdr: true, taxIncludedIdr: true, bankSnapshot: true } },
     },
   })
   if (!booking) notFound()
   // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts). Status lunas/sisa tetap mengikuti alur v1 sampai Fase 7.
   const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice })
+  // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF); setelan env lama hanya cadangan untuk booking tanpa invoice.
+  const payTo = booking.invoice
+    ? (booking.invoice.bankSnapshot as BankSnapshot[])
+    : banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null }))
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
@@ -114,14 +119,12 @@ export default async function BookingDetailPage({ params }: Props) {
           <div className="rounded-lg bg-white/70 p-4 space-y-2 text-sm">
             <p className="font-semibold">Transfer ke rekening:</p>
             <div className="grid grid-cols-2 gap-1">
-              {banks.map((b) => (
-                <React.Fragment key={b.bankName}>
+              {payTo.map((b) => (
+                <React.Fragment key={`${b.bankName}-${b.accountNumber}`}>
                   <span className="text-muted-foreground">Bank {b.bankName}</span>
-                  <span className="font-mono font-bold">{b.accountNumber}</span>
+                  <span className="font-mono font-bold">{b.accountNumber} <span className="font-sans font-normal text-muted-foreground">a.n. {b.accountHolder}</span></span>
                 </React.Fragment>
               ))}
-              <span className="text-muted-foreground">A.n.</span>
-              <span className="font-bold">{businessName}</span>
             </div>
           </div>
           <div className="text-center">

@@ -62,7 +62,33 @@ export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: n
       termsDoc: s.termsDoc, footerNoteDoc: s.footerNoteDoc, issuedById: opts.byUserId,
     },
     select: { id: true, number: true },
+  }).catch((e: unknown) => {
+    // Nomor hasil pola baru sama dengan nomor lama (mis. awalan/lebar diubah) → setiap penerbitan akan menabrak nomor yang sama: galat jelas, bukan 500 diam.
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002' && JSON.stringify(e.meta?.target ?? '').includes('number')) {
+      console.error(`[invoice] nomor ${number} sudah dipakai — periksa pola nomor di Pengaturan Invoice`)
+      throw new InvoiceError('Nomor invoice berikutnya bentrok dengan nomor lama — periksa pola nomor di Pengaturan Invoice')
+    }
+    throw e
   })
   await tx.booking.update({ where: { id: bookingId }, data: { paymentDeadline: paymentDeadlineFor(now, opts.dueDays) } })
   return inv
 }
+
+/** Aturan pajak yang DIBEKUKAN di invoice (tarif, dasar, mode) — dipakai menghitung ulang jumlahnya bila subtotal berubah. */
+export const frozenTaxRules = (lines: unknown): TaxRuleInput[] =>
+  (Array.isArray(lines) ? lines : []).map(l => {
+    const x = l as TaxRuleInput
+    return { name: x.name, ratePercent: Number(x.ratePercent), basisPercent: Number(x.basisPercent), mode: x.mode }
+  })
+
+/**
+ * Subtotal booking berubah (penyesuaian/diskon total) → JUMLAH pajak dihitung ulang dengan aturan BEKU invoice (bukan aturan terkini): tarif yang berlaku saat terbit
+ * tetap dipakai, tetapi dasarnya mengikuti tagihan sekarang. Dipanggil di transaksi yang sama dengan perubahan `Booking.totalAmount`. Booking tanpa invoice → tak ada yang diubah.
+ */
+export async function retaxInvoice(tx: Tx, bookingId: string): Promise<void> {
+  const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { totalAmount: true, invoice: { select: { id: true, taxLines: true } } } })
+  if (!b.invoice) return
+  const tax = computeTax(Number(b.totalAmount), frozenTaxRules(b.invoice.taxLines))
+  await tx.invoice.update({ where: { id: b.invoice.id }, data: { taxLines: tax.lines as Prisma.InputJsonValue, taxAddedIdr: tax.addedIdr, taxIncludedIdr: tax.includedIdr } })
+}
+

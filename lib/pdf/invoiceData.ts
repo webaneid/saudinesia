@@ -4,7 +4,8 @@ import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/get
 import { DATE_SHORT_MONTH_2D, formatCalendarDate, formatInstant } from '@/lib/time'
 import { formatAddressLine } from '@/lib/address/format'
 import { billOf } from '@/lib/invoice/bill'
-import type { BankSnapshot, CompanySnapshot } from '@/lib/invoice/issue'
+import { frozenTaxRules, type BankSnapshot, type CompanySnapshot } from '@/lib/invoice/issue'
+import { computeTax } from '@/lib/invoice/tax'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { plainText } from '@/lib/rich-text/doc'
 import { getPaymentConfig } from '@/lib/constants/payment'
@@ -121,6 +122,13 @@ export async function buildInvoiceData(booking: InvoiceBooking): Promise<Invoice
   // Tagihan, terbayar, dan sisa dari SATU pembaca (lib/invoice/bill.ts): pajak ditambahkan ikut ditagih; jumlah kurang tak pernah tampil lunas.
   const bill = billOf(booking)
   const inv = booking.invoice
+  // Pajak tercetak harus = aturan beku × subtotal terkini (dokumen pajak): tak cocok → jangan terbitkan dokumen, sama seperti invarian I4.
+  if (inv) {
+    const expected = computeTax(subtotal, frozenTaxRules(inv.taxLines))
+    if (Math.round(expected.addedIdr * 100) !== Math.round(Number(inv.taxAddedIdr) * 100) || Math.round(expected.includedIdr * 100) !== Math.round(Number(inv.taxIncludedIdr) * 100)) {
+      throw new Error(`Invoice ${inv.number}: pajak tersimpan tidak sesuai subtotal ${subtotal}`)
+    }
+  }
   // Booking tanpa invoice (hanya pratinjau draf — semua booking terbit punya invoice sejak Fase 6a): kop & rekening dari setelan lama, tanpa pajak.
   const fallback = getPaymentConfig()
 

@@ -13,7 +13,7 @@ import { ok, err } from '@/lib/validators'
 import { ItemNotBookableError } from '@/lib/booking/errors'
 import { prepareBooking, writeBooking, RuleViolationError } from '@/lib/booking/create'
 import { displayStatusOf, statusSelect } from '@/lib/booking/lifecycle'
-import { issueInvoice } from '@/lib/invoice/issue'
+import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
 import { isSerializationConflict, retrySerializable } from '@/lib/booking/serializable'
 import { billOf, billSelect } from '@/lib/invoice/bill'
 
@@ -98,6 +98,8 @@ export async function POST(request: Request) {
       if (error instanceof RuleViolationError) return NextResponse.json({ success: false, error: error.message, meta: { violations: error.violations } }, { status: 422 })
       // Item yang belum/tidak bisa dijual (produk nonaktif, belum berharga) — bukan kuota habis (SEC-66)
       if (error instanceof ItemNotBookableError) return NextResponse.json(err(error.message), { status: 422 })
+      // Invoice tak dapat diterbitkan (setelan nomor/jatuh tempo bermasalah) — urusan admin; jamaah menerima pesan umum, rinciannya di log server.
+      if (error instanceof InvoiceError) return NextResponse.json(err('Pesanan belum dapat diterbitkan — silakan hubungi admin'), { status: 422 })
       // Quota errors thrown by reserve helpers
       if (error.message.includes('insufficient') || error.message.includes('capacity')) {
         return NextResponse.json(err(error.message), { status: 409 })
