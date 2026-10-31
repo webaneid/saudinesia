@@ -11,6 +11,7 @@ import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
+import { legacyInsert } from './lib/legacyInsert'
 import { legacyUser } from './lib/legacyUser'
 
 await assertThrowawayDb()
@@ -117,12 +118,12 @@ async function fullWorld(db: PrismaClient, withGap = 0) {
   const visa = await db.visaProduct.create({ data: { name: 'Umroh Reguler', visaType: 'Umroh' } })
   const bk = await mkBooking(db, user.id, 7_200_000 + 500_000 + 3_000_000 + 900_000 + 2_000_000 + 12_000_000 + 1_800_000 + withGap)
   const d = (s: string) => new Date(s)
-  const bh = await db.bookingHotel.create({ data: { bookingId: bk.id, hotelRoomScheduleId: sch.id, checkIn: d('2027-06-01'), checkOut: d('2027-06-04'), nights: 3, numRooms: 2, numGuests: 4, pricePerNight: 1_200_000, totalPrice: 7_200_000 } })
-  const bt = await db.bookingTransport.create({ data: { bookingId: bk.id, transportQuotaId: quota.id, travelDate: d('2027-06-02'), numPassengers: 10, unitPrice: 500_000, totalPrice: 500_000 } })
-  const bm = await db.bookingMuthowif.create({ data: { bookingId: bk.id, startDate: d('2027-06-01'), endDate: d('2027-06-04'), numDays: 3, numPeople: 5, totalPrice: 3_000_000 } })
+  const bh = await legacyInsert(db, 'booking_hotels', { bookingId: bk.id, hotelRoomScheduleId: sch.id, checkIn: d('2027-06-01'), checkOut: d('2027-06-04'), nights: 3, numRooms: 2, numGuests: 4, pricePerNight: 1_200_000, totalPrice: 7_200_000 })
+  const bt = await legacyInsert(db, 'booking_transports', { bookingId: bk.id, transportQuotaId: quota.id, travelDate: d('2027-06-02'), numPassengers: 10, unitPrice: 500_000, totalPrice: 500_000 })
+  const bm = await legacyInsert(db, 'booking_muthowif', { bookingId: bk.id, startDate: d('2027-06-01'), endDate: d('2027-06-04'), numDays: 3, numPeople: 5, totalPrice: 3_000_000 })
   const bc = await db.bookingCatering.create({ data: { bookingId: bk.id, cateringOptionId: cat.id, startDate: d('2027-06-01'), endDate: d('2027-06-04'), numDays: 3, numPeople: 3, totalPrice: 900_000 } })
-  const btp = await db.bookingTourPackage.create({ data: { bookingId: bk.id, tourPackageId: tour.id, tourDate: d('2027-06-02'), numPeople: 4, totalPrice: 2_000_000 } })
-  const bj = await db.bookingHaji.create({ data: { bookingId: bk.id, hajiProductId: haji.id, numPersons: 2, totalPrice: 12_000_000 } })
+  const btp = await legacyInsert(db, 'booking_tour_packages', { bookingId: bk.id, tourPackageId: tour.id, tourDate: d('2027-06-02'), numPeople: 4, totalPrice: 2_000_000 })
+  const bj = await legacyInsert(db, 'booking_haji', { bookingId: bk.id, hajiProductId: haji.id, numPersons: 2, totalPrice: 12_000_000 })
   const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
   const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh', selectedDurationDays: 30 }, select: { id: true } })
   await setLegacy(db, 'visa_applications', va.id, { hppSnapshotRupiah: 1_500_000, sellPriceSnapshot: 1_800_000 })

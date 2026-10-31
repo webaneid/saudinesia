@@ -18,16 +18,15 @@ export type CancellableBooking = Prisma.BookingGetPayload<{
 // Dasar refund = uang yang SUDAH MASUK (Σ pembayaran `confirmed`), bukan `totalAmount` — tanpa uang masuk tak ada baris Refund (SEC-118).
 export async function cancelBooking(tx: Tx, booking: CancellableBooking, reason: string, finalStatus: 'cancelled' | 'expired' = 'cancelled'): Promise<{ refundAmount: number }> {
   await tx.booking.update({ where: { id: booking.id }, data: { status: finalStatus } })
-  // Booking terkonfirmasi: kuotanya sudah `booked`, jadi itu yang dilepas (bukan `pending`).
-  const o = { confirmed: booking.confirmedAt !== null }
+  // Status kuota PER BARIS (`quotaConfirmed`): baris yang sudah dikonfirmasi melepas `booked`, sisanya `pending` (produk tambahan revisi bisa masih `pending`).
 
-  for (const h of booking.hotels) await quotaAdapters.hotel.release(tx, h, o)
-  for (const t of booking.transports) await quotaAdapters.transport.release(tx, t, o)
-  for (const tp of booking.tourPackages) await quotaAdapters.tourPackage.release(tx, tp, o)
-  for (const bm of booking.muthowif) await quotaAdapters.muthowif.release(tx, bm, o)
-  for (const bh of booking.haji) await quotaAdapters.haji.release(tx, bh, o)
-  for (const bf of booking.flights) await quotaAdapters.flight.release(tx, bf, o)
-  for (const bp of booking.packages) await quotaAdapters.package.release(tx, bp, o)
+  for (const h of booking.hotels) await quotaAdapters.hotel.release(tx, h, { confirmed: h.quotaConfirmed })
+  for (const t of booking.transports) await quotaAdapters.transport.release(tx, t, { confirmed: t.quotaConfirmed })
+  for (const tp of booking.tourPackages) await quotaAdapters.tourPackage.release(tx, tp, { confirmed: tp.quotaConfirmed })
+  for (const bm of booking.muthowif) await quotaAdapters.muthowif.release(tx, bm, { confirmed: bm.quotaConfirmed })
+  for (const bh of booking.haji) await quotaAdapters.haji.release(tx, bh, { confirmed: bh.quotaConfirmed })
+  for (const bf of booking.flights) await quotaAdapters.flight.release(tx, bf, { confirmed: bf.quotaConfirmed })
+  for (const bp of booking.packages) await quotaAdapters.package.release(tx, bp, { confirmed: bp.quotaConfirmed })
 
   const paid = finalStatus === 'expired' || !booking.departureDate ? 0 : Number((await tx.payment.aggregate({ where: { bookingId: booking.id, status: 'confirmed' }, _sum: { amount: true } }))._sum.amount ?? 0)
   const refund = paid > 0 && booking.departureDate ? computeRefundAmount(paid, booking.departureDate) : 0

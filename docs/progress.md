@@ -861,6 +861,8 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] Fase 6 — Invoice terbit (penomoran, pajak, revisi, void snapshot T1, invoice publik + PDF baru) — selesai 2026-11-01 (6a/6b/6c)
   - [x] 6a — entitas Invoice (1:1, nomor tanpa lompat saat terbit admin & checkout jamaah, backfill booking lama), pajak beku (ikut penyesuaian total dengan tarif beku), satu pembaca tagihan `billOf`, PDF berkop/NPWP/pajak/rekening/S&K, kotak Invoice — selesai 2026-10-31 (§10.4)
   - [x] 6b — edit setelah terbit (mode revisi, simpan sekali: tambah/hapus/ganti item, harga khusus, jamaah R3, tanggal invoice), T1 void snapshot + trigger, riwayat revisi, kuota sadar konfirmasi (bug batal terkonfirmasi ditutup), atur total dilonggarkan R2 — selesai 2026-11-01 (§10.4)
+  - [x] Koreksi 6b (2026-11-01): produk draf/revisi dapat diubah; kuota produk tambahan revisi ditahan pending, status kuota per baris (`quotaConfirmed`)
+  - [x] Editor baris inline (2026-11-01, arahan pemilik — gaya InvoicePlane): popup produk diganti `ItemRows` di draf dan editor revisi; subtotal per baris + total dari pratinjau server otomatis (`itemTotals`); catatan harga khusus hanya wajib saat harga diubah
   - [x] 6c — invoice publik tanpa login (tautan HMAC dapat dicabut, halaman + PDF, noindex/no-store), notifikasi `invoice_issued` saat terbit admin & checkout jamaah + kirim ulang, salin/cabut di admin — selesai 2026-11-01 (§10.4); menutup K5-1
 - [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
 - [ ] Fase 8 — QRIS dinamis (porting Facport)

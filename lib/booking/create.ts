@@ -5,6 +5,7 @@ import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePri
 import { reserveFlightQuota } from '@/lib/quota'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
 import { writeBookingItems, type TourPackageResolved } from './lineItems'
+import type { ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { resolvePackageItem, type PackageResolved } from './packageItem'
 import { visaRuleViolations } from './ruleContext'
 import { blockingViolations, type RuleViolation } from './rules'
@@ -72,9 +73,9 @@ export async function prepareBooking(data: BookingInput, ownerId: string, opts: 
  * Di DALAM transaksi: tahan kuota (melempar "insufficient" → 409), tulis item + jamaah + snapshot ke booking `bookingId` (baris sudah ada), hitung tanggal acuan,
  * simpan total = Σ snapshot (invarian I4). Mengembalikan total.
  */
-export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBooking, bookingId: string): Promise<number> {
+export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBooking, bookingId: string, written?: ItemMeta[]): Promise<number> {
   await reserveItems(tx, p)
-  const total = await writeBookingItems(tx, bookingId, p.data, p.tours, p.packages)
+  const total = await writeBookingItems(tx, bookingId, p.data, p.tours, p.packages, written)
   await recomputeBookingDates(tx, bookingId)
   await tx.booking.update({ where: { id: bookingId }, data: { totalAmount: total } })
   return total

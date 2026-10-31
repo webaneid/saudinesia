@@ -5,7 +5,7 @@ import { calendarDateOf, dbDateOf } from '@/lib/time'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 import { formatRupiah } from '@/lib/utils'
 import { quotaAdapters } from '@/lib/quota/adapters'
-import { CUSTOM_PRICE_PREFIX, bookingSnapshotTotals, voidItemLines, writeCustomPriceLine, type ItemMeta } from '@/lib/pricing/engine/snapshot'
+import { CUSTOM_PRICE_PREFIX, bookingSnapshotTotals, itemSellTotals, voidItemLines, writeCustomPriceLine, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { InvoiceError, reviseInvoice } from '@/lib/invoice/issue'
 import { billOf } from '@/lib/invoice/bill'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
@@ -166,30 +166,22 @@ const itemDelegate = (tx: Tx, t: ItemType) => ({
   tourPackage: tx.bookingTourPackage, flight: tx.bookingFlight, package: tx.bookingPackage,
 } as const)[t]
 
-async function releaseRow(tx: Tx, b: State, c: CurrentItem, confirmed: boolean) {
-  const o = { confirmed }
+/** Lepas kuota satu baris item sesuai STATUS BARIS ITU (`quotaConfirmed`: `booked` vs `pending`). */
+async function releaseRow(tx: Tx, b: State, c: CurrentItem) {
   const id = c.ref.itemId
-  switch (c.ref.itemType) {
-    case 'hotel': return quotaAdapters.hotel.release(tx, b.hotels.find(r => r.id === id)!, o)
-    case 'transport': return quotaAdapters.transport.release(tx, b.transports.find(r => r.id === id)!, o)
-    case 'muthowif': return quotaAdapters.muthowif.release(tx, b.muthowif.find(r => r.id === id)!, o)
-    case 'catering': return
-    case 'tourPackage': return quotaAdapters.tourPackage.release(tx, b.tourPackages.find(r => r.id === id)!, o)
-    case 'flight': return quotaAdapters.flight.release(tx, b.flights.find(r => r.id === id)!, o)
-    case 'package': return quotaAdapters.package.release(tx, b.packages.find(r => r.id === id)!, o)
+  const rel = <T extends { id: string; quotaConfirmed: boolean }>(rows: T[], fn: (tx: Tx, row: T, o: { confirmed: boolean }) => Promise<void>) => {
+    const row = rows.find(r => r.id === id)!
+    return fn(tx, row, { confirmed: row.quotaConfirmed })
   }
-}
-
-/** Booking dikonfirmasi: kuota item BARU langsung dikonfirmasi (sama dengan item lama yang sudah `booked`). */
-async function confirmNewRows(tx: Tx, bookingId: string, before: Set<string>) {
-  const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, flights: true, packages: true } })
-  const fresh = <T extends { id: string }>(rows: T[]) => rows.filter(r => !before.has(r.id))
-  for (const r of fresh(b.hotels)) await quotaAdapters.hotel.confirm(tx, r)
-  for (const r of fresh(b.transports)) await quotaAdapters.transport.confirm(tx, r)
-  for (const r of fresh(b.muthowif)) await quotaAdapters.muthowif.confirm(tx, r)
-  for (const r of fresh(b.tourPackages)) await quotaAdapters.tourPackage.confirm(tx, r)
-  for (const r of fresh(b.flights)) await quotaAdapters.flight.confirm(tx, r)
-  for (const r of fresh(b.packages)) await quotaAdapters.package.confirm(tx, r)
+  switch (c.ref.itemType) {
+    case 'hotel': return rel(b.hotels, quotaAdapters.hotel.release)
+    case 'transport': return rel(b.transports, quotaAdapters.transport.release)
+    case 'muthowif': return rel(b.muthowif, quotaAdapters.muthowif.release)
+    case 'catering': return
+    case 'tourPackage': return rel(b.tourPackages, quotaAdapters.tourPackage.release)
+    case 'flight': return rel(b.flights, quotaAdapters.flight.release)
+    case 'package': return rel(b.packages, quotaAdapters.package.release)
+  }
 }
 
 /**
@@ -226,9 +218,13 @@ async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBoo
   }
 }
 
-export type RevisionResult = { revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]; /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[] }
+export type RevisionResult = {
+  revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]
+  /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[]
+  /** Harga jual tiap item SESUDAH revisi, URUT `input.items` (subtotal baris di editor). */ itemTotals: number[]
+}
 
-async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byUserId: string, prepared: { full: PreparedBooking; writes: PreparedBooking }, planned: Plan): Promise<RevisionResult> {
+async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byUserId: string, prepared: { full: PreparedBooking; writes: PreparedBooking }, planned: Plan, opts: { requireReason: boolean } = { requireReason: true }): Promise<RevisionResult> {
   // $queryRaw: Prisma ORM tak punya SELECT … FOR UPDATE — revisi, atur total, konfirmasi bayar, dan batal pada booking yang sama diserialkan.
   const locked = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${bookingId} FOR UPDATE`)
   if (locked.length === 0) throw new RevisionError(404, 'Booking tidak ditemukan')
@@ -243,7 +239,8 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
 
   const confirmed = b.confirmedAt !== null
   const reason = input.reason?.trim() || null
-  if ((confirmed || b.payments.length > 0) && (reason?.length ?? 0) < 3) {
+  // Pratinjau tak menuntut alasan (editor menampilkan total sambil mengetik); SIMPAN tetap menuntutnya (R2).
+  if (opts.requireReason && (confirmed || b.payments.length > 0) && (reason?.length ?? 0) < 3) {
     throw new RevisionError(422, 'Booking sudah dikonfirmasi atau sudah ada pembayaran — isi alasan revisi (minimal 3 karakter)')
   }
   const revision = b.invoice.revision + 1
@@ -254,7 +251,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
 
   // 1. hapus / ganti: lepas kuota, void baris harga, hapus baris item
   for (const c of [...p.removed, ...p.writes.flatMap(w => (w.replaces ? [w.replaces] : []))]) {
-    await releaseRow(tx, b, c, confirmed)
+    await releaseRow(tx, b, c)
     await voidItemLines(tx, { bookingId, itemType: c.ref.itemType, itemId: c.ref.itemId, byUserId, reason: voidReason, revision })
     await (itemDelegate(tx, c.ref.itemType) as unknown as { delete: (a: { where: { id: string } }) => Promise<unknown> }).delete({ where: { id: c.ref.itemId } })
   }
@@ -266,7 +263,6 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   for (const pg of p.pilgrimRemoves) await tx.bookingPilgrim.delete({ where: { id: pg.id } }) // dokumen 0 (R3); visa ikut terhapus (cascade)
 
   // 3. tambah / ganti (versi baru) + visa jamaah baru/ganti — mesin pesan yang sama
-  const before = new Set([b.hotels, b.transports, b.muthowif, b.tourPackages, b.flights, b.packages].flatMap(rows => rows.map(r => r.id)))
   const flights = [...p.kept.map(k => k.cur.item), ...p.writes.map(w => w.item)].flatMap(i => (i.itemType === 'flight' || i.itemType === 'package' ? [i.departureDate] : []))
   const plannedTravel = flights.length > 0 ? [...flights].sort()[0]! : undefined
   const written: ItemMeta[] = []
@@ -274,7 +270,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
     await reserveItems(tx, prepared.writes)
     await writeBookingItems(tx, bookingId, { ...prepared.writes.data, plannedTravelDate: plannedTravel }, prepared.writes.tours, prepared.writes.packages, written)
   }
-  if (confirmed) await confirmNewRows(tx, bookingId, before)
+  // Produk baru SELALU ditahan `pending` (koreksi pemilik 2026-11-01) — juga pada booking yang sudah dikonfirmasi; dikonfirmasi saat pembayarannya diverifikasi.
   await syncPackageVisas(tx, bookingId, prepared.full, p.full.items, plannedTravel ? dbDateOf(plannedTravel) : null)
 
   // 4. harga khusus per item (R4): selisih terhadap harga item (tanpa harga khusus lamanya)
@@ -287,6 +283,8 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
     const kept = p.kept.find(k => k.index === index)
     if (!kept && want === null) continue // item baru/ganti tanpa harga khusus
     if (kept && (kept.cur.customSellIdr === null ? want === null || cents(want) === cents(kept.cur.priceIdr) : want !== null && cents(want) === cents(kept.cur.customSellIdr))) continue
+    // Catatan wajib hanya saat harga khusus DITETAPKAN/DIUBAH (yang tak berubah dilewati di atas) — editor tak perlu mengetik ulang catatan lama.
+    if (want !== null && (input.items[index]!.priceNote?.length ?? 0) < 3) throw new RevisionError(422, 'Harga khusus wajib disertai catatan (minimal 3 karakter)')
     await voidItemLines(tx, { bookingId, itemType: ref.itemType, itemId: ref.itemId, byUserId, reason: voidReason, revision, lineKeyPrefix: CUSTOM_PRICE_PREFIX })
     const lines = await tx.priceSnapshot.findMany({ where: { bookingId, itemType: ref.itemType, itemId: ref.itemId, voidedAt: null }, select: { totalSellIdr: true, itemLabel: true, itemDetail: true, itemQty: true } })
     const base = lines.reduce((s, l) => s + cents(Number(l.totalSellIdr)), 0) / 100
@@ -322,7 +320,9 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   const notices: string[] = []
   if (paid > grandAfter) notices.push(`Sudah dibayar ${formatRupiah(paid)} — melebihi tagihan baru ${formatRupiah(grandAfter)} (kelebihan bayar; refund dicatat terpisah).`)
   if (pays.some(x => x.status === 'pending')) notices.push('Ada bukti transfer yang menunggu verifikasi — jumlahnya mungkin tak lagi sama dengan tagihan baru.')
-  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices }
+  const sells = await itemSellTotals(tx, bookingId)
+  const itemTotals = input.items.map((_, i) => { const r = itemIdOf.get(i); return r ? sells.get(`${r.itemType}:${r.itemId}`) ?? 0 : 0 })
+  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices, itemTotals }
 }
 
 /** Rencana + resolusi di LUAR transaksi (bacaan saja): aturan visa atas isi LENGKAP sesudah revisi, resolusi item yang akan ditulis. */
@@ -352,7 +352,7 @@ export async function previewRevision(bookingId: string, input: BookingRevisionI
     await prisma.$transaction(async tx => {
       const before = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: invoiceBookingInclude })
       const grandBefore = billOf(before).grandTotal
-      const r = await apply(tx, bookingId, input, byUserId, prepared, planned)
+      const r = await apply(tx, bookingId, input, byUserId, prepared, planned, { requireReason: false })
       const after = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: invoiceBookingInclude })
       const inv = await buildInvoiceData(after)
       throw new Rollback({ ...r, lines: inv.lineItems, grandBefore, grandAfter: billOf(after).grandTotal })
