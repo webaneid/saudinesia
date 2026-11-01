@@ -2,79 +2,46 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { isRecordNotFound } from '@/lib/admin/errors'
-import { z } from 'zod'
+import { periodUpdateSchema } from '@/lib/validators/hotelPeriod'
+import { deletePeriod, updatePeriod } from '@/lib/hotels/periods'
+import { periodFailure } from '@/lib/hotels/http'
 import { withSellPrice } from '@/lib/pricing/engine/read'
 
-const updateSchema = z.object({
-  periodStart: z.coerce.date().optional(),
-  periodEnd:   z.coerce.date().optional(),
-  isActive:    z.boolean().optional(),
-})
-
+// Satu periode: lihat / ubah tanggal & status / hapus-aman (docs/arsitektur-hotel.md §12.2). Periode harus milik hotel di URL.
 type Ctx = { params: Promise<{ id: string; periodId: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
   try {
     await requireManager()
-    const { periodId } = await params
-    const period = await prisma.hotelPricePeriod.findUnique({
-      where: { id: periodId },
-      include: { schedules: { include: { roomType: true } } },
-    })
-    if (!period) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
+    const { id, periodId } = await params
+    const period = await prisma.hotelPricePeriod.findFirst({ where: { id: periodId, hotelId: id }, include: { schedules: { include: { roomType: true } } } })
+    if (!period) return NextResponse.json(err('Periode harga hotel tidak ditemukan'), { status: 404 })
     return NextResponse.json(ok({ ...period, schedules: await withSellPrice('hotel', period.schedules) }))
   } catch (e) {
-    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
-      return NextResponse.json(err('Forbidden'), { status: 403 })
-    }
-    console.error('[admin/products/hotels/[id]/periods/[periodId]/GET]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return periodFailure(e, 'admin/products/hotels/[id]/periods/[periodId]/GET')
   }
 }
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
     await requireManager()
-    const { periodId } = await params
-    const parsed = updateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-
-    const period = await prisma.hotelPricePeriod.update({
-      where: { id: periodId }, data: parsed.data, include: { schedules: { include: { roomType: true } } },
-    })
-    return NextResponse.json(ok({ ...period, schedules: await withSellPrice('hotel', period.schedules) }))
+    const { id, periodId } = await params
+    const parsed = periodUpdateSchema.safeParse(await req.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    await updatePeriod(id, periodId, parsed.data)
+    return NextResponse.json(ok(null))
   } catch (e) {
-    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
-      return NextResponse.json(err('Forbidden'), { status: 403 })
-    }
-    if (isRecordNotFound(e)) return NextResponse.json(err('Periode harga hotel tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/hotels/[id]/periods/[periodId]/PUT]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return periodFailure(e, 'admin/products/hotels/[id]/periods/[periodId]/PUT')
   }
 }
 
 export async function DELETE(_req: Request, { params }: Ctx) {
   try {
     await requireManager()
-    const { periodId } = await params
-
-    // Periode yang salah satu tipe kamarnya masih punya booking — nonaktifkan (soft), bukan hapus
-    // fisik. docs/arsitektur-hotel.md §11.3.
-    const bookingCount = await prisma.bookingHotel.count({ where: { hotelRoomSchedule: { periodId } } })
-    if (bookingCount > 0) {
-      const period = await prisma.hotelPricePeriod.update({ where: { id: periodId }, data: { isActive: false } })
-      return NextResponse.json(ok(period))
-    }
-
-    await prisma.hotelPricePeriod.delete({ where: { id: periodId } })
-    return NextResponse.json(ok(null))
+    const { id, periodId } = await params
+    const r = await deletePeriod(id, periodId)
+    return NextResponse.json(ok(r))
   } catch (e) {
-    if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
-      return NextResponse.json(err('Forbidden'), { status: 403 })
-    }
-    if (isRecordNotFound(e)) return NextResponse.json(err('Periode harga hotel tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/hotels/[id]/periods/[periodId]/DELETE]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return periodFailure(e, 'admin/products/hotels/[id]/periods/[periodId]/DELETE')
   }
 }

@@ -3155,3 +3155,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Alternatives considered:** container query (tak tersedia di Tailwind 3.4 project ini tanpa plugin baru); menghitung subtotal di klien dari harga satuan — ditolak, harga hanya dihitung server; menampilkan ringkasan parsial — ditolak.
 **Security:** tidak ada masukan baru; `allowNoChange` hanya dipakai jalur parsial internal (bukan dari body); pratinjau parsial berjalan di balik `requireBookingManage`, dibatasi jumlah baris (tiap percobaan membuang ≥ 1 baris), semua tulisan di-rollback. 0 temuan.
 
+## 2026-11-02 — Hotel F1: periode harga CRUD lengkap + duplikat lewat satu penulis
+**Decision:** periode harga hotel ditulis HANYA lewat `lib/hotels/periods.ts` (kunci baris hotel, cakupan hotel di URL, hapus-aman bersama `dropPolymorphic`, simpan harga satu transaksi). Duplikat menyalin tipe kamar aktif, kuota total (terpakai 0), biaya modal + vendor, lalu harga jual manual lewat `setManualSell` berjejak. Aksi baris periode memakai ikon baku: `Pencil` edit, `Copy` duplikat (jenis aksi baru `duplicate` di `ACTION_ICONS`), `Trash2` hapus.
+**Rationale:** pemilik minta periode bisa diedit, dihapus, dan diduplikat agar admin tak menulis rate sheet dari nol; recheck menemukan hapus periode meninggalkan titik harga yatim dan tak menghitung rujukan paket, serta ubah tanggal tanpa validasi (SEC-161).
+**Alternatives considered:** salin juga kuota terpakai (ditolak — pemesanan milik periode lama); duplikat tanpa harga manual (ditolak — admin harus mengetik ulang); peran `requirePricingEdit` untuk duplikat (ditolak — menyalin HPP = mengedit HPP, tetap superadmin per `lib/pricing/policy.ts`).
+**Security:** 0 temuan baru; SEC-161 (Medium, pre-existing) ditutup dan dibuktikan dengan tes + mutasi. `bun audit` tanpa critical.
+

@@ -20,7 +20,8 @@ import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
+import { DATE_SHORT_MONTH, addDays, daysBetween, formatCalendarDate, type CalendarDate } from '@/lib/time'
+import { KindButton } from '@/components/shared/data-table/RowActions'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -354,6 +355,8 @@ export default function HotelDetailPage() {
               expanded={expandedPeriodId === p.id}
               onToggle={() => setExpandedPeriodId(expandedPeriodId === p.id ? null : p.id)}
               onSaved={loadPeriods}
+              ask={ask}
+              onDuplicated={async newId => { await loadPeriods(); setExpandedPeriodId(newId) }}
             />
           ))}
         </div>
@@ -437,10 +440,70 @@ export default function HotelDetailPage() {
 
 type RoomPriceInput = { hargaKamar: string; totalQuota: string; preview: { hppRupiah: number; sellPrice: number } | null }
 
-function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: {
+/** Tanggal bawaan duplikat: mulai sehari setelah periode sumber berakhir, panjang sama (admin bisa ubah). */
+function nextRange(start: string, end: string): { periodStart: string; periodEnd: string } {
+  const from = addDays(end as CalendarDate, 1)
+  return { periodStart: from, periodEnd: addDays(from, daysBetween(start as CalendarDate, end as CalendarDate)) }
+}
+
+type Ask = ReturnType<typeof useConfirm>['ask']
+type Notice = { tone: 'ok' | 'error'; text: string } | null
+
+async function send(url: string, method: string, body?: unknown): Promise<{ ok: boolean; data?: unknown; error?: string }> {
+  try {
+    const r = await fetch(url, { method, headers: body ? { 'Content-Type': 'application/json' } : undefined, body: body ? JSON.stringify(body) : undefined })
+    const j = await r.json().catch(() => null)
+    return r.ok ? { ok: true, data: j?.data } : { ok: false, error: j?.error ?? 'Permintaan gagal.' }
+  } catch { return { ok: false, error: 'Tidak dapat menghubungi server.' } }
+}
+
+function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved, ask, onDuplicated }: {
   period: Period; hotelId: string; roomTypes: RoomType[]
   expanded: boolean; onToggle: () => void; onSaved: () => void
+  ask: Ask; onDuplicated: (newId: string) => void
 }) {
+  const base = `/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}`
+  const [mode, setMode] = useState<'view' | 'edit' | 'duplicate'>('view')
+  const [dates, setDates] = useState({ periodStart: period.periodStart.slice(0, 10), periodEnd: period.periodEnd.slice(0, 10) })
+  const [busy, setBusy] = useState(false)
+  const [notice, setNotice] = useState<Notice>(null)
+  const startEdit = () => { setDates({ periodStart: period.periodStart.slice(0, 10), periodEnd: period.periodEnd.slice(0, 10) }); setNotice(null); setMode('edit') }
+  const startDuplicate = () => { setDates(nextRange(period.periodStart.slice(0, 10), period.periodEnd.slice(0, 10))); setNotice(null); setMode('duplicate') }
+
+  async function submitDates() {
+    setBusy(true); setNotice(null)
+    const r = mode === 'edit' ? await send(base, 'PUT', dates) : await send(`${base}/duplicate`, 'POST', dates)
+    setBusy(false)
+    if (!r.ok) { setNotice({ tone: 'error', text: r.error ?? 'Gagal.' }); return }
+    setMode('view')
+    if (mode === 'duplicate') onDuplicated((r.data as { id: string }).id)
+    else { setLoaded(false); await onSaved() }
+  }
+  async function setActive(isActive: boolean) {
+    setBusy(true); setNotice(null)
+    const r = await send(base, 'PUT', { isActive })
+    setBusy(false)
+    if (!r.ok) setNotice({ tone: 'error', text: r.error ?? 'Gagal.' }); else await onSaved()
+  }
+  async function remove() {
+    if (!(await ask({ title: `Hapus periode ${formatDate(period.periodStart)} – ${formatDate(period.periodEnd)}?`, body: 'Harga semua tipe kamar di periode ini ikut terhapus. Bila periode sudah dipakai booking atau paket, periode dinonaktifkan, bukan dihapus.' }))) return
+    setBusy(true); setNotice(null)
+    const r = await send(base, 'DELETE')
+    setBusy(false)
+    if (!r.ok) { setNotice({ tone: 'error', text: r.error ?? 'Gagal menghapus.' }); return }
+    const d = r.data as { deleted: boolean; message?: string }
+    if (!d.deleted) setNotice({ tone: 'ok', text: d.message ?? 'Dinonaktifkan.' })
+    await onSaved()
+  }
+  async function removeRoom(scheduleId: string, name: string) {
+    if (!(await ask({ title: `Hapus tipe kamar ${name} dari periode ini?`, body: 'Bila kamar ini sudah dipakai booking atau paket, kamar dinonaktifkan, bukan dihapus.' }))) return
+    const r = await send(`${base}/rooms/${scheduleId}`, 'DELETE')
+    if (!r.ok) { setNotice({ tone: 'error', text: r.error ?? 'Gagal menghapus.' }); return }
+    const d = r.data as { deleted: boolean; message?: string }
+    setNotice(d.deleted ? null : { tone: 'ok', text: d.message ?? 'Dinonaktifkan.' })
+    await loadPrices(); await onSaved()
+  }
+
   const [vendorId, setVendorId] = useState('')
   const [currency, setCurrency] = useState('USD')
   const [rooms, setRooms] = useState<Record<string, RoomPriceInput>>({})
@@ -448,8 +511,9 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [loaded, setLoaded] = useState(false)
-  const [schedules, setSchedules] = useState<{ scheduleId: string; roomTypeName: string }[]>([])
+  const [schedules, setSchedules] = useState<{ scheduleId: string; roomTypeId: string; roomTypeName: string }[]>([])
   const [priceTick, setPriceTick] = useState(0)
+  const [loadSeq, setLoadSeq] = useState(0) // pratinjau HPP/jual dihitung ulang setiap harga dimuat ulang (mis. sesudah ubah tanggal)
 
   async function loadPrices() {
     const r = await fetch(`/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}/prices`)
@@ -462,7 +526,8 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
         next[row.roomTypeId] = { hargaKamar: row.cost ? String(row.cost) : '', totalQuota: String(row.totalQuota), preview: null }
       }
       setRooms(next)
-      setSchedules((j.data.rooms as { scheduleId: string; roomTypeName: string }[]).map(r => ({ scheduleId: r.scheduleId, roomTypeName: r.roomTypeName })))
+      setLoadSeq(n => n + 1)
+      setSchedules((j.data.rooms as { scheduleId: string; roomTypeId: string; roomTypeName: string }[]).map(r => ({ scheduleId: r.scheduleId, roomTypeId: r.roomTypeId, roomTypeName: r.roomTypeName })))
     }
     setLoaded(true)
   }
@@ -497,7 +562,7 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
     }, 500)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currency, JSON.stringify(Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, v.hargaKamar])))])
+  }, [currency, loadSeq, JSON.stringify(Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, v.hargaKamar])))])
 
   const filledRooms = Object.entries(rooms).filter(([, v]) => Number(v.hargaKamar) > 0)
   const canSave = !!vendorId && filledRooms.length > 0
@@ -528,37 +593,66 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const prices = period.schedules.map(s => s.price)
+  const prices = period.schedules.filter(s => s.isActive).map(s => s.price)
   const priceRange: { min: number; max: number } | null = prices.length > 0
     ? { min: Math.min(...prices), max: Math.max(...prices) }
     : null
 
   return (
-    <div className={`border rounded-xl overflow-hidden ${!period.isActive ? 'opacity-50 border-admin-line' : 'border-admin-line'}`}>
-      <button type="button" onClick={onToggle} className="w-full flex items-center justify-between px-4 py-3 hover:bg-admin-spot/30 transition-colors text-left">
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] font-semibold text-admin-ink">
-            {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
+    <div className="overflow-hidden rounded-xl border border-admin-line">
+      <div className="flex items-center gap-2 pr-3">
+        <button type="button" onClick={onToggle} aria-expanded={expanded} className={`flex min-w-0 flex-1 flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-3 text-left transition-colors hover:bg-admin-spot/30 ${period.isActive ? '' : 'opacity-60'}`}>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-[13px] font-semibold text-admin-ink">{formatDate(period.periodStart)} – {formatDate(period.periodEnd)}</span>
+            <span className="text-[11px] text-admin-muted">{period.schedules.filter(s => s.isActive).length} tipe kamar terisi</span>
+            {!period.isActive && <span className="admin-badge-gray">Nonaktif</span>}
           </span>
-          <span className="text-[11px] text-admin-muted">{period.schedules.length} tipe kamar terisi</span>
+          <span className="text-[13px] font-bold text-admin-ink">
+            {priceRange
+              ? priceRange.min === priceRange.max ? formatRupiah(priceRange.min) : `${formatRupiah(priceRange.min)} – ${formatRupiah(priceRange.max)}`
+              : 'Belum ada harga'}
+          </span>
+        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <KindButton kind="edit" label="Ubah tanggal periode" onClick={startEdit} disabled={busy} />
+          <KindButton kind="duplicate" label="Duplikat periode" onClick={startDuplicate} disabled={busy} />
+          {period.isActive
+            ? <KindButton kind="delete" label="Hapus periode" onClick={remove} disabled={busy} />
+            : <KindButton kind="activate" label="Aktifkan periode" onClick={() => setActive(true)} disabled={busy} />}
         </div>
-        <span className="text-[13px] font-bold text-admin-ink">
-          {priceRange
-            ? priceRange.min === priceRange.max ? formatRupiah(priceRange.min) : `${formatRupiah(priceRange.min)} – ${formatRupiah(priceRange.max)}`
-            : 'Belum ada harga'}
-        </span>
-      </button>
+      </div>
+
+      {mode !== 'view' && (
+        <div className="space-y-2 border-t border-admin-line bg-admin-spot/30 px-4 py-3">
+          <p className="m-0 text-xs font-semibold text-admin-ink">
+            {mode === 'edit' ? 'Ubah tanggal periode' : `Duplikat periode ${formatDate(period.periodStart)} – ${formatDate(period.periodEnd)}`}
+          </p>
+          {mode === 'duplicate' && <p className="m-0 text-[11px] text-admin-muted">Tipe kamar, kuota, modal (vendor + mata uang), dan harga jual manual ikut disalin. Tentukan tanggal periode baru.</p>}
+          <div className="flex flex-wrap items-end gap-2">
+            <label className="space-y-1"><span className="block text-[11px] text-admin-muted">Mulai</span>
+              <input type="date" className="admin-inp" aria-label="Tanggal mulai periode" value={dates.periodStart} onChange={e => setDates(d => ({ ...d, periodStart: e.target.value }))} /></label>
+            <label className="space-y-1"><span className="block text-[11px] text-admin-muted">Akhir</span>
+              <input type="date" className="admin-inp" aria-label="Tanggal akhir periode" min={dates.periodStart} value={dates.periodEnd} onChange={e => setDates(d => ({ ...d, periodEnd: e.target.value }))} /></label>
+            <button type="button" onClick={submitDates} disabled={busy || !dates.periodStart || !dates.periodEnd} className="admin-btn-sm flex items-center gap-1.5 disabled:opacity-50">
+              <Save className="h-3.5 w-3.5" /> {busy ? 'Menyimpan...' : mode === 'edit' ? 'Simpan tanggal' : 'Buat salinan'}
+            </button>
+            <button type="button" onClick={() => { setMode('view'); setNotice(null) }} className="admin-btn-ghost text-sm">Batal</button>
+          </div>
+        </div>
+      )}
+      {notice && <p role={notice.tone === 'error' ? 'alert' : 'status'} className={`m-0 border-t border-admin-line px-4 py-2 text-[12px] font-medium ${notice.tone === 'error' ? 'text-admin-danger' : 'text-admin-muted'}`}>{notice.text}</p>}
       {expanded && (
         <div className="border-t border-admin-line p-4 space-y-3 bg-admin-spot/20">
           <p className="text-xs font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Vendor &amp; Mata Uang (berlaku untuk semua tipe kamar di periode ini)</p>
-          <div className="flex items-start gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             <div className="min-w-0 flex-1">
               <VendorPicker value={vendorId} onChange={setVendorId} context="hotel" label="Vendor hotel" />
             </div>
             <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
           </div>
 
-          <div className="space-y-2">
+          <div className="-mx-1 overflow-x-auto px-1">{/* HP: grid harga digeser ke samping, bukan terpotong */}
+          <div className="min-w-max space-y-2">
             <div className="flex items-center gap-2 text-[11px] text-admin-muted/70 font-medium px-1">
               <span className="w-24">Tipe Kamar</span>
               <span className="w-24">Harga ({currency})</span>
@@ -585,9 +679,11 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
                   <span className="w-32 text-[12.5px] font-semibold text-admin-ink truncate">
                     {v.preview ? formatRupiah(v.preview.sellPrice) : '—'}
                   </span>
+                  {(() => { const sch = schedules.find(x => x.roomTypeId === rt.id); return sch ? <KindButton kind="delete" label={`Hapus tipe kamar ${rt.name} dari periode`} onClick={() => removeRoom(sch.scheduleId, rt.name)} /> : null })()}
                 </div>
               )
             })}
+          </div>
           </div>
 
           <button
@@ -596,7 +692,7 @@ function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: 
             className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5"
           >
             <Save className="h-3.5 w-3.5" />
-            {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Semua Harga'}
+            {saving ? 'Menyimpan...' : saved ? 'Tersimpan' : 'Simpan Semua Harga'}
           </button>
           {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
 

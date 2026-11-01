@@ -28,7 +28,7 @@ async function lockRow(tx: Tx, table: LockTable, id: string): Promise<void> {
 }
 
 /** Baris polimorfik milik produk (tanpa FK). Pemilik baru yang menyimpan `productType`+`productId` WAJIB ditambahkan di sini. */
-async function dropPolymorphic(tx: Tx, productType: string, ids: string[]): Promise<void> {
+export async function dropPolymorphic(tx: Tx, productType: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const scope = { productType, productId: { in: ids } }
   await tx.productCost.deleteMany({ where: scope })
