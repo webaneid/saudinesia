@@ -87,7 +87,7 @@ t('RowActions/ActionLink (render nyata): hanya ikon + teks aksesibel (title/aria
   assert.equal((html.match(/<svg/g) ?? []).length, 2, 'dua ikon')
   assert.ok(!/>\s*(Lihat detail|Edit)\s*</.test(html), 'tak ada teks tampak — hanya ikon')
   assert.deepEqual(Object.keys(ACTION_ICONS).sort(), Object.keys(ACTION_LABELS).sort())
-  assert.deepEqual(Object.keys(ACTION_LABELS).sort(), ['activate', 'deactivate', 'delete', 'edit', 'view'])
+  assert.deepEqual(Object.keys(ACTION_LABELS).sort(), ['activate', 'deactivate', 'delete', 'duplicate', 'edit', 'view'])
 })
 
 t('DataTable (render nyata): kolom `actions` berjudul "Aksi", rata kanan, lebar pas, dan di kartu HP pindah ke dasar; baris kosong memakai teks kosong; loading tak merender data', () => {

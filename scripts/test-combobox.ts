@@ -118,12 +118,12 @@ t('Fase 3: kotak cari otomatis hanya untuk daftar > 7 pilihan atau onSearch; enu
   assert.match(comp, /findIndex\(o => o\.id === value\)/, 'sorotan awal = pilihan terpilih')
   const cur = read('components/shared/CurrencySelect.tsx')
   assert.match(cur, /clearable=\{false\}/)
-  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/muthowif/page.tsx']) {
+  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx', 'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/muthowif/page.tsx']) {
     const src = read(f)
     assert.match(src, /<CurrencySelect/, f)
     assert.doesNotMatch(src, /CURRENCIES\.map|currencies\.map/, `${f}: tak boleh membuat opsi mata uang sendiri`)
   }
-  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
+  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
 })
 
 t('bendera SVG (Windows tak menggambar emoji bendera): tiap negara punya berkas, berkas aman dan kecil, sinkron dengan paket sumber, LICENSE ikut, emoji bendera tak dipakai lagi', () => {

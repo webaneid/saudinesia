@@ -73,7 +73,7 @@ await t('F4: satu pemilih vendor — tak ada jalur lama (settings/vendors, quick
   assert.deepEqual(users, [
     'app/[locale]/admin/(protected)/bookings/[id]/CostActualsPanel.tsx', // pengeluaran aktual vendor (Fase 7)
     'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx',
-    'app/[locale]/admin/(protected)/products/hotels/[id]/page.tsx',
+    'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx',
     'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx',
     'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx',
     'components/admin/pricing/VendorCurrencyField.tsx',
@@ -93,7 +93,6 @@ await t('F4: editor biaya Pesawat/Transport/Hotel tidak lagi "Tersimpan ✓" saa
   for (const [f, call, errVar] of [
     ['flight/[id]/page.tsx', 'schedules/${id}/cost', 'setCostError'],
     ['transport/trips/[id]/page.tsx', 'pricing/${pricing.id}/cost', 'setSaveError'],
-    ['hotels/[id]/page.tsx', 'periods/${period.id}/prices', 'setSaveError'],
   ] as const) {
     const src = read(dir + f)
     const i = src.indexOf("method: 'PUT'", src.indexOf(call))
@@ -103,6 +102,13 @@ await t('F4: editor biaya Pesawat/Transport/Hotel tidak lagi "Tersimpan ✓" saa
     assert.ok(after.includes(errVar + '('), `${f}: galat simpan tidak ditampilkan`)
     assert.ok(after.indexOf('!r.ok') < after.search(/setSaved\(true\)|setCostSaved\(true\)/), `${f}: penanda sukses mendahului pemeriksaan`)
   }
+  // Hotel: harga kamar disimpan bersama tanggal lewat formulir periode (docs/arsitektur-hotel.md §12.4)
+  const hp = read(dir + 'hotels/[id]/PeriodForm.tsx')
+  const i = hp.indexOf("method: mode === 'edit' ? 'PUT' : 'POST'")
+  assert.ok(i > 0, 'hotel: panggilan simpan periode tidak ditemukan')
+  const after = hp.slice(i, i + 600)
+  assert.match(after, /if \(!r\.ok\) \{ setError\(/, 'hotel: galat simpan harus ditampilkan')
+  assert.ok(after.indexOf('!r.ok') < after.indexOf('onDone('), 'hotel: sukses mendahului pemeriksaan')
 })
 
 await t('F5: model Vendor tak lagi punya kolom lama (category/country/contactInfo); nameKey & countryCode wajib; tak ada kode yang membacanya', () => {

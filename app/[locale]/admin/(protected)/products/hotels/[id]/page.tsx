@@ -15,24 +15,11 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
-import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
-import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
-import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
+import { PeriodForm, type RoomType } from './PeriodForm'
+import { PeriodRow, type Period } from './PeriodRow'
 
-const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
-
-type RoomType = { id: string; name: string; defaultCapacity: number }
-type Schedule = {
-  id: string; roomTypeId: string; roomType: RoomType
-  price: number; totalQuota: number; pendingQuota: number; bookedQuota: number; isActive: boolean
-}
-type Period = {
-  id: string; periodStart: string; periodEnd: string; isActive: boolean
-  schedules: Schedule[]
-}
 type AddressRecord = {
   type: 'domestic' | 'international'; fullAddress: string; postalCode: string | null
   provinceId: string | null; regencyId: string | null; districtId: string | null; villageId: string | null
@@ -56,10 +43,6 @@ function toAddressValue(a: AddressRecord): AddressValue {
 type HotelService = {
   id: string; serviceName: string; serviceType: string | null
   price: number; description: string | null; isActive: boolean
-}
-
-function formatDate(d: string) {
-  return formatCalendarDate(d, DATE_SHORT_MONTH)
 }
 
 export default function HotelDetailPage() {
@@ -86,9 +69,6 @@ export default function HotelDetailPage() {
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
   const [showPeriodForm, setShowPeriodForm] = useState(false)
-  const [savingPeriod, setSavingPeriod] = useState(false)
-  const [periodForm, setPeriodForm] = useState({ periodStart: '', periodEnd: '' })
-  const [periodError, setPeriodError] = useState('')
 
   const [expandedPeriodId, setExpandedPeriodId] = useState<string | null>(null)
 
@@ -165,25 +145,6 @@ export default function HotelDetailPage() {
       setError('Tidak dapat menghubungi server.')
     } finally {
       setSaving(false)
-    }
-  }
-
-  async function handleSavePeriod() {
-    setSavingPeriod(true); setPeriodError('')
-    const r = await fetch(`/api/v1/admin/products/hotels/${id}/periods`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(periodForm),
-    })
-    const j = await r.json()
-    setSavingPeriod(false)
-    if (j.success) {
-      await loadPeriods()
-      setShowPeriodForm(false)
-      setPeriodForm({ periodStart: '', periodEnd: '' })
-      if (j.data?.id) setExpandedPeriodId(j.data.id)
-    } else {
-      setPeriodError(j.error ?? 'Gagal menyimpan periode')
     }
   }
 
@@ -307,34 +268,17 @@ export default function HotelDetailPage() {
       {/* Periode & Harga Kamar */}
       <MetaBox
         title="Periode & Harga Kamar" icon={Wallet}
-        description="Satu periode tanggal bisa punya harga berbeda untuk banyak tipe kamar sekaligus — sama seperti rate sheet dari vendor."
+        description="Satu periode tanggal bisa punya harga berbeda untuk banyak tipe kamar sekaligus — sama seperti rate sheet dari vendor. Edit dan Duplikat membuka tanggal beserta seluruh isinya."
         aside={<button onClick={() => setShowPeriodForm(!showPeriodForm)} className="admin-btn-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Tambah Periode</button>}
       >
 
         {showPeriodForm && (
-          <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
-            <div className="grid md:grid-cols-2 gap-3">
-              <div>
-                <p className="text-xs text-admin-muted mb-1">Periode Mulai</p>
-                <input type="date" className="admin-inp" value={periodForm.periodStart} onChange={e => setPeriodForm(f => ({ ...f, periodStart: e.target.value }))} />
-              </div>
-              <div>
-                <p className="text-xs text-admin-muted mb-1">Periode Akhir</p>
-                <input type="date" className="admin-inp" value={periodForm.periodEnd} onChange={e => setPeriodForm(f => ({ ...f, periodEnd: e.target.value }))} />
-              </div>
-            </div>
-            {periodError && <p className="text-[12px] text-admin-danger">{periodError}</p>}
-            <p className="text-[11px] text-admin-muted/70">Harga tiap tipe kamar diisi setelah periode dibuat.</p>
-            <div className="flex gap-2">
-              <button
-                onClick={handleSavePeriod}
-                disabled={savingPeriod || !periodForm.periodStart || !periodForm.periodEnd}
-                className="admin-btn-sm disabled:opacity-50"
-              >
-                {savingPeriod ? 'Menyimpan...' : 'Simpan Periode →'}
-              </button>
-              <button onClick={() => setShowPeriodForm(false)} className="admin-btn-ghost text-sm">Batal</button>
-            </div>
+          <div className="overflow-hidden rounded-xl border border-admin-line">
+            <PeriodForm
+              mode="create" hotelId={hotel.id} roomTypes={roomTypes} ask={ask}
+              onCancel={() => setShowPeriodForm(false)}
+              onDone={async newId => { await loadPeriods(); setShowPeriodForm(false); setExpandedPeriodId(newId) }}
+            />
           </div>
         )}
 
@@ -354,6 +298,8 @@ export default function HotelDetailPage() {
               expanded={expandedPeriodId === p.id}
               onToggle={() => setExpandedPeriodId(expandedPeriodId === p.id ? null : p.id)}
               onSaved={loadPeriods}
+              ask={ask}
+              onDuplicated={async newId => { await loadPeriods(); setExpandedPeriodId(newId) }}
             />
           ))}
         </div>
@@ -432,179 +378,5 @@ export default function HotelDetailPage() {
       }
     />
     </>
-  )
-}
-
-type RoomPriceInput = { hargaKamar: string; totalQuota: string; preview: { hppRupiah: number; sellPrice: number } | null }
-
-function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSaved }: {
-  period: Period; hotelId: string; roomTypes: RoomType[]
-  expanded: boolean; onToggle: () => void; onSaved: () => void
-}) {
-  const [vendorId, setVendorId] = useState('')
-  const [currency, setCurrency] = useState('USD')
-  const [rooms, setRooms] = useState<Record<string, RoomPriceInput>>({})
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-  const [loaded, setLoaded] = useState(false)
-  const [schedules, setSchedules] = useState<{ scheduleId: string; roomTypeName: string }[]>([])
-  const [priceTick, setPriceTick] = useState(0)
-
-  async function loadPrices() {
-    const r = await fetch(`/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}/prices`)
-    const j = await r.json()
-    if (j.data) {
-      setVendorId(j.data.vendorId ?? '')
-      setCurrency(j.data.currency ?? 'USD')
-      const next: Record<string, RoomPriceInput> = {}
-      for (const row of j.data.rooms as { roomTypeId: string; cost: number | null; totalQuota: number }[]) {
-        next[row.roomTypeId] = { hargaKamar: row.cost ? String(row.cost) : '', totalQuota: String(row.totalQuota), preview: null }
-      }
-      setRooms(next)
-      setSchedules((j.data.rooms as { scheduleId: string; roomTypeName: string }[]).map(r => ({ scheduleId: r.scheduleId, roomTypeName: r.roomTypeName })))
-    }
-    setLoaded(true)
-  }
-
-  useEffect(() => { if (expanded && !loaded) loadPrices() }, [expanded, loaded])
-
-  function updateRoom(roomTypeId: string, field: 'hargaKamar' | 'totalQuota', value: string) {
-    setRooms(p => ({
-      ...p,
-      [roomTypeId]: { hargaKamar: '', totalQuota: '10', preview: null, ...p[roomTypeId], [field]: value },
-    }))
-  }
-
-  // Live preview per tipe kamar — debounce 500ms, panggil endpoint simulate yang sama dipakai §10.
-  useEffect(() => {
-    const timer = setTimeout(async () => {
-      const entries = Object.entries(rooms).filter(([, v]) => Number(v.hargaKamar) > 0)
-      if (entries.length === 0) return
-      const results = await Promise.all(entries.map(async ([roomTypeId, v]) => {
-        const params = new URLSearchParams({ hargaKamar: v.hargaKamar, currency })
-        const r = await fetch(`/api/v1/admin/products/hotels/simulate?${params}`)
-        const j = await r.json()
-        return [roomTypeId, j.data ? { hppRupiah: j.data.hppRupiah, sellPrice: j.data.sellPrice } : null] as const
-      }))
-      setRooms(p => {
-        const next = { ...p }
-        for (const [roomTypeId, preview] of results) {
-          if (next[roomTypeId]) next[roomTypeId] = { ...next[roomTypeId], preview }
-        }
-        return next
-      })
-    }, 500)
-    return () => clearTimeout(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currency, JSON.stringify(Object.fromEntries(Object.entries(rooms).map(([k, v]) => [k, v.hargaKamar])))])
-
-  const filledRooms = Object.entries(rooms).filter(([, v]) => Number(v.hargaKamar) > 0)
-  const canSave = !!vendorId && filledRooms.length > 0
-
-  async function handleSaveAll() {
-    setSaving(true)
-    setSaveError(null)
-    const r = await fetch(`/api/v1/admin/products/hotels/${hotelId}/periods/${period.id}/prices`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        vendorId, currency,
-        rooms: filledRooms.map(([roomTypeId, v]) => ({
-          roomTypeId, cost: Number(v.hargaKamar), totalQuota: Number(v.totalQuota || 0),
-        })),
-      }),
-    })
-    if (!r.ok) {
-      const j = await r.json().catch(() => null)
-      setSaveError(j?.error ?? 'Harga gagal disimpan.')
-      setSaving(false)
-      return
-    }
-    await onSaved()
-    await loadPrices()
-    setPriceTick(t => t + 1)
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-  }
-
-  const prices = period.schedules.map(s => s.price)
-  const priceRange: { min: number; max: number } | null = prices.length > 0
-    ? { min: Math.min(...prices), max: Math.max(...prices) }
-    : null
-
-  return (
-    <div className={`border rounded-xl overflow-hidden ${!period.isActive ? 'opacity-50 border-admin-line' : 'border-admin-line'}`}>
-      <button type="button" onClick={onToggle} className="w-full flex items-center justify-between px-4 py-3 hover:bg-admin-spot/30 transition-colors text-left">
-        <div className="flex items-center gap-3">
-          <span className="text-[13px] font-semibold text-admin-ink">
-            {formatDate(period.periodStart)} – {formatDate(period.periodEnd)}
-          </span>
-          <span className="text-[11px] text-admin-muted">{period.schedules.length} tipe kamar terisi</span>
-        </div>
-        <span className="text-[13px] font-bold text-admin-ink">
-          {priceRange
-            ? priceRange.min === priceRange.max ? formatRupiah(priceRange.min) : `${formatRupiah(priceRange.min)} – ${formatRupiah(priceRange.max)}`
-            : 'Belum ada harga'}
-        </span>
-      </button>
-      {expanded && (
-        <div className="border-t border-admin-line p-4 space-y-3 bg-admin-spot/20">
-          <p className="text-xs font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-3.5 w-3.5" /> Vendor &amp; Mata Uang (berlaku untuk semua tipe kamar di periode ini)</p>
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <VendorPicker value={vendorId} onChange={setVendorId} context="hotel" label="Vendor hotel" />
-            </div>
-            <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
-          </div>
-
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-[11px] text-admin-muted/70 font-medium px-1">
-              <span className="w-24">Tipe Kamar</span>
-              <span className="w-24">Harga ({currency})</span>
-              <span className="w-20">Kuota</span>
-              <span className="w-28">HPP</span>
-              <span className="w-32">Harga Jual</span>
-            </div>
-            {roomTypes.map(rt => {
-              const v = rooms[rt.id] ?? { hargaKamar: '', totalQuota: '10', preview: null }
-              return (
-                <div key={rt.id} className="flex items-center gap-2">
-                  <span className="w-24 text-[12.5px] text-admin-ink/80 truncate">{rt.name}</span>
-                  <input
-                    type="number" className="admin-inp w-24" placeholder="0"
-                    value={v.hargaKamar} onChange={e => updateRoom(rt.id, 'hargaKamar', e.target.value)}
-                  />
-                  <input
-                    type="number" className="admin-inp w-20" placeholder="Kuota"
-                    value={v.totalQuota} onChange={e => updateRoom(rt.id, 'totalQuota', e.target.value)}
-                  />
-                  <span className="w-28 text-[12.5px] font-semibold text-admin-ink truncate">
-                    {v.preview ? formatRupiah(Math.round(v.preview.hppRupiah)) : '—'}
-                  </span>
-                  <span className="w-32 text-[12.5px] font-semibold text-admin-ink truncate">
-                    {v.preview ? formatRupiah(v.preview.sellPrice) : '—'}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-
-          <button
-            onClick={handleSaveAll}
-            disabled={saving || !canSave}
-            className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Semua Harga'}
-          </button>
-          {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
-
-          {schedules.map(s => (
-            <PriceCard key={s.scheduleId} ownerType="hotel" ownerId={s.scheduleId} title={`Harga kamar ${s.roomTypeName}: modal, jual, untung`} reloadKey={priceTick} onChanged={() => { void loadPrices(); void onSaved() }} />
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
