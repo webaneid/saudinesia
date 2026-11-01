@@ -5,6 +5,8 @@ import { AutocompleteSelect, type AutocompleteOption } from './AutocompleteSelec
 import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
+import { ExternalLink, MapPin, Search } from 'lucide-react'
+import { mapsSearchUrl, parseMapsUrl } from '@/lib/address/maps'
 
 export type AddressValue = {
   type: 'domestic' | 'international'
@@ -17,6 +19,8 @@ export type AddressValue = {
   countryCode: string | null
   city: string
   stateRegion: string
+  /** Tautan Google Maps (hanya dipakai bila `withMap`) — '' = kosong. */
+  mapsUrl?: string
 }
 
 export const EMPTY_ADDRESS: AddressValue = {
@@ -31,12 +35,16 @@ type WilayahRow = { id: string; name: string }
 type Props = {
   value: AddressValue
   onChange: (value: AddressValue) => void
+  /** Tampilkan "Lokasi Google Maps" opsional (docs/arsitektur-hotel.md §12.5) — hanya untuk alamat yang lokasinya publik (hotel), bukan rumah jamaah. */
+  withMap?: boolean
+  /** Kata kunci tombol "Cari di Google Maps" (mis. nama hotel + kota); bawaan = alamat lengkap. */
+  mapsQuery?: string
 }
 
 // Komponen alamat reusable — 2 tab (Indonesia/Luar Negeri), combobox berjenjang untuk wilayah
 // resmi. docs/arsitektur-alamat.md §3.1-§3.2. Murni controlled form (tidak memanggil POST/PUT
 // /api/v1/address sendiri) — form pemanggil yang memutuskan kapan menyimpan.
-export function AddressPicker({ value, onChange }: Props) {
+export function AddressPicker({ value, onChange, withMap = false, mapsQuery }: Props) {
   const [provinces, setProvinces] = useState<AutocompleteOption[]>([])
   const [regencies, setRegencies] = useState<AutocompleteOption[]>([])
   const [districts, setDistricts] = useState<AutocompleteOption[]>([])
@@ -92,7 +100,7 @@ export function AddressPicker({ value, onChange }: Props) {
   }
 
   function switchTab(type: 'domestic' | 'international') {
-    onChange({ ...EMPTY_ADDRESS, type, fullAddress: value.fullAddress, postalCode: value.postalCode })
+    onChange({ ...EMPTY_ADDRESS, type, fullAddress: value.fullAddress, postalCode: value.postalCode, ...(withMap ? { mapsUrl: value.mapsUrl ?? '' } : {}) })
   }
 
   return (
@@ -169,6 +177,34 @@ export function AddressPicker({ value, onChange }: Props) {
         <p className="text-xs text-muted-foreground mb-1">Kode Pos</p>
         <Input className="w-40" value={value.postalCode} onChange={e => set({ postalCode: e.target.value })} />
       </div>
+      {withMap && <MapsField url={value.mapsUrl ?? ''} query={(mapsQuery ?? '').trim() || value.fullAddress} onChange={mapsUrl => set({ mapsUrl })} />}
+    </div>
+  )
+}
+
+// Lokasi Google Maps TANPA API key: cari lewat Maps URLs publik di tab baru → salin tautan "Bagikan" → tempel. Validasi yang sama dengan server (lib/address/maps.ts).
+function MapsField({ url, query, onChange }: { url: string; query: string; onChange: (url: string) => void }) {
+  const parsed = url.trim() ? parseMapsUrl(url) : null
+  return (
+    <div className="space-y-1.5 rounded-md border border-input p-3">
+      <p className="flex items-center gap-1.5 text-xs font-medium text-foreground"><MapPin className="h-3.5 w-3.5" /> Lokasi Google Maps <span className="font-normal text-muted-foreground">(opsional)</span></p>
+      <p className="text-xs text-muted-foreground">Cari tempatnya di Google Maps, tekan &quot;Bagikan&quot; lalu &quot;Salin link&quot;, dan tempel tautannya di sini.</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input className="min-w-0 flex-1 basis-64" inputMode="url" aria-label="Tautan Google Maps" placeholder="https://maps.app.goo.gl/…" value={url} onChange={e => onChange(e.target.value)} />
+        <a href={mapsSearchUrl(query)} target="_blank" rel="noopener noreferrer" aria-disabled={!query.trim()}
+          className={`inline-flex items-center gap-1.5 rounded-md border border-input px-3 py-2 text-xs font-medium hover:bg-accent ${query.trim() ? '' : 'pointer-events-none opacity-50'}`}>
+          <Search className="h-3.5 w-3.5" /> Cari di Google Maps
+        </a>
+      </div>
+      {parsed && !parsed.ok && <p role="alert" className="text-xs text-destructive">{parsed.message}</p>}
+      {parsed?.ok && (
+        <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <a href={parsed.value.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-2 hover:underline">
+            <ExternalLink className="h-3.5 w-3.5" /> Buka tautan
+          </a>
+          {parsed.value.latitude !== null && <span>Koordinat {parsed.value.latitude}, {parsed.value.longitude}</span>}
+        </p>
+      )}
     </div>
   )
 }

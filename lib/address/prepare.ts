@@ -2,6 +2,7 @@ import { prisma } from '@/lib/db'
 import type { Prisma } from '@prisma/client'
 import { COUNTRIES } from '@/lib/constants/countries'
 import type { AddressInput } from '@/lib/validators/address'
+import { parseMapsUrl } from './maps'
 
 type PrepareResult =
   | { ok: true; data: Prisma.AddressUncheckedCreateInput }
@@ -10,6 +11,15 @@ type PrepareResult =
 // Validasi hierarki (kecamatan benar-benar anak dari kab/kota yang dipilih, dst.) dan kode
 // negara — server-side, tidak percaya urutan klik di UI. docs/arsitektur-alamat.md §3.2/§5.
 export async function prepareAddressData(input: AddressInput): Promise<PrepareResult> {
+  const base = await prepareBase(input)
+  if (!base.ok || input.mapsUrl === undefined) return base // tanpa kolom peta (profil/vendor/invoice) → lokasi lama tak disentuh
+  if (input.mapsUrl === null) return { ok: true, data: { ...base.data, mapsUrl: null, latitude: null, longitude: null } }
+  const m = parseMapsUrl(input.mapsUrl) // diperiksa ulang di server: koordinat SELALU diturunkan dari tautan, tak pernah dari klien
+  if (!m.ok) return { ok: false, message: m.message }
+  return { ok: true, data: { ...base.data, mapsUrl: m.value.url, latitude: m.value.latitude, longitude: m.value.longitude } }
+}
+
+async function prepareBase(input: AddressInput): Promise<PrepareResult> {
   if (input.type === 'domestic') {
     const { provinceId, regencyId, districtId, villageId } = input
     if (provinceId && !(await prisma.addressProvince.findUnique({ where: { id: provinceId }, select: { id: true } }))) return { ok: false, message: 'Provinsi tidak dikenal' }

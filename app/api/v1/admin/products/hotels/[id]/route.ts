@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
-import { addressSchema } from '@/lib/validators/address'
+import { addressWithMapSchema } from '@/lib/validators/address'
 import { upsertAddress } from '@/lib/address/prepare'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
@@ -17,8 +17,8 @@ const updateSchema = z.object({
   description:      richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   facilities:       z.array(z.string()).optional(),
   isActive:         z.boolean().optional(),
-  address:          addressSchema.optional(), // docs/arsitektur-alamat.md §9
-})
+  address:          addressWithMapSchema.optional(), // docs/arsitektur-alamat.md §9 + lokasi Google Maps (docs/arsitektur-hotel.md §12.5)
+}).strict()
 
 type Ctx = { params: Promise<{ id: string }> }
 

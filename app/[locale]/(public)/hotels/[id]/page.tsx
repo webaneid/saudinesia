@@ -3,7 +3,8 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { prisma } from '@/lib/db'
 import { getProductImages } from '@/lib/media/urls'
-import { MapPin, Star, ArrowLeft, CheckCircle, Building2 } from 'lucide-react'
+import { MapPin, Star, ArrowLeft, CheckCircle, Building2, ExternalLink } from 'lucide-react'
+import { parseMapsUrl } from '@/lib/address/maps'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { formatRupiah, formatDistance } from '@/lib/utils'
@@ -41,9 +42,12 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
         orderBy: { periodStart: 'asc' },
       },
       services: { where: { isActive: true } },
+      address: { select: { mapsUrl: true } }, // hanya tautan lokasi (docs/arsitektur-hotel.md §12.5)
     },
   })
   if (!hotelRaw) notFound()
+  // Diperiksa ulang saat tampil (host Google Maps saja) — tautan tersimpan tak dipercaya mentah.
+  const mapsLink = hotelRaw.address?.mapsUrl ? parseMapsUrl(hotelRaw.address.mapsUrl) : null
   // Harga jual per jadwal kamar dari titik harga (docs/arsitektur-harga-terpadu.md §15).
   const hotelPrices = await sellPrices('hotel', hotelRaw.pricePeriods.flatMap(p => p.schedules.map(s => s.id)))
   const servicePrices = await sellPrices('hotel_service', hotelRaw.services.map(s => s.id))
@@ -84,9 +88,16 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
               </span>
             </div>
           </div>
-          <Button asChild>
-            <Link href={`/${locale}/register`}>Pesan Sekarang</Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            {mapsLink?.ok && (
+              <Button asChild variant="outline">
+                <a href={mapsLink.value.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /> Lihat di Google Maps</a>
+              </Button>
+            )}
+            <Button asChild>
+              <Link href={`/${locale}/register`}>Pesan Sekarang</Link>
+            </Button>
+          </div>
         </div>
       </div>
 

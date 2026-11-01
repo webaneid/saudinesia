@@ -24,6 +24,7 @@ type AddressRecord = {
   type: 'domestic' | 'international'; fullAddress: string; postalCode: string | null
   provinceId: string | null; regencyId: string | null; districtId: string | null; villageId: string | null
   countryCode: string | null; city: string | null; stateRegion: string | null
+  mapsUrl: string | null
 } | null
 type Hotel = {
   id: string; name: string; city: string; stars: number | null
@@ -33,11 +34,12 @@ type Hotel = {
 }
 
 function toAddressValue(a: AddressRecord): AddressValue {
-  if (!a) return EMPTY_ADDRESS
+  if (!a) return { ...EMPTY_ADDRESS, mapsUrl: '' }
   return {
     type: a.type, fullAddress: a.fullAddress, postalCode: a.postalCode ?? '',
     provinceId: a.provinceId, regencyId: a.regencyId, districtId: a.districtId, villageId: a.villageId,
     countryCode: a.countryCode, city: a.city ?? '', stateRegion: a.stateRegion ?? '',
+    mapsUrl: a.mapsUrl ?? '',
   }
 }
 type HotelService = {
@@ -123,6 +125,7 @@ export default function HotelDetailPage() {
   }
 
   async function handleSave() {
+    if (address.mapsUrl?.trim() && !address.fullAddress.trim()) { setError('Isi Alamat Lengkap hotel dulu — lokasi Google Maps disimpan bersama alamat.'); return }
     setSaving(true); setError(null)
     try {
       const res = await fetch(`/api/v1/admin/products/hotels/${id}`, {
@@ -262,7 +265,7 @@ export default function HotelDetailPage() {
       </MetaBox>
 
       <MetaBox title="Alamat" icon={MapPin} description="docs/arsitektur-alamat.md" defaultOpen={!!address.fullAddress.trim()}>
-        <AddressPicker value={address} onChange={setAddress} />
+        <AddressPicker value={address} onChange={setAddress} withMap mapsQuery={[form.name, form.city === 'makkah' ? 'Makkah' : 'Madinah'].filter(Boolean).join(' ')} />
       </MetaBox>
 
       {/* Periode & Harga Kamar */}

@@ -1391,6 +1391,12 @@ model Address {
   city        String?
   stateRegion String?
 
+  // Lokasi Google Maps OPSIONAL (docs/arsitektur-hotel.md §12.5) — hanya diterima lewat `addressWithMapSchema` (hotel), bukan profil jamaah.
+  // `mapsUrl` = tautan https ke host Google Maps yang diizinkan (lib/address/maps.ts); koordinat diisi server bila terbaca dari tautan panjang.
+  mapsUrl   String?
+  latitude  Decimal? @db.Decimal(9, 6)
+  longitude Decimal? @db.Decimal(9, 6)
+
   province AddressProvince? @relation(fields: [provinceId], references: [id])
   regency  AddressRegency?  @relation(fields: [regencyId], references: [id])
   district AddressDistrict? @relation(fields: [districtId], references: [id])
