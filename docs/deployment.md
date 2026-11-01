@@ -149,3 +149,9 @@ Migrasi `20261029090000_price_legacy_columns_drop` menghapus 17 kolom (tak bisa 
 
 ## Catatan operasional: migrasi Fase 7 (`20261030090000_adjustments_cost_actuals`, 2026-10-28)
 Migrasi memuat perbaikan data: pembayaran **terkonfirmasi bernilai 0** diisi total booking-nya (alur lama mengonfirmasi lunas). Sebelum deploy produksi periksa pada salinan DB: `select "bookingId", count(*) from payments where status = 'confirmed' group by 1 having count(*) > 1` — bila ada booking dengan lebih dari satu pembayaran terkonfirmasi bernilai 0, isi hanya satu (yang terbaru) secara manual sebelum migrasi agar "dibayar" di laporan tidak menggelembung (SEC-97). Jumlah pembayaran kini diisi saat konfirmasi (bawaan total; kurang dari total ditolak).
+
+## Catatan operasional: kunci data pribadi NIK/paspor (data jamaah Fase 1, ADR-0005, 2026-11-02)
+- `PII_INDEX_KEY` dan `PII_ENCRYPTION_KEY` dibuat otomatis oleh `scripts/buat-env-production.sh` (64 hex, berbeda satu sama lain dan dari `JWT_SECRET`). **Cadangkan keduanya di password manager**: kunci hilang = NIK dan nomor paspor tersimpan tidak bisa dibaca lagi, dan keunikan NIK tidak bisa diperiksa.
+- Kunci kosong/lemah tidak menjatuhkan server: boot mencatat `[pii] …` dan fitur data jamaah menolak bekerja (fail-closed) sampai diperbaiki.
+- **Rotasi kunci enkripsi**: pindahkan kunci lama ke `PII_ENCRYPTION_KEYS_RETIRED="<versi lama>:<hex lama>"`, isi `PII_ENCRYPTION_KEY` baru, naikkan `PII_ENCRYPTION_KEY_VERSION`, restart. Nilai lama tetap terbaca; enkripsi ulang bertahap memakai `needsReencrypt` (alat enkripsi ulang dibuat bersama tabel jamaah, Fase 2+). Kunci lama baru boleh dibuang setelah tidak ada ciphertext versi itu.
+- **`PII_INDEX_KEY` tidak dirotasi biasa**: menggantinya berarti menghitung ulang semua indeks NIK/paspor dari nilai terdekripsi (butuh alat khusus); lakukan hanya bila kunci bocor.

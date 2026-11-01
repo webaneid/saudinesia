@@ -38,6 +38,8 @@ PW_REDIS="$(acak 24)"
     -e "s#^MINIO_ACCESS_KEY=\$#MINIO_ACCESS_KEY=saudinesia$(acak 4)#" \
     -e "s#^MINIO_SECRET_KEY=\$#MINIO_SECRET_KEY=$(acak 24)#" \
     -e "s#^JWT_SECRET=\$#JWT_SECRET=$(acak 32)#" \
+    -e "s#^PII_INDEX_KEY=\$#PII_INDEX_KEY=$(acak 32)#" \
+    -e "s#^PII_ENCRYPTION_KEY=\$#PII_ENCRYPTION_KEY=$(acak 32)#" \
     -e "s#^WHATSAPP_WEBHOOK_SECRET=\$#WHATSAPP_WEBHOOK_SECRET=$(acak 32)#" \
     .env.production.example > .env.production )
 chmod 600 .env.production
@@ -45,5 +47,5 @@ chmod 600 .env.production
 echo "OK: $DIR/.env.production dibuat (hanya bisa dibaca user ini)."
 KOSONG="$(grep -E '^[A-Z_]+=$' .env.production | cut -d= -f1 | tr '\n' ' ')"
 [ -z "$KOSONG" ] || echo "Isi MANUAL (masih kosong): $KOSONG"
-echo "Simpan cadangan JWT_SECRET & POSTGRES_PASSWORD di password manager."
+echo "Simpan cadangan JWT_SECRET, POSTGRES_PASSWORD, PII_INDEX_KEY & PII_ENCRYPTION_KEY di password manager (kunci PII hilang = NIK/paspor tak terbaca)."
 echo "WHATSAPP_WEBHOOK_SECRET dibuat otomatis — salin NILAI YANG SAMA ke GOWA (WHATSAPP_WEBHOOK_SECRET) dan atur WHATSAPP_WEBHOOK=https://$APP_DOMAIN/api/v1/webhooks/whatsapp, WHATSAPP_WEBHOOK_EVENTS=message."
