@@ -850,6 +850,17 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] Hapus prototipe `/campaigns` (dasbor donasi statis, di luar produk) + token Tailwind legacy miliknya — selesai 2026-10-30 atas keputusan pemilik. Pengecualian `<table>` di tes kini kosong.
 - [x] Pembersihan sisa booking lama (keputusan pemilik 2026-10-30: booking engine akan dibuat baru) — dihapus: `PilgrimForm`, `DocumentUploader`, `Footer`, `LocaleSwitcher`, `lib/validators/contact.ts`, `docs/m4-plan.md`, halaman jamaah `/bookings` & `/groups` (TODO), model `Group`/`GroupMember`/`BookingVisa` + `Booking.groupId` (migrasi `20261102090000` fail-closed), dependensi `@tiptap/extension-image`/`-link`/`@types/jszip` (`@tiptap/pm` dipertahankan: peer wajib).
 
+## Data Jamaah tersimpan + dokumen dinamis (`docs/arsitektur-jamaah.md`, ADR-0005) — rencana disetujui pemilik 2026-11-02
+- [x] Fase 0 — dokumen rencana (keputusan K1–K12, C1–C3) — PR #94
+- [x] Fase 1 — fondasi PII `lib/pii/` (NIK & paspor: normalisasi, petunjuk NIK, HMAC indeks, AES-256-GCM berversi kunci + rotasi, samaran), kunci env terpisah + peringatan boot + generator env produksi, ADR-0005, `scripts/test-pii.ts` (+ penjaga sumber) — 2026-11-02
+- [ ] Fase 2 — skema identitas + kartu + layanan dedup + hapus akun
+- [ ] Fase 3 — Jamaah Saya (UI + API, admin atas nama pelanggan)
+- [ ] Fase 4 — dokumen jamaah (katalog jenis, unggah cek isi + WebP, repeater; menutup SEC-164)
+- [ ] Fase 5 — syarat dokumen per produk + kelengkapan + aturan paspor 6 bulan
+- [ ] Fase 6 — pengajuan & verifikasi admin
+- [ ] Fase 7 — integrasi booking (pilih kartu, snapshot, alamat sungguhan)
+- [ ] Fase 8 — gudang admin (identitas, konflik, gabung, buka NIK berjejak)
+
 ## Booking Engine v2 (admin lebih dulu, invoice, pembayaran bertahap, buku kas) — dirancang 2026-10-30
 Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0 recheck, §5 zona waktu, §10 fase); ADR-0004 (Proposed).
 - [x] Fase 0 — dokumen arsitektur + ADR-0004 + aturan waktu di `CLAUDE.md` (2026-10-30)

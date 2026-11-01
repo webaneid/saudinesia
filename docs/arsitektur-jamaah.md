@@ -1,6 +1,6 @@
 # Arsitektur — Data Jamaah Tersimpan + Komponen Dokumen Dinamis
 
-> **Status: RENCANA DISETUJUI PEMILIK (2026-11-02) — keputusan Q1–Q12 (§2) dan konfirmasi C1–C3 (§14) final; fase §13 disetujui. Belum ada kode; eksekusi mulai Fase 1.** Keputusan struktural (identitas global berkunci NIK + salinan per akun) dicatat sebagai ADR-0005 di Fase 1.
+> **Status: RENCANA DISETUJUI PEMILIK (2026-11-02) — keputusan Q1–Q12 (§2) dan konfirmasi C1–C3 (§14) final; fase §13 disetujui. Fase 1 (fondasi `lib/pii/`) SELESAI 2026-11-02 (§6 as-built); Fase 2–8 belum.** Keputusan struktural (identitas global berkunci NIK + salinan per akun) dicatat sebagai ADR-0005 di Fase 1.
 >
 > Dokumen ini akan menjadi source of truth untuk: jamaah tersimpan per akun, gudang identitas jamaah global, dokumen jamaah, serta pengajuan & verifikasi data jamaah. Ia **memperluas** `docs/arsitektur-manifest.md` (form per booking tetap ada sebagai snapshot), **menggantikan** model `Document` dan `DocumentRequirement.docType` teks bebas di `docs/arsitektur-dokumen.md`, dan wajib diselaraskan dengan `docs/arsitektur-hapus-akun.md` dan `docs/arsitektur-booking-engine-v2.md`.
 
@@ -15,7 +15,7 @@
 5. Pengguna bisa menjadi jamaah untuk dirinya sendiri.
 6. Isi data jamaah: nama lengkap sesuai paspor, NIK, alamat lengkap (`Address`/`AddressPicker`), kontak (`ContactPicker`), tempat & tanggal lahir, dokumen.
 7. **Dokumen dinamis seperti repeater**: tiap entri = label + berkas/foto. Admin menentukan dokumen apa yang wajib **per produk/jenis visa**; ada daftar bawaan (Paspor, KTP, KK, Tiket Pesawat PP, Bukti Reservasi Hotel, Bukti Reservasi Transportasi, Sertifikat Vaksin). Ikon Lucide, tanpa emoji.
-8. **Verifikasi data oleh admin** (pola yang sudah dipakai di smart-ai, `architecture-pmb.md`): setiap dokumen dinilai admin — diterima, atau ditolak bila tidak sesuai / sudah kedaluwarsa — dan pengguna memperbaiki lalu mengajukan ulang.
+8. **Verifikasi data oleh admin** (pola yang sudah dipakai di smart-ai, berkas architecture-pmb di repo smart-ai): setiap dokumen dinilai admin — diterima, atau ditolak bila tidak sesuai / sudah kedaluwarsa — dan pengguna memperbaiki lalu mengajukan ulang.
 
 ---
 
@@ -120,7 +120,6 @@ model PilgrimIdentity {
   id              String    @id @default(uuid())
   nikHash         String?   @unique   // HMAC-SHA256(kunci indeks, NIK); null = bayi tanpa NIK / WNA
   nikCipher       String?             // AES-256-GCM berversi kunci — dibuka hanya lewat lib/pii, berjejak
-  nikLast4        String?             // tampilan tersamar tanpa dekripsi
   passportKeyHash String?   @unique   // HMAC(countryCode + nomor paspor) — kunci WNA (C2)
   // Data kanonik: awal = kartu pertama; diperbarui dari pengajuan yang lolos verifikasi (K3). Tak pernah ke API jamaah.
   fullName        String
@@ -152,7 +151,6 @@ model SavedPilgrim {
   nameKey          String
   nikHash          String?
   nikCipher        String?
-  nikLast4         String?
   gender           Gender?
   birthPlace       String?
   birthDate        DateTime?   @db.Date
@@ -346,9 +344,9 @@ Catatan desain:
 ## 6. NIK dan nomor paspor: hash + enkripsi (K9, K10)
 
 - **Hash biasa tidak cukup**: NIK berpola (6 digit wilayah + 6 digit tanggal lahir + 4 digit urut), sehingga SHA-256 polos bisa dibalik dengan menebak. Indeks memakai **HMAC-SHA256 berkunci rahasia**.
-- **Nilai asli terenkripsi** AES-256-GCM (IV acak per nilai, prefix versi kunci untuk rotasi). Tampilan bawaan tersamar (`…Last4`); staf membuka nilai utuh lewat tindakan yang tercatat (`nik_revealed`). Pemilik kartu melihat NIK/paspor kartunya sendiri.
+- **Nilai asli terenkripsi** AES-256-GCM (IV acak per nilai, AAD per tujuan, prefix versi kunci untuk rotasi); membuka nilai mencocokkan indeks baris yang sama (ciphertext yang disalin ke baris lain ditolak, SEC-167). **NIK tidak punya digit polos sama sekali** (SEC-165: digit 1–6 = kode kecamatan di `Address`, 7–12 = tanggal lahir, jadi 4 digit terakhir polos akan melengkapi NIK tanpa kunci) — tampilan selalu tersamar penuh; paspor boleh `passportLast4`. Staf membuka nilai utuh lewat tindakan yang tercatat (`nik_revealed`). Pemilik kartu melihat NIK/paspor kartunya sendiri.
 - **Kunci terpisah dari `JWT_SECRET`**: `PII_INDEX_KEY` dan `PII_ENCRYPTION_KEY` (≥ 32 byte, diperiksa saat boot seperti `lib/auth/secret.ts`). Merotasi `JWT_SECRET` tidak boleh merusak indeks NIK. **Kunci wajib ikut backup rahasia** — kunci hilang = NIK/paspor tersimpan tak terbaca (masuk `docs/deployment.md`).
-- Satu modul `lib/pii/` (`normalizeNik`, `checkNik`, `nikIndex`, `passportIndex`, `encrypt`/`decrypt`, `mask`); tidak ada kode lain yang memakai `crypto` untuk PII (tes penemu sumber). PII tidak pernah ke log; `select` eksplisit — kolom `*Cipher` hanya dibaca `lib/pii`.
+- **As-built Fase 1 (2026-11-02):** satu modul `lib/pii/` — `normalizeNik`/`nikProblem`/`nikHints`/`sealNik`/`openNik(cipher, hash)`, `normalizePassport`/`passportIndex`/`sealPassport`/`openPassport(cipher, {countryCode, keyHash})`, `needsReencrypt`, `NIK_MASK`/`maskPassport` (klien hanya `@/lib/pii/mask`); kunci divalidasi fail-closed di `lib/pii/keys.ts` (64 hex, entropi + blok berulang, berbeda satu sama lain dan dari `JWT_SECRET`, daftar pensiun untuk rotasi), peringatan boot di `instrumentation-node.ts`. Sisa review: SEC-168 (deteksi kunci indeks tertukar, Fase 2), SEC-169/170/172 (Low). Rancangan awal: tidak ada kode lain yang memakai `crypto` untuk PII (tes penemu sumber). PII tidak pernah ke log; `select` eksplisit — kolom `*Cipher` hanya dibaca `lib/pii`.
 
 ---
 
@@ -463,9 +461,9 @@ Permintaan hapus dari jamaah yang **bukan** pemilik akun (langsung ke Saudinesia
 
 | Fase | Isi | Bukti selesai |
 |---|---|---|
-| **0** | Dokumen ini | disetujui pemilik |
-| **1** | Fondasi PII: `lib/pii/` (NIK + paspor: normalisasi, cek lunak, HMAC, AES-256-GCM berversi kunci, samaran), env `PII_INDEX_KEY`/`PII_ENCRYPTION_KEY` + pemeriksa boot + `.env.example` + catatan backup di `docs/deployment.md`, ADR-0005 | `scripts/test-pii.ts`: vektor uji, tamper GCM ditolak, kunci lemah ditolak, rotasi; penemu sumber `crypto` di luar `lib/pii` |
-| **2** | Skema identitas + kartu + `PilgrimIdentityEvent`, FK `BookingPilgrim.userId` (D2) + `savedPilgrimId`/`identityId`; `lib/pilgrims/service.ts` (dedup §4.1, advisory lock, pengecualian bayi); rate limit; perlakuan hapus akun | tes dedup (baru/cocok/konflik/ganda sendiri/bayi), **tes orakel**, simpan NIK sama serentak → satu identitas (uji deterministik), `test-deletion` + `test-admin-delete` hijau |
+| **0** | Dokumen ini — SELESAI (PR #94) | disetujui pemilik |
+| **1 — SELESAI 2026-11-02** | Fondasi PII: `lib/pii/` (NIK + paspor: normalisasi, cek lunak, HMAC, AES-256-GCM berversi kunci, samaran), env `PII_INDEX_KEY`/`PII_ENCRYPTION_KEY` + pemeriksa boot + `.env.example` + catatan backup di `docs/deployment.md`, ADR-0005 | `scripts/test-pii.ts`: vektor uji, tamper GCM ditolak, kunci lemah ditolak, rotasi; penemu sumber `crypto` di luar `lib/pii` |
+| **2** | Skema identitas + kartu + `PilgrimIdentityEvent`, cek kunci indeks/enkripsi di DB (SEC-168), `server-only` (SEC-170), FK `BookingPilgrim.userId` (D2) + `savedPilgrimId`/`identityId`; `lib/pilgrims/service.ts` (dedup §4.1, advisory lock, pengecualian bayi); rate limit; perlakuan hapus akun | tes dedup (baru/cocok/konflik/ganda sendiri/bayi), **tes orakel**, simpan NIK sama serentak → satu identitas (uji deterministik), `test-deletion` + `test-admin-delete` hijau |
 | **3** | API + UI **Jamaah Saya** (CRUD, "Saya sendiri", `AddressPicker`, `ContactPicker`) + admin membuat/mengubah kartu atas nama pelanggan di detail pelanggan | curl termasuk yang DITOLAK (kartu akun lain → 404, field asing → 400, tanpa onboarding → ditolak); e2e browser; terdaftar di `test-admin-editor`/`test-admin-create`/`test-table-consistency` |
 | **4** | Dokumen: `DocumentType` (CRUD + bawaan), `PilgrimDocument` menggantikan `Document`, layanan unggah (cek isi, konversi WebP, sha256, ganti = hapus lama), `DocumentRepeater`, admin boleh unggah (D3, D4, D7), hapus akun | berkas palsu (exe berganti nama .jpg) DITOLAK, hasil WebP tanpa EXIF dan MRZ terbaca, objek tak bisa diakses tanpa presigned, `test-deletion` hijau; security review subagent |
 | **5** | Syarat per produk: `DocumentRequirement.documentTypeId`, editor syarat di Visa (lalu produk lain), `lib/documents/completeness.ts` + aturan paspor 6 bulan; hapus `VisaProduct.requirements`/`REQUIRED_DOCUMENTS` (D5, D8) | kelengkapan per produk benar (tabel uji), paspor 5 bln 29 hr vs 6 bln tepat di beberapa `TZ` |
@@ -482,4 +480,4 @@ Permintaan hapus dari jamaah yang **bukan** pemilik akun (langsung ke Saudinesia
 3. **C3 — Berkas PDF**: diterima **apa adanya** (maks 5 MB, tidak dikonversi); gambar selalu dikonversi ke WebP.
 
 ## 15. Referensi silang
-`docs/arsitektur-manifest.md` (snapshot `fieldValues`, `role`), `docs/arsitektur-dokumen.md` (`DocumentRequirement`), `docs/arsitektur-alamat.md` (`Address`, `upsertAddress`), `docs/arsitektur-komponen-kontak.md` (`ContactPicker`), `docs/arsitektur-hapus-akun.md` (anonimisasi, sapuan), `docs/arsitektur-booking-engine-v2.md` §10.3 (data jamaah setelah terbit), `docs/arsitektur-media.md` (cek isi + enkode ulang), `docs/arsitektur-auth.md` (`onboardingRefusal`), smart-ai `docs/architecture/architecture-pmb.md` (pola verifikasi per dokumen + status pengajuan).
+`docs/arsitektur-manifest.md` (snapshot `fieldValues`, `role`), `docs/arsitektur-dokumen.md` (`DocumentRequirement`), `docs/arsitektur-alamat.md` (`Address`, `upsertAddress`), `docs/arsitektur-komponen-kontak.md` (`ContactPicker`), `docs/arsitektur-hapus-akun.md` (anonimisasi, sapuan), `docs/arsitektur-booking-engine-v2.md` §10.3 (data jamaah setelah terbit), `docs/arsitektur-media.md` (cek isi + enkode ulang), `docs/arsitektur-auth.md` (`onboardingRefusal`), repo smart-ai (berkas architecture-pmb) (pola verifikasi per dokumen + status pengajuan).
