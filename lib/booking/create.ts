@@ -10,7 +10,7 @@ import { resolvePackageItem, type PackageResolved } from './packageItem'
 import { visaRuleViolations } from './ruleContext'
 import { blockingViolations, type RuleViolation } from './rules'
 import { recomputeBookingDates } from './dates'
-import { ItemNotBookableError } from './errors'
+import { ItemNotBookableError, tagItem } from './errors'
 
 // SATU mesin pesan (docs/arsitektur-booking-engine-v2.md §10.3): jalur jamaah `POST /bookings` dan penerbitan draf admin memakai fungsi yang SAMA —
 // resolusi paket → aturan visa → tahan kuota → item + snapshot harga → tanggal acuan → total. Pratinjau = `writeBooking` di transaksi yang di-rollback.
@@ -44,7 +44,7 @@ export class RuleViolationError extends Error {
  */
 export async function prepareBooking(data: BookingInput, ownerId: string, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
   // Kendaraan Paket Ziarah: mode included → kuota kendaraan dicari dari tanggal tur; user_choice → kuota yang dikirim (docs/arsitektur-ziarah.md §12.6).
-  const tours = await Promise.all(data.items.flatMap(i => (i.itemType === 'tourPackage' ? [i] : [])).map(async (tp) => {
+  const tours = await Promise.all(data.items.flatMap((i, index) => (i.itemType === 'tourPackage' ? [{ tp: i, index }] : [])).map(async ({ tp, index }) => { try {
     const breakdown = await computeTourPackageBreakdown(tp.tourPackageId)
     let transportQuotaId: string | null = null
     if (breakdown.transportMode === 'included' && breakdown.includedTransportPricingId) {
@@ -59,8 +59,8 @@ export async function prepareBooking(data: BookingInput, ownerId: string, opts: 
       transportQuotaId = tp.transportQuotaId
     }
     return { breakdown, transportQuotaId }
-  }))
-  const packages = await Promise.all(data.items.flatMap(i => (i.itemType === 'package' ? [resolvePackageItem(i)] : [])))
+  } catch (e) { return tagItem(e, index) } }))
+  const packages = await Promise.all(data.items.flatMap((i, index) => (i.itemType === 'package' ? [resolvePackageItem(i).catch(e => tagItem(e, index))] : [])))
   // Revisi menulis SUBSET item; aturan visa dievaluasi atas isi booking LENGKAP lewat pemanggilan terpisah (rules: true) — bukan atas subset.
   if (opts.rules === false) return { data, tours, packages, warnings: [] }
   const violations = await visaRuleViolations(data, ownerId, packages, tours)
@@ -85,40 +85,44 @@ export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBook
 export async function reserveItems(tx: Prisma.TransactionClient, p: PreparedBooking): Promise<void> {
   let tourIdx = 0
   let packageIdx = 0
-  for (const item of p.data.items) {
-    switch (item.itemType) {
-      case 'hotel':
-        await reserveHotel(tx, item.hotelRoomScheduleId, item.numRooms)
-        break
-      case 'transport':
-        await reserveTransport(tx, item.transportQuotaId, item.numPassengers)
-        break
-      case 'muthowif':
-        // Kapasitas dicek sebagai POOL — muthowif spesifik ditentukan admin belakangan (docs/arsitektur-muthowif.md §9.2).
-        await reserveMuthowifPool(tx, new Date(item.startDate), new Date(item.endDate), item.numPeople)
-        break
-      case 'catering':
-        break // tidak berkapasitas
-      case 'tourPackage': {
-        // Kendaraan paket ziarah memakai TransportQuota yang SAMA dengan transport biasa (docs/arsitektur-ziarah.md §8.1, §12.6); hotel pilihan menahan kuota nyata.
-        const r = p.tours[tourIdx++]!
-        if (r.transportQuotaId) await reserveTransport(tx, r.transportQuotaId, item.numPeople)
-        if (r.breakdown.hotelMode === 'user_choice' && item.chosenHotelRoomScheduleId && item.chosenHotelNumRooms) {
-          await reserveHotel(tx, item.chosenHotelRoomScheduleId, item.chosenHotelNumRooms)
+  for (const [itemIndex, item] of p.data.items.entries()) {
+    try {
+      switch (item.itemType) {
+        case 'hotel':
+          await reserveHotel(tx, item.hotelRoomScheduleId, item.numRooms)
+          break
+        case 'transport':
+          await reserveTransport(tx, item.transportQuotaId, item.numPassengers)
+          break
+        case 'muthowif':
+          // Kapasitas dicek sebagai POOL — muthowif spesifik ditentukan admin belakangan (docs/arsitektur-muthowif.md §9.2).
+          await reserveMuthowifPool(tx, new Date(item.startDate), new Date(item.endDate), item.numPeople)
+          break
+        case 'catering':
+          break // tidak berkapasitas
+        case 'tourPackage': {
+          // Kendaraan paket ziarah memakai TransportQuota yang SAMA dengan transport biasa (docs/arsitektur-ziarah.md §8.1, §12.6); hotel pilihan menahan kuota nyata.
+          const r = p.tours[tourIdx++]!
+          if (r.transportQuotaId) await reserveTransport(tx, r.transportQuotaId, item.numPeople)
+          if (r.breakdown.hotelMode === 'user_choice' && item.chosenHotelRoomScheduleId && item.chosenHotelNumRooms) {
+            await reserveHotel(tx, item.chosenHotelRoomScheduleId, item.chosenHotelNumRooms)
+          }
+          break
         }
-        break
+        case 'haji':
+          await reserveHaji(tx, item.hajiProductId, item.numPersons)
+          break
+        case 'flight':
+          await reserveFlightQuota(tx, item.flightScheduleId, item.numPassengers)
+          break
+        case 'package': {
+          const r = p.packages[packageIdx++]!
+          if (r.flightScheduleId) await reserveFlightQuota(tx, r.flightScheduleId, item.numPeople) // hanya kursi tiket yang ditahan untuk paket (§10.2)
+          break
+        }
       }
-      case 'haji':
-        await reserveHaji(tx, item.hajiProductId, item.numPersons)
-        break
-      case 'flight':
-        await reserveFlightQuota(tx, item.flightScheduleId, item.numPassengers)
-        break
-      case 'package': {
-        const r = p.packages[packageIdx++]!
-        if (r.flightScheduleId) await reserveFlightQuota(tx, r.flightScheduleId, item.numPeople) // hanya kursi tiket yang ditahan untuk paket (§10.2)
-        break
-      }
+    } catch (e) {
+      tagItem(e, itemIndex) // editor baris menunjuk baris yang kuotanya kurang
     }
   }
 }

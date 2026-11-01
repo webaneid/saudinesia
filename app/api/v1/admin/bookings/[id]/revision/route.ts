@@ -33,7 +33,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     } catch (e) {
       const f = revisionFailure(e)
       if (!f) throw e
-      return NextResponse.json({ success: false, error: f.error, ...(f.violations && { meta: { violations: f.violations } }) }, { status: f.status })
+      return NextResponse.json({ success: false, error: f.error, ...((f.violations || f.itemIndex !== undefined) && { meta: { violations: f.violations ?? [], ...(f.itemIndex !== undefined && { itemIndex: f.itemIndex }) } }) }, { status: f.status })
     }
   } catch (e) {
     return authFailureResponse(e, 'admin/bookings/[id]/revision/PUT')

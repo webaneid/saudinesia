@@ -131,7 +131,7 @@ await t('PRATINJAU isi belum disimpan (editor baris): override dipakai, total pe
   assert.deepEqual([readDraft(after.draft), after.updatedAt.getTime()], [readDraft(before.draft), before.updatedAt.getTime()])
   assert.deepEqual(await residue(did), { flights: 0, pilgrims: 0, snapshots: 0 })
 })
-await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kurang → 409; draf tanpa produk → 422; tanggal di luar periode → 422', async () => {
+await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kurang → 409; draf tanpa produk → 422; tanggal di luar periode → 422; galat item membawa nomor barisnya', async () => {
   const noFlight = await newDraft({ items: [], pilgrims: [{ visaProductId: visa.id }] })
   const v = await previewDraft(noFlight)
   assert.ok(!v.ok && v.status === 422 && v.violations?.[0]?.missing === 'flight', JSON.stringify(v))
@@ -140,9 +140,12 @@ await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kuran
   assert.ok(!q.ok && q.status === 409, JSON.stringify(q))
   const empty = await newDraft({ items: [], pilgrims: [{}] })
   assert.deepEqual(await previewDraft(empty), { ok: false, status: 422, message: 'Tambahkan minimal satu produk' })
-  const out = await newDraft({ items: [fl('2090-07-10', 1)], pilgrims: [{}] })
+  const out = await newDraft({ items: [fl('2090-06-10', 1), fl('2090-07-10', 1)], pilgrims: [{}] })
   const o = await previewDraft(out)
   assert.ok(!o.ok && o.status === 422 && /periode jadwal/.test(o.message))
+  assert.equal(!o.ok && o.itemIndex, 1, 'galat menunjuk baris ke-2 (editor baris menandai baris itu)')
+  assert.equal(!q.ok && q.itemIndex, 0, 'kuota kurang menunjuk barisnya')
+  assert.equal(!v.ok && v.itemIndex, undefined, 'pelanggaran aturan visa bukan galat baris')
 })
 await t('TERBIT: status aktif, draf dikosongkan, kursi ditahan SEKALI, total = pratinjau, jatuh tempo dari draf, jamaah dibuat kosong + rencana tanggal visa = tiket pergi', async () => {
   const did = await newDraft()

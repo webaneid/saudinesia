@@ -14,7 +14,7 @@ import { writeBookingItems } from './lineItems'
 import { recomputeBookingDates } from './dates'
 import { recordRevision, type RevisionChange } from './revisionLog'
 import { isSerializationConflict, retrySerializable } from './serializable'
-import { ItemNotBookableError } from './errors'
+import { ItemNotBookableError, itemIndexOf, remapItemIndex } from './errors'
 import type { RuleViolation } from './rules'
 
 // Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, keputusan pemilik R1–R4). Masukan = isi booking LENGKAP sesudah edit; mesin menghitung selisihnya:
@@ -267,8 +267,12 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   const plannedTravel = flights.length > 0 ? [...flights].sort()[0]! : undefined
   const written: ItemMeta[] = []
   if (p.writes.length > 0 || p.pilgrimWrites.length > 0) {
-    await reserveItems(tx, prepared.writes)
-    await writeBookingItems(tx, bookingId, { ...prepared.writes.data, plannedTravelDate: plannedTravel }, prepared.writes.tours, prepared.writes.packages, written)
+    try {
+      await reserveItems(tx, prepared.writes)
+      await writeBookingItems(tx, bookingId, { ...prepared.writes.data, plannedTravelDate: plannedTravel }, prepared.writes.tours, prepared.writes.packages, written)
+    } catch (e) {
+      remapItemIndex(e, k => p.writes[k]?.index) // nomor subset → baris editor
+    }
   }
   // Produk baru SELALU ditahan `pending` (koreksi pemilik 2026-11-01) — juga pada booking yang sudah dikonfirmasi; dikonfirmasi saat pembayarannya diverifikasi.
   await syncPackageVisas(tx, bookingId, prepared.full, p.full.items, plannedTravel ? dbDateOf(plannedTravel) : null)
@@ -333,7 +337,10 @@ async function prepare(bookingId: string, input: BookingRevisionInput) {
   if (b.invoice && b.invoice.revision !== input.expectedRevision) throw new RevisionError(409, 'Booking sudah diubah orang lain sejak halaman dibuka — muat ulang lalu ulangi')
   const p = plan(b, input)
   const full = await prepareBooking(p.full, b.userId)
+  // Item yang ditulis = SUBSET masukan: nomor galatnya dipetakan kembali ke baris editor.
+  const toInput = (k: number) => p.writes[k]?.index
   const writes = await prepareBooking({ items: p.writes.map(w => w.item), pilgrims: p.pilgrimWrites, totalPilgrims: p.full.pilgrims.length }, b.userId, { rules: false })
+    .catch(e => remapItemIndex(e, toInput))
   return { planned: p, prepared: { full, writes } }
 }
 
@@ -389,7 +396,13 @@ export async function revisionEditorState(bookingId: string): Promise<RevisionEd
 }
 
 /** Galat revisi → respons (status + pesan + pelanggaran aturan). `null` = galat tak terduga (route menjawab 500 + log). */
-export function revisionFailure(e: unknown): { status: number; error: string; violations?: RuleViolation[] } | null {
+export function revisionFailure(e: unknown): { status: number; error: string; violations?: RuleViolation[]; itemIndex?: number } | null {
+  const r = revisionFailureOf(e)
+  const itemIndex = itemIndexOf(e) // baris editor (urut `input.items`) penyebab galat
+  return r && itemIndex !== undefined ? { ...r, itemIndex } : r
+}
+
+function revisionFailureOf(e: unknown): { status: number; error: string; violations?: RuleViolation[] } | null {
   if (e instanceof RevisionError) return { status: e.status, error: e.message }
   if (e instanceof RuleViolationError) return { status: 422, error: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError || e instanceof InvoiceError) return { status: 422, error: e.message }

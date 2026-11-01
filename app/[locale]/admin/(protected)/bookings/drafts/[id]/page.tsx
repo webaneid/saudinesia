@@ -45,7 +45,7 @@ export default function DraftEditorPage({ params }: Props) {
   const [deleting, setDeleting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [problem, setProblem] = useState<{ message: string; violations: Violation[] } | null>(null)
+  const [problem, setProblem] = useState<{ message: string; violations: Violation[]; itemIndex?: number } | null>(null)
   const [notFound, setNotFound] = useState(false)
   const previewSeq = useRef(0)
 
@@ -88,7 +88,7 @@ export default function DraftEditorPage({ params }: Props) {
         const res = await fetch(`/api/v1/admin/bookings/drafts/${id}/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft }) })
         const json = await res.json().catch(() => null)
         if (seq !== previewSeq.current) return
-        if (!res.ok) { setPreview(null); setProblem({ message: json?.error ?? 'Pratinjau gagal.', violations: json?.meta?.violations ?? [] }) }
+        if (!res.ok) { setPreview(null); setProblem({ message: json?.error ?? 'Pratinjau gagal.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }) }
         else { setPreview(json.data); setProblem(null) }
       } catch {
         if (seq === previewSeq.current) setProblem({ message: 'Tidak dapat menghubungi server.', violations: [] })
@@ -138,7 +138,7 @@ export default function DraftEditorPage({ params }: Props) {
       const body = { expectedUpdatedAt: version, ...(dueDays !== undefined && { dueDays }) }
       const res = await fetch(`/api/v1/admin/bookings/drafts/${id}/publish`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => null)
-      if (!res.ok) { setProblem({ message: json?.error ?? 'Booking gagal diterbitkan.', violations: json?.meta?.violations ?? [] }); return }
+      if (!res.ok) { setProblem({ message: json?.error ?? 'Booking gagal diterbitkan.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }); return }
       setSnapshot(draftJson)
       router.push(`/${locale}/admin/bookings/${id}`)
     } catch {
@@ -165,7 +165,8 @@ export default function DraftEditorPage({ params }: Props) {
   const main = (
     <>
       <MetaBox title="Produk" icon={Package} collapsible={false} description="Ubah langsung di baris. Subtotal dan total dihitung server otomatis.">
-        <ItemRows rows={rows} onChange={r => { touched(); setRows(r) }} catalog={catalog} load={load} defaultPeople={people} totals={rowTotals} computing={previewing} />
+        <ItemRows rows={rows} onChange={r => { touched(); setRows(r) }} catalog={catalog} load={load} defaultPeople={people} totals={rowTotals} computing={previewing}
+          rowError={problem?.itemIndex !== undefined ? { index: problem.itemIndex, message: problem.message } : undefined} />
       </MetaBox>
 
       <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Jumlah orang dan visa per orang. Data jamaah (nama, paspor, …) diisi setelah booking terbit.">

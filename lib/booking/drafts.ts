@@ -10,14 +10,15 @@ import { isDeletedAccount } from '@/lib/customers/query'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
 import { itemSellTotals, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
-import { ItemNotBookableError } from './errors'
+import { ItemNotBookableError, itemIndexOf } from './errors'
 import { isSerializationConflict, retrySerializable } from './serializable'
 import type { RuleViolation } from './rules'
 
 // Draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3). Draf = baris `Booking` berstatus `draft` + masukan pesan di kolom `draft` (JSON) — TANPA item,
 // kuota, snapshot, atau jejak. Pratinjau menjalankan mesin pesan yang sama (lib/booking/create.ts) di transaksi yang di-rollback; terbit menjalankannya sungguhan.
 
-export type DraftError = { ok: false; status: 404 | 409 | 422; message: string; violations?: RuleViolation[] }
+/** `itemIndex` = baris item draf (urut `draft.items`) penyebab galat — editor baris menampilkan galat di baris itu. */
+export type DraftError = { ok: false; status: 404 | 409 | 422; message: string; violations?: RuleViolation[]; itemIndex?: number }
 type Tx = Prisma.TransactionClient
 
 const EMPTY: BookingDraft = { items: [], pilgrims: [{}] }
@@ -169,6 +170,12 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
 }
 
 function failure(e: unknown): DraftError {
+  const r = failureOf(e)
+  const itemIndex = itemIndexOf(e)
+  return itemIndex === undefined ? r : { ...r, itemIndex }
+}
+
+function failureOf(e: unknown): DraftError {
   if (e instanceof RuleViolationError) return { ok: false, status: 422, message: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError) return { ok: false, status: 422, message: e.message }
   if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message }

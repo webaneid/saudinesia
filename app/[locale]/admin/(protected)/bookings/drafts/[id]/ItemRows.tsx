@@ -120,13 +120,31 @@ type Props = {
   computing?: boolean
   /** Editor revisi: kolom harga khusus + catatan (R4). */
   customPrice?: boolean
+  /** Galat server yang menunjuk satu baris (`meta.itemIndex`): mis. tanggal di luar periode harga, kuota kurang. */
+  rowError?: { index: number; message: string }
+}
+
+/** Harga jual satuan dari katalog (server) — tampil langsung, tanpa menunggu pratinjau. Subtotal tetap dari server (harga tak dihitung di klien). */
+function unitPrice(row: ItemRow, catalog: Catalog): { amount: number; unit: string } | null {
+  const id = row.f.pick
+  if (!id) return null
+  switch (row.module) {
+    case 'flight': { const o = catalog.flight?.find(x => x.id === id); return o ? { amount: o.price, unit: '/penumpang' } : null }
+    case 'hotel': { const o = catalog.hotel?.find(x => x.id === id); return o ? { amount: o.price, unit: '/kamar/malam' } : null }
+    case 'transport': { const o = catalog.transport?.find(x => x.id === id); return o ? { amount: o.price, unit: '/kendaraan' } : null }
+    case 'muthowif': return catalog.muthowif ? { amount: catalog.muthowif.pricePerPersonDay, unit: '/orang/hari' } : null
+    case 'catering': { const o = catalog.catering?.find(x => x.id === id); return o?.prices ? { amount: o.prices.regular, unit: '/orang/hari (reguler)' } : null }
+    case 'tourPackage': { const o = catalog.tourPackage?.find(x => x.id === id); return o ? { amount: o.price, unit: '(dasar)' } : null }
+    case 'package': { const o = catalog.package?.find(x => x.id === id); return o ? { amount: o.pricePerPerson, unit: '/orang (dasar)' } : null }
+    default: return null
+  }
 }
 
 function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return <label className={`block space-y-0.5 ${className}`}><span className="block text-[11px] text-admin-muted">{label}</span>{children}</label>
 }
 
-export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice }: Props) {
+export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice, rowError }: Props) {
   const modulesInUse = [...new Set(rows.map(r => r.module).filter((m): m is ModuleKey => m !== ''))]
   useEffect(() => { for (const m of modulesInUse) void load(m) }, [modulesInUse.join(','), load]) // eslint-disable-line react-hooks/exhaustive-deps
   const needsTransport = rows.some(r => r.module === 'tourPackage' && catalog.tourPackage?.find(t => t.id === r.f.pick)?.transportMode === 'user_choice')
@@ -169,8 +187,10 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
           <Field label={label} className="w-36"><input type="date" className="admin-inp-xs" aria-label={`${label} baris ${i + 1}`} min={min} max={max} value={f[key]} onChange={e => setF(i, { [key]: e.target.value })} /></Field>
         )
         const total = totals?.[i]
+        const unit = unitPrice(row, catalog)
+        const serverError = rowError?.index === i ? rowError.message : null
         return (
-          <div key={row.key} className="rounded-lg border border-admin-line bg-white p-2.5">
+          <div key={row.key} className={`rounded-lg border bg-white p-2.5 ${serverError ? 'border-admin-danger' : 'border-admin-line'}`}>
             <div className="flex flex-wrap items-end gap-2">
               <Field label="Jenis" className="w-36">
                 <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref} placeholder="— pilih —"
@@ -184,13 +204,22 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
               {row.module === 'hotel' && <>
                 {date('Check-in', 'start', hotel?.from, hotel?.to)}{date('Check-out', 'end', f.start || hotel?.from, hotel?.to)}
                 <Field label="Kamar" className="w-20"><input type="number" min={1} className="admin-inp-xs" aria-label={`Kamar baris ${i + 1}`} value={f.rooms} onChange={e => setF(i, { rooms: e.target.value })} /></Field>
-                {span(f.start, f.end) > 0 && <span className="pb-1.5 text-[11px] text-admin-muted">{span(f.start, f.end)} malam</span>}
+                <span className="pb-1.5 text-[11px] text-admin-muted">
+                  {span(f.start, f.end) > 0 && <>{span(f.start, f.end)} malam</>}
+                  {hotel && <span className="block">periode harga {fmt(hotel.from)} – {fmt(hotel.to)}</span>}
+                </span>
               </>}
               {row.module === 'transport' && people('Penumpang')}
               {(row.module === 'muthowif' || row.module === 'catering') && <>{date('Mulai', 'start')}{date('Selesai', 'end', f.start)}{people('Orang')}</>}
               {row.module === 'tourPackage' && <>{date('Tanggal tur', 'start')}{people('Orang')}</>}
               {row.module === 'package' && <>{date('Tanggal berangkat', 'start')}{people('Orang')}</>}
-              <div className="ml-auto flex items-end gap-1">
+              <div className="ml-auto flex items-end gap-3">
+                {unit && (
+                  <div className="text-right">
+                    <span className="block text-[11px] text-admin-muted">Harga</span>
+                    <span className="block text-sm tabular-nums text-admin-ink">{formatRupiah(unit.amount)}<span className="text-[11px] text-admin-muted"> {unit.unit}</span></span>
+                  </div>
+                )}
                 <div className="min-w-28 text-right">
                   <span className="block text-[11px] text-admin-muted">Subtotal</span>
                   <span className="block text-sm font-semibold tabular-nums text-admin-ink">
@@ -232,6 +261,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
               </div>
             )}
             {'error' in check && row.module && <p className="m-0 mt-1.5 text-[11px] text-admin-warning">{check.error}</p>}
+            {serverError && !('error' in check) && <p role="alert" className="m-0 mt-1.5 text-xs font-medium text-admin-danger">{serverError}</p>}
           </div>
         )
       })}

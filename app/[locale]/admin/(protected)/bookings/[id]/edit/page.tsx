@@ -52,7 +52,7 @@ export default function BookingRevisionPage({ params }: Props) {
   const [previewing, setPreviewing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [error, setError] = useState<{ message: string; violations: Violation[] } | null>(null)
+  const [error, setError] = useState<{ message: string; violations: Violation[]; itemIndex?: number } | null>(null)
   const [notFound, setNotFound] = useState(false)
   const previewSeq = useRef(0)
 
@@ -103,7 +103,7 @@ export default function BookingRevisionPage({ params }: Props) {
         const res = await fetch(`/api/v1/admin/bookings/${id}/revision/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: previewJson })
         const json = await res.json().catch(() => null)
         if (seq !== previewSeq.current) return
-        if (!res.ok) { setPreview(null); setError({ message: json?.error ?? 'Pratinjau gagal.', violations: json?.meta?.violations ?? [] }) }
+        if (!res.ok) { setPreview(null); setError({ message: json?.error ?? 'Pratinjau gagal.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }) }
         else { setPreview(json.data); setError(null) }
       } catch {
         if (seq === previewSeq.current) setError({ message: 'Tidak dapat menghubungi server.', violations: [] })
@@ -123,7 +123,7 @@ export default function BookingRevisionPage({ params }: Props) {
     try {
       const res = await fetch(`/api/v1/admin/bookings/${id}/revision`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => null)
-      if (!res.ok) { setError({ message: json?.error ?? 'Revisi gagal disimpan.', violations: json?.meta?.violations ?? [] }); return }
+      if (!res.ok) { setError({ message: json?.error ?? 'Revisi gagal disimpan.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }); return }
       setBaseline(fingerprint(rows, pilgrims, invoiceDate, dueDate))
       router.push(`/${locale}/admin/bookings/${id}`)
     } catch { setError({ message: 'Tidak dapat menghubungi server.', violations: [] }) } finally { setSaving(false) }
@@ -136,7 +136,8 @@ export default function BookingRevisionPage({ params }: Props) {
     <>
       <MetaBox title="Produk" icon={Package} collapsible={false}
         description="Ubah langsung di baris. Mengubah/menghapus produk melepas kuotanya; produk baru ditahan (pending) saat revisi disimpan.">
-        <ItemRows rows={rows} onChange={setRows} catalog={catalog} load={load} defaultPeople={pilgrims.length} totals={dirty ? preview?.itemTotals : state?.items.map(i => i.priceIdr)} computing={previewing} customPrice />
+        <ItemRows rows={rows} onChange={setRows} catalog={catalog} load={load} defaultPeople={pilgrims.length} totals={dirty ? preview?.itemTotals : state?.items.map(i => i.priceIdr)} computing={previewing} customPrice
+          rowError={error?.itemIndex !== undefined ? { index: error.itemIndex, message: error.message } : undefined} />
       </MetaBox>
 
       <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Tambah jamaah kapan saja. Hapus atau ganti visa hanya bila visanya belum diproses dan belum ada dokumen.">
