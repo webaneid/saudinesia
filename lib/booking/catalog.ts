@@ -32,13 +32,15 @@ export async function bookingCatalog(module: BookingModule): Promise<unknown> {
       }))
     }
     case 'hotel': {
+      // Satu baris per jadwal kamar; form mengelompokkan Hotel → Kamar dan memilih periode dari tanggal (lib/booking/hotelPick.ts, docs/arsitektur-hotel.md §12.6).
       const rows = await prisma.hotelRoomSchedule.findMany({
-        where: { isActive: true, period: { periodEnd: { gte: today }, hotel: { isActive: true } } }, orderBy: [{ period: { periodStart: 'asc' } }, { id: 'asc' }],
-        select: { id: true, totalQuota: true, pendingQuota: true, bookedQuota: true, roomType: { select: { name: true, defaultCapacity: true } }, period: { select: { periodStart: true, periodEnd: true, hotel: { select: { name: true, city: true } } } } },
+        where: { isActive: true, period: { isActive: true, periodEnd: { gte: today }, hotel: { isActive: true } } }, orderBy: [{ period: { periodStart: 'asc' } }, { id: 'asc' }],
+        select: { id: true, totalQuota: true, pendingQuota: true, bookedQuota: true, roomTypeId: true, roomType: { select: { name: true, defaultCapacity: true } }, period: { select: { periodStart: true, periodEnd: true, hotel: { select: { id: true, name: true, city: true, stars: true } } } } },
       })
       const price = await sellPrices('hotel', rows.map(r => r.id))
       return rows.map(r => ({
-        id: r.id, hotelName: r.period.hotel.name, city: r.period.hotel.city, roomType: r.roomType.name, capacity: r.roomType.defaultCapacity,
+        id: r.id, hotelId: r.period.hotel.id, hotelName: r.period.hotel.name, city: r.period.hotel.city, stars: r.period.hotel.stars,
+        roomTypeId: r.roomTypeId, roomType: r.roomType.name, capacity: r.roomType.defaultCapacity,
         from: calendarDateOf(r.period.periodStart), to: calendarDateOf(r.period.periodEnd), roomsLeft: r.totalQuota - r.pendingQuota - r.bookedQuota, price: price.get(r.id) ?? 0,
       }))
     }

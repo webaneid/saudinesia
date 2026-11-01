@@ -1,4 +1,5 @@
 import type { BookingDraft } from '@/lib/validators/booking'
+import type { HotelScheduleOpt } from '@/lib/booking/hotelPick'
 import { formatCalendarDate } from '@/lib/time'
 import { formatRupiah } from '@/lib/utils'
 
@@ -8,7 +9,7 @@ export type DraftItem = BookingDraft['items'][number]
 
 export type VisaOpt = { id: string; name: string; visaType: string; tiers: Array<{ minDays: number; maxDays: number; fee: number }> }
 export type FlightOpt = { id: string; label: string; from: string; to: string; seatsLeft: number; price: number }
-export type HotelOpt = { id: string; hotelName: string; city: string; roomType: string; capacity: number; from: string; to: string; roomsLeft: number; price: number }
+export type HotelOpt = HotelScheduleOpt // satu jadwal kamar (hotel × tipe kamar × periode), harga jual — lib/booking/hotelPick.ts
 export type TransportOpt = { id: string; pricingId: string; tripId: string; tripName: string; category: string | null; vehicle: string; capacity: number; date: string; seatsLeft: number; price: number }
 export type MuthowifOpt = { pricePerPersonDay: number }
 export type CateringOpt = { id: string; name: string; prices?: { regular: number; ramadan: number; hajj: number } }
