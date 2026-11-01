@@ -17,7 +17,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const parsed = schema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const r = await publishDraft(id, { ...parsed.data, byUserId: session.userId })
-    if (!r.ok) return NextResponse.json({ success: false, error: r.message, ...(r.violations && { meta: { violations: r.violations } }) }, { status: r.status })
+    if (!r.ok) return NextResponse.json({ success: false, error: r.message, ...((r.violations || r.itemIndex !== undefined) && { meta: { violations: r.violations ?? [], ...(r.itemIndex !== undefined && { itemIndex: r.itemIndex }) } }) }, { status: r.status })
     // Notifikasi invoice terbit berisi tautan publik (P2, menutup K5-1) — setelah commit, best-effort (tak menggagalkan terbit).
     void sendInvoiceNotification(r.id, { dedupe: true })
     return NextResponse.json(ok({ id: r.id, bookingCode: r.bookingCode, invoiceNumber: r.invoiceNumber }))

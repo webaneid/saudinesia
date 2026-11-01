@@ -120,13 +120,34 @@ type Props = {
   computing?: boolean
   /** Editor revisi: kolom harga khusus + catatan (R4). */
   customPrice?: boolean
+  /** Galat server yang menunjuk satu baris (`meta.itemIndex`): mis. tanggal di luar periode harga, kuota kurang. */
+  rowError?: { index: number; message: string }
 }
+
+/** Harga jual satuan dari katalog (server) — tampil langsung, tanpa menunggu pratinjau. Subtotal tetap dari server (harga tak dihitung di klien). */
+function unitPrice(row: ItemRow, catalog: Catalog): { amount: number; unit: string } | null {
+  const id = row.f.pick
+  if (!id) return null
+  switch (row.module) {
+    case 'flight': { const o = catalog.flight?.find(x => x.id === id); return o ? { amount: o.price, unit: '/penumpang' } : null }
+    case 'hotel': { const o = catalog.hotel?.find(x => x.id === id); return o ? { amount: o.price, unit: '/kamar/malam' } : null }
+    case 'transport': { const o = catalog.transport?.find(x => x.id === id); return o ? { amount: o.price, unit: '/kendaraan' } : null }
+    case 'muthowif': return catalog.muthowif ? { amount: catalog.muthowif.pricePerPersonDay, unit: '/orang/hari' } : null
+    case 'catering': { const o = catalog.catering?.find(x => x.id === id); return o?.prices ? { amount: o.prices.regular, unit: '/orang/hari (reguler)' } : null }
+    case 'tourPackage': { const o = catalog.tourPackage?.find(x => x.id === id); return o ? { amount: o.price, unit: '(dasar)' } : null }
+    case 'package': { const o = catalog.package?.find(x => x.id === id); return o ? { amount: o.pricePerPerson, unit: '/orang (dasar)' } : null }
+    default: return null
+  }
+}
+
+/** Kolom baris (≥ xl; editor berada di kolom kiri yang sempit): Produk · Tanggal · Jumlah · Harga · Subtotal · hapus. Di HP bertumpuk dua kolom. */
+const GRID = 'xl:grid-cols-[minmax(0,2.2fr)_minmax(0,2fr)_minmax(0,0.8fr)_minmax(0,1.1fr)_minmax(0,1fr)_1.75rem]'
 
 function Field({ label, children, className = '' }: { label: string; children: React.ReactNode; className?: string }) {
   return <label className={`block space-y-0.5 ${className}`}><span className="block text-[11px] text-admin-muted">{label}</span>{children}</label>
 }
 
-export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice }: Props) {
+export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice, rowError }: Props) {
   const modulesInUse = [...new Set(rows.map(r => r.module).filter((m): m is ModuleKey => m !== ''))]
   useEffect(() => { for (const m of modulesInUse) void load(m) }, [modulesInUse.join(','), load]) // eslint-disable-line react-hooks/exhaustive-deps
   const needsTransport = rows.some(r => r.module === 'tourPackage' && catalog.tourPackage?.find(t => t.id === r.f.pick)?.transportMode === 'user_choice')
@@ -156,53 +177,90 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
   return (
     <div className="space-y-2">
       {rows.length === 0 && <p className="m-0 text-sm text-admin-muted">Belum ada produk. Visa dipasang per jamaah di kotak Jamaah.</p>}
+      {rows.length > 0 && (
+        <div aria-hidden className={`hidden gap-x-3 px-2.5 text-[11px] font-medium uppercase tracking-wide text-admin-muted xl:grid ${GRID}`}>
+          <span>Produk</span><span>Tanggal</span><span>Jumlah</span><span className="text-right">Harga</span><span className="text-right">Subtotal</span><span />
+        </div>
+      )}
       {rows.map((row, i) => {
         const { f } = row
         const check = rowToItem(row, catalog)
         const flight = row.module === 'flight' ? catalog.flight?.find(x => x.id === f.pick) : undefined
         const hotel = row.module === 'hotel' ? catalog.hotel?.find(x => x.id === f.pick) : undefined
+        const transport = row.module === 'transport' ? catalog.transport?.find(x => x.id === f.pick) : undefined
         const tour = row.module === 'tourPackage' ? catalog.tourPackage?.find(x => x.id === f.pick) : undefined
         const pkg = row.module === 'package' ? catalog.package?.find(x => x.id === f.pick) : undefined
         const tourQuotas = tour && f.start ? (catalog.transport ?? []).filter(q => q.date === f.start && tour.vehicleOptions.some(v => v.pricingId === q.pricingId)) : []
-        const people = (label: string) => <Field label={label} className="w-24"><input type="number" min={1} className="admin-inp-xs" aria-label={`${label} baris ${i + 1}`} value={f.people} onChange={e => setF(i, { people: e.target.value })} /></Field>
         const date = (label: string, key: 'start' | 'end', min?: string, max?: string) => (
-          <Field label={label} className="w-36"><input type="date" className="admin-inp-xs" aria-label={`${label} baris ${i + 1}`} min={min} max={max} value={f[key]} onChange={e => setF(i, { [key]: e.target.value })} /></Field>
+          <label className="flex items-center gap-2"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">{label}</span><input type="date" className="admin-inp-xs min-w-0 flex-1" aria-label={`${label} baris ${i + 1}`} min={min} max={max} value={f[key]} onChange={e => setF(i, { [key]: e.target.value })} /></label>
+        )
+        const count = (label: string, key: 'people' | 'rooms') => (
+          <Field label={label}><input type="number" min={1} className="admin-inp-xs" aria-label={`${label} baris ${i + 1}`} value={f[key]} onChange={e => setF(i, { [key]: e.target.value })} /></Field>
         )
         const total = totals?.[i]
+        const unit = unitPrice(row, catalog)
+        const serverError = rowError?.index === i ? rowError.message : null
+        const nights = span(f.start, f.end)
+        const days = f.start && f.end ? span(f.start, f.end) + 1 : 0
         return (
-          <div key={row.key} className="rounded-lg border border-admin-line bg-white p-2.5">
-            <div className="flex flex-wrap items-end gap-2">
-              <Field label="Jenis" className="w-36">
-                <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref} placeholder="— pilih —"
+          <div key={row.key} className={`rounded-lg border bg-white p-2.5 ${serverError ? 'border-admin-danger' : 'border-admin-line'}`}>
+            <div className={`grid grid-cols-2 gap-x-3 gap-y-2 xl:items-start ${GRID}`}>
+              {/* 1. Produk: jenis + produk */}
+              <div className="col-span-2 space-y-1.5 xl:col-span-1">
+                <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref} placeholder="— pilih jenis —"
                   options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(defaultPeople), label: undefined })} />
-              </Field>
-              <Field label="Produk" className="min-w-48 flex-1">
                 <ChoiceSelect size="sm" ariaLabel={`Produk baris ${i + 1}`} value={f.pick} disabled={!row.module} options={optionsFor(row)}
                   placeholder={row.module ? (optionsFor(row).length ? '— pilih produk —' : 'Memuat / belum ada produk') : 'Pilih jenis dulu'} onChange={v => setF(i, { pick: v })} />
-              </Field>
-              {row.module === 'flight' && <>{date('Tanggal terbang', 'start', flight?.from, flight?.to)}{people('Penumpang')}</>}
-              {row.module === 'hotel' && <>
-                {date('Check-in', 'start', hotel?.from, hotel?.to)}{date('Check-out', 'end', f.start || hotel?.from, hotel?.to)}
-                <Field label="Kamar" className="w-20"><input type="number" min={1} className="admin-inp-xs" aria-label={`Kamar baris ${i + 1}`} value={f.rooms} onChange={e => setF(i, { rooms: e.target.value })} /></Field>
-                {span(f.start, f.end) > 0 && <span className="pb-1.5 text-[11px] text-admin-muted">{span(f.start, f.end)} malam</span>}
-              </>}
-              {row.module === 'transport' && people('Penumpang')}
-              {(row.module === 'muthowif' || row.module === 'catering') && <>{date('Mulai', 'start')}{date('Selesai', 'end', f.start)}{people('Orang')}</>}
-              {row.module === 'tourPackage' && <>{date('Tanggal tur', 'start')}{people('Orang')}</>}
-              {row.module === 'package' && <>{date('Tanggal berangkat', 'start')}{people('Orang')}</>}
-              <div className="ml-auto flex items-end gap-1">
-                <div className="min-w-28 text-right">
-                  <span className="block text-[11px] text-admin-muted">Subtotal</span>
-                  <span className="block text-sm font-semibold tabular-nums text-admin-ink">
-                    {'error' in check ? '—' : computing && total === undefined ? <Loader2 className="ml-auto size-3.5 animate-spin" /> : total !== undefined ? formatRupiah(total) : '—'}
-                  </span>
-                </div>
-                <button type="button" aria-label={`Hapus baris ${i + 1}`} onClick={() => onChange(rows.filter((_, j) => j !== i))} className="rounded p-1.5 text-admin-muted hover:text-admin-danger"><Trash2 className="size-4" /></button>
+              </div>
+
+              {/* 2. Tanggal: menyesuaikan jenis produk */}
+              <div className="col-span-2 space-y-1.5 xl:col-span-1">
+                {row.module === 'flight' && date('Berangkat', 'start', flight?.from, flight?.to)}
+                {row.module === 'hotel' && <>
+                  {date('Check-in', 'start', hotel?.from, hotel?.to)}{date('Check-out', 'end', f.start || hotel?.from, hotel?.to)}
+                  <p className="m-0 text-[11px] text-admin-muted">
+                    {nights > 0 && <>{nights} malam · </>}{hotel && <>periode harga {fmt(hotel.from)} – {fmt(hotel.to)}</>}
+                  </p>
+                </>}
+                {(row.module === 'muthowif' || row.module === 'catering') && <>
+                  {date('Mulai', 'start')}{date('Selesai', 'end', f.start)}
+                  {days > 0 && <p className="m-0 text-[11px] text-admin-muted">{days} hari</p>}
+                </>}
+                {row.module === 'tourPackage' && date('Tanggal tur', 'start')}
+                {row.module === 'package' && date('Berangkat', 'start')}
+                {row.module === 'transport' && <p className="m-0 flex items-center gap-2 py-1 text-sm"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">Tanggal</span>{transport ? fmt(transport.date) : '—'}</p>}
+              </div>
+
+              {/* 3. Jumlah */}
+              <div className="space-y-1.5">
+                {row.module === 'hotel' ? count('Kamar', 'rooms')
+                  : row.module === 'flight' || row.module === 'transport' ? count('Penumpang', 'people')
+                  : row.module ? count('Orang', 'people') : null}
+              </div>
+
+              {/* 4. Harga satuan (katalog, harga jual) */}
+              <div className="text-right">
+                <span className="block text-[11px] text-admin-muted xl:hidden">Harga</span>
+                {unit ? <>
+                  <span className="block text-sm tabular-nums text-admin-ink">{formatRupiah(unit.amount)}</span>
+                  <span className="block text-[11px] text-admin-muted">{unit.unit}</span>
+                </> : <span className="block text-sm text-admin-muted">—</span>}
+              </div>
+
+              {/* 5. Subtotal (server) */}
+              <div className="text-right">
+                <span className="block text-[11px] text-admin-muted xl:hidden">Subtotal</span>
+                <span className="block text-sm font-semibold tabular-nums text-admin-ink">
+                  {'error' in check || serverError ? '—' : computing && total === undefined ? <Loader2 className="ml-auto size-3.5 animate-spin" /> : total !== undefined ? formatRupiah(total) : '—'}
+                </span>
+              </div>
+              <div className="flex justify-end">
+                <button type="button" aria-label={`Hapus baris ${i + 1}`} onClick={() => onChange(rows.filter((_, j) => j !== i))} className="rounded p-1 text-admin-muted hover:text-admin-danger"><Trash2 className="size-4" /></button>
               </div>
             </div>
 
             {/* Baris kedua: pilihan per jenis (jika ada) */}
-            {(row.module === 'transport' || tour?.transportMode === 'user_choice' || tour?.hotelMode === 'user_choice' || pkg || customPrice) && (
+            {(row.module === 'transport' || tour?.transportMode === 'user_choice' || tour?.hotelMode === 'user_choice' || (pkg && Object.values(pkg.modes).includes('user_choice')) || customPrice) && (
               <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-admin-line pt-2">
                 {row.module === 'transport' && <>
                   <Field label="Detail penjemputan" className="min-w-40 flex-1"><input className="admin-inp-xs" maxLength={300} value={f.extra.pickup ?? ''} onChange={e => setX(i, 'pickup', e.target.value)} /></Field>
@@ -232,6 +290,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
               </div>
             )}
             {'error' in check && row.module && <p className="m-0 mt-1.5 text-[11px] text-admin-warning">{check.error}</p>}
+            {serverError && !('error' in check) && <p role="alert" className="m-0 mt-1.5 text-xs font-medium text-admin-danger">{serverError}</p>}
           </div>
         )
       })}

@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { ItemNotBookableError } from './errors'
+import { ItemNotBookableError, tagItem } from './errors'
 import { packageLines, type PackageResolved } from './packageItem'
 import { calendarDateOf, dbDateOf } from '@/lib/time'
 import type { BookingItemInput } from '@/lib/validators/booking'
@@ -44,160 +44,164 @@ export async function writeBookingItems(
   // Rencana tanggal berangkat visa (D1): bawaan = tiket pergi paling awal di booking ini (tiket mandiri atau paket bertiket).
   const flightDates: string[] = []
 
-  for (const item of data.items) {
-    switch (item.itemType) {
-      case 'hotel': {
-        const sch = await tx.hotelRoomSchedule.findUniqueOrThrow({
-          where: { id: item.hotelRoomScheduleId },
-          select: { period: { select: { periodStart: true, periodEnd: true, hotel: { select: { name: true } } } }, roomType: { select: { name: true } } }, // 404 bila jadwal tak ada
-        })
-        // Tanggal menginap harus berada di periode harga jadwal yang dipilih (jadwal periode murah tak boleh dipakai untuk tanggal musim ramai).
-        if (new Date(item.checkIn) < sch.period.periodStart || new Date(item.checkOut) > sch.period.periodEnd) {
-          throw new ItemNotBookableError('Tanggal menginap di luar periode harga kamar yang dipilih')
+  for (const [itemIndex, item] of data.items.entries()) {
+    try {
+      switch (item.itemType) {
+        case 'hotel': {
+          const sch = await tx.hotelRoomSchedule.findUniqueOrThrow({
+            where: { id: item.hotelRoomScheduleId },
+            select: { period: { select: { periodStart: true, periodEnd: true, hotel: { select: { name: true } } } }, roomType: { select: { name: true } } }, // 404 bila jadwal tak ada
+          })
+          // Tanggal menginap harus berada di periode harga jadwal yang dipilih (jadwal periode murah tak boleh dipakai untuk tanggal musim ramai).
+          if (new Date(item.checkIn) < sch.period.periodStart || new Date(item.checkOut) > sch.period.periodEnd) {
+            throw new ItemNotBookableError('Tanggal menginap di luar periode harga kamar yang dipilih')
+          }
+          const point = await takePoint(tx, 'hotel', item.hotelRoomScheduleId, '', 'kamar hotel')
+          const label = `${sch.period.hotel.name} — ${sch.roomType.name}`
+          const line = lineFromPoint(point, { description: label, qty: item.nights * item.numRooms, unit: 'room_night' })
+          const row = await tx.bookingHotel.create({
+            data: {
+              bookingId, hotelRoomScheduleId: item.hotelRoomScheduleId,
+              checkIn: new Date(item.checkIn), checkOut: new Date(item.checkOut),
+              nights: item.nights, numRooms: item.numRooms, numGuests: data.totalPilgrims ?? data.pilgrims.length,
+              pricePerNight: point.sellIdr, totalPrice: lineTotalSell(line),
+            },
+          })
+          add({ itemType: 'hotel', itemId: row.id, label, detail: `${day(item.checkIn)} – ${day(item.checkOut)} · ${item.nights} malam · ${item.numRooms} kamar`, qty: item.numRooms }, [line])
+          break
         }
-        const point = await takePoint(tx, 'hotel', item.hotelRoomScheduleId, '', 'kamar hotel')
-        const label = `${sch.period.hotel.name} — ${sch.roomType.name}`
-        const line = lineFromPoint(point, { description: label, qty: item.nights * item.numRooms, unit: 'room_night' })
-        const row = await tx.bookingHotel.create({
-          data: {
-            bookingId, hotelRoomScheduleId: item.hotelRoomScheduleId,
-            checkIn: new Date(item.checkIn), checkOut: new Date(item.checkOut),
-            nights: item.nights, numRooms: item.numRooms, numGuests: data.totalPilgrims ?? data.pilgrims.length,
-            pricePerNight: point.sellIdr, totalPrice: lineTotalSell(line),
-          },
-        })
-        add({ itemType: 'hotel', itemId: row.id, label, detail: `${day(item.checkIn)} – ${day(item.checkOut)} · ${item.nights} malam · ${item.numRooms} kamar`, qty: item.numRooms }, [line])
-        break
-      }
-      case 'transport': {
-        const quota = await tx.transportQuota.findUniqueOrThrow({
-          where: { id: item.transportQuotaId },
-          select: { pricingId: true, travelDate: true, pricing: { select: { trip: { select: { name: true } }, vehicle: { select: { name: true } } } } },
-        })
-        const point = await takePoint(tx, 'transport', quota.pricingId, '', 'transport')
-        const label = `${quota.pricing.trip.name} (${quota.pricing.vehicle.name})`
-        const line = lineFromPoint(point, { description: label, qty: 1, unit: 'vehicle' })
-        const row = await tx.bookingTransport.create({
-          data: {
-            bookingId, transportQuotaId: item.transportQuotaId,
-            travelDate: quota.travelDate,
-            numPassengers: item.numPassengers,
-            unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
-            pickupDetail: item.pickupDetail ?? null,
-            dropoffDetail: item.dropoffDetail ?? null,
-          },
-        })
-        add({ itemType: 'transport', itemId: row.id, label, detail: `${day(quota.travelDate)} · ${item.numPassengers} penumpang`, qty: item.numPassengers }, [line])
-        break
-      }
-      case 'muthowif': {
-        // muthowifId TIDAK diisi — admin assign belakangan (docs/arsitektur-muthowif.md §9).
-        const service = await tx.muthowifServicePrice.findFirstOrThrow({ select: { id: true } })
-        const point = await takePoint(tx, 'muthowif', service.id, '', 'layanan muthowif')
-        const line = lineFromPoint(point, { description: 'Layanan Muthowif', qty: item.numDays * item.numPeople, unit: 'person_day' })
-        const row = await tx.bookingMuthowif.create({
-          data: {
-            bookingId, muthowifId: null,
-            startDate: new Date(item.startDate), endDate: new Date(item.endDate),
-            numDays: item.numDays, numPeople: item.numPeople, totalPrice: lineTotalSell(line),
-          },
-        })
-        add({ itemType: 'muthowif', itemId: row.id, label: 'Layanan Muthowif', detail: `${day(item.startDate)} – ${day(item.endDate)} · ${item.numDays} hari · ${item.numPeople} orang`, qty: item.numPeople }, [line])
-        break
-      }
-      case 'catering': {
-        // Harga dihitung server-side dari titik harga musim pada tanggal mulai; opsi nonaktif / belum berharga → 422.
-        const { point } = await computeCateringBookingPrice({
-          cateringOptionId: item.cateringOptionId, startDate: new Date(item.startDate), numDays: item.numDays, numPeople: item.numPeople,
-        }, tx)
-        const option = await tx.cateringOption.findUniqueOrThrow({ where: { id: item.cateringOptionId }, select: { name: true } })
-        const line = lineFromPoint(point, { description: option.name, qty: item.numDays * item.numPeople, unit: 'person_day' })
-        const row = await tx.bookingCatering.create({
-          data: {
-            bookingId, cateringOptionId: item.cateringOptionId,
-            startDate: new Date(item.startDate), endDate: new Date(item.endDate),
-            numDays: item.numDays, numPeople: item.numPeople, totalPrice: lineTotalSell(line),
-          },
-        })
-        add({ itemType: 'catering', itemId: row.id, label: option.name, detail: `${day(item.startDate)} – ${day(item.endDate)} · ${item.numDays} hari · ${item.numPeople} orang`, qty: item.numPeople }, [line])
-        break
-      }
-      case 'tourPackage': {
-        const { breakdown, transportQuotaId } = tourResolved[tourIdx++]!
-        const tour = await tx.tourPackage.findUniqueOrThrow({ where: { id: item.tourPackageId }, select: { name: true } })
-        const lines = await tourPackageLines(tx, item, tour.name, breakdown, transportQuotaId)
-        const totalPrice = sumSell(lines)
-        if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket ziarah belum ditetapkan')
-        let tourDate: Date
-        if (transportQuotaId) {
-          tourDate = (await tx.transportQuota.findUniqueOrThrow({ where: { id: transportQuotaId }, select: { travelDate: true } })).travelDate
-        } else {
-          const d = item.tourDate ?? data.departureDate
-          if (!d) throw new ItemNotBookableError('Tanggal paket ziarah wajib diisi')
-          tourDate = new Date(d)
+        case 'transport': {
+          const quota = await tx.transportQuota.findUniqueOrThrow({
+            where: { id: item.transportQuotaId },
+            select: { pricingId: true, travelDate: true, pricing: { select: { trip: { select: { name: true } }, vehicle: { select: { name: true } } } } },
+          })
+          const point = await takePoint(tx, 'transport', quota.pricingId, '', 'transport')
+          const label = `${quota.pricing.trip.name} (${quota.pricing.vehicle.name})`
+          const line = lineFromPoint(point, { description: label, qty: 1, unit: 'vehicle' })
+          const row = await tx.bookingTransport.create({
+            data: {
+              bookingId, transportQuotaId: item.transportQuotaId,
+              travelDate: quota.travelDate,
+              numPassengers: item.numPassengers,
+              unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
+              pickupDetail: item.pickupDetail ?? null,
+              dropoffDetail: item.dropoffDetail ?? null,
+            },
+          })
+          add({ itemType: 'transport', itemId: row.id, label, detail: `${day(quota.travelDate)} · ${item.numPassengers} penumpang`, qty: item.numPassengers }, [line])
+          break
         }
-        const row = await tx.bookingTourPackage.create({
-          data: {
-            bookingId, tourPackageId: item.tourPackageId, transportQuotaId,
-            tourDate, numPeople: item.numPeople, totalPrice,
-            // hanya bermakna (dan hanya menahan kuota) pada mode user_choice — selain itu null, supaya release/confirm kuota tak menyentuh kuota yang tak pernah ditahan
-            chosenHotelRoomScheduleId: breakdown.hotelMode === 'user_choice' ? item.chosenHotelRoomScheduleId ?? null : null,
-            chosenHotelNumRooms: breakdown.hotelMode === 'user_choice' ? item.chosenHotelNumRooms ?? null : null,
-          },
-        })
-        add({ itemType: 'tourPackage', itemId: row.id, label: tour.name, detail: `${day(tourDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
-        break
-      }
-      case 'haji': {
-        const haji = await tx.hajiProduct.findUniqueOrThrow({ where: { id: item.hajiProductId }, select: { name: true } })
-        const lines = await compositeLines(tx, { ownerType: 'haji', ownerId: item.hajiProductId, what: 'produk haji', label: haji.name, multiplier: item.numPersons })
-        const totalPrice = sumSell(lines)
-        if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga produk haji belum ditetapkan')
-        const row = await tx.bookingHaji.create({
-          data: { bookingId, hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
-        })
-        add({ itemType: 'haji', itemId: row.id, label: haji.name, detail: `${item.numPersons} orang`, qty: item.numPersons }, lines)
-        break
-      }
-      case 'flight': {
-        const sch = await tx.flightSchedule.findUnique({
-          where: { id: item.flightScheduleId },
-          select: { isActive: true, departureFrom: true, departureTo: true, route: { select: { origin: true, destination: true } } },
-        })
-        if (!sch || !sch.isActive) throw new ItemNotBookableError('Jadwal tiket pesawat tidak tersedia')
-        // Tanggal terbang harus di periode harga/kuota jadwal yang dipilih (jadwal periode murah tak boleh dipakai di luar periodenya).
-        if (item.departureDate < calendarDateOf(sch.departureFrom) || item.departureDate > calendarDateOf(sch.departureTo)) {
-          throw new ItemNotBookableError(`Tanggal terbang di luar periode jadwal tiket (${day(sch.departureFrom)} – ${day(sch.departureTo)})`)
+        case 'muthowif': {
+          // muthowifId TIDAK diisi — admin assign belakangan (docs/arsitektur-muthowif.md §9).
+          const service = await tx.muthowifServicePrice.findFirstOrThrow({ select: { id: true } })
+          const point = await takePoint(tx, 'muthowif', service.id, '', 'layanan muthowif')
+          const line = lineFromPoint(point, { description: 'Layanan Muthowif', qty: item.numDays * item.numPeople, unit: 'person_day' })
+          const row = await tx.bookingMuthowif.create({
+            data: {
+              bookingId, muthowifId: null,
+              startDate: new Date(item.startDate), endDate: new Date(item.endDate),
+              numDays: item.numDays, numPeople: item.numPeople, totalPrice: lineTotalSell(line),
+            },
+          })
+          add({ itemType: 'muthowif', itemId: row.id, label: 'Layanan Muthowif', detail: `${day(item.startDate)} – ${day(item.endDate)} · ${item.numDays} hari · ${item.numPeople} orang`, qty: item.numPeople }, [line])
+          break
         }
-        const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'tiket pesawat')
-        flightDates.push(item.departureDate)
-        const label = `Tiket ${sch.route.origin} → ${sch.route.destination}`
-        const line = lineFromPoint(point, { description: label, qty: item.numPassengers, unit: 'person' })
-        const row = await tx.bookingFlight.create({
-          data: {
-            bookingId, flightScheduleId: item.flightScheduleId, departureDate: dbDateOf(item.departureDate),
-            numPassengers: item.numPassengers, unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
-          },
-        })
-        add({ itemType: 'flight', itemId: row.id, label, detail: `${day(item.departureDate)} · ${item.numPassengers} penumpang`, qty: item.numPassengers }, [line])
-        break
+        case 'catering': {
+          // Harga dihitung server-side dari titik harga musim pada tanggal mulai; opsi nonaktif / belum berharga → 422.
+          const { point } = await computeCateringBookingPrice({
+            cateringOptionId: item.cateringOptionId, startDate: new Date(item.startDate), numDays: item.numDays, numPeople: item.numPeople,
+          }, tx)
+          const option = await tx.cateringOption.findUniqueOrThrow({ where: { id: item.cateringOptionId }, select: { name: true } })
+          const line = lineFromPoint(point, { description: option.name, qty: item.numDays * item.numPeople, unit: 'person_day' })
+          const row = await tx.bookingCatering.create({
+            data: {
+              bookingId, cateringOptionId: item.cateringOptionId,
+              startDate: new Date(item.startDate), endDate: new Date(item.endDate),
+              numDays: item.numDays, numPeople: item.numPeople, totalPrice: lineTotalSell(line),
+            },
+          })
+          add({ itemType: 'catering', itemId: row.id, label: option.name, detail: `${day(item.startDate)} – ${day(item.endDate)} · ${item.numDays} hari · ${item.numPeople} orang`, qty: item.numPeople }, [line])
+          break
+        }
+        case 'tourPackage': {
+          const { breakdown, transportQuotaId } = tourResolved[tourIdx++]!
+          const tour = await tx.tourPackage.findUniqueOrThrow({ where: { id: item.tourPackageId }, select: { name: true } })
+          const lines = await tourPackageLines(tx, item, tour.name, breakdown, transportQuotaId)
+          const totalPrice = sumSell(lines)
+          if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket ziarah belum ditetapkan')
+          let tourDate: Date
+          if (transportQuotaId) {
+            tourDate = (await tx.transportQuota.findUniqueOrThrow({ where: { id: transportQuotaId }, select: { travelDate: true } })).travelDate
+          } else {
+            const d = item.tourDate ?? data.departureDate
+            if (!d) throw new ItemNotBookableError('Tanggal paket ziarah wajib diisi')
+            tourDate = new Date(d)
+          }
+          const row = await tx.bookingTourPackage.create({
+            data: {
+              bookingId, tourPackageId: item.tourPackageId, transportQuotaId,
+              tourDate, numPeople: item.numPeople, totalPrice,
+              // hanya bermakna (dan hanya menahan kuota) pada mode user_choice — selain itu null, supaya release/confirm kuota tak menyentuh kuota yang tak pernah ditahan
+              chosenHotelRoomScheduleId: breakdown.hotelMode === 'user_choice' ? item.chosenHotelRoomScheduleId ?? null : null,
+              chosenHotelNumRooms: breakdown.hotelMode === 'user_choice' ? item.chosenHotelNumRooms ?? null : null,
+            },
+          })
+          add({ itemType: 'tourPackage', itemId: row.id, label: tour.name, detail: `${day(tourDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
+          break
+        }
+        case 'haji': {
+          const haji = await tx.hajiProduct.findUniqueOrThrow({ where: { id: item.hajiProductId }, select: { name: true } })
+          const lines = await compositeLines(tx, { ownerType: 'haji', ownerId: item.hajiProductId, what: 'produk haji', label: haji.name, multiplier: item.numPersons })
+          const totalPrice = sumSell(lines)
+          if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga produk haji belum ditetapkan')
+          const row = await tx.bookingHaji.create({
+            data: { bookingId, hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
+          })
+          add({ itemType: 'haji', itemId: row.id, label: haji.name, detail: `${item.numPersons} orang`, qty: item.numPersons }, lines)
+          break
+        }
+        case 'flight': {
+          const sch = await tx.flightSchedule.findUnique({
+            where: { id: item.flightScheduleId },
+            select: { isActive: true, departureFrom: true, departureTo: true, route: { select: { origin: true, destination: true } } },
+          })
+          if (!sch || !sch.isActive) throw new ItemNotBookableError('Jadwal tiket pesawat tidak tersedia')
+          // Tanggal terbang harus di periode harga/kuota jadwal yang dipilih (jadwal periode murah tak boleh dipakai di luar periodenya).
+          if (item.departureDate < calendarDateOf(sch.departureFrom) || item.departureDate > calendarDateOf(sch.departureTo)) {
+            throw new ItemNotBookableError(`Tanggal terbang di luar periode jadwal tiket (${day(sch.departureFrom)} – ${day(sch.departureTo)})`)
+          }
+          const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'tiket pesawat')
+          flightDates.push(item.departureDate)
+          const label = `Tiket ${sch.route.origin} → ${sch.route.destination}`
+          const line = lineFromPoint(point, { description: label, qty: item.numPassengers, unit: 'person' })
+          const row = await tx.bookingFlight.create({
+            data: {
+              bookingId, flightScheduleId: item.flightScheduleId, departureDate: dbDateOf(item.departureDate),
+              numPassengers: item.numPassengers, unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
+            },
+          })
+          add({ itemType: 'flight', itemId: row.id, label, detail: `${day(item.departureDate)} · ${item.numPassengers} penumpang`, qty: item.numPassengers }, [line])
+          break
+        }
+        case 'package': {
+          const r = packageResolved[packageIdx++]!
+          const lines = await packageLines(tx, item.packageId, r, item.numPeople)
+          const totalPrice = sumSell(lines)
+          if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket umroh belum ditetapkan')
+          const row = await tx.bookingPackage.create({
+            data: {
+              bookingId, packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
+              numPeople: item.numPeople, flightScheduleId: r.flightScheduleId, choices: r.choices as Prisma.InputJsonValue, totalPrice,
+            },
+          })
+          if (r.visaProductId) for (let i = 0; i < item.numPeople; i++) packageVisaSlots.push(r.visaProductId)
+          if (r.flightScheduleId) flightDates.push(r.departureDate)
+          add({ itemType: 'package', itemId: row.id, label: r.name, detail: `${day(r.departureDate)} – ${day(r.returnDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
+          break
+        }
       }
-      case 'package': {
-        const r = packageResolved[packageIdx++]!
-        const lines = await packageLines(tx, item.packageId, r, item.numPeople)
-        const totalPrice = sumSell(lines)
-        if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket umroh belum ditetapkan')
-        const row = await tx.bookingPackage.create({
-          data: {
-            bookingId, packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
-            numPeople: item.numPeople, flightScheduleId: r.flightScheduleId, choices: r.choices as Prisma.InputJsonValue, totalPrice,
-          },
-        })
-        if (r.visaProductId) for (let i = 0; i < item.numPeople; i++) packageVisaSlots.push(r.visaProductId)
-        if (r.flightScheduleId) flightDates.push(r.departureDate)
-        add({ itemType: 'package', itemId: row.id, label: r.name, detail: `${day(r.departureDate)} – ${day(r.returnDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
-        break
-      }
+    } catch (e) {
+      tagItem(e, itemIndex) // editor baris menunjuk baris yang gagal
     }
   }
 

@@ -10,14 +10,17 @@ import { isDeletedAccount } from '@/lib/customers/query'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
 import { itemSellTotals, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
-import { ItemNotBookableError } from './errors'
+import { ItemNotBookableError, itemIndexOf } from './errors'
 import { isSerializationConflict, retrySerializable } from './serializable'
+import { partialItemTotals } from './partialTotals'
 import type { RuleViolation } from './rules'
 
 // Draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3). Draf = baris `Booking` berstatus `draft` + masukan pesan di kolom `draft` (JSON) — TANPA item,
 // kuota, snapshot, atau jejak. Pratinjau menjalankan mesin pesan yang sama (lib/booking/create.ts) di transaksi yang di-rollback; terbit menjalankannya sungguhan.
 
-export type DraftError = { ok: false; status: 404 | 409 | 422; message: string; violations?: RuleViolation[] }
+/** `itemIndex` = baris item draf (urut `draft.items`) penyebab galat — editor baris menampilkan galat di baris itu. */
+export type DraftError = { ok: false; status: 404 | 409 | 422; message: string; violations?: RuleViolation[]; itemIndex?: number
+  /** Pratinjau: subtotal baris lain saat satu baris gagal (`null` = baris gagal / tak dihitung). */ itemTotals?: (number | null)[] }
 type Tx = Prisma.TransactionClient
 
 const EMPTY: BookingDraft = { items: [], pilgrims: [{}] }
@@ -108,7 +111,21 @@ export async function previewDraft(id: string, override?: BookingDraft): Promise
   if (draft.items.length === 0 && draft.pilgrims.every(p => !p.visaProductId)) return { ok: false, status: 422, message: 'Tambahkan minimal satu produk' }
   const dueDays = draft.dueDays ?? (await getInvoiceSettings()).defaultDueDays
   try {
-    const prepared = await prepareBooking(draftInput(draft), b.userId)
+    return { ok: true, preview: await simulate(id, b.userId, draft, dueDays) }
+  } catch (e) {
+    const f = failure(e)
+    if (f.itemIndex === undefined) return f
+    // Satu baris gagal → subtotal baris lain tetap dihitung (tanpa baris itu); ringkasan tetap tak ditampilkan.
+    const itemTotals = await partialItemTotals(draft.items.length, f.itemIndex, async keep =>
+      (await simulate(id, b.userId, { ...draft, items: keep.map(i => draft.items[i]!) }, dueDays)).itemTotals)
+    return { ...f, itemTotals }
+  }
+}
+
+/** Satu simulasi terbit di transaksi yang selalu di-rollback; galat mesin diteruskan apa adanya. */
+async function simulate(id: string, userId: string, draft: BookingDraft, dueDays: number): Promise<DraftPreview> {
+  try {
+    const prepared = await prepareBooking(draftInput(draft), userId)
     await prisma.$transaction(async (tx) => {
       const written: ItemMeta[] = []
       await writeBooking(tx, prepared, id, written)
@@ -119,11 +136,11 @@ export async function previewDraft(id: string, override?: BookingDraft): Promise
       const itemTotals = draft.items.map((_, i) => { const m = written[i]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
       throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings, itemTotals })
     }, { isolationLevel: 'Serializable' })
-    throw new Error('pratinjau tidak di-rollback') // tak terjangkau: transaksi di atas selalu melempar Rollback
   } catch (e) {
-    if (e instanceof Rollback) return { ok: true, preview: e.result }
-    return failure(e)
+    if (e instanceof Rollback) return e.result
+    throw e
   }
+  throw new Error('pratinjau tidak di-rollback') // tak terjangkau: transaksi di atas selalu melempar Rollback
 }
 
 /** Terbitkan: draf dikunci, mesin pesan menulis item ke baris yang sama, status `draft → active`, isi draf dikosongkan, jatuh tempo ditetapkan (D4). Atomik. */
@@ -169,6 +186,12 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
 }
 
 function failure(e: unknown): DraftError {
+  const r = failureOf(e)
+  const itemIndex = itemIndexOf(e)
+  return itemIndex === undefined ? r : { ...r, itemIndex }
+}
+
+function failureOf(e: unknown): DraftError {
   if (e instanceof RuleViolationError) return { ok: false, status: 422, message: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError) return { ok: false, status: 422, message: e.message }
   if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message }

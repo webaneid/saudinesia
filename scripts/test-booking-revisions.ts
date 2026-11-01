@@ -10,7 +10,7 @@ import { repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { bookingSnapshotTotals } from '@/lib/pricing/engine/snapshot'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { createDraft, publishDraft, saveDraft } from '@/lib/booking/drafts'
-import { previewRevision, reviseBooking, revisionEditorState, RevisionError } from '@/lib/booking/revise'
+import { previewRevision, reviseBooking, revisionEditorState, revisionFailure, revisionPartialTotals, RevisionError } from '@/lib/booking/revise'
 import { RuleViolationError } from '@/lib/booking/create'
 import { setBookingTotal, AdjustmentError } from '@/lib/booking/adjustments'
 import { cancelBooking } from '@/lib/booking/cancel'
@@ -109,6 +109,10 @@ await t('TAMBAH hotel: kuota pending +2 kamar, total & pajak beku dihitung ulang
   const pv = await previewRevision(id, input, staff.id)
   assert.deepEqual([pv.totalBefore, pv.totalAfter, pv.taxAfter, pv.revision, pv.grandAfter], [14_400_000, 21_600_000, 2_376_000, 2, 23_976_000])
   assert.deepEqual(pv.itemTotals, [12_000_000, 7_200_000], 'total per item urut masukan (editor baris)')
+  const bad = await base(id); bad.items.push({ item: { ...HT(1), checkIn: '2091-01-02', checkOut: '2091-01-05' } }) // di luar periode harga, baris ke-2
+  const fail = await previewRevision(id, bad, staff.id).then(() => null, (e: unknown) => revisionFailure(e))
+  assert.deepEqual([fail?.status, fail?.itemIndex], [422, 1], 'nomor subset item yang ditulis dipetakan ke baris editor')
+  assert.deepEqual(await revisionPartialTotals(id, bad, staff.id, 1), [12_000_000, null], 'subtotal baris lain tetap dihitung tanpa baris yang gagal')
   assert.deepEqual(await rooms(), r0, 'pratinjau tak menahan kuota')
   assert.equal((await prisma.invoice.findUniqueOrThrow({ where: { bookingId: id } })).revision, 1, 'pratinjau tak menaikkan revisi')
   const r = await reviseBooking(id, input, staff.id)
