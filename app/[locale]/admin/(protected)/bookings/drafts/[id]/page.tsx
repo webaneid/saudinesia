@@ -45,7 +45,7 @@ export default function DraftEditorPage({ params }: Props) {
   const [deleting, setDeleting] = useState(false)
   const [previewing, setPreviewing] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
-  const [problem, setProblem] = useState<{ message: string; violations: Violation[]; itemIndex?: number } | null>(null)
+  const [problem, setProblem] = useState<{ message: string; violations: Violation[]; itemIndex?: number; itemTotals?: (number | null)[] } | null>(null)
   const [notFound, setNotFound] = useState(false)
   const previewSeq = useRef(0)
 
@@ -88,7 +88,7 @@ export default function DraftEditorPage({ params }: Props) {
         const res = await fetch(`/api/v1/admin/bookings/drafts/${id}/preview`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ draft }) })
         const json = await res.json().catch(() => null)
         if (seq !== previewSeq.current) return
-        if (!res.ok) { setPreview(null); setProblem({ message: json?.error ?? 'Pratinjau gagal.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }) }
+        if (!res.ok) { setPreview(null); setProblem({ message: json?.error ?? 'Pratinjau gagal.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex, itemTotals: json?.meta?.itemTotals }) }
         else { setPreview(json.data); setProblem(null) }
       } catch {
         if (seq === previewSeq.current) setProblem({ message: 'Tidak dapat menghubungi server.', violations: [] })
@@ -160,7 +160,7 @@ export default function DraftEditorPage({ params }: Props) {
   const visaOptions = (catalog.visa ?? []).map(v => ({ id: v.id, label: v.name }))
   // Subtotal per baris dari pratinjau: urutan `itemTotals` = urutan baris LENGKAP (yang ikut dikirim).
   const rowTotals: (number | undefined)[] = []
-  { let k = 0; for (const c of checked) rowTotals.push('item' in c ? preview?.itemTotals[k++] : undefined) }
+  { let k = 0; for (const c of checked) { if (!('item' in c)) { rowTotals.push(undefined); continue } rowTotals.push(preview ? preview.itemTotals[k] : problem?.itemTotals?.[k] ?? undefined); k++ } } // gagal satu baris → subtotal baris lain dari pratinjau parsial
 
   const main = (
     <>

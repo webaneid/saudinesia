@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const parsed = schema.safeParse(await req.json().catch(() => ({})))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const r = await previewDraft(id, parsed.data.draft)
-    if (!r.ok) return NextResponse.json({ success: false, error: r.message, ...((r.violations || r.itemIndex !== undefined) && { meta: { violations: r.violations ?? [], ...(r.itemIndex !== undefined && { itemIndex: r.itemIndex }) } }) }, { status: r.status })
+    if (!r.ok) return NextResponse.json({ success: false, error: r.message, ...((r.violations || r.itemIndex !== undefined) && { meta: { violations: r.violations ?? [], ...(r.itemIndex !== undefined && { itemIndex: r.itemIndex }), ...(r.itemTotals && { itemTotals: r.itemTotals }) } }) }, { status: r.status })
     return NextResponse.json(ok(r.preview))
   } catch (e) {
     return authFailureResponse(e, 'admin/bookings/drafts/[id]/preview')

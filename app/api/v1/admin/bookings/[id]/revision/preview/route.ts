@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { ok, err } from '@/lib/validators'
 import { bookingRevisionSchema } from '@/lib/validators/booking'
 import { requireBookingManage } from '@/lib/booking/policy'
-import { previewRevision, revisionFailure } from '@/lib/booking/revise'
+import { previewRevision, revisionFailure, revisionPartialTotals } from '@/lib/booking/revise'
 import { authFailureResponse } from '@/lib/admin/errors'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -19,7 +19,9 @@ export async function POST(req: Request, { params }: Ctx) {
     } catch (e) {
       const f = revisionFailure(e)
       if (!f) throw e
-      return NextResponse.json({ success: false, error: f.error, ...((f.violations || f.itemIndex !== undefined) && { meta: { violations: f.violations ?? [], ...(f.itemIndex !== undefined && { itemIndex: f.itemIndex }) } }) }, { status: f.status })
+      // Satu baris gagal → subtotal baris lain tetap dihitung (tanpa baris itu) untuk editor; ringkasan tetap tak ditampilkan.
+      const itemTotals = f.itemIndex !== undefined ? await revisionPartialTotals(id, parsed.data, session.userId, f.itemIndex) : undefined
+      return NextResponse.json({ success: false, error: f.error, ...((f.violations || f.itemIndex !== undefined) && { meta: { violations: f.violations ?? [], ...(f.itemIndex !== undefined && { itemIndex: f.itemIndex, itemTotals }) } }) }, { status: f.status })
     }
   } catch (e) {
     return authFailureResponse(e, 'admin/bookings/[id]/revision/preview')

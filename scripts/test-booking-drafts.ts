@@ -131,7 +131,7 @@ await t('PRATINJAU isi belum disimpan (editor baris): override dipakai, total pe
   assert.deepEqual([readDraft(after.draft), after.updatedAt.getTime()], [readDraft(before.draft), before.updatedAt.getTime()])
   assert.deepEqual(await residue(did), { flights: 0, pilgrims: 0, snapshots: 0 })
 })
-await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kurang → 409; draf tanpa produk → 422; tanggal di luar periode → 422; galat item membawa nomor barisnya', async () => {
+await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kurang → 409; draf tanpa produk → 422; tanggal di luar periode → 422; galat item membawa nomor barisnya + subtotal baris lain', async () => {
   const noFlight = await newDraft({ items: [], pilgrims: [{ visaProductId: visa.id }] })
   const v = await previewDraft(noFlight)
   assert.ok(!v.ok && v.status === 422 && v.violations?.[0]?.missing === 'flight', JSON.stringify(v))
@@ -146,6 +146,11 @@ await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kuran
   assert.equal(!o.ok && o.itemIndex, 1, 'galat menunjuk baris ke-2 (editor baris menandai baris itu)')
   assert.equal(!q.ok && q.itemIndex, 0, 'kuota kurang menunjuk barisnya')
   assert.equal(!v.ok && v.itemIndex, undefined, 'pelanggaran aturan visa bukan galat baris')
+  const single = await previewDraft(await newDraft({ items: [fl('2090-06-10', 1)], pilgrims: [{}] }))
+  assert.ok(single.ok)
+  assert.deepEqual(!o.ok && o.itemTotals, [single.preview.itemTotals[0], null], 'subtotal baris lain tetap dihitung, baris gagal null')
+  assert.deepEqual(!q.ok && q.itemTotals, [null], 'satu-satunya baris gagal → tak ada subtotal')
+  assert.equal(!v.ok && v.itemTotals, undefined, 'galat tanpa baris → tak ada pratinjau parsial')
 })
 await t('TERBIT: status aktif, draf dikosongkan, kursi ditahan SEKALI, total = pratinjau, jatuh tempo dari draf, jamaah dibuat kosong + rencana tanggal visa = tiket pergi', async () => {
   const did = await newDraft()
@@ -249,7 +254,7 @@ await t('KODE BOOKING: setelah draf di TENGAH dihapus, booking baru tetap dapat 
 await t('PENJAGA: satu mesin pesan (route jamaah + draf memakai prepareBooking/writeBooking); pratinjau selalu rollback; terbit mengunci & membaca ulang; route admin memakai requireBookingManage', () => {
   const engine = read('lib/booking/create.ts'); const dr = read('lib/booking/drafts.ts'); const route = read('app/api/v1/bookings/route.ts')
   assert.match(route, /prepareBooking\(/); assert.match(route, /writeBooking\(tx, prepared, bk\.id\)/)
-  assert.match(dr, /throw new Rollback\(/); assert.match(dr, /if \(e instanceof Rollback\) return \{ ok: true, preview: e\.result \}/)
+  assert.match(dr, /throw new Rollback\(/); assert.match(dr, /if \(e instanceof Rollback\) return e\.result/); assert.match(dr, /return \{ ok: true, preview: await simulate\(/)
   assert.ok(dr.indexOf('lockDraft(tx, id)', dr.indexOf('export async function publishDraft')) > 0, 'terbit mengunci draf')
   assert.match(dr, /row\.status !== 'draft'/)
   assert.match(engine, /export async function writeBooking/)

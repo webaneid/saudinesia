@@ -3149,3 +3149,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Alternatives considered:** pratinjau parsial (total tanpa baris yang gagal) — ditolak, angka ringkasan bisa disangka final; mencocokkan teks pesan ke baris di klien — rapuh; validasi periode di klien — menduplikasi aturan server.
 **Security:** tidak ada masukan baru; respons hanya menambah indeks baris (bilangan) pada galat yang sudah ada di route admin berperan; harga yang ditampilkan adalah harga jual yang sudah dikirim katalog admin (tanpa HPP). 0 Critical/High/Medium/Low.
 
+## 2026-11-01 — Baris produk lima kolom + subtotal parsial saat satu baris gagal
+**Decision:** baris produk editor booking ditata lima kolom tetap (Produk · Tanggal · Jumlah · Harga · Subtotal, ≥ `xl`; bertumpuk di bawahnya). Bila pratinjau gagal karena satu baris, pratinjau rollback diulang tanpa baris itu (`lib/booking/partialTotals.ts`) agar subtotal baris lain tetap tampil; ringkasan invoice tetap disembunyikan.
+**Rationale:** pemilik menilai baris "numpuk" dan subtotal tidak muncul sama sekali bila satu baris salah. Subtotal per baris tetap angka server (mesin yang sama), hanya ringkasan yang ditahan karena total parsial menyesatkan.
+**Alternatives considered:** container query (tak tersedia di Tailwind 3.4 project ini tanpa plugin baru); menghitung subtotal di klien dari harga satuan — ditolak, harga hanya dihitung server; menampilkan ringkasan parsial — ditolak.
+**Security:** tidak ada masukan baru; `allowNoChange` hanya dipakai jalur parsial internal (bukan dari body); pratinjau parsial berjalan di balik `requireBookingManage`, dibatasi jumlah baris (tiap percobaan membuang ≥ 1 baris), semua tulisan di-rollback. 0 temuan.
+
