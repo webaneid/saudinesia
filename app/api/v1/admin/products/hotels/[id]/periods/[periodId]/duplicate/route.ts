@@ -5,7 +5,7 @@ import { periodDuplicateSchema } from '@/lib/validators/hotelPeriod'
 import { duplicatePeriod } from '@/lib/hotels/periods'
 import { periodFailure } from '@/lib/hotels/http'
 
-// Duplikat periode (docs/arsitektur-hotel.md §12.2): menyalin tipe kamar, kuota, biaya modal/vendor, dan harga jual manual. Menyalin HPP → superadmin (sama dengan simpan harga).
+// Duplikat periode (docs/arsitektur-hotel.md §12.2) = periode baru + isi dari formulir (diisi dari sumber, bisa diubah); harga jual manual sumber ikut disalin. Menyalin HPP → superadmin (sama dengan simpan harga).
 type Ctx = { params: Promise<{ id: string; periodId: string }> }
 
 export async function POST(req: Request, { params }: Ctx) {

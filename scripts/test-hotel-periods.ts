@@ -5,11 +5,11 @@ import { prisma } from '@/lib/db'
 import { sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { setManualSell } from '@/lib/pricing/engine/manual'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
-import { createPeriod, deletePeriod, duplicatePeriod, HotelPeriodError, removeRoom, savePeriodPrices, updatePeriod } from '@/lib/hotels/periods'
+import { createPeriod, deletePeriod, duplicatePeriod, HotelPeriodError, removeRoom, updatePeriod } from '@/lib/hotels/periods'
 import { periodPricesSchema, periodUpdateSchema } from '@/lib/validators/hotelPeriod'
 import { assertThrowawayDb } from './lib/testDb'
 
-// Periode harga hotel (docs/arsitektur-hotel.md §12): edit · hapus-aman · duplikat · hapus tipe kamar · simpan harga transaksional · cakupan hotel.
+// Periode harga hotel (docs/arsitektur-hotel.md §12): satu formulir (tanggal + isi, satu transaksi) untuk tambah · edit · duplikat; hapus-aman · hapus tipe kamar · cakupan hotel.
 await assertThrowawayDb()
 
 let failed = 0
@@ -43,7 +43,7 @@ const schedOf = async (periodId: string) => prisma.hotelRoomSchedule.findMany({ 
 const sell = async (id: string) => Number((await prisma.pricePoint.findFirstOrThrow({ where: { ownerType: 'hotel', ownerId: id } })).sellIdr)
 
 await t('BUAT + SIMPAN HARGA: satu transaksi, vendor sama untuk semua kamar, harga jual dari mesin; tumpang tindih / akhir < mulai DITOLAK', async () => {
-  await savePeriodPrices(hotel.id, p1, { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1_000_000, single.id, 5), IDR(2_000_000, quad.id, 8)] })
+  await updatePeriod(hotel.id, p1, { prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1_000_000, single.id, 5), IDR(2_000_000, quad.id, 8)] } })
   const [s, q] = await schedOf(p1)
   assert.deepEqual([await sell(s!.id), await sell(q!.id)], [1_200_000, 2_400_000])
   assert.equal(new Set((await prisma.productCost.findMany({ where: { productId: { in: [s!.id, q!.id] } } })).map(c => c.vendorId)).size, 1)
@@ -51,11 +51,29 @@ await t('BUAT + SIMPAN HARGA: satu transaksi, vendor sama untuk semua kamar, har
   await rejects(createPeriod(hotel.id, { periodStart: '2090-03-10', periodEnd: '2090-03-01' }), 400)
   // gagal di tengah (tipe kamar tak ada) → tak ada yang tersimpan sebagian
   const before = await prisma.productCost.count({ where: { vendorId: vendor.id } })
-  await savePeriodPrices(hotel.id, p1, { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(9_000_000, single.id), IDR(1, '00000000-0000-0000-0000-000000000000')] }).catch(() => null)
+  await updatePeriod(hotel.id, p1, { prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(9_000_000, single.id), IDR(1, '00000000-0000-0000-0000-000000000000')] } }).catch(() => null)
   assert.equal(await prisma.productCost.count({ where: { vendorId: vendor.id } }), before)
   assert.equal(await sell(s!.id), 1_200_000, 'harga lama utuh (rollback)')
   assert.equal(periodPricesSchema.safeParse({ vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1, single.id), IDR(2, single.id)] }).success, false, 'tipe kamar ganda')
   assert.equal(periodUpdateSchema.safeParse({ periodStart: '2090-01-01', hotelId: other.id }).success, false, '.strict()')
+})
+
+await t('FORMULIR LENGKAP = SATU TRANSAKSI: tambah dengan isi gagal → periode tak tercipta; edit tanggal + isi gagal → tanggal tak berubah; edit sukses → tanggal dan isi berubah bersama', async () => {
+  const n = await prisma.hotelPricePeriod.count({ where: { hotelId: hotel.id } })
+  await createPeriod(hotel.id, { periodStart: '2090-06-01', periodEnd: '2090-06-30', prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1_000_000, single.id), IDR(1, '00000000-0000-0000-0000-000000000000')] } }).catch(() => null)
+  assert.equal(await prisma.hotelPricePeriod.count({ where: { hotelId: hotel.id } }), n, 'periode tanpa isi tak boleh tertinggal')
+  const { id: p9 } = await createPeriod(hotel.id, { periodStart: '2090-06-01', periodEnd: '2090-06-30', prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(500_000, single.id, 4)] } })
+  const [s9] = await schedOf(p9)
+  assert.equal(await sell(s9!.id), 600_000)
+  await prisma.hotelRoomSchedule.update({ where: { id: s9!.id }, data: { bookedQuota: 3 } })
+  await rejects(updatePeriod(hotel.id, p9, { periodEnd: '2090-07-15', prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(500_000, single.id, 1)] } }), 409, /tidak boleh di bawah 3/)
+  assert.equal((await prisma.hotelPricePeriod.findUniqueOrThrow({ where: { id: p9 } })).periodEnd.toISOString(), '2090-06-30T00:00:00.000Z', 'tanggal ikut batal')
+  await updatePeriod(hotel.id, p9, { periodEnd: '2090-07-15', prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(700_000, single.id, 6), IDR(900_000, quad.id, 2)] } })
+  const after = await schedOf(p9)
+  assert.equal((await prisma.hotelPricePeriod.findUniqueOrThrow({ where: { id: p9 } })).periodEnd.toISOString(), '2090-07-15T00:00:00.000Z')
+  assert.deepEqual([after.length, await sell(after[0]!.id), after[0]!.totalQuota], [2, 850_000, 6])
+  await prisma.hotelRoomSchedule.update({ where: { id: s9!.id }, data: { bookedQuota: 0 } })
+  assert.deepEqual(await deletePeriod(hotel.id, p9), { deleted: true })
 })
 
 await t('CAKUPAN HOTEL: periode hotel lain → 404 untuk ubah / hapus / duplikat / hapus kamar / simpan harga', async () => {
@@ -64,7 +82,7 @@ await t('CAKUPAN HOTEL: periode hotel lain → 404 untuk ubah / hapus / duplikat
   await rejects(deletePeriod(other.id, p1), 404)
   await rejects(duplicatePeriod(other.id, p1, { periodStart: '2090-05-01', periodEnd: '2090-05-31' }, staff.id), 404)
   await rejects(removeRoom(other.id, p1, s!.id), 404)
-  await rejects(savePeriodPrices(other.id, p1, { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(5, single.id)] }), 404)
+  await rejects(updatePeriod(other.id, p1, { prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(5, single.id)] } }), 404)
   assert.equal(await prisma.hotelPricePeriod.count({ where: { hotelId: other.id } }), 0)
 })
 
@@ -84,6 +102,15 @@ await t('DUPLIKAT: kamar aktif, kuota (terpakai 0), biaya + vendor, harga jual M
   assert.match(change?.note ?? '', /Disalin dari periode/)
   // sumber tidak berubah
   assert.deepEqual([await sell(s!.id), await sell(q!.id)], [1_200_000, 2_750_000])
+  // dari formulir: isi diubah admin sebelum simpan (modal single baru, quad dibuang) → periode baru memakai isi formulir; jual manual hanya untuk tipe yang sama
+  const { id: p3 } = await duplicatePeriod(hotel.id, p1, { periodStart: '2090-03-01', periodEnd: '2090-03-31', prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1_500_000, single.id, 3)] } }, staff.id)
+  const rows3 = await schedOf(p3)
+  assert.deepEqual([rows3.length, rows3[0]!.roomTypeId, rows3[0]!.totalQuota, await sell(rows3[0]!.id)], [1, single.id, 3, 1_800_000])
+  assert.deepEqual(await deletePeriod(hotel.id, p3), { deleted: true })
+  // dari formulir dengan quad: jual manual sumber tetap tersalin
+  const { id: p4 } = await duplicatePeriod(hotel.id, p1, { periodStart: '2090-03-01', periodEnd: '2090-03-31', prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(2_000_000, quad.id, 8)] } }, staff.id)
+  assert.equal(await sell((await schedOf(p4))[0]!.id), 2_750_000)
+  assert.deepEqual(await deletePeriod(hotel.id, p4), { deleted: true })
 })
 
 await t('UBAH TANGGAL: tumpang tindih DITOLAK; booking hidup di luar rentang baru DITOLAK; booking batal tak menghalangi; nonaktif → aktif dicek tumpang tindih', async () => {
@@ -119,7 +146,7 @@ await t('HAPUS: dirujuk booking → NONAKTIF (bisa diaktifkan lagi); tak dirujuk
 
 await t('HAPUS TIPE KAMAR: dirujuk → nonaktif; tak dirujuk → terhapus bersih; kuota di bawah terpakai DITOLAK', async () => {
   const [s, q] = await schedOf(p1)
-  await rejects(savePeriodPrices(hotel.id, p1, { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1_000_000, single.id, 2)] }), 409, /tidak boleh di bawah 3/)
+  await rejects(updatePeriod(hotel.id, p1, { prices: { vendorId: vendor.id, currency: 'IDR', rooms: [IDR(1_000_000, single.id, 2)] } }), 409, /tidak boleh di bawah 3/)
   assert.equal((await removeRoom(hotel.id, p1, s!.id)).deleted, false)
   assert.equal((await prisma.hotelRoomSchedule.findUniqueOrThrow({ where: { id: s!.id } })).isActive, false)
   assert.deepEqual(await removeRoom(hotel.id, p1, q!.id), { deleted: true })
@@ -132,10 +159,12 @@ await t('PENJAGA: route periode memakai satu penulis (lib/hotels/periods.ts), me
   for (const f of ['route.ts', '[periodId]/route.ts', '[periodId]/prices/route.ts', '[periodId]/duplicate/route.ts', '[periodId]/rooms/[scheduleId]/route.ts']) {
     const src = read(`${dir}/${f}`)
     assert.ok(!/hotelPricePeriod\.(create|update|delete)|hotelRoomSchedule\.(create|update|upsert|delete)|productCost\.(create|update)/.test(src), `${f} menulis langsung`)
-    assert.match(src, /from '@\/lib\/hotels\/periods'/)
+    if (!f.includes('prices')) assert.match(src, /from '@\/lib\/hotels\/periods'/) // prices = baca saja (isi formulir)
   }
   assert.match(read(`${dir}/[periodId]/duplicate/route.ts`), /requireSuperAdmin\(\)/, 'menyalin HPP = superadmin')
   assert.match(read(`${dir}/[periodId]/prices/route.ts`), /requireSuperAdmin\(\)/)
+  assert.doesNotMatch(read(`${dir}/[periodId]/prices/route.ts`), /export async function (PUT|POST)/, 'isi disimpan lewat formulir periode, bukan route terpisah')
+  for (const f of ['route.ts', '[periodId]/route.ts']) assert.match(read(`${dir}/${f}`), /if \(parsed\.data\.prices\) await requireSuperAdmin\(\)/, `${f}: isi = HPP → superadmin`)
   assert.match(read('lib/hotels/periods.ts'), /dropPolymorphic\(tx, 'hotel'/)
 })
 

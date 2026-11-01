@@ -3161,3 +3161,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Alternatives considered:** salin juga kuota terpakai (ditolak — pemesanan milik periode lama); duplikat tanpa harga manual (ditolak — admin harus mengetik ulang); peran `requirePricingEdit` untuk duplikat (ditolak — menyalin HPP = mengedit HPP, tetap superadmin per `lib/pricing/policy.ts`).
 **Security:** 0 temuan baru; SEC-161 (Medium, pre-existing) ditutup dan dibuktikan dengan tes + mutasi. `bun audit` tanpa critical.
 
+## 2026-11-02 — Hotel F1 (koreksi): satu formulir periode lengkap untuk Tambah, Edit, Duplikat
+**Decision:** periode hotel disunting lewat SATU formulir (`PeriodForm`): tanggal + vendor & mata uang + modal dan kuota per tipe kamar, disimpan dalam satu permintaan dan satu transaksi (`createPeriod`/`updatePeriod`/`duplicatePeriod` menerima `prices` opsional). Edit terisi seluruh isi periode; Duplikat terisi seluruh isi dengan tanggal digeser dan disimpan sebagai periode baru. `PUT …/prices` dihapus (GET tetap untuk mengisi formulir); badan berisi `prices` → superadmin, tanggal saja → manager.
+**Rationale:** koreksi pemilik atas F1 pertama (Edit/Duplikat hanya tanggal): *"ketika edit secara otomatis maka tampil semua isi termasuk periodenya"*, *"yg di diduplikasi itu periodenya bersama isinya … sehingga admin dengan mudah membuat periode lain"*. Satu transaksi mencegah periode setengah jadi (tanggal tersimpan, harga gagal).
+**Alternatives considered:** tetap dua langkah (tanggal lalu harga) — ditolak, justru yang dikoreksi pemilik; duplikat selalu menyalin di server tanpa bisa diubah — ditolak, admin ingin menyesuaikan harga periode baru sebelum simpan (tanpa `prices` tetap menyalin di server untuk pemanggil lain).
+**Security:** 0 temuan baru (badan `.strict()`, cakupan hotel tetap, isi = HPP → `requireSuperAdmin`, dibuktikan tes penjaga + mutasi). `bun audit` tidak berubah (tanpa dependensi baru).
+

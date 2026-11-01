@@ -62,41 +62,86 @@ async function referenceCount(db: Tx, scheduleIds: string[]): Promise<number> {
   return counts.reduce((a, b) => a + b, 0)
 }
 
-/** Periode baru (tanggal saja; harga diisi di grid). Ditolak bila tumpang tindih periode aktif lain. */
-export async function createPeriod(hotelId: string, range: { periodStart: CalendarDate; periodEnd: CalendarDate }): Promise<{ id: string }> {
-  assertRange(range.periodStart, range.periodEnd)
-  return prisma.$transaction(async tx => {
-    await lockHotel(tx, hotelId)
-    await assertNoOverlap(tx, hotelId, range.periodStart, range.periodEnd)
-    return tx.hotelPricePeriod.create({ data: { hotelId, periodStart: dbDateOf(range.periodStart), periodEnd: dbDateOf(range.periodEnd) }, select: { id: true } })
+export type RoomPriceInput = { roomTypeId: string; cost: number; totalQuota: number }
+/** Isi periode: vendor + mata uang SATU untuk semua tipe kamar (§11.1) dan harga modal + kuota per tipe kamar. */
+export type PeriodPrices = { vendorId: string; currency: string; rooms: RoomPriceInput[] }
+export type PeriodInput = { periodStart: CalendarDate; periodEnd: CalendarDate; prices?: PeriodPrices }
+export type PeriodPatch = { periodStart?: CalendarDate; periodEnd?: CalendarDate; isActive?: boolean; prices?: PeriodPrices }
+
+/** Rentang tanggal sah + tak tumpang tindih; untuk periode yang ADA juga: booking hidup yang memakai kamarnya tetap di dalam rentang baru. */
+async function checkDates(tx: Tx, hotelId: string, start: CalendarDate, end: CalendarDate, active: boolean, existing?: { id: string; periodStart: Date; periodEnd: Date; scheduleIds: string[] }): Promise<void> {
+  assertRange(start, end)
+  if (active) await assertNoOverlap(tx, hotelId, start, end, existing?.id)
+  if (!existing || existing.scheduleIds.length === 0) return
+  if (start === calendarDateOf(existing.periodStart) && end === calendarDateOf(existing.periodEnd)) return
+  const ids = existing.scheduleIds
+  // Aturan mesin pesan (lib/booking/lineItems.ts): checkIn ≥ periodStart dan checkOut ≤ periodEnd.
+  const outside = await tx.bookingHotel.count({
+    where: { hotelRoomScheduleId: { in: ids }, booking: LIVE_BOOKING, OR: [{ checkIn: { lt: dbDateOf(start) } }, { checkOut: { gt: dbDateOf(end) } }] },
   })
+  const tours = await tx.bookingTourPackage.count({
+    where: { chosenHotelRoomScheduleId: { in: ids }, booking: LIVE_BOOKING, OR: [{ tourDate: { lt: dbDateOf(start) } }, { tourDate: { gt: dbDateOf(end) } }] },
+  })
+  if (outside + tours > 0) throw new HotelPeriodError(409, `${outside + tours} booking memakai kamar periode ini di luar tanggal baru — ubah atau batalkan booking itu dulu`)
 }
 
-export type PeriodPatch = { periodStart?: CalendarDate; periodEnd?: CalendarDate; isActive?: boolean }
+async function writeRoom(tx: Tx, periodId: string, vendorId: string, currency: string, room: RoomPriceInput): Promise<string> {
+  const schedule = await tx.hotelRoomSchedule.upsert({
+    where: { periodId_roomTypeId: { periodId, roomTypeId: room.roomTypeId } },
+    create: { periodId, roomTypeId: room.roomTypeId, totalQuota: room.totalQuota },
+    update: { totalQuota: room.totalQuota, isActive: true },
+  })
+  const costTiers = [{ ...FLAT_TIER, cost: room.cost }]
+  const scope = { productType: 'hotel', productId: schedule.id, costComponent: COMPONENT_KAMAR }
+  const existing = await tx.productCost.findFirst({ where: scope, select: { id: true } })
+  if (existing) await tx.productCost.update({ where: { id: existing.id }, data: { vendorId, currency, costTiers, isActive: true } })
+  else await tx.productCost.create({ data: { ...scope, vendorId, currency, costTiers } })
+  await tx.preferredVendor.upsert({ where: { productType_productId_costComponent: scope }, create: { ...scope, vendorId }, update: { vendorId } })
+  return schedule.id
+}
 
-/** Ubah tanggal / status aktif. Ditolak bila tumpang tindih periode aktif lain, atau bila booking yang hidup memakai kamar periode ini di luar rentang baru. */
+/** Tulis isi periode (dalam transaksi pemanggil). Kuota total tak boleh di bawah kamar yang sudah dipesan. Tipe kamar yang tak dikirim dibiarkan (hapus lewat `removeRoom`). */
+async function writePrices(tx: Tx, periodId: string, prices: PeriodPrices): Promise<string[]> {
+  const used = new Map((await tx.hotelRoomSchedule.findMany({ where: { periodId }, select: { roomTypeId: true, pendingQuota: true, bookedQuota: true, roomType: { select: { name: true } } } }))
+    .map(s => [s.roomTypeId, s]))
+  const out: string[] = []
+  for (const room of prices.rooms) {
+    const u = used.get(room.roomTypeId)
+    if (u && room.totalQuota < u.pendingQuota + u.bookedQuota) throw new HotelPeriodError(409, `Kuota ${u.roomType.name} tidak boleh di bawah ${u.pendingQuota + u.bookedQuota} kamar yang sudah dipesan`)
+    out.push(await writeRoom(tx, periodId, prices.vendorId, prices.currency, room))
+  }
+  return out
+}
+
+const reprice = async (ids: string[]) => { for (const id of ids) await repriceOwner('hotel', id) } // mesin harga punya transaksi sendiri → sesudah commit
+
+/** Periode baru beserta isinya (opsional) dalam SATU transaksi. Ditolak bila tumpang tindih periode aktif lain. */
+export async function createPeriod(hotelId: string, input: PeriodInput): Promise<{ id: string }> {
+  if (input.prices) await assertVendorUsable(input.prices.vendorId)
+  const { id, ids } = await prisma.$transaction(async tx => {
+    await lockHotel(tx, hotelId)
+    await checkDates(tx, hotelId, input.periodStart, input.periodEnd, true)
+    const { id } = await tx.hotelPricePeriod.create({ data: { hotelId, periodStart: dbDateOf(input.periodStart), periodEnd: dbDateOf(input.periodEnd) }, select: { id: true } })
+    return { id, ids: input.prices ? await writePrices(tx, id, input.prices) : [] }
+  })
+  await reprice(ids)
+  return { id }
+}
+
+/** Ubah periode: tanggal, status aktif, dan/atau isinya — SATU transaksi. Ditolak bila tumpang tindih, atau booking hidup memakai kamarnya di luar rentang baru. */
 export async function updatePeriod(hotelId: string, periodId: string, patch: PeriodPatch): Promise<void> {
-  await prisma.$transaction(async tx => {
+  if (patch.prices) await assertVendorUsable(patch.prices.vendorId)
+  const ids = await prisma.$transaction(async tx => {
     await lockHotel(tx, hotelId)
     const p = await periodOf(tx, hotelId, periodId)
     const start = patch.periodStart ?? calendarDateOf(p.periodStart)
     const end = patch.periodEnd ?? calendarDateOf(p.periodEnd)
     const active = patch.isActive ?? p.isActive
-    assertRange(start, end)
-    if (active) await assertNoOverlap(tx, hotelId, start, end, periodId)
-    const ids = p.schedules.map(s => s.id)
-    if (ids.length > 0 && (start !== calendarDateOf(p.periodStart) || end !== calendarDateOf(p.periodEnd))) {
-      // Aturan mesin pesan (lib/booking/lineItems.ts): checkIn ≥ periodStart dan checkOut ≤ periodEnd.
-      const outside = await tx.bookingHotel.count({
-        where: { hotelRoomScheduleId: { in: ids }, booking: LIVE_BOOKING, OR: [{ checkIn: { lt: dbDateOf(start) } }, { checkOut: { gt: dbDateOf(end) } }] },
-      })
-      const tours = await tx.bookingTourPackage.count({
-        where: { chosenHotelRoomScheduleId: { in: ids }, booking: LIVE_BOOKING, OR: [{ tourDate: { lt: dbDateOf(start) } }, { tourDate: { gt: dbDateOf(end) } }] },
-      })
-      if (outside + tours > 0) throw new HotelPeriodError(409, `${outside + tours} booking memakai kamar periode ini di luar tanggal baru — ubah atau batalkan booking itu dulu`)
-    }
+    await checkDates(tx, hotelId, start, end, active, { id: p.id, periodStart: p.periodStart, periodEnd: p.periodEnd, scheduleIds: p.schedules.map(s => s.id) })
     await tx.hotelPricePeriod.update({ where: { id: periodId }, data: { periodStart: dbDateOf(start), periodEnd: dbDateOf(end), isActive: active } })
+    return patch.prices ? writePrices(tx, periodId, patch.prices) : []
   })
+  await reprice(ids)
 }
 
 export type DeleteResult = { deleted: true } | { deleted: false; message: string }
@@ -135,73 +180,46 @@ export async function removeRoom(hotelId: string, periodId: string, scheduleId: 
   })
 }
 
-export type RoomPriceInput = { roomTypeId: string; cost: number; totalQuota: number }
-
-async function writeRoom(tx: Tx, periodId: string, vendorId: string, currency: string, room: RoomPriceInput): Promise<string> {
-  const schedule = await tx.hotelRoomSchedule.upsert({
-    where: { periodId_roomTypeId: { periodId, roomTypeId: room.roomTypeId } },
-    create: { periodId, roomTypeId: room.roomTypeId, totalQuota: room.totalQuota },
-    update: { totalQuota: room.totalQuota, isActive: true },
-  })
-  const costTiers = [{ ...FLAT_TIER, cost: room.cost }]
-  const scope = { productType: 'hotel', productId: schedule.id, costComponent: COMPONENT_KAMAR }
-  const existing = await tx.productCost.findFirst({ where: scope, select: { id: true } })
-  if (existing) await tx.productCost.update({ where: { id: existing.id }, data: { vendorId, currency, costTiers, isActive: true } })
-  else await tx.productCost.create({ data: { ...scope, vendorId, currency, costTiers } })
-  await tx.preferredVendor.upsert({ where: { productType_productId_costComponent: scope }, create: { ...scope, vendorId }, update: { vendorId } })
-  return schedule.id
-}
-
-/** Simpan harga semua tipe kamar satu periode (vendor + mata uang sama, §11.1) dalam SATU transaksi, lalu hitung ulang harga jual. Kuota total tak boleh di bawah yang sudah terpakai. */
-export async function savePeriodPrices(hotelId: string, periodId: string, input: { vendorId: string; currency: string; rooms: RoomPriceInput[] }): Promise<string[]> {
-  await assertVendorUsable(input.vendorId)
-  const ids = await prisma.$transaction(async tx => {
-    await lockHotel(tx, hotelId)
-    await periodOf(tx, hotelId, periodId)
-    const used = new Map((await tx.hotelRoomSchedule.findMany({ where: { periodId }, select: { roomTypeId: true, pendingQuota: true, bookedQuota: true, roomType: { select: { name: true } } } }))
-      .map(s => [s.roomTypeId, s]))
-    const out: string[] = []
-    for (const room of input.rooms) {
-      const u = used.get(room.roomTypeId)
-      if (u && room.totalQuota < u.pendingQuota + u.bookedQuota) throw new HotelPeriodError(409, `Kuota ${u.roomType.name} tidak boleh di bawah ${u.pendingQuota + u.bookedQuota} kamar yang sudah dipesan`)
-      out.push(await writeRoom(tx, periodId, input.vendorId, input.currency, room))
-    }
-    return out
-  })
-  for (const id of ids) await repriceOwner('hotel', id)
-  return ids
-}
-
 /**
- * Duplikat periode: periode baru (tanggal dari admin) berisi semua tipe kamar AKTIF sumber — kuota total (terpakai mulai 0), biaya modal (vendor, mata uang, nominal),
- * vendor pilihan — dalam satu transaksi; lalu harga jual dihitung ulang dan harga jual MANUAL sumber disalin lewat `setManualSell` (tercatat di `price_changes`).
+ * Duplikat periode = periode BARU beserta isinya. Formulir admin mengirim tanggal baru + isi (diisi dari sumber, boleh diubah) → ditulis dalam satu transaksi;
+ * tanpa `prices` isi disalin dari sumber di server (semua tipe kamar AKTIF: kuota total — terpakai mulai 0 —, biaya modal, vendor pilihan). Sesudahnya harga jual
+ * dihitung ulang dan harga jual MANUAL sumber disalin untuk tipe kamar yang sama lewat `setManualSell` (tercatat di `price_changes`).
  */
-export async function duplicatePeriod(hotelId: string, periodId: string, range: { periodStart: CalendarDate; periodEnd: CalendarDate }, byUserId: string): Promise<{ id: string }> {
-  assertRange(range.periodStart, range.periodEnd)
-  const { id, map, label } = await prisma.$transaction(async tx => {
+export async function duplicatePeriod(hotelId: string, periodId: string, input: PeriodInput, byUserId: string): Promise<{ id: string }> {
+  if (input.prices) await assertVendorUsable(input.prices.vendorId)
+  const { id, ids, label, sourceByRoomType } = await prisma.$transaction(async tx => {
     await lockHotel(tx, hotelId)
     const src = await periodOf(tx, hotelId, periodId)
-    await assertNoOverlap(tx, hotelId, range.periodStart, range.periodEnd)
-    const created = await tx.hotelPricePeriod.create({ data: { hotelId, periodStart: dbDateOf(range.periodStart), periodEnd: dbDateOf(range.periodEnd) } })
-    const map: Array<[string, string]> = [] // [jadwal sumber, jadwal baru]
-    for (const s of src.schedules.filter(x => x.isActive)) {
-      const copy = await tx.hotelRoomSchedule.create({ data: { periodId: created.id, roomTypeId: s.roomTypeId, totalQuota: s.totalQuota } })
-      const costs = await tx.productCost.findMany({ where: { productType: 'hotel', productId: s.id, isActive: true } })
-      for (const c of costs) {
-        await tx.productCost.create({ data: { productType: 'hotel', productId: copy.id, costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, costTiers: c.costTiers ?? Prisma.JsonNull } })
+    await checkDates(tx, hotelId, input.periodStart, input.periodEnd, true)
+    const created = await tx.hotelPricePeriod.create({ data: { hotelId, periodStart: dbDateOf(input.periodStart), periodEnd: dbDateOf(input.periodEnd) } })
+    const ids: string[] = []
+    if (input.prices) ids.push(...await writePrices(tx, created.id, input.prices))
+    else {
+      for (const s of src.schedules.filter(x => x.isActive)) {
+        const copy = await tx.hotelRoomSchedule.create({ data: { periodId: created.id, roomTypeId: s.roomTypeId, totalQuota: s.totalQuota } })
+        const costs = await tx.productCost.findMany({ where: { productType: 'hotel', productId: s.id, isActive: true } })
+        for (const c of costs) {
+          await tx.productCost.create({ data: { productType: 'hotel', productId: copy.id, costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, costTiers: c.costTiers ?? Prisma.JsonNull } })
+        }
+        const prefs = await tx.preferredVendor.findMany({ where: { productType: 'hotel', productId: s.id } })
+        for (const v of prefs) await tx.preferredVendor.create({ data: { productType: 'hotel', productId: copy.id, costComponent: v.costComponent, vendorId: v.vendorId } })
+        ids.push(copy.id)
       }
-      const prefs = await tx.preferredVendor.findMany({ where: { productType: 'hotel', productId: s.id } })
-      for (const v of prefs) await tx.preferredVendor.create({ data: { productType: 'hotel', productId: copy.id, costComponent: v.costComponent, vendorId: v.vendorId } })
-      map.push([s.id, copy.id])
     }
-    return { id: created.id, map, label: `${formatCalendarDate(calendarDateOf(src.periodStart))} – ${formatCalendarDate(calendarDateOf(src.periodEnd))}` }
+    return {
+      id: created.id, ids,
+      label: `${formatCalendarDate(calendarDateOf(src.periodStart))} – ${formatCalendarDate(calendarDateOf(src.periodEnd))}`,
+      sourceByRoomType: new Map(src.schedules.filter(x => x.isActive).map(x => [x.roomTypeId, x.id])),
+    }
   })
-  const manual = new Map((await prisma.pricePoint.findMany({ where: { ownerType: 'hotel', ownerId: { in: map.map(([s]) => s) }, variantKey: '', manualSellIdr: { not: null } }, select: { ownerId: true, manualSellIdr: true } }))
+  await reprice(ids)
+  const created = await prisma.hotelRoomSchedule.findMany({ where: { id: { in: ids } }, select: { id: true, roomTypeId: true } })
+  const manual = new Map((await prisma.pricePoint.findMany({ where: { ownerType: 'hotel', ownerId: { in: [...sourceByRoomType.values()] }, variantKey: '', manualSellIdr: { not: null } }, select: { ownerId: true, manualSellIdr: true } }))
     .map(p => [p.ownerId, Number(p.manualSellIdr)]))
-  for (const [from, to] of map) {
-    await repriceOwner('hotel', to)
-    const sell = manual.get(from)
-    if (sell) await setManualSell({ ownerType: 'hotel', ownerId: to, byUserId, sellIdr: sell, note: `Disalin dari periode ${label}` })
+  for (const c of created) {
+    const from = sourceByRoomType.get(c.roomTypeId)
+    const sell = from ? manual.get(from) : undefined
+    if (sell) await setManualSell({ ownerType: 'hotel', ownerId: c.id, byUserId, sellIdr: sell, note: `Disalin dari periode ${label}` })
   }
   return { id }
 }

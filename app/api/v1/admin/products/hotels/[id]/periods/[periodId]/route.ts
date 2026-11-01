@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireManager } from '@/lib/auth/session'
+import { requireManager, requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { periodUpdateSchema } from '@/lib/validators/hotelPeriod'
 import { deletePeriod, updatePeriod } from '@/lib/hotels/periods'
 import { periodFailure } from '@/lib/hotels/http'
 import { withSellPrice } from '@/lib/pricing/engine/read'
 
-// Satu periode: lihat / ubah tanggal & status / hapus-aman (docs/arsitektur-hotel.md §12.2). Periode harus milik hotel di URL.
+// Satu periode: lihat / ubah tanggal, status, dan isi (satu transaksi) / hapus-aman (docs/arsitektur-hotel.md §12.2). Periode harus milik hotel di URL.
 type Ctx = { params: Promise<{ id: string; periodId: string }> }
 
 export async function GET(_req: Request, { params }: Ctx) {
@@ -28,6 +28,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id, periodId } = await params
     const parsed = periodUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (parsed.data.prices) await requireSuperAdmin() // isi = HPP (lib/pricing/policy.ts)
     await updatePeriod(id, periodId, parsed.data)
     return NextResponse.json(ok(null))
   } catch (e) {

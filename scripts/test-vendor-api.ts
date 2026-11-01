@@ -228,7 +228,10 @@ await t('HANYA lib/vendors/service.ts yang menulis tabel vendor/kategori (tak ad
     const src = readFileSync(`app/api/v1/admin/system/${f}`, 'utf8')
     assert.match(src, /createVendorHandlers\(\)/, f); assert.ok(src.split('\n').length <= 10, f); assert.doesNotMatch(src, /prisma/, f)
   }
-  for (const f of ['flight/schedules/[id]/cost', 'transport/pricing/[id]/cost', 'hotels/[id]/periods/[periodId]/prices', 'visa/[id]/cost-tiers']) {
+  // Hotel: periode + isi disimpan lewat satu penulis lib/hotels/periods.ts (docs/arsitektur-hotel.md §12) — vendor diperiksa di sana, galat → 400 di lib/hotels/http.ts.
+  assert.match(readFileSync('lib/hotels/periods.ts', 'utf8'), /await assertVendorUsable\(input\.prices\.vendorId\)[\s\S]*await assertVendorUsable\(patch\.prices\.vendorId\)/, 'hotel: simpan isi periode harus memeriksa vendor')
+  assert.match(readFileSync('lib/hotels/http.ts', 'utf8'), /vendorNotUsableResponse\(e\)/, 'hotel: galat vendor → 400')
+  for (const f of ['flight/schedules/[id]/cost', 'transport/pricing/[id]/cost', 'visa/[id]/cost-tiers']) {
     const src = readFileSync(`app/api/v1/admin/products/${f}/route.ts`, 'utf8')
     assert.match(src, /await assertVendorUsable\(/, `${f}: PUT harus memeriksa vendor`); assert.match(src, /vendorNotUsableResponse\(e\)/, `${f}: galat vendor → 400`)
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { requireManager } from '@/lib/auth/session'
+import { requireManager, requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { periodCreateSchema } from '@/lib/validators/hotelPeriod'
 import { createPeriod } from '@/lib/hotels/periods'
@@ -32,6 +32,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const { id } = await params
     const parsed = periodCreateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (parsed.data.prices) await requireSuperAdmin() // isi = HPP (lib/pricing/policy.ts)
     return NextResponse.json(ok(await createPeriod(id, parsed.data)), { status: 201 })
   } catch (e) {
     return periodFailure(e, 'admin/products/hotels/[id]/periods/POST')
