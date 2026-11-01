@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { calendarDateOf, dbDateOf, formatCalendarDate, type CalendarDate } from '@/lib/time'
 import { dropPolymorphic } from '@/lib/admin/productDelete'
-import { repriceOwner } from '@/lib/pricing/engine'
+import { getPricePoint, repriceOwner } from '@/lib/pricing/engine'
 import { setManualSell } from '@/lib/pricing/engine/manual'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 
@@ -214,11 +214,10 @@ export async function duplicatePeriod(hotelId: string, periodId: string, input: 
   })
   await reprice(ids)
   const created = await prisma.hotelRoomSchedule.findMany({ where: { id: { in: ids } }, select: { id: true, roomTypeId: true } })
-  const manual = new Map((await prisma.pricePoint.findMany({ where: { ownerType: 'hotel', ownerId: { in: [...sourceByRoomType.values()] }, variantKey: '', manualSellIdr: { not: null } }, select: { ownerId: true, manualSellIdr: true } }))
-    .map(p => [p.ownerId, Number(p.manualSellIdr)]))
   for (const c of created) {
     const from = sourceByRoomType.get(c.roomTypeId)
-    const sell = from ? manual.get(from) : undefined
+    const point = from ? await getPricePoint('hotel', from) : null // pembaca mesin harga — kolom harga manual hanya disentuh mesin
+    const sell = point?.mode === 'manual' ? point.sellIdr : undefined
     if (sell) await setManualSell({ ownerType: 'hotel', ownerId: c.id, byUserId, sellIdr: sell, note: `Disalin dari periode ${label}` })
   }
   return { id }
