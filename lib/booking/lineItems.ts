@@ -50,8 +50,10 @@ export async function writeBookingItems(
         case 'hotel': {
           const sch = await tx.hotelRoomSchedule.findUniqueOrThrow({
             where: { id: item.hotelRoomScheduleId },
-            select: { period: { select: { periodStart: true, periodEnd: true, hotel: { select: { name: true } } } }, roomType: { select: { name: true } } }, // 404 bila jadwal tak ada
+            select: { isActive: true, period: { select: { isActive: true, periodStart: true, periodEnd: true, hotel: { select: { name: true, isActive: true } } } }, roomType: { select: { name: true } } }, // 404 bila jadwal tak ada
           })
+          // Kamar/periode/hotel yang dinonaktifkan (mis. hapus-aman karena dirujuk) tidak dijual lagi — sama dengan tiket pesawat. Item lama yang tak diubah di revisi tak ditulis ulang.
+          if (!sch.isActive || !sch.period.isActive || !sch.period.hotel.isActive) throw new ItemNotBookableError('Kamar hotel ini tidak dijual lagi')
           // Tanggal menginap harus berada di periode harga jadwal yang dipilih (jadwal periode murah tak boleh dipakai untuk tanggal musim ramai).
           if (new Date(item.checkIn) < sch.period.periodStart || new Date(item.checkOut) > sch.period.periodEnd) {
             throw new ItemNotBookableError('Tanggal menginap di luar periode harga kamar yang dipilih')

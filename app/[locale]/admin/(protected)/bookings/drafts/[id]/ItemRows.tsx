@@ -6,6 +6,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { Button } from '@/components/admin/ui/Button'
 import { formatRupiah } from '@/lib/utils'
 import { daysBetween, formatCalendarDate, type CalendarDate } from '@/lib/time'
+import { hotelsOf, noPeriodMessage, resolveHotelSchedule, roomsOf } from '@/lib/booking/hotelPick'
 import { MODULE_LABEL, type Catalog, type DraftItem, type ModuleKey } from './catalog'
 
 // Editor BARIS produk (docs/arsitektur-booking-engine-v2.md §10.4, arahan pemilik 2026-11-01 — gaya baris invoice): satu baris per item, semua kolom langsung dapat diubah,
@@ -30,6 +31,17 @@ const fmt = (iso: string) => formatCalendarDate(iso)
 let seq = 0
 export const newRowKey = () => `r${Date.now().toString(36)}${(seq++).toString(36)}`
 const empty = (people: number): RowFields => ({ pick: '', start: '', end: '', people: String(people), rooms: '1', extra: {} })
+
+/**
+ * Baris hotel (docs/arsitektur-hotel.md §12.6): admin memilih Hotel → Tipe kamar (`extra.hotel`/`extra.room`), PERIODE harga dipilih otomatis dari tanggal
+ * (`f.pick` = jadwal kamar hasil `resolveHotelSchedule`). Baris dari draf/booking hanya menyimpan jadwal → pilihan diturunkan dari katalog.
+ */
+function hotelSel(row: ItemRow, catalog: Catalog): { hotel: string; room: string } {
+  const o = row.f.pick ? catalog.hotel?.find(x => x.id === row.f.pick) : undefined
+  return { hotel: row.f.extra.hotel ?? o?.hotelId ?? '', room: row.f.extra.room ?? o?.roomTypeId ?? '' }
+}
+/** Baris hotel lama yang jadwalnya tak lagi di katalog (nonaktif / periode lewat) dan belum diubah: dikirim apa adanya, server yang memutuskan. */
+const hotelLegacy = (row: ItemRow, catalog: Catalog) => !!row.f.pick && !hotelSel(row, catalog).hotel
 
 export function newRow(people: number, module: ModuleKey | '' = ''): ItemRow {
   return { key: newRowKey(), module, f: empty(people) }
@@ -61,7 +73,7 @@ export function rowToItem(row: ItemRow, catalog: Catalog): { item: DraftItem } |
   const { module, f } = row
   const n = num(f.people)
   if (!module) return { error: 'Pilih jenis produk' }
-  if (!f.pick) return { error: 'Pilih produk' }
+  if (!f.pick && module !== 'hotel') return { error: 'Pilih produk' }
   switch (module) {
     case 'flight':
       if (!f.start) return { error: 'Isi tanggal terbang' }
@@ -69,8 +81,19 @@ export function rowToItem(row: ItemRow, catalog: Catalog): { item: DraftItem } |
       return { item: { itemType: 'flight', flightScheduleId: f.pick, departureDate: f.start, numPassengers: n } }
     case 'hotel': {
       const nights = span(f.start, f.end)
+      const rooms = Math.max(1, num(f.rooms))
+      if (hotelLegacy(row, catalog)) {
+        if (nights < 1) return { error: 'Check-out harus setelah check-in' }
+        return { item: { itemType: 'hotel', hotelRoomScheduleId: f.pick, checkIn: f.start, checkOut: f.end, nights, numRooms: rooms } }
+      }
+      const sel = hotelSel(row, catalog)
+      if (!sel.hotel) return { error: 'Pilih hotel' }
+      if (!sel.room) return { error: 'Pilih tipe kamar' }
+      if (!f.start || !f.end) return { error: 'Isi tanggal check-in dan check-out' }
       if (nights < 1) return { error: 'Check-out harus setelah check-in' }
-      return { item: { itemType: 'hotel', hotelRoomScheduleId: f.pick, checkIn: f.start, checkOut: f.end, nights, numRooms: Math.max(1, num(f.rooms)) } }
+      const res = resolveHotelSchedule(catalog.hotel ?? [], sel.hotel, sel.room, f.start, f.end)
+      if (!res.ok) return { error: noPeriodMessage(res.periods) }
+      return { item: { itemType: 'hotel', hotelRoomScheduleId: res.schedule.id, checkIn: f.start, checkOut: f.end, nights, numRooms: rooms } }
     }
     case 'transport':
       if (n < 1) return { error: 'Penumpang minimal 1' }
@@ -156,12 +179,21 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
   const set = (i: number, patch: Partial<ItemRow>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
   const setF = (i: number, patch: Partial<RowFields>) => onChange(rows.map((r, j) => (j === i ? { ...r, f: { ...r.f, ...patch } } : r)))
   const setX = (i: number, k: string, v: string) => onChange(rows.map((r, j) => (j === i ? { ...r, f: { ...r.f, extra: { ...r.f.extra, [k]: v } } } : r)))
+  // Hotel: setiap perubahan hotel/kamar/tanggal memilih ulang periode (jadwal) secara otomatis; baris lama tanpa pilihan dibiarkan apa adanya.
+  const setHotel = (i: number, patch: { hotel?: string; room?: string; start?: string; end?: string }) => onChange(rows.map((r, j) => {
+    if (j !== i) return r
+    const cur = hotelSel(r, catalog)
+    const hotel = patch.hotel ?? cur.hotel, room = patch.room ?? cur.room
+    const start = patch.start ?? r.f.start, end = patch.end ?? r.f.end
+    const res = resolveHotelSchedule(catalog.hotel ?? [], hotel, room, start, end)
+    const pick = res.ok ? res.schedule.id : hotel || room ? '' : r.f.pick
+    return { ...r, f: { ...r.f, start, end, pick, extra: { ...r.f.extra, hotel, room } } }
+  }))
 
   const optionsFor = (row: ItemRow) => {
     const base = (() => {
       switch (row.module) {
         case 'flight': return (catalog.flight ?? []).map(o => ({ id: o.id, label: o.label, hint: `${fmt(o.from)} – ${fmt(o.to)} · sisa ${o.seatsLeft} · ${formatRupiah(o.price)}` }))
-        case 'hotel': return (catalog.hotel ?? []).map(o => ({ id: o.id, label: `${o.hotelName} — ${o.roomType}`, hint: `${o.city} · ${fmt(o.from)} – ${fmt(o.to)} · ${formatRupiah(o.price)}/malam` }))
         case 'transport': return (catalog.transport ?? []).map(o => ({ id: o.id, label: `${fmt(o.date)} — ${o.tripName}`, hint: `${o.vehicle} · sisa ${o.seatsLeft} kursi · ${formatRupiah(o.price)}` }))
         case 'muthowif': return [{ id: 'muthowif', label: 'Layanan Muthowif', hint: `${formatRupiah(catalog.muthowif?.pricePerPersonDay ?? 0)}/orang/hari` }]
         case 'catering': return (catalog.catering ?? []).map(o => ({ id: o.id, label: o.name, hint: o.prices ? `${formatRupiah(o.prices.regular)}/orang/hari (reguler)` : '' }))
@@ -179,7 +211,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
       {rows.length === 0 && <p className="m-0 text-sm text-admin-muted">Belum ada produk. Visa dipasang per jamaah di kotak Jamaah.</p>}
       {rows.length > 0 && (
         <div aria-hidden className={`hidden gap-x-3 px-2.5 text-[11px] font-medium uppercase tracking-wide text-admin-muted xl:grid ${GRID}`}>
-          <span>Produk</span><span>Tanggal</span><span>Jumlah</span><span className="text-right">Harga</span><span className="text-right">Subtotal</span><span />
+          <span>Produk</span><span>Tanggal</span><span>Jumlah</span><span className="text-right">Harga jual</span><span className="text-right">Subtotal</span><span />
         </div>
       )}
       {rows.map((row, i) => {
@@ -192,8 +224,10 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
         const pkg = row.module === 'package' ? catalog.package?.find(x => x.id === f.pick) : undefined
         const tourQuotas = tour && f.start ? (catalog.transport ?? []).filter(q => q.date === f.start && tour.vehicleOptions.some(v => v.pricingId === q.pricingId)) : []
         const date = (label: string, key: 'start' | 'end', min?: string, max?: string) => (
-          <label className="flex items-center gap-2"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">{label}</span><input type="date" className="admin-inp-xs min-w-0 flex-1" aria-label={`${label} baris ${i + 1}`} min={min} max={max} value={f[key]} onChange={e => setF(i, { [key]: e.target.value })} /></label>
+          <label className="flex items-center gap-2"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">{label}</span><input type="date" className="admin-inp-xs min-w-0 flex-1" aria-label={`${label} baris ${i + 1}`} min={min} max={max} value={f[key]} onChange={e => (row.module === 'hotel' ? setHotel(i, { [key]: e.target.value }) : setF(i, { [key]: e.target.value }))} /></label>
         )
+        const hsel = row.module === 'hotel' ? hotelSel(row, catalog) : null
+        const legacyHotel = row.module === 'hotel' && hotelLegacy(row, catalog)
         const count = (label: string, key: 'people' | 'rooms') => (
           <Field label={label}><input type="number" min={1} className="admin-inp-xs" aria-label={`${label} baris ${i + 1}`} value={f[key]} onChange={e => setF(i, { [key]: e.target.value })} /></Field>
         )
@@ -209,17 +243,27 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
               <div className="col-span-2 space-y-1.5 xl:col-span-1">
                 <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref} placeholder="— pilih jenis —"
                   options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(defaultPeople), label: undefined })} />
-                <ChoiceSelect size="sm" ariaLabel={`Produk baris ${i + 1}`} value={f.pick} disabled={!row.module} options={optionsFor(row)}
-                  placeholder={row.module ? (optionsFor(row).length ? '— pilih produk —' : 'Memuat / belum ada produk') : 'Pilih jenis dulu'} onChange={v => setF(i, { pick: v })} />
+                {hsel ? <>
+                  <ChoiceSelect size="sm" ariaLabel={`Hotel baris ${i + 1}`} value={hsel.hotel} clearable={false}
+                    options={hotelsOf(catalog.hotel ?? []).map(h => ({ id: h.id, label: h.name, hint: [h.city, h.stars ? `bintang ${h.stars}` : ''].filter(Boolean).join(' · ') }))}
+                    placeholder={!catalog.hotel ? 'Memuat…' : legacyHotel ? (row.label ?? 'Hotel (tidak tersedia di katalog)') : catalog.hotel.length ? '— pilih hotel —' : 'Belum ada hotel berharga'}
+                    onChange={v => setHotel(i, { hotel: v, room: '' })} />
+                  <ChoiceSelect size="sm" ariaLabel={`Tipe kamar baris ${i + 1}`} value={hsel.room} clearable={false} disabled={!hsel.hotel}
+                    options={roomsOf(catalog.hotel ?? [], hsel.hotel).map(r => ({ id: r.id, label: r.name, hint: `isi ${r.capacity} · ${r.minPrice === r.maxPrice ? formatRupiah(r.minPrice) : `${formatRupiah(r.minPrice)} – ${formatRupiah(r.maxPrice)}`}/malam` }))}
+                    placeholder={hsel.hotel ? '— pilih tipe kamar —' : 'Pilih hotel dulu'} onChange={v => setHotel(i, { room: v })} />
+                </> : (
+                  <ChoiceSelect size="sm" ariaLabel={`Produk baris ${i + 1}`} value={f.pick} disabled={!row.module} options={optionsFor(row)}
+                    placeholder={row.module ? (optionsFor(row).length ? '— pilih produk —' : 'Memuat / belum ada produk') : 'Pilih jenis dulu'} onChange={v => setF(i, { pick: v })} />
+                )}
               </div>
 
               {/* 2. Tanggal: menyesuaikan jenis produk */}
               <div className="col-span-2 space-y-1.5 xl:col-span-1">
                 {row.module === 'flight' && date('Berangkat', 'start', flight?.from, flight?.to)}
                 {row.module === 'hotel' && <>
-                  {date('Check-in', 'start', hotel?.from, hotel?.to)}{date('Check-out', 'end', f.start || hotel?.from, hotel?.to)}
+                  {date('Check-in', 'start')}{date('Check-out', 'end', f.start || undefined)}
                   <p className="m-0 text-[11px] text-admin-muted">
-                    {nights > 0 && <>{nights} malam · </>}{hotel && <>periode harga {fmt(hotel.from)} – {fmt(hotel.to)}</>}
+                    {nights > 0 && <>{nights} malam</>}{nights > 0 && hotel && ' · '}{hotel && <>periode harga {fmt(hotel.from)} – {fmt(hotel.to)} (otomatis)</>}
                   </p>
                 </>}
                 {(row.module === 'muthowif' || row.module === 'catering') && <>
@@ -240,7 +284,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
 
               {/* 4. Harga satuan (katalog, harga jual) */}
               <div className="text-right">
-                <span className="block text-[11px] text-admin-muted xl:hidden">Harga</span>
+                <span className="block text-[11px] text-admin-muted xl:hidden">Harga jual</span>
                 {unit ? <>
                   <span className="block text-sm tabular-nums text-admin-ink">{formatRupiah(unit.amount)}</span>
                   <span className="block text-[11px] text-admin-muted">{unit.unit}</span>
