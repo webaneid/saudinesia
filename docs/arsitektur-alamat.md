@@ -231,6 +231,8 @@ User: "semua yang membutuhkan alamat ... pakai komponen tersebut" — dikonfirma
 
 **Verifikasi:** `bun run build` 0 error. Vendor: edit form terbuka prefilled, ganti provinsi → kab/kota cascading benar, simpan → 200 → data persisten (dikonfirmasi query DB). Fix schema berlaku otomatis ke Hotel dan Profile (satu `addressSchema` dipakai bertiga).
 
+**Lokasi Google Maps (2026-11-02, `docs/arsitektur-hotel.md` §12.5):** `Address` mendapat `mapsUrl`/`latitude`/`longitude` opsional, diterima HANYA lewat `addressWithMapSchema` (dipakai Hotel) dan `AddressPicker withMap`. `User`/`Vendor`/Pengaturan Invoice tetap `addressSchema` (kolom itu dibuang) — lokasi rumah jamaah tak pernah disimpan.
+
 ---
 
 ## 10. Referensi Silang

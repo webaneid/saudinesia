@@ -3167,3 +3167,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Alternatives considered:** tetap dua langkah (tanggal lalu harga) — ditolak, justru yang dikoreksi pemilik; duplikat selalu menyalin di server tanpa bisa diubah — ditolak, admin ingin menyesuaikan harga periode baru sebelum simpan (tanpa `prices` tetap menyalin di server untuk pemanggil lain).
 **Security:** 0 temuan baru (badan `.strict()`, cakupan hotel tetap, isi = HPP → `requireSuperAdmin`, dibuktikan tes penjaga + mutasi). `bun audit` tidak berubah (tanpa dependensi baru).
 
+## 2026-11-02 — Hotel F2: lokasi Google Maps tanpa API key, hanya untuk alamat hotel
+**Decision:** lokasi hotel = tautan Google Maps yang ditempel admin (`Address.mapsUrl`, koordinat diturunkan server bila terbaca), dicari lewat Maps URLs publik di tab baru. Tautan diterima hanya untuk host Google Maps yang diizinkan (`lib/address/maps.ts`), diperiksa di skema, di penulis, dan lagi saat tampil di halaman publik. Kolom ini hanya diterima `addressWithMapSchema` (hotel); alamat jamaah/vendor/invoice tetap `addressSchema`.
+**Rationale:** pemilik ingin pencarian Google Maps opsional tanpa wajib API — Places/Embed API butuh key dan biaya. Tautan tampil di halaman publik, jadi whitelist host mencegah tautan phishing/`javascript:`; server tidak pernah mengikuti tautan (tanpa SSRF). Membatasi ke skema hotel mencegah titik lokasi rumah jamaah tersimpan (UU PDP).
+**Alternatives considered:** Places Autocomplete di dalam aplikasi (ditolak sekarang — key + biaya); iframe peta tersemat (butuh Embed API key, bisa menyusul); kolom di `Hotel` (ditolak — `Address` dipakai lintas pemilik); mengurai tautan pendek dengan mengikuti redirect di server (ditolak — SSRF, koordinat cukup opsional).
+**Security:** 1 temuan Low pre-existing (SEC-162, skema ubah hotel tanpa `.strict()`) diperbaiki + dijaga tes; 0 temuan baru. Bukti: `test-address-maps` + 4 mutasi merah; `bun audit` tanpa critical.
+

@@ -867,7 +867,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] Tata letak kolom Produk · Tanggal · Jumlah · Harga · Subtotal + subtotal parsial saat satu baris gagal (2026-11-01)
 - Hotel — perombakan kecil (docs/arsitektur-hotel.md §12, 2026-11-02)
   - [x] F1 Periode: edit tanggal, hapus-aman, duplikat (ikon Pensil/Tong sampah/Copy), hapus tipe kamar, simpan harga transaksional, cakupan hotel (SEC-161)
-  - [ ] F2 Lokasi Google Maps (tanpa API key)
+  - [x] F2 Lokasi Google Maps (tanpa API key): `Address.mapsUrl/latitude/longitude`, whitelist host `lib/address/maps.ts`, `AddressPicker withMap`, tombol publik "Lihat di Google Maps" (SEC-162)
   - [ ] F3 Booking: pemilih Jenis → Hotel → Kamar, periode otomatis, label harga jual
   - [x] 6c — invoice publik tanpa login (tautan HMAC dapat dicabut, halaman + PDF, noindex/no-store), notifikasi `invoice_issued` saat terbit admin & checkout jamaah + kirim ulang, salin/cabut di admin — selesai 2026-11-01 (§10.4); menutup K5-1
 - [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
