@@ -856,7 +856,7 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] Fase 2 — skema identitas + kartu + `PilgrimIdentityEvent` + cek kunci PII di DB (SEC-168), FK `BookingPilgrim.userId`, `lib/pilgrims/service.ts` (dedup tanpa orakel, kunci advisory, bayi/WNA, hapus-aman), rate limit, hapus akun, penjaga klien transitif (SEC-170), `scripts/test-pilgrims.ts` — 2026-11-02
 - [x] Fase 3 — Jamaah Saya (UI + API, admin atas nama pelanggan) — selesai 2026-11-02 (`docs/arsitektur-jamaah.md` §5.2)
 - [x] Fase 4 — dokumen jamaah (katalog jenis Produk → Jenis Dokumen, unggah cek isi + WebP tanpa EXIF, `DocumentRepeater` jamaah + admin, hapus kartu/akun ikut menghapus berkas; menutup SEC-164, D3/D4/D7) — selesai 2026-11-03 (`docs/arsitektur-jamaah.md` §7.5)
-- [ ] Fase 5 — syarat dokumen per produk + kelengkapan + aturan paspor 6 bulan
+- [x] Fase 5 — syarat dokumen per produk atas katalog (`DocumentRequirement.documentTypeId`, satu penulis `lib/documents/requirements.ts`, editor `RequirementsEditor` di Visa, visa baru berisi syarat bawaan), evaluator kelengkapan murni `lib/documents/completeness.ts` + aturan paspor 6 bulan (`addMonths`), `VisaProduct.requirements`/`REQUIRED_DOCUMENTS`/`DOC_LABEL` dihapus (D5, D8) — selesai 2026-11-03 (`docs/arsitektur-jamaah.md` §7.7)
 - [ ] Fase 6 — pengajuan & verifikasi admin
 - [ ] Fase 7 — integrasi booking (pilih kartu, snapshot, alamat sungguhan)
 - [ ] Fase 8 — gudang admin (identitas, konflik, gabung, buka NIK berjejak)

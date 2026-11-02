@@ -52,8 +52,8 @@ export async function deleteDocumentType(id: string): Promise<DeleteOutcome> {
     if (!rows[0]) throw Object.assign(new Error('not found'), { code: 'P2025' })
     return rows[0].isSystem
   }
-  // Bawaan dihitung sebagai "dirujuk kode" — tak pernah dihapus fisik.
-  const references = async (db: Prisma.TransactionClient | typeof prisma, isSystem: boolean) => (isSystem ? 1 : 0) + await db.pilgrimDocument.count({ where: { documentTypeId: id } })
+  // Bawaan dihitung sebagai "dirujuk kode" — tak pernah dihapus fisik. Syarat produk merujuk lewat FK Restrict (Fase 5).
+  const references = async (db: Prisma.TransactionClient | typeof prisma, isSystem: boolean) => (isSystem ? 1 : 0) + await db.pilgrimDocument.count({ where: { documentTypeId: id } }) + await db.documentRequirement.count({ where: { documentTypeId: id } })
   return deleteOrDeactivate({
     references: async () => references(prisma, await prisma.$transaction(lock)),
     remove: () => prisma.$transaction(async (tx) => {
@@ -61,6 +61,6 @@ export async function deleteDocumentType(id: string): Promise<DeleteOutcome> {
       await tx.documentType.delete({ where: { id } })
     }),
     deactivate: () => prisma.documentType.update({ where: { id }, data: { isActive: false } }),
-    usedBy: () => 'Jenis dokumen ini bawaan sistem atau sudah dipakai dokumen jamaah',
+    usedBy: () => 'Jenis dokumen ini bawaan sistem, sudah dipakai dokumen jamaah, atau menjadi syarat produk',
   })
 }

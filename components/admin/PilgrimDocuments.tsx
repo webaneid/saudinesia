@@ -2,8 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { Download, Loader2, ChevronDown, ChevronUp, AlertCircle } from 'lucide-react'
-import { REQUIRED_DOCUMENTS, DOC_LABEL } from '@/lib/constants/booking'
-import type { VisaRequirement } from '@/lib/types/visa'
+import type { RequirementView } from '@/lib/documents/completeness'
 import { DocumentCard } from '@/components/shared/media/DocumentCard'
 import { PreviewModal } from '@/components/shared/media/PreviewModal'
 import type { DocumentItem } from '@/components/shared/media/useDocuments'
@@ -13,7 +12,7 @@ type Props = {
   pilgrimId: string
   pilgrimName: string
   bookingCode: string
-  requirements?: VisaRequirement[]  // from visaProduct; undefined = use REQUIRED_DOCUMENTS fallback
+  requirements: RequirementView[]  // syarat produk (lib/documents/requirements.ts); kosong = tak ada dokumen wajib
 }
 
 export function PilgrimDocuments({ bookingId, pilgrimId, pilgrimName, bookingCode, requirements }: Props) {
@@ -76,9 +75,7 @@ export function PilgrimDocuments({ bookingId, pilgrimId, pilgrimName, bookingCod
     }
   }, [bookingId, bookingCode])
 
-  const docList = requirements
-    ? requirements.map(r => ({ docType: r.docType, label: r.label, required: r.required }))
-    : REQUIRED_DOCUMENTS.map(t => ({ docType: t, label: DOC_LABEL[t] ?? t, required: true }))
+  const docList = requirements.map(r => ({ docType: r.key, label: r.label, required: r.required }))
 
   const requiredCount = docList.filter(d => d.required).length
   const docMap  = Object.fromEntries(documents.map(d => [d.docType, d]))

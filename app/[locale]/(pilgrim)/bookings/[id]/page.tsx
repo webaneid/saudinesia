@@ -12,10 +12,11 @@ import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileD
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
-import { BOOKING_STATUS, VISA_STATUS, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
+import { BOOKING_STATUS, VISA_STATUS } from '@/lib/constants/booking'
 import { getPaymentConfig } from '@/lib/constants/payment'
 import { DocumentGrid } from '@/components/shared/media/DocumentGrid'
-import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { requirementsOfMany } from '@/lib/documents/requirements'
+import type { RequirementView } from '@/lib/documents/completeness'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
@@ -56,22 +57,17 @@ export default async function BookingDetailPage({ params }: Props) {
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
-  // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
-  // parseRequirements(visaProduct.requirements)
-  const requirementsByPilgrim = new Map<string, Awaited<ReturnType<typeof getDocumentRequirements>>>()
+  // Syarat dokumen per jamaah = syarat produk visanya (lib/documents/requirements.ts, satu kueri); tanpa visa = tak ada dokumen wajib.
+  const visaReqs = await requirementsOfMany([...new Set(booking.pilgrims.flatMap(p => p.visaApplication?.visaProductId ? [p.visaApplication.visaProductId] : []))].map(productId => ({ productType: 'visa', productId })))
+  const requirementsByPilgrim = new Map<string, RequirementView[]>(booking.pilgrims.map(p => [p.id, (p.visaApplication?.visaProductId && visaReqs.get(`visa:${p.visaApplication.visaProductId}`)) || []]))
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {
-      requirementsByPilgrim.set(p.id, await getDocumentRequirements('visa', p.visaApplication.visaProductId))
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements('visa', p.visaApplication.visaProductId))
     } else {
       // docs/arsitektur-booking.md §6 Step 6a — pilgrim tanpa visa (mis. checkout Transport-only)
       // tetap punya field manifest generik untuk menampilkan nama dkk. — bukan 'Jamaah' fallback.
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))
-      // [] eksplisit (BUKAN dibiarkan undefined) — DocumentGrid jatuh ke REQUIRED_DOCUMENTS
-      // (daftar hardcode paspor/KTP/dst.) kalau requirements undefined, yang salah untuk pilgrim
-      // tanpa visa sama sekali (mis. Transport-only) — tidak ada dokumen yang wajib diupload.
-      requirementsByPilgrim.set(p.id, [])
     }
   }
   function displayName(p: NonNullable<typeof booking>['pilgrims'][number]): string {
@@ -244,7 +240,7 @@ export default async function BookingDetailPage({ params }: Props) {
               bookingId={booking.id}
               pilgrimId={p.id}
               pilgrimName={displayName(p)}
-              requirements={requirementsByPilgrim.get(p.id)}
+              requirements={requirementsByPilgrim.get(p.id) ?? []}
             />
           </div>
         ))}

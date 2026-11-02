@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { REQUIRED_DOCUMENTS, type DocType } from '@/lib/constants/booking'
 
 export type DocumentItem = {
   id: string
@@ -20,7 +19,7 @@ export type DocumentsState = {
 
 export type UseDocumentsReturn = DocumentsState & {
   refresh: () => Promise<void>
-  upload: (docType: DocType, file: File, onProgress?: (pct: number) => void) => Promise<void>
+  upload: (docType: string, file: File, onProgress?: (pct: number) => void) => Promise<void>
   remove: (docId: string) => Promise<void>
   getPreviewUrl: (docId: string) => Promise<string>
   uploadError: string | null
@@ -32,7 +31,7 @@ export function useDocuments(bookingId: string, pilgrimId: string): UseDocuments
   const base = `/api/v1/pilgrims/${bookingId}/${pilgrimId}/documents`
 
   const [documents, setDocuments] = useState<DocumentItem[]>([])
-  const [missing,   setMissing]   = useState<string[]>([...REQUIRED_DOCUMENTS])
+  const [missing,   setMissing]   = useState<string[]>([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -58,7 +57,7 @@ export function useDocuments(bookingId: string, pilgrimId: string): UseDocuments
 
   // Upload via XHR to track progress (fetch doesn't expose upload progress)
   const upload = useCallback(
-    (docType: DocType, file: File, onProgress?: (pct: number) => void) =>
+    (docType: string, file: File, onProgress?: (pct: number) => void) =>
       new Promise<void>((resolve, reject) => {
         setUploading(true)
         setUploadError(null)

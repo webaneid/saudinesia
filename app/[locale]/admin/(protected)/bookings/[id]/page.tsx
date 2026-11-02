@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { displayStatus } from '@/lib/booking/lifecycle'
-import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
+import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
 import { ArrowLeft, FileDown, Pencil } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
 import { InvoiceBox } from './InvoiceBox'
@@ -13,7 +13,8 @@ import { VisaActions } from './VisaActions'
 import { PilgrimDataForm } from './PilgrimDataForm'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
 import { PilgrimDocuments } from '@/components/admin/PilgrimDocuments'
-import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { requirementsOfMany } from '@/lib/documents/requirements'
+import type { RequirementView } from '@/lib/documents/completeness'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
@@ -47,25 +48,17 @@ export default async function AdminBookingDetail({ params }: Props) {
   if (!booking) notFound()
   if (booking.status === 'draft') redirect(`/${locale}/admin/bookings/drafts/${id}`) // draf diedit di editor draf (§10.3)
 
-  // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
-  // parseRequirements(visaProduct.requirements), dikumpulkan per pilgrim (server component, jadi
-  // dihitung sekali sebelum render, bukan dipanggil sinkron di dalam .map()).
-  const requirementsByPilgrim = new Map<string, Awaited<ReturnType<typeof getDocumentRequirements>>>()
-  // docs/arsitektur-manifest.md §4 — getManifestFieldRequirements()/getFieldByRole() menggantikan
-  // pembacaan langsung p.fullName dkk (kolom baku sudah dihapus, sekarang fieldValues generik).
+  // Syarat dokumen per jamaah = syarat produk visanya (lib/documents/requirements.ts, satu kueri); tanpa visa = tak ada dokumen wajib.
+  const visaReqs = await requirementsOfMany([...new Set(booking.pilgrims.flatMap(p => p.visaApplication?.visaProductId ? [p.visaApplication.visaProductId] : []))].map(productId => ({ productType: 'visa', productId })))
+  const requirementsByPilgrim = new Map<string, RequirementView[]>(booking.pilgrims.map(p => [p.id, (p.visaApplication?.visaProductId && visaReqs.get(`visa:${p.visaApplication.visaProductId}`)) || []]))
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {
-      requirementsByPilgrim.set(p.id, await getDocumentRequirements('visa', p.visaApplication.visaProductId))
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements('visa', p.visaApplication.visaProductId))
     } else {
       // docs/arsitektur-booking.md §6 Step 6a — pilgrim tanpa visa (mis. checkout Transport-only)
       // tetap punya field manifest generik untuk menampilkan nama dkk. — bukan 'Jamaah' fallback.
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))
-      // [] eksplisit (BUKAN dibiarkan undefined) — PilgrimDocuments jatuh ke REQUIRED_DOCUMENTS
-      // (daftar hardcode paspor/KTP/dst.) kalau requirements undefined, yang salah untuk pilgrim
-      // tanpa visa sama sekali (mis. Transport-only) — tidak ada dokumen yang wajib diupload.
-      requirementsByPilgrim.set(p.id, [])
     }
   }
   function displayName(p: NonNullable<typeof booking>['pilgrims'][number]): string {
@@ -254,7 +247,7 @@ export default async function AdminBookingDetail({ params }: Props) {
               pilgrimId={p.id}
               pilgrimName={displayName(p)}
               bookingCode={booking.bookingCode}
-              requirements={requirementsByPilgrim.get(p.id)}
+              requirements={requirementsByPilgrim.get(p.id) ?? []}
             />
           ))}
         </div>
@@ -270,10 +263,7 @@ export default async function AdminBookingDetail({ params }: Props) {
         <div className="divide-y divide-admin-line">
           {booking.pilgrims.map((p) => {
             const visaCfg = VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]
-            const pilgrimRequirements = requirementsByPilgrim.get(p.id) ?? null
-            const requiredDocCount = pilgrimRequirements
-              ? pilgrimRequirements.filter(r => r.required).length
-              : REQUIRED_DOCUMENTS.length
+            const requiredDocCount = (requirementsByPilgrim.get(p.id) ?? []).filter(r => r.required).length
             return (
               <div key={p.id} className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-4">

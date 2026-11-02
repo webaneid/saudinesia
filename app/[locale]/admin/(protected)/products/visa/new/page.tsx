@@ -17,7 +17,7 @@ export default function NewVisaPage() {
     <CreatePage
       icon={KeyRound} title="Produk Visa Baru" backHref={`/${locale}/admin/products/visa`} backLabel="Daftar Produk Visa"
       description="Harga dan persyaratan dokumen diatur di halaman produk setelah dibuat — harga terhitung otomatis begitu komponen HPP diisi."
-      onSubmit={() => submit({ ...form, processDays: +form.processDays, requirements: [] })} saving={saving} canSubmit={!!form.name.trim() && !!form.visaType.trim()} error={error} submitLabel="Simpan & Lanjut"
+      onSubmit={() => submit({ ...form, processDays: +form.processDays })} saving={saving} canSubmit={!!form.name.trim() && !!form.visaType.trim()} error={error} submitLabel="Simpan & Lanjut"
     >
       <div className="grid gap-3 md:grid-cols-2">
         <div>

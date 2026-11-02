@@ -3,7 +3,6 @@ import JSZip from 'jszip'
 import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { getObjectBuffer } from '@/lib/storage/minio'
-import { DOC_LABEL } from '@/lib/constants/booking'
 import { err } from '@/lib/validators'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { authFailureResponse } from '@/lib/admin/errors'
@@ -47,24 +46,33 @@ export async function GET(req: NextRequest, { params }: Params) {
     const fields = p.visaApplication?.visaProductId ? fieldsByProduct.get(p.visaApplication.visaProductId) ?? [] : []
     const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
     const pilgrimName = typeof name === 'string' && name ? name : p.id
-    return p.documents.map(d => ({ ...d, pilgrimName }))
+    return p.documents.map(d => ({ ...d, pilgrimName, pilgrimId: p.id }))
   })
 
   if (allDocs.length === 0) {
     return NextResponse.json(err('No documents to download'), { status: 404 })
   }
 
+  // Nama berkas di ZIP = label katalog jenis dokumen (kunci bila tak dikenal), dibersihkan — label diatur admin, jangan jadi path.
+  const labelOf = new Map((await prisma.documentType.findMany({ where: { key: { in: [...new Set(allDocs.map(d => d.docType))] } }, select: { key: true, label: true } })).map(t => [t.key, t.label]))
+  // Path unik ditetapkan sebelum unduhan paralel (SEC-187): nama jamaah sama, label sama, atau label kosong setelah disaring tak boleh saling
+  // menimpa entri ZIP — folder diberi awalan id jamaah, nama berkas ganda diberi sufiks -2, -3, …
+  const used = new Set<string>()
+  const entries = allDocs.map(doc => {
+    const label  = (labelOf.get(doc.docType) ?? doc.docType).replace(/[^a-zA-Z0-9 ()-]/g, '').trim() || 'dokumen'
+    const folder = `${doc.pilgrimName.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'jamaah'}-${doc.pilgrimId.slice(0, 8)}`
+    const ext    = (doc.fileName.split('.').pop() ?? 'bin').replace(/[^a-zA-Z0-9]/g, '') || 'bin'
+    let path = `${folder}/${label}.${ext}`
+    for (let n = 2; used.has(path); n++) path = `${folder}/${label}-${n}.${ext}`
+    used.add(path)
+    return { doc, path }
+  })
   const zip = new JSZip()
 
   await Promise.all(
-    allDocs.map(async (doc) => {
+    entries.map(async ({ doc, path }) => {
       try {
-        const buffer = await getObjectBuffer(doc.filePath)
-        const label  = DOC_LABEL[doc.docType] ?? doc.docType
-        // Safe folder name per pilgrim
-        const folder = doc.pilgrimName.replace(/[^a-zA-Z0-9 ]/g, '').trim() || doc.id
-        const ext    = doc.fileName.split('.').pop() ?? 'bin'
-        zip.file(`${folder}/${label}.${ext}`, buffer)
+        zip.file(path, await getObjectBuffer(doc.filePath))
       } catch {
         // Skip files that can't be fetched (log silently, don't break ZIP)
       }

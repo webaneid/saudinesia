@@ -2,22 +2,21 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { X, UploadCloud, FileText, ImageIcon, AlertCircle, CheckCircle2 } from 'lucide-react'
-import { DOC_LABEL, REQUIRED_DOCUMENTS, type DocType } from '@/lib/constants/booking'
-import type { VisaRequirement } from '@/lib/types/visa'
+import type { RequirementView } from '@/lib/documents/completeness'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
-const ALLOWED_MIMES  = ['image/jpeg', 'image/png', 'application/pdf']
-const ALLOWED_LABEL  = 'JPG, PNG, atau PDF'
+const ALLOWED_MIMES  = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'] // cek awal di peramban; server menilai dari ISI berkas
+const ALLOWED_LABEL  = 'JPG, PNG, WebP, atau PDF'
 const MAX_BYTES      = 5 * 1024 * 1024
 
 type Props = {
   open: boolean
   defaultDocType?: string        // pre-select docType when opened from a card
-  requirements?: VisaRequirement[] // dynamic list; falls back to REQUIRED_DOCUMENTS
+  requirements: RequirementView[] // syarat produk — pilihan jenis yang boleh diunggah
   uploading: boolean
   uploadError: string | null
   onClose: () => void
-  onUpload: (docType: DocType, file: File, onProgress: (pct: number) => void) => Promise<void>
+  onUpload: (docType: string, file: File, onProgress: (pct: number) => void) => Promise<void>
 }
 
 function formatBytes(bytes: number) {
@@ -27,12 +26,10 @@ function formatBytes(bytes: number) {
 function isImage(file: File) { return file.type.startsWith('image/') }
 
 export function UploadModal({ open, defaultDocType, requirements, uploading, uploadError, onClose, onUpload }: Props) {
-  const docOptions = requirements
-    ? requirements.map(r => ({ value: r.docType, label: r.label }))
-    : REQUIRED_DOCUMENTS.map(t => ({ value: t, label: DOC_LABEL[t] ?? t }))
+  const docOptions = requirements.map(r => ({ value: r.key, label: r.label }))
 
-  const firstType = (docOptions[0]?.value ?? REQUIRED_DOCUMENTS[0]) as DocType
-  const [docType,   setDocType]   = useState<DocType>((defaultDocType as DocType) ?? firstType)
+  const firstType = docOptions[0]?.value ?? ''
+  const [docType,   setDocType]   = useState<string>(defaultDocType ?? firstType)
   const [file,      setFile]      = useState<File | null>(null)
   const [preview,   setPreview]   = useState<string | null>(null)
   const [dragOver,  setDragOver]  = useState(false)
@@ -44,7 +41,7 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
   // Sync defaultDocType when modal opens for a specific card
   useEffect(() => {
     if (open) {
-      setDocType((defaultDocType as DocType) ?? firstType)
+      setDocType(defaultDocType ?? firstType)
       setFile(null); setPreview(null); setProgress(0)
       setClientErr(null); setDone(false)
     }
@@ -127,7 +124,7 @@ export function UploadModal({ open, defaultDocType, requirements, uploading, upl
               Jenis Dokumen
             </label>
             <ChoiceSelect
-              ariaLabel="Jenis dokumen" value={docType} onChange={v => setDocType(v as DocType)} clearable={false}
+              ariaLabel="Jenis dokumen" value={docType} onChange={v => setDocType(v)} clearable={false}
               disabled={!!defaultDocType || uploading} options={docOptions.map(o => ({ id: o.value, label: o.label }))}
             />
           </div>

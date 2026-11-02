@@ -5,13 +5,12 @@ import {
   FileText, Upload, Eye, Trash2, MoreVertical,
   CheckCircle2, Clock, ImageIcon,
 } from 'lucide-react'
-import { DOC_LABEL } from '@/lib/constants/booking'
 import type { DocumentItem } from './useDocuments'
 import { DATE_SHORT_MONTH, formatInstant } from '@/lib/time'
 
 type Props = {
   docType: string
-  label?: string       // overrides DOC_LABEL lookup
+  label?: string       // label syarat produk; tanpa label tampil kunci jenis
   required?: boolean   // shows optional badge if false
   document: DocumentItem | null
   onUploadClick: (docType: string) => void
@@ -36,7 +35,7 @@ function isImage(fileName: string): boolean {
 
 export function DocumentCard({ docType, label: labelProp, required = true, document, onUploadClick, onPreviewClick, onDeleteClick, readonly = false }: Props) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const label  = labelProp ?? DOC_LABEL[docType] ?? docType
+  const label  = labelProp ?? docType
   const filled = !!document
 
   return (

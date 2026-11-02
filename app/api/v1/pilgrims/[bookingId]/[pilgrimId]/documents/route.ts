@@ -6,8 +6,9 @@ import { DocumentFileRejected, prepareDocumentFile } from '@/lib/documents/file'
 import { MAX_UPLOAD_BYTES } from '@/lib/media/image'
 import { ok, err } from '@/lib/validators'
 import { onboardingRefusal } from '@/lib/auth/contact'
-import { REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
-import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { requirementsOf } from '@/lib/documents/requirements'
+import { evaluateCompleteness, type RequirementView } from '@/lib/documents/completeness'
+import { todayInApp } from '@/lib/time'
 
 type Params = { params: Promise<{ bookingId: string; pilgrimId: string }> }
 
@@ -40,22 +41,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     select: { id: true, docType: true, fileName: true, fileSizeBytes: true, uploadedAt: true },
   })
 
-  // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
-  // parseRequirements(visaProduct.requirements), sumber kebenaran per productType+productId.
-  const visaApp = await prisma.visaApplication.findUnique({
-    where: { bookingPilgrimId: pilgrimId },
-    select: { visaProductId: true },
-  })
-  const requirements = visaApp?.visaProductId
-    ? await getDocumentRequirements('visa', visaApp.visaProductId)
-    : null
-
-  const requiredTypes = requirements
-    ? requirements.filter(r => r.required).map(r => r.docType)
-    : [...REQUIRED_DOCUMENTS]
-
-  const uploaded = new Set(documents.map(d => d.docType))
-  const missing  = requiredTypes.filter(t => !uploaded.has(t))
+  const requirements = await legacyRequirements(pilgrimId)
+  const missing = legacyCompleteness(requirements, documents).missingRequired.map(r => r.key)
 
   return NextResponse.json(ok({ documents, missing, requirements }))
 }
@@ -87,18 +74,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(err('file and docType are required'), { status: 400 })
   }
 
-  // Validate docType against visa product requirements or fallback to REQUIRED_DOCUMENTS
-  const visaApp = await prisma.visaApplication.findUnique({
-    where: { bookingPilgrimId: pilgrimId },
-    select: { visaProductId: true },
-  })
-  const requirements = visaApp?.visaProductId
-    ? await getDocumentRequirements('visa', visaApp.visaProductId)
-    : null
-
-  const allowedDocTypes = requirements
-    ? requirements.map(r => r.docType)
-    : [...REQUIRED_DOCUMENTS] as string[]
+  // Jenis yang boleh = syarat produk visa jamaah (lib/documents/requirements.ts); tanpa syarat = tak ada yang diunggah lewat rute lama.
+  const requirements = await legacyRequirements(pilgrimId)
+  const allowedDocTypes = requirements.map(r => r.key)
 
   if (!allowedDocTypes.includes(docType)) {
     return NextResponse.json(err(`docType tidak valid`), { status: 400 })
@@ -161,17 +139,12 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(err('Jamaah tidak ditemukan'), { status: 404 })
   }
 
-  // Auto-advance: check all required docs are now uploaded
-  const requiredTypes = requirements
-    ? requirements.filter(r => r.required).map(r => r.docType)
-    : [...REQUIRED_DOCUMENTS] as string[]
-
+  // Auto-advance: semua syarat wajib sudah ada berkasnya (evaluator tunggal lib/documents/completeness.ts).
   const uploadedDocs = await prisma.document.findMany({
     where: { bookingPilgrimId: pilgrimId },
     select: { docType: true },
   })
-  const uploadedSet = new Set(uploadedDocs.map(d => d.docType))
-  const allRequired = requiredTypes.every(t => uploadedSet.has(t))
+  const allRequired = legacyCompleteness(requirements, uploadedDocs).ready
 
   if (allRequired) {
     await prisma.visaApplication.updateMany({
@@ -181,4 +154,19 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   return NextResponse.json(ok(doc), { status: 201 })
+}
+
+// Model `Document` lama (diganti Fase 7) tak punya status/tanggal: berkas = "menunggu pemeriksaan", masa berlaku tak dinilai.
+async function legacyRequirements(pilgrimId: string): Promise<RequirementView[]> {
+  const visaApp = await prisma.visaApplication.findUnique({ where: { bookingPilgrimId: pilgrimId }, select: { visaProductId: true } })
+  return visaApp?.visaProductId ? requirementsOf('visa', visaApp.visaProductId) : []
+}
+function legacyCompleteness(requirements: RequirementView[], docs: { docType: string }[]) {
+  const idByKey = new Map(requirements.map(r => [r.key, r.documentTypeId]))
+  return evaluateCompleteness({
+    requirements,
+    documents: docs.flatMap(d => { const id = idByKey.get(d.docType); return id ? [{ documentTypeId: id, status: 'pending' as const, expiresAt: null }] : [] }),
+    referenceDate: todayInApp(),
+    checkValidity: false,
+  })
 }

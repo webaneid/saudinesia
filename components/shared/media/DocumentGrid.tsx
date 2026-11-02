@@ -2,8 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { Loader2, AlertCircle, RefreshCw } from 'lucide-react'
-import { REQUIRED_DOCUMENTS, DOC_LABEL, type DocType } from '@/lib/constants/booking'
-import type { VisaRequirement } from '@/lib/types/visa'
+import type { RequirementView } from '@/lib/documents/completeness'
 import { useDocuments } from './useDocuments'
 import { DocumentCard } from './DocumentCard'
 import { UploadModal } from './UploadModal'
@@ -13,7 +12,7 @@ type Props = {
   bookingId: string
   pilgrimId: string
   pilgrimName: string
-  requirements?: VisaRequirement[]  // dynamic per visa product; falls back to REQUIRED_DOCUMENTS
+  requirements: RequirementView[]  // syarat produk (lib/documents/requirements.ts); kosong = tak ada dokumen wajib
 }
 
 export function DocumentGrid({ bookingId, pilgrimId, pilgrimName, requirements }: Props) {
@@ -27,9 +26,7 @@ export function DocumentGrid({ bookingId, pilgrimId, pilgrimName, requirements }
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null)
 
   // Normalise to a flat list of { docType, label }
-  const docList = requirements
-    ? requirements.map(r => ({ docType: r.docType, label: r.label, required: r.required }))
-    : REQUIRED_DOCUMENTS.map(t => ({ docType: t, label: DOC_LABEL[t] ?? t, required: true }))
+  const docList = requirements.map(r => ({ docType: r.key, label: r.label, required: r.required }))
 
   const openUpload = useCallback((docType: string) => {
     setUploadDocType(docType)
@@ -57,7 +54,7 @@ export function DocumentGrid({ bookingId, pilgrimId, pilgrimName, requirements }
   }, [deleteTarget, docs])
 
   const handleUpload = useCallback(
-    async (docType: DocType, file: File, onProgress: (pct: number) => void) => {
+    async (docType: string, file: File, onProgress: (pct: number) => void) => {
       await docs.upload(docType, file, onProgress)
     },
     [docs],

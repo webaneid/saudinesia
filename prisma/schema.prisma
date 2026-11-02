@@ -453,16 +453,15 @@ model HajiProduct {
 // ─── VISA PRODUCT ─────────────────────────────────────────────
 
 model VisaProduct {
-  id           String   @id @default(uuid())
-  name         String
-  country      String   @default("Saudi Arabia")
-  visaType     String // free text — admin defines (e.g. "Umroh", "Visitor", "Bisnis")
-  description  String?
-  requirements Json     @default("[]") // VisaRequirement[] — see lib/types/visa.ts
-  priceLabel   String?
-  processDays  Int      @default(14)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  name        String
+  country     String   @default("Saudi Arabia")
+  visaType    String // free text — admin defines (e.g. "Umroh", "Visitor", "Bisnis")
+  description String?
+  priceLabel  String?
+  processDays Int      @default(14)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   // Komponen yang WAJIB ada di booking yang sama (docs/arsitektur-booking-engine-v2.md §4.1/§10.2): [{type:'flight'}, {type:'hotel'}, {type:'transport', categories?, tripIds?}].
   // Bentuk dijaga `visaRequiredComponentsSchema` (lib/validators/visa.ts); dievaluasi HANYA oleh lib/booking/rules.ts.
@@ -475,22 +474,23 @@ model VisaProduct {
   @@map("visa_products")
 }
 
-// ─── DOCUMENT REQUIREMENT (universal, docs/arsitektur-dokumen.md §3) ──────────
-// Menggantikan VisaProduct.requirements: Json (dipertahankan sementara, deprecated) sebagai
-// sumber kebenaran syarat dokumen — polimorfik, pola sama ProductCost/PreferredVendor
-// (docs/arsitektur-harga.md §3.3), supaya produk lain (Paket Umroh, Tiket Pesawat, Haji) bisa
-// punya syarat dokumen sendiri, bukan monopoli Visa.
+// ─── DOCUMENT REQUIREMENT (syarat dokumen per produk, docs/arsitektur-jamaah.md §7.2/§7.6) ──────
+// Polimorfik productType+productId (pola ProductCost); jenis dari katalog DocumentType (bukan teks bebas). Ditulis HANYA oleh
+// lib/documents/requirements.ts. Kelengkapan dinilai HANYA oleh lib/documents/completeness.ts.
 model DocumentRequirement {
-  id          String  @id @default(uuid())
-  productType String // 'visa' | 'package' | 'flight' | 'haji' | dst — bebas teks, tidak hardcode daftar
-  productId   String // FK ke produk spesifik, TIDAK di-enforce di DB (pola sama PackageItem/ProductCost)
-  docType     String // key mesin: 'ktp' | 'paspor' | 'kk' | 'foto' | dst — bebas admin isi
-  label       String // nama tampilan: "Paspor Asli (scan semua halaman)"
-  description String  @default("")
-  required    Boolean @default(true)
-  order       Int     @default(0)
+  id             String  @id @default(uuid())
+  productType    String // registry pemilik di lib/documents/requirements.ts ('visa' di F5)
+  productId      String // FK produk spesifik, tidak di-enforce di DB (pola ProductCost); dibersihkan saat produk dihapus
+  documentTypeId String
+  label          String? // pengganti label katalog untuk produk ini (null = label katalog)
+  description    String  @default("") // petunjuk publik
+  required       Boolean @default(true)
+  order          Int     @default(0)
 
-  @@index([productType, productId])
+  documentType DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([productType, productId, documentTypeId])
+  @@index([documentTypeId])
   @@map("document_requirements")
 }
 
@@ -990,7 +990,8 @@ model DocumentType {
   createdAt         DateTime @default(now()) @db.Timestamptz(3)
   updatedAt         DateTime @updatedAt @db.Timestamptz(3)
 
-  documents PilgrimDocument[]
+  requirements DocumentRequirement[]
+  documents    PilgrimDocument[]
 
   @@index([isActive, order])
   @@map("document_types")

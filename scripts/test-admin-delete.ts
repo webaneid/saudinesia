@@ -29,7 +29,7 @@ const img = (productType: string, productId: string) => prisma.productImage.crea
 const poly = async (productType: string, productId: string) => {
   await prisma.productCost.create({ data: { productType, productId, vendorId: vendor.id, costComponent: 'X', currency: 'IDR', costTiers: flat(1000) } })
   await prisma.preferredVendor.create({ data: { productType, productId, costComponent: 'X', vendorId: vendor.id } })
-  await prisma.documentRequirement.create({ data: { productType, productId, docType: 'ktp', label: 'KTP' } })
+  await prisma.documentRequirement.create({ data: { productType, productId, documentTypeId: (await prisma.documentType.findUniqueOrThrow({ where: { key: 'ktp' } })).id, label: 'KTP' } })
   await prisma.manifestFieldRequirement.create({ data: { productType, productId, fieldKey: 'nama', label: 'Nama', fieldType: 'text' } })
 }
 const polyCount = async (productType: string, productId: string) =>
