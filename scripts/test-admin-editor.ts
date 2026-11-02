@@ -13,6 +13,8 @@ const ADMIN = 'app/[locale]/admin/(protected)/'
 const SHELL_PAGES = ['products/packages/[id]', 'products/hotels/[id]', 'products/tour-packages/[id]', 'bookings/[id]/edit']
 // Halaman edit berbasis EditPage (yang sendirinya EditorShell) + useEditEntity: formulir tunggal + Foto + Hapus.
 const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/transport/vehicles/[id]', 'products/haji/[id]']
+// EditPage tanpa foto (entitas tak bergambar — dokumen jamaah menyusul Fase 4 jamaah sebagai kotak sendiri).
+const EDITPAGE_NO_MEDIA_PAGES = ['customers/[id]/pilgrims/[cardId]']
 
 await t('halaman bespoke memakai EditorShell + PublishBox + MetaBox + useUnsavedGuard + useDirtyForm/baseline', () => {
   for (const e of SHELL_PAGES) {
@@ -33,6 +35,14 @@ await t('halaman EditPage: useEditEntity + useDirtyForm; formulir diisi SEKALI (
     assert.match(src, /dirty=\{dirty\}/, `${e}: dirty tidak diteruskan ke EditPage`)
     assert.match(src, /media=\{<MediaField\b/, `${e}: foto harus lewat prop media (kolom kanan)`)
   }
+  for (const e of EDITPAGE_NO_MEDIA_PAGES) {
+    const src = read(ADMIN + e + '/page.tsx')
+    assert.match(src, /<EditPage\b/, `${e}: tidak memakai EditPage`)
+    assert.match(src, /useEditEntity</, `${e}: tidak memakai useEditEntity`)
+    assert.match(src, /useDirtyForm\(/, `${e}: tidak melacak perubahan belum disimpan`)
+    assert.match(src, /!form \|\|/, `${e}: formulir harus diisi sekali (guard !form)`)
+    assert.match(src, /dirty=\{dirty\}/, `${e}: dirty tidak diteruskan ke EditPage`)
+  }
 })
 
 await t('EditPage = EditorShell + PublishBox + DeleteBox; tidak ada panel tersebar', () => {
@@ -42,7 +52,7 @@ await t('EditPage = EditorShell + PublishBox + DeleteBox; tidak ada panel terseb
 })
 
 await t('halaman edit tidak kembali ke panel tersebar (kartu komponen manual)', () => {
-  for (const e of [...SHELL_PAGES, ...EDITPAGE_PAGES]) {
+  for (const e of [...SHELL_PAGES, ...EDITPAGE_PAGES, ...EDITPAGE_NO_MEDIA_PAGES]) {
     const src = read(ADMIN + e + '/page.tsx')
     assert.doesNotMatch(src, /className="admin-card p-4 space-y-3"/, `${e}: kartu komponen manual — pakai MetaBox`)
     assert.doesNotMatch(src, /<ArrowLeft\b/, `${e}: tombol kembali ad-hoc — EditorShell menyediakannya`)

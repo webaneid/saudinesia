@@ -5,6 +5,8 @@ import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikHints, nikProblem, nikProvinceCode, normalizeNik, normalizePassport, sealNik, sealPassport, type NikHint } from '@/lib/pii'
 import { calendarDateOf, dbDateOf, todayInApp, type CalendarDate } from '@/lib/time'
+import { paginate, type ListParams, type PageMeta } from '@/lib/table/pagination'
+import { escapeLike } from '@/lib/utils/search'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import { nameKeyOf } from './nameKey'
 
@@ -32,6 +34,8 @@ export type SavedPilgrimView = {
   nik: string | null
   passport: { number: string; issuedAt: CalendarDate | null; expiry: CalendarDate | null } | null
   addressId: string | null
+  /** Alamat kartu ini sendiri (untuk AddressPicker saat mengubah); bukan data akun lain. */
+  address: SavedPilgrimAddress | null
   phone: string | null
   whatsapp: string | null
   email: string | null
@@ -39,6 +43,19 @@ export type SavedPilgrimView = {
   archived: boolean
   createdAt: string
   updatedAt: string
+}
+
+export type SavedPilgrimAddress = {
+  type: 'domestic' | 'international'
+  fullAddress: string
+  postalCode: string | null
+  provinceId: string | null
+  regencyId: string | null
+  districtId: string | null
+  villageId: string | null
+  countryCode: string | null
+  city: string | null
+  stateRegion: string | null
 }
 
 export type ServiceError = { ok: false; status: 400 | 404 | 409 | 422 | 429; error: string; field?: string; retryAfterSec?: number }
@@ -49,6 +66,7 @@ const viewSelect = {
   id: true, fullName: true, gender: true, birthPlace: true, birthDate: true, nationality: true, nikHash: true,
   passportLast4: true, passportIssuedAt: true, passportExpiry: true, addressId: true, phone: true, whatsapp: true, email: true,
   selfOfUserId: true, archivedAt: true, createdAt: true, updatedAt: true,
+  address: { select: { type: true, fullAddress: true, postalCode: true, provinceId: true, regencyId: true, districtId: true, villageId: true, countryCode: true, city: true, stateRegion: true } },
 } satisfies Prisma.SavedPilgrimSelect
 
 type ViewRow = Prisma.SavedPilgrimGetPayload<{ select: typeof viewSelect }>
@@ -60,7 +78,7 @@ function toView(r: ViewRow): SavedPilgrimView {
     id: r.id, fullName: r.fullName, gender: r.gender, birthPlace: r.birthPlace, birthDate: cal(r.birthDate), nationality: r.nationality,
     nik: r.nikHash ? NIK_MASK : null,
     passport: r.passportLast4 ? { number: maskPassport(r.passportLast4), issuedAt: cal(r.passportIssuedAt), expiry: cal(r.passportExpiry) } : null,
-    addressId: r.addressId, phone: r.phone, whatsapp: r.whatsapp, email: r.email,
+    addressId: r.addressId, address: r.address, phone: r.phone, whatsapp: r.whatsapp, email: r.email,
     isSelf: r.selfOfUserId !== null, archived: r.archivedAt !== null,
     createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   }
@@ -416,6 +434,29 @@ export async function getSavedPilgrim(actor: Actor, ownerId: string, cardId: str
   if (actor.userId !== ownerId && !isStaff(actor)) return null
   const row = await prisma.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: viewSelect })
   return row ? toView(row) : null
+}
+
+export type ListOptions = ListParams & { q?: string; archived?: boolean }
+
+/** Daftar kartu milik `ownerId` (pemilik sendiri atau staf), berpaginasi server; cari nama lewat kunci nama ternormalisasi. `null` = bukan haknya. */
+export async function listSavedPilgrims(actor: Actor, ownerId: string, opts: ListOptions): Promise<{ items: SavedPilgrimView[]; meta: PageMeta } | null> {
+  if (actor.userId !== ownerId && !isStaff(actor)) return null
+  const key = opts.q?.trim() ? nameKeyOf(opts.q) : ''
+  const where: Prisma.SavedPilgrimWhereInput = {
+    ownerId,
+    archivedAt: opts.archived ? { not: null } : null,
+    ...(key ? { nameKey: { contains: escapeLike(key) } } : {}),
+  }
+  const { items, meta } = await paginate(
+    opts,
+    () => prisma.savedPilgrim.count({ where }),
+    ({ skip, take }) => prisma.savedPilgrim.findMany({
+      where, skip, take, select: viewSelect,
+      // "Saya sendiri" selalu di atas, lalu urut nama; id = pemecah seri
+      orderBy: [{ selfOfUserId: { sort: 'asc', nulls: 'last' } }, { nameKey: 'asc' }, { id: 'asc' }],
+    }),
+  )
+  return { items: items.map(toView), meta }
 }
 
 // ─── Penghapusan akun (lib/account/deletion.ts, docs/arsitektur-jamaah.md §10) ────────────────────────────────────────────────────────

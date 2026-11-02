@@ -277,14 +277,15 @@ await t('SEC-107 PENEMU RUTE: setiap POST/PUT/PATCH jamaah (app/api/v1 di luar a
   })
   for (const d of dirs) for (const f of walkRoutes(`app/api/v1/${d}`)) {
     const src = read(f)
-    if (!/requireSession\(|getSession\(/.test(src)) continue
+    // pembungkus sesi jamaah (lib/pilgrims/session.ts) juga dihitung — route di baliknya tak boleh lolos dari penemu
+    if (!/requireSession\(|getSession\(|requirePilgrimActor\(/.test(src)) continue
     if (!/export async function (POST|PUT|PATCH)\b/.test(src)) continue
     found.push(f)
     if (exceptions[f]) continue
     assert.match(src, /onboardingRefusal\(/, `${f}: tulis/unggah data jamaah tanpa gerbang langkah awal`)
   }
   assert.ok(found.length >= 6, `penemu menemukan ${found.length} rute — periksa pola pencariannya`)
-  for (const must of ['bookings/route.ts', 'bookings/[id]/payment/bukti/route.ts', 'pilgrims/[bookingId]/[pilgrimId]/documents/route.ts', 'address/route.ts', 'address/[id]/route.ts']) assert.ok(found.includes(`app/api/v1/${must}`), must)
+  for (const must of ['bookings/route.ts', 'bookings/[id]/payment/bukti/route.ts', 'pilgrims/[bookingId]/[pilgrimId]/documents/route.ts', 'address/route.ts', 'address/[id]/route.ts', 'account/pilgrims/route.ts', 'account/pilgrims/[id]/route.ts', 'account/pilgrims/[id]/restore/route.ts']) assert.ok(found.includes(`app/api/v1/${must}`), must)
   for (const f of Object.keys(exceptions)) assert.ok(found.includes(f), `pengecualian ${f} tak lagi ada`)
   // auth/* di luar penemu (endpoint langkah awal sendiri: contact, whatsapp, daftar/masuk) — kecuali profil, yang mengumpulkan nama + alamat dan WAJIB digerbang
   assert.match(read('app/api/v1/auth/profile/route.ts'), /export async function PUT[\s\S]*onboardingRefusal\(/)

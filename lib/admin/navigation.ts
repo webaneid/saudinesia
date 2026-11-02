@@ -58,6 +58,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   admin: 'Admin',
   bookings: 'Booking',
   customers: 'Pelanggan',
+  pilgrims: 'Jamaah',
   payments: 'Pembayaran',
   visa: 'Visa',
   quotas: 'Quota',
