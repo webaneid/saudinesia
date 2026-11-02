@@ -43,6 +43,8 @@ export function badRequest(error: z.ZodError): NextResponse {
   return NextResponse.json({ ...err(issue?.message ?? 'Data tidak valid'), ...(issue?.path.length ? { meta: { field: issue.path.join('.') } } : {}) }, { status: 400 })
 }
 
+/** Booking jamaah yang sudah batal/hangus/selesai tidak menerima data/berkas baru (lib/pilgrims/bookingLink.ts → pilgrimBookingState). */
+export const closedBooking = () => NextResponse.json(err('Booking ini sudah tidak aktif — data dan dokumen tidak dapat ditambah lagi'), { status: 409 })
 export const notFound = () => NextResponse.json(err('Data jamaah tidak ditemukan'), { status: 404 })
 
 /** Batas tulis per IP untuk route jamaah (lapis di atas batas per akun di layanan). Tanpa IP (dev/langsung) → hanya batas per akun. */

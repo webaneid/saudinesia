@@ -9,6 +9,7 @@ import { computeTax } from '@/lib/invoice/tax'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { plainText } from '@/lib/rich-text/doc'
 import { getPaymentConfig } from '@/lib/constants/payment'
+import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
 
 // Invoice dibangun HANYA dari `price_snapshots` (docs/arsitektur-harga-terpadu.md §17, invarian I3/I4/I5): harga yang tertera adalah harga yang DIBEKUKAN saat dipesan —
 // bukan dihitung ulang dan bukan dibaca dari kolom harga item. Hanya JUAL yang masuk ke sini; modal/untung tak pernah keluar ke dokumen pilgrim.
@@ -16,7 +17,7 @@ import { getPaymentConfig } from '@/lib/constants/payment'
 export const invoiceBookingInclude = {
   user: { include: { address: { include: { province: true, regency: true, district: true, village: true } } } },
   priceSnapshots: { where: { voidedAt: null }, orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] }, // baris di-void revisi tak tampil (T1)
-  pilgrims: { include: { visaApplication: { select: { id: true, visaProductId: true } } } },
+  pilgrims: { select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { id: true, visaProductId: true } } } }, // tanpa kolom NIK/paspor tersegel
   payments: true,
   invoice: true,
 } satisfies Prisma.BookingInclude

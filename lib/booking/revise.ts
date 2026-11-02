@@ -17,6 +17,7 @@ import { isSerializationConflict, retrySerializable } from './serializable'
 import { ItemNotBookableError, itemIndexOf, remapItemIndex } from './errors'
 import { partialItemTotals } from './partialTotals'
 import type { RuleViolation } from './rules'
+import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
 
 // Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, keputusan pemilik R1–R4). Masukan = isi booking LENGKAP sesudah edit; mesin menghitung selisihnya:
 // item lama hilang → HAPUS (kuota dilepas sesuai status konfirmasi, baris harga di-void, baris item dihapus), item lama berubah → GANTI (hapus + tambah), item tanpa rujukan
@@ -32,7 +33,7 @@ export class RevisionError extends Error {
 
 const stateInclude = {
   hotels: true, transports: true, muthowif: true, catering: true, tourPackages: true, flights: true, packages: true, haji: { select: { id: true } },
-  pilgrims: { orderBy: { id: 'asc' }, include: { visaApplication: true } },
+  pilgrims: { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: true } }, // tanpa kolom NIK/paspor tersegel
   invoice: { select: { revision: true, invoiceDate: true, dueDate: true } },
   payments: { where: { status: 'confirmed' }, select: { id: true } },
   priceSnapshots: { where: { voidedAt: null }, select: { itemType: true, itemId: true, lineKey: true, itemLabel: true, itemDetail: true, itemQty: true, totalSellIdr: true } },

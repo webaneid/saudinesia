@@ -10,8 +10,11 @@ type PrepareResult =
 
 // Validasi hierarki (kecamatan benar-benar anak dari kab/kota yang dipilih, dst.) dan kode
 // negara — server-side, tidak percaya urutan klik di UI. docs/arsitektur-alamat.md §3.2/§5.
-export async function prepareAddressData(input: AddressInput): Promise<PrepareResult> {
-  const base = await prepareBase(input)
+/** Koneksi baca tabel wilayah — `prisma` atau klien transaksi (dipanggil di dalam transaksi booking: jangan mengambil koneksi pool kedua). */
+export type WilayahDb = Pick<typeof prisma, 'addressProvince' | 'addressRegency' | 'addressDistrict' | 'addressVillage'>
+
+export async function prepareAddressData(input: AddressInput, db: WilayahDb = prisma): Promise<PrepareResult> {
+  const base = await prepareBase(input, db)
   if (!base.ok || input.mapsUrl === undefined) return base // tanpa kolom peta (profil/vendor/invoice) → lokasi lama tak disentuh
   if (input.mapsUrl === null) return { ok: true, data: { ...base.data, mapsUrl: null, latitude: null, longitude: null } }
   const m = parseMapsUrl(input.mapsUrl) // diperiksa ulang di server: koordinat SELALU diturunkan dari tautan, tak pernah dari klien
@@ -19,22 +22,22 @@ export async function prepareAddressData(input: AddressInput): Promise<PrepareRe
   return { ok: true, data: { ...base.data, mapsUrl: m.value.url, latitude: m.value.latitude, longitude: m.value.longitude } }
 }
 
-async function prepareBase(input: AddressInput): Promise<PrepareResult> {
+async function prepareBase(input: AddressInput, db: WilayahDb): Promise<PrepareResult> {
   if (input.type === 'domestic') {
     const { provinceId, regencyId, districtId, villageId } = input
-    if (provinceId && !(await prisma.addressProvince.findUnique({ where: { id: provinceId }, select: { id: true } }))) return { ok: false, message: 'Provinsi tidak dikenal' }
+    if (provinceId && !(await db.addressProvince.findUnique({ where: { id: provinceId }, select: { id: true } }))) return { ok: false, message: 'Provinsi tidak dikenal' }
     if (regencyId) {
-      const regency = await prisma.addressRegency.findUnique({ where: { id: regencyId } })
+      const regency = await db.addressRegency.findUnique({ where: { id: regencyId } })
       if (!regency || regency.provinceId !== provinceId) return { ok: false, message: 'Kab/Kota tidak sesuai dengan Provinsi yang dipilih' }
     }
     if (districtId) {
       if (!regencyId) return { ok: false, message: 'Kab/Kota wajib dipilih sebelum Kecamatan' }
-      const district = await prisma.addressDistrict.findUnique({ where: { id: districtId } })
+      const district = await db.addressDistrict.findUnique({ where: { id: districtId } })
       if (!district || district.regencyId !== regencyId) return { ok: false, message: 'Kecamatan tidak sesuai dengan Kab/Kota yang dipilih' }
     }
     if (villageId) {
       if (!districtId) return { ok: false, message: 'Kecamatan wajib dipilih sebelum Desa/Kelurahan' }
-      const village = await prisma.addressVillage.findUnique({ where: { id: villageId } })
+      const village = await db.addressVillage.findUnique({ where: { id: villageId } })
       if (!village || village.districtId !== districtId) return { ok: false, message: 'Desa/Kelurahan tidak sesuai dengan Kecamatan yang dipilih' }
     }
 

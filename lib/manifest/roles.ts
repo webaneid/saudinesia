@@ -2,6 +2,7 @@ import { getCountryName } from '@/lib/constants/countries'
 import { splitE164 } from '@/lib/utils/phone'
 import { maskPassport, NIK_MASK } from '@/lib/pii/mask'
 import type { CalendarDate } from '@/lib/time'
+import type { ManifestAddressValue } from './addressValue'
 
 // Peran field manifest = PENGIKAT ke atribut kartu jamaah (docs/arsitektur-jamaah.md §5.3 butir 2). Daftar TUNGGAL — CHECK DB di migrasi
 // `20261115090000_booking_pilgrim_cards` memakai daftar yang sama (dijaga scripts/test-booking-link.ts). Satu peran paling banyak satu field per produk.
@@ -33,8 +34,8 @@ export type CardForSnapshot = {
   phone: string | null
   whatsapp: string | null
   email: string | null
-  /** Alamat sebagai teks (field alamat berjenjang menyusul di 7b). */
-  addressText: string | null
+  /** Alamat kartu sebagai objek beku (`text` = satu baris terformat dari nama wilayah). */
+  address: ManifestAddressValue | null
 }
 
 type Field = { fieldKey: string; fieldType: string; role: string | null }
@@ -58,7 +59,7 @@ function valueFor(role: ManifestRole, fieldType: string, c: CardForSnapshot): un
     case 'phone': return fieldType === 'phone' ? phoneValue(c.phone) : undefined
     case 'whatsapp': return fieldType === 'phone' ? phoneValue(c.whatsapp) : undefined
     case 'email': return c.email
-    case 'address': return fieldType === 'text' || fieldType === 'textarea' ? c.addressText : undefined
+    case 'address': return fieldType === 'address' ? c.address : fieldType === 'text' || fieldType === 'textarea' ? (c.address?.text ?? null) : undefined
     case 'nik': return c.hasNik ? NIK_MASK : null
     case 'passport_number': return c.passportLast4 ? maskPassport(c.passportLast4) : null
   }

@@ -5,6 +5,8 @@ import { consume, policy } from '@/lib/auth/rateLimit'
 import { formatAddressLine } from '@/lib/address/format'
 import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
 import { isSealedRole, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
+import type { ManifestAddressValue } from '@/lib/manifest/addressValue'
+import { resolveAddressValues } from '@/lib/manifest/address'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikProblem, normalizeNik, normalizePassport, sealNik, sealPassport } from '@/lib/pii'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import { requirementsOfMany } from '@/lib/documents/requirements'
@@ -21,13 +23,7 @@ import { lockCardOwner, type Actor, type ServiceError } from './service'
 
 type Tx = Prisma.TransactionClient
 
-/**
- * Kolom jamaah booking yang BOLEH dibaca halaman/API (tanpa kolom NIK/paspor tersegel). Pembaca relasi `pilgrims` WAJIB memakai `select` ini,
- * bukan `include` (yang membawa semua kolom skalar termasuk cipher) — dijaga scripts/test-booking-link.ts.
- */
-export const BOOKING_PILGRIM_SAFE_SELECT = {
-  id: true, bookingId: true, userId: true, isLeader: true, fieldValues: true, savedPilgrimId: true, passportLast4: true,
-} as const satisfies Prisma.BookingPilgrimSelect
+export { BOOKING_PILGRIM_SAFE_SELECT } from './safeSelect'
 export type LinkResult = { ok: true; savedPilgrimId: string | null; fieldValues: Record<string, unknown> } | ServiceError
 
 class Abort extends Error {
@@ -42,6 +38,7 @@ const cardSelect = {
   nikHash: true, nikCipher: true, passportKeyHash: true, passportCipher: true, passportLast4: true, passportIssuedAt: true, passportExpiry: true,
   phone: true, whatsapp: true, email: true,
   address: { select: { type: true, fullAddress: true, postalCode: true, city: true, stateRegion: true, countryCode: true,
+    provinceId: true, regencyId: true, districtId: true, villageId: true,
     village: { select: { name: true } }, district: { select: { name: true } }, regency: { select: { name: true } }, province: { select: { name: true } } } },
 } satisfies Prisma.SavedPilgrimSelect
 type CardRow = Prisma.SavedPilgrimGetPayload<{ select: typeof cardSelect }>
@@ -50,8 +47,15 @@ const cal = (d: Date | null) => (d ? calendarDateOf(d) : null)
 const forSnapshot = (c: CardRow): CardForSnapshot => ({
   fullName: c.fullName, gender: c.gender, birthPlace: c.birthPlace, birthDate: cal(c.birthDate), nationality: c.nationality,
   hasNik: c.nikHash !== null, passportLast4: c.passportLast4, passportIssuedAt: cal(c.passportIssuedAt), passportExpiry: cal(c.passportExpiry),
-  phone: c.phone, whatsapp: c.whatsapp, email: c.email, addressText: formatAddressLine(c.address) || null,
+  phone: c.phone, whatsapp: c.whatsapp, email: c.email, address: addressOf(c.address),
 })
+function addressOf(a: CardRow['address']): ManifestAddressValue | null {
+  if (!a) return null
+  return {
+    type: a.type, fullAddress: a.fullAddress, postalCode: a.postalCode, provinceId: a.provinceId, regencyId: a.regencyId, districtId: a.districtId,
+    villageId: a.villageId, countryCode: a.countryCode, city: a.city, stateRegion: a.stateRegion, text: formatAddressLine(a),
+  }
+}
 
 /** Field manifest jamaah: produk visa-nya, atau `core` bila tanpa visa (aturan yang sama dengan route data jamaah). */
 export function manifestFieldsOf(db: Tx | typeof prisma, visaProductId: string | null | undefined) {
@@ -124,6 +128,7 @@ export function linkCard(actor: Actor, bookingId: string, bookingPilgrimId: stri
         passportCountry: card.passportCipher ? card.nationality : null, passportKeyHash: card.passportKeyHash,
         passportCipher: card.passportCipher, passportLast4: card.passportLast4,
       },
+      select: { id: true },
     })
     return { ok: true, savedPilgrimId: card.id, fieldValues }
   })
@@ -140,7 +145,7 @@ export function unlinkCard(actor: Actor, bookingId: string, bookingPilgrimId: st
     const bp = await lockBookingPilgrim(tx, actor, bookingId, bookingPilgrimId)
     if (!bp.savedPilgrimId) return fail(409, 'Jamaah ini belum memakai data jamaah tersimpan')
     await refuseTripDocs(tx, bookingId, bp.savedPilgrimId)
-    await tx.bookingPilgrim.update({ where: { id: bookingPilgrimId }, data: { savedPilgrimId: null, identityId: null } })
+    await tx.bookingPilgrim.update({ where: { id: bookingPilgrimId }, data: { savedPilgrimId: null, identityId: null }, select: { id: true } })
     return { ok: true, savedPilgrimId: null, fieldValues: bp.fieldValues }
   })
 }
@@ -199,10 +204,21 @@ export function passportCountryOf(fields: readonly FieldLite[], values: Record<s
   return typeof raw === 'string' && /^[A-Z]{2}$/.test(raw) ? raw : 'ID'
 }
 
-/** Jamaah booking BARU (checkout/booking admin, lib/booking/lineItems.ts): field `nik`/`passport_number` disegel sebelum ditulis. */
+/** Jamaah booking BARU (checkout/booking admin, lib/booking/lineItems.ts): alamat dibekukan, field `nik`/`passport_number` disegel sebelum ditulis. */
 export async function sealNewPilgrim(tx: Tx, visaProductId: string | null, values: Record<string, unknown>): Promise<ManualPii> {
   const fields = await manifestFieldsOf(tx, visaProductId)
-  return sealManualPii(fields, values, passportCountryOf(fields, values))
+  const addressed = await resolveAddressValues(fields, values, tx) // alamat dibekukan dengan `text` dari DB (D1)
+  if (!addressed.ok) return addressed
+  return sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values))
+}
+
+/**
+ * Jamaah hanya MENAMBAH data/berkas pada booking `active` (minimisasi data UU PDP: booking batal/hangus/selesai tak menerima PII atau berkas baru);
+ * lihat, hapus, dan lepas tetap terbuka. `missing` = bukan booking akun ini (route menjawab 404 lewat layanan, tanpa orakel).
+ */
+export async function pilgrimBookingState(bookingId: string, userId: string): Promise<'open' | 'closed' | 'missing'> {
+  const b = await prisma.booking.findFirst({ where: { id: bookingId, userId, status: { not: 'draft' } }, select: { status: true } })
+  return !b ? 'missing' : b.status === 'active' ? 'open' : 'closed'
 }
 
 /** Cakupan dokumen perjalanan satu jamaah booking: pemilik booking + kartu tertaut; `null` bila tak ada / draf / belum tertaut (404 yang sama). */

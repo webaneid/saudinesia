@@ -8,16 +8,17 @@ import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
 import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
 import type { BankSnapshot } from '@/lib/invoice/issue'
-import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane, FolderOpen } from 'lucide-react'
+import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS } from '@/lib/constants/booking'
 import { getPaymentConfig } from '@/lib/constants/payment'
-import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
+import { BOOKING_PILGRIM_SAFE_SELECT, bookingChecklists } from '@/lib/pilgrims/bookingLink'
+import { PilgrimTripPanel } from './PilgrimTripPanel'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
-import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
+import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -55,6 +56,11 @@ export default async function BookingDetailPage({ params }: Props) {
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
+  // Kartu tertaut + kelengkapan dokumen per jamaah — aturan yang sama dengan halaman admin (lib/pilgrims/bookingLink.ts → evaluateCompleteness).
+  const checklists = await bookingChecklists(booking.id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(p => ({
+    id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
+    plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
+  })))
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {
@@ -231,14 +237,12 @@ export default async function BookingDetailPage({ params }: Props) {
                 {VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]?.label ?? p.visaApplication?.status}
               </Badge>
             </div>
-            {/* Dokumen milik orang disimpan di kartu Jamaah Saya (docs/arsitektur-jamaah.md §5.3); unggah per perjalanan menyusul di Fase 7b. */}
-            {p.savedPilgrimId ? (
-              <Link href={`/${safeLocale(locale)}/jamaah/${p.savedPilgrimId}`} className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline">
-                <FolderOpen className="h-4 w-4" /> Kelola data & dokumen di Jamaah Saya
-              </Link>
-            ) : (
-              <p className="text-sm text-muted-foreground">Data jamaah ini belum ditautkan ke Jamaah Saya. Tim kami akan menghubungi Anda untuk kelengkapan dokumen.</p>
-            )}
+            {/* Data & dokumen dari Jamaah Saya + dokumen per perjalanan (docs/arsitektur-jamaah.md §5.5). */}
+            <PilgrimTripPanel
+              locale={safeLocale(locale)} bookingId={booking.id} pilgrimId={p.id}
+              linked={checklists.get(p.id)?.card ?? null}
+              checklist={(checklists.get(p.id)?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state }))}
+            />
           </div>
         ))}
       </div>

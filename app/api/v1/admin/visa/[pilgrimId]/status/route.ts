@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { notify } from '@/lib/notifications/notify'
 import { isValidVisaStatusTransition } from '@/lib/validators/visaStatus'
 import { z } from 'zod'
+import { authFailureResponse } from '@/lib/admin/errors'
 
 const VISA_STATUS_LABELS: Record<string, string> = {
   pending_documents:     'Menunggu Dokumen',
@@ -17,9 +18,9 @@ const VISA_STATUS_LABELS: Record<string, string> = {
 
 const schema = z.object({
   status: z.enum(['pending_documents','documents_complete','submitted_to_syarikah','in_review','issued','rejected']),
-  notes: z.string().optional(),
-  rejectionReason: z.string().optional(),
-})
+  notes: z.string().max(2000).optional(),
+  rejectionReason: z.string().max(2000).optional(),
+}).strict()
 
 export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimId: string }> }) {
   try {
@@ -32,7 +33,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimI
 
     const pilgrim = await prisma.bookingPilgrim.findUnique({
       where: { id: pilgrimId },
-      include: { booking: { include: { user: true } }, visaApplication: true },
+      select: { bookingId: true, booking: { select: { bookingCode: true, user: { select: { id: true } } } }, visaApplication: { select: { status: true } } }, // tanpa kolom tersegel
     })
     if (!pilgrim) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
     if (!pilgrim.visaApplication) return NextResponse.json(err('Visa application tidak ditemukan'), { status: 404 })
@@ -66,8 +67,6 @@ export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimI
 
     return NextResponse.json(ok(updated))
   } catch (e) {
-    if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/visa/status]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return authFailureResponse(e, 'admin/visa/status')
   }
 }

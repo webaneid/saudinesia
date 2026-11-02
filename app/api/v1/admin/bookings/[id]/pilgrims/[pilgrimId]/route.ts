@@ -12,6 +12,7 @@ import { authFailureResponse } from '@/lib/admin/errors'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { passportCountryOf, sealManualPii } from '@/lib/pilgrims/bookingLink'
 import { isSealedRole } from '@/lib/manifest/roles'
+import { resolveAddressValues } from '@/lib/manifest/address'
 
 class Refused extends Error {}
 
@@ -47,7 +48,10 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (!checked.ok) return NextResponse.json({ success: false, error: Object.values(checked.errors)[0], meta: { errors: checked.errors } }, { status: 400 })
     if (parsed.data.plannedTravelDate !== undefined && !pilgrim.visaApplication) return NextResponse.json(err('Jamaah ini tidak mengajukan visa'), { status: 400 })
     // NIK / nomor paspor (peran `nik`/`passport_number`) DISEGEL — snapshot hanya menyimpan samaran (docs/arsitektur-jamaah.md §5.3 butir 3).
-    const sealed = await sealManualPii(fields, checked.values, passportCountryOf(fields, checked.values, pilgrim.savedPilgrim?.nationality))
+    // Alamat berjenjang dibekukan dengan `text` dari nama wilayah di DB (D1, docs/arsitektur-jamaah.md §5.5).
+    const addressed = await resolveAddressValues(fields, checked.values)
+    if (!addressed.ok) return NextResponse.json({ success: false, error: Object.values(addressed.errors)[0], meta: { errors: addressed.errors } }, { status: 400 })
+    const sealed = await sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values, pilgrim.savedPilgrim?.nationality))
     if (!sealed.ok) return NextResponse.json({ success: false, error: Object.values(sealed.errors)[0], meta: { errors: sealed.errors } }, { status: 400 })
 
     const values = await prisma.$transaction(async (tx) => {
@@ -64,7 +68,7 @@ export async function PUT(req: Request, { params }: Ctx) {
         throw new Refused('NIK/paspor jamaah ini berasal dari data jamaah tersimpan — ubah di data tersimpan lalu perbarui dari kartu, atau lepas tautan dulu')
       }
       const merged = { ...current, ...sealed.values }
-      await tx.bookingPilgrim.update({ where: { id: pilgrimId }, data: { fieldValues: merged as Prisma.InputJsonValue, ...sealed.columns } })
+      await tx.bookingPilgrim.update({ where: { id: pilgrimId }, data: { fieldValues: merged as Prisma.InputJsonValue, ...sealed.columns }, select: { id: true } })
       if (parsed.data.plannedTravelDate !== undefined && pilgrim.visaApplication) {
         await tx.visaApplication.update({ where: { id: pilgrim.visaApplication.id }, data: { plannedTravelDate: parsed.data.plannedTravelDate ? dbDateOf(parsed.data.plannedTravelDate) : null } })
       }
