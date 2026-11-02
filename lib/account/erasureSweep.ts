@@ -40,6 +40,8 @@ export async function sweepErasedAccount(userId: string, deps: SweepDeps = defau
   }
 
   await prisma.bookingPilgrim.updateMany({ where: { id: { in: ids } }, data: { fieldValues: {}, userId: null, ...SEALED_PII_CLEARED } })
+  // Catatan pemeriksaan yang ditulis petugas di sela penghapusan (Fase 6 modul jamaah).
+  await prisma.pilgrimReviewEvent.updateMany({ where: { bookingPilgrimId: { in: ids }, note: { not: null } }, data: { note: null } })
   // Log yang ditulis terlambat dengan penerima/isi asli: scrub ulang (baris dipertahankan untuk audit pengiriman).
   const notificationLogs = (await prisma.notificationLog.updateMany({
     where: { userId, NOT: { recipient: '[dihapus]' } },

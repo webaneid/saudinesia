@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { lockCardOwner, type Actor } from '@/lib/pilgrims/service'
+import { reopenForChangedDocument } from '@/lib/pilgrims/review'
 import { calendarDateOf, dbDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import type { DocumentUploadFields } from '@/lib/validators/documents'
 import { DocumentFileRejected, prepareDocumentFile } from './file'
@@ -181,7 +182,12 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
         if (!type.allowMultiple) {
           const old = await tx.pilgrimDocument.findMany({ where: { savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: type.id }, select: { id: true, objectKey: true } })
           replaced = old.map(o => o.objectKey)
-          if (old.length > 0) await tx.pilgrimDocument.deleteMany({ where: { id: { in: old.map(o => o.id) } } })
+          if (old.length > 0) {
+            // Pengajuan aktif yang memakai jenis ini diperiksa ulang (keputusan pemilik 2026-11-03, docs/arsitektur-jamaah.md §8.4).
+            // Ubah dokumen DULU, baru buka ulang (SEC-200): keputusan petugas yang memegang FOR SHARE atas dokumen ini selesai lebih dulu, dan reopen melihatnya.
+            await tx.pilgrimDocument.deleteMany({ where: { id: { in: old.map(o => o.id) } } })
+            await reopenForChangedDocument(tx, { savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: type.id }, actor.userId, 'Dokumen diganti')
+          }
         }
         if ((await tx.pilgrimDocument.count({ where: { savedPilgrimId: cardId } })) >= MAX_DOCUMENTS_PER_CARD) {
           throw new Abort({ ok: false, status: 409, error: `Maksimal ${MAX_DOCUMENTS_PER_CARD} dokumen per jamaah. Hapus dokumen yang tidak dipakai.` })
@@ -215,9 +221,10 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
       const key = await prisma.$transaction(async (tx) => {
         await lockCard(tx, actor, ownerId, cardId)
         await lockTripScope(tx, ownerId, cardId, scope)
-        const doc = await tx.pilgrimDocument.findFirst({ where: { id: docId, savedPilgrimId: cardId, bookingId: scope.bookingId }, select: { objectKey: true } })
+        const doc = await tx.pilgrimDocument.findFirst({ where: { id: docId, savedPilgrimId: cardId, bookingId: scope.bookingId }, select: { objectKey: true, documentTypeId: true } })
         if (!doc) throw new Abort({ ok: false, status: 404, error: 'Dokumen tidak ditemukan' })
         await tx.pilgrimDocument.delete({ where: { id: docId } })
+        await reopenForChangedDocument(tx, { savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: doc.documentTypeId }, actor.userId, 'Dokumen dihapus') // sesudah mengubah (SEC-200)
         return doc.objectKey
       })
       await removeObjectsQuietly(storage, [key], 'documents/delete')

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
+import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { requireBookingManage } from '@/lib/booking/policy'
@@ -13,6 +13,7 @@ import { isDeletedAccount } from '@/lib/customers/query'
 import { passportCountryOf, sealManualPii } from '@/lib/pilgrims/bookingLink'
 import { isSealedRole } from '@/lib/manifest/roles'
 import { resolveAddressValues } from '@/lib/manifest/address'
+import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from '@/lib/pilgrims/reviewState'
 
 class Refused extends Error {}
 
@@ -34,7 +35,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const pilgrim = await prisma.bookingPilgrim.findFirst({
       where: { id: pilgrimId, bookingId: id, booking: { status: { not: 'draft' } } },
       select: {
-        visaApplication: { select: { id: true, visaProductId: true } }, booking: { select: { userId: true, user: { select: { email: true } } } },
+        visaApplication: { select: { id: true, visaProductId: true } }, booking: { select: { userId: true, status: true, user: { select: { email: true } } } },
         savedPilgrim: { select: { nationality: true } },
       },
     })
@@ -59,7 +60,9 @@ export async function PUT(req: Request, { params }: Ctx) {
       // anonimisasi) → jamaah booking (FOR UPDATE: dua admin yang menyimpan field berbeda tak saling menimpa). $queryRaw: ORM tak punya FOR SHARE/UPDATE.
       const owner = await tx.$queryRaw<Array<{ email: string }>>(Prisma.sql`SELECT "email" FROM "users" WHERE "id" = ${pilgrim.booking.userId} FOR SHARE`)
       if (!owner[0] || isDeletedAccount(owner[0].email)) throw new Refused('Akun pelanggan ini sudah dihapus')
-      const locked = await tx.$queryRaw<Array<{ fieldValues: unknown; savedPilgrimId: string | null }>>(Prisma.sql`SELECT "fieldValues", "savedPilgrimId" FROM "booking_pilgrims" WHERE "id" = ${pilgrimId} FOR UPDATE`)
+      const locked = await tx.$queryRaw<Array<{ fieldValues: unknown; savedPilgrimId: string | null; reviewStatus: PilgrimReviewStatus }>>(Prisma.sql`SELECT "fieldValues", "savedPilgrimId", "reviewStatus" FROM "booking_pilgrims" WHERE "id" = ${pilgrimId} FOR UPDATE`)
+      // Diajukan/terverifikasi pada booking aktif (Fase 6): data yang sedang/sudah diperiksa tak berubah diam-diam — kembalikan dulu.
+      if (locked[0] && pilgrim.booking.status === 'active' && isReviewLocked(locked[0].reviewStatus)) throw new Refused(REVIEW_LOCKED_MESSAGE)
       // NIK/paspor jamaah bertaut berasal dari kartu (identitas orang di kartu) — mengetik nilai lain di sini akan mencampur dua orang.
       const current = (locked[0]?.fieldValues ?? {}) as Record<string, unknown>
       const blank = (v: unknown) => (v === '' || v === undefined ? null : v)

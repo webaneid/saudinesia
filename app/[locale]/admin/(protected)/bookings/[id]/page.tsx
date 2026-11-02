@@ -13,6 +13,8 @@ import { VisaActions } from './VisaActions'
 import { PilgrimDataForm } from './PilgrimDataForm'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
 import { PilgrimCardPanel } from './PilgrimCardPanel'
+import { PilgrimReviewPanel } from './PilgrimReviewPanel'
+import { reviewHistoryOf } from '@/lib/pilgrims/review'
 import { BOOKING_PILGRIM_SAFE_SELECT, bookingChecklists } from '@/lib/pilgrims/bookingLink'
 import { cardBoundKeys } from '@/lib/manifest/roles'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
@@ -53,6 +55,7 @@ export default async function AdminBookingDetail({ params }: Props) {
     id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
     plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
   })))
+  const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), true)
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {
@@ -278,6 +281,16 @@ export default async function AdminBookingDetail({ params }: Props) {
                   customerId={booking.userId}
                   linked={check?.card ?? null}
                   checklist={(check?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state }))}
+                />
+
+                <PilgrimReviewPanel
+                  bookingId={id}
+                  pilgrimId={p.id}
+                  status={p.reviewStatus}
+                  active={booking.status === 'active'}
+                  linked={!!p.savedPilgrimId}
+                  documents={(check?.documents ?? []).map(d => ({ ...d, requirementState: check?.items.find(i => i.documentTypeId === d.documentTypeId)?.state ?? null }))}
+                  history={reviewHistory.get(p.id) ?? []}
                 />
 
                 <PilgrimDataForm

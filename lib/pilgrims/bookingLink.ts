@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
@@ -12,6 +12,7 @@ import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import { requirementsOfMany } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { lockCardOwner, type Actor, type ServiceError } from './service'
+import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from './reviewState'
 
 // Tautan kartu jamaah tersimpan → jamaah booking (docs/arsitektur-jamaah.md §5.3, Fase 7a) — SATU-SATUNYA penulis `booking_pilgrims.savedPilgrimId`,
 // `identityId`, dan kolom NIK/paspor tersegel. Aturan:
@@ -79,10 +80,12 @@ async function lockBookingPilgrim(tx: Tx, actor: Actor, bookingId: string, booki
   const refusal = await lockCardOwner(tx, actor, ownerId)
   if (refusal) throw new Abort(refusal.status === 404 ? { ok: false, status: 404, error: 'Jamaah tidak ditemukan' } : refusal)
   // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
-  const rows = await tx.$queryRaw<{ savedPilgrimId: string | null; fieldValues: unknown }[]>`
-    SELECT "savedPilgrimId", "fieldValues" FROM "booking_pilgrims" WHERE "id" = ${bookingPilgrimId} AND "bookingId" = ${bookingId} FOR UPDATE`
+  const rows = await tx.$queryRaw<{ savedPilgrimId: string | null; fieldValues: unknown; reviewStatus: PilgrimReviewStatus }[]>`
+    SELECT "savedPilgrimId", "fieldValues", "reviewStatus" FROM "booking_pilgrims" WHERE "id" = ${bookingPilgrimId} AND "bookingId" = ${bookingId} FOR UPDATE`
   const row = rows[0]
   if (!row) return notFound()
+  // Diajukan/terverifikasi (Fase 6): ditolak SEBELUM mengunci kartu — urutan kunci layanan dokumen (kartu → jamaah booking) tetap aman.
+  if (isReviewLocked(row.reviewStatus)) return fail(409, REVIEW_LOCKED_MESSAGE)
   const visa = await tx.visaApplication.findUnique({ where: { bookingPilgrimId }, select: { visaProductId: true } })
   return { id: bookingPilgrimId, bookingId, ownerId, savedPilgrimId: row.savedPilgrimId, fieldValues: (row.fieldValues ?? {}) as Record<string, unknown>, visaProductId: visa?.visaProductId ?? null }
 }
@@ -230,6 +233,12 @@ export async function tripScopeOf(bookingId: string, bookingPilgrimId: string): 
   return bp?.savedPilgrimId ? { ownerId: bp.booking.userId, cardId: bp.savedPilgrimId } : null
 }
 
+/** Berkas jamaah untuk jenis yang disyaratkan (bahan pemeriksaan petugas, Fase 6). Tanpa kunci objek — dilihat lewat URL presigned. */
+export type ChecklistDocument = {
+  id: string; documentTypeId: string; label: string; trip: boolean; status: 'pending' | 'accepted' | 'rejected'
+  rejectReason: 'not_matching' | 'expired' | 'unreadable' | 'other' | null; reviewNote: string | null; expiresAt: CalendarDate | null
+}
+
 /**
  * Kelengkapan dokumen jamaah booking (§5.3 butir 5): syarat = syarat produk visanya; berkas = dokumen milik orang di kartu tertaut + dokumen
  * perjalanan booking ini. Jamaah tanpa kartu tertaut: semua syarat `missing`. Tanggal acuan = rencana berangkat visa → tanggal acuan booking → hari ini.
@@ -238,7 +247,7 @@ export async function bookingChecklists(
   bookingId: string,
   bookingDate: CalendarDate | null,
   pilgrims: readonly { id: string; savedPilgrimId: string | null; visaProductId: string | null; plannedTravelDate: CalendarDate | null }[],
-): Promise<Map<string, { card: { id: string; name: string } | null; items: CompletenessItem[]; ready: boolean }>> {
+): Promise<Map<string, { card: { id: string; name: string } | null; items: CompletenessItem[]; ready: boolean; verified: boolean; documents: ChecklistDocument[] }>> {
   const reqs = await requirementsOfMany([...new Set(pilgrims.flatMap(p => (p.visaProductId ? [p.visaProductId] : [])))].map(productId => ({ productType: 'visa', productId })))
   const cardIds = [...new Set(pilgrims.flatMap(p => (p.savedPilgrimId ? [p.savedPilgrimId] : [])))]
   const [cards, docs] = cardIds.length
@@ -246,7 +255,8 @@ export async function bookingChecklists(
         prisma.savedPilgrim.findMany({ where: { id: { in: cardIds } }, select: { id: true, fullName: true } }),
         prisma.pilgrimDocument.findMany({
           where: { savedPilgrimId: { in: cardIds }, OR: [{ bookingId: null }, { bookingId }] },
-          select: { savedPilgrimId: true, documentTypeId: true, status: true, expiresAt: true },
+          orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+          select: { id: true, savedPilgrimId: true, bookingId: true, documentTypeId: true, label: true, status: true, rejectReason: true, reviewNote: true, expiresAt: true },
         }),
       ])
     : [[], []]
@@ -254,10 +264,15 @@ export async function bookingChecklists(
   const today = todayInApp()
   return new Map(pilgrims.map(p => {
     const requirements = (p.visaProductId && reqs.get(`visa:${p.visaProductId}`)) || []
-    const documents = docs.filter(d => d.savedPilgrimId === p.savedPilgrimId)
-      .map(d => ({ documentTypeId: d.documentTypeId, status: d.status, expiresAt: d.expiresAt ? calendarDateOf(d.expiresAt) : null }))
+    const typeIds = new Set(requirements.map(r => r.documentTypeId))
+    const own = docs.filter(d => d.savedPilgrimId === p.savedPilgrimId)
+    const documents = own.map(d => ({ documentTypeId: d.documentTypeId, status: d.status, expiresAt: d.expiresAt ? calendarDateOf(d.expiresAt) : null }))
     const c = evaluateCompleteness({ requirements, documents, referenceDate: p.plannedTravelDate ?? bookingDate ?? today })
     const card = p.savedPilgrimId ? { id: p.savedPilgrimId, name: nameOf.get(p.savedPilgrimId) ?? 'Jamaah' } : null
-    return [p.id, { card, items: c.items, ready: c.ready }]
+    const listed = own.filter(d => typeIds.has(d.documentTypeId)).map((d): ChecklistDocument => ({
+      id: d.id, documentTypeId: d.documentTypeId, label: d.label, trip: d.bookingId !== null, status: d.status, rejectReason: d.rejectReason,
+      reviewNote: d.reviewNote, expiresAt: d.expiresAt ? calendarDateOf(d.expiresAt) : null,
+    }))
+    return [p.id, { card, items: c.items, ready: c.ready, verified: c.verified, documents: listed }]
   }))
 }

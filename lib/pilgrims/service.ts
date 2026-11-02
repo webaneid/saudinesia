@@ -241,6 +241,31 @@ export async function settleIdentity(tx: Tx, identityId: string, actorId: string
   return 'kept'
 }
 
+export type VerifiedCanonical = { fullName?: string; gender?: Gender; birthPlace?: string; birthDate?: CalendarDate; nationality?: string }
+
+/**
+ * Pengajuan jamaah booking TERVERIFIKASI (Fase 6, lib/pilgrims/review.ts) → data kanonik identitas = data yang diverifikasi petugas (atribut yang
+ * tak ada di snapshot tetap), `lastVerifiedAt` diisi (sejak itu kartu tak lagi menggeser kanonik). Pemanggil memegang kunci baris jamaah booking;
+ * di sini kunci identitas diambil SESUDAHNYA dan TIDAK menulis baris kartu (status cocok kartu dihitung ulang saat kartu ditulis berikutnya) —
+ * menulis kartu sambil memegang baris jamaah booking bisa deadlock dengan layanan dokumen (kartu → jamaah booking).
+ */
+export async function applyVerifiedSnapshot(tx: Tx, identityId: string, canonical: VerifiedCanonical, actorId: string, bookingPilgrimId: string): Promise<void> {
+  const keys = await tx.pilgrimIdentity.findUnique({ where: { id: identityId }, select: { nikHash: true, passportKeyHash: true } })
+  if (!keys) return
+  await lockIdentityKeys(tx, [keys.nikHash ?? keys.passportKeyHash])
+  const data: Prisma.PilgrimIdentityUpdateInput = { lastVerifiedAt: new Date() }
+  if (canonical.fullName) Object.assign(data, { fullName: canonical.fullName, nameKey: nameKeyOf(canonical.fullName) })
+  if (canonical.gender) data.gender = canonical.gender
+  if (canonical.birthPlace) data.birthPlace = canonical.birthPlace
+  if (canonical.birthDate) data.birthDate = dbDateOf(canonical.birthDate)
+  if (canonical.nationality) data.nationality = canonical.nationality
+  await tx.pilgrimIdentity.update({ where: { id: identityId }, data, select: { id: true } })
+  // Detail tanpa PII: hanya asal perubahan dan atribut yang dipakai.
+  await tx.pilgrimIdentityEvent.create({
+    data: { identityId, actorId, kind: 'canonical_updated', detail: { source: 'verified_submission', bookingPilgrimId, fields: Object.keys(canonical).sort() } },
+  })
+}
+
 async function warningsFor(nik: Resolved['newNik'], input: SavedPilgrimInput): Promise<PilgrimWarning[]> {
   if (!nik) return []
   const out: PilgrimWarning[] = nikHints(nik, { birthDate: input.birthDate, gender: input.gender ?? null })

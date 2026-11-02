@@ -16,6 +16,7 @@ import { BOOKING_STATUS, VISA_STATUS } from '@/lib/constants/booking'
 import { getPaymentConfig } from '@/lib/constants/payment'
 import { BOOKING_PILGRIM_SAFE_SELECT, bookingChecklists } from '@/lib/pilgrims/bookingLink'
 import { PilgrimTripPanel } from './PilgrimTripPanel'
+import { reviewHistoryOf } from '@/lib/pilgrims/review'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
@@ -61,6 +62,8 @@ export default async function BookingDetailPage({ params }: Props) {
     id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
     plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
   })))
+  // Catatan perbaikan terakhir dari petugas (Fase 6) — nama petugas tidak dikirim ke pemesan.
+  const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), false)
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {
@@ -242,6 +245,12 @@ export default async function BookingDetailPage({ params }: Props) {
               locale={safeLocale(locale)} bookingId={booking.id} pilgrimId={p.id}
               linked={checklists.get(p.id)?.card ?? null}
               checklist={(checklists.get(p.id)?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state }))}
+              review={{
+                status: p.reviewStatus,
+                open: booking.status === 'active',
+                ready: checklists.get(p.id)?.ready ?? false,
+                note: p.reviewStatus === 'needs_revision' ? (reviewHistory.get(p.id)?.find(h => h.to === 'needs_revision')?.note ?? null) : null,
+              }}
             />
           </div>
         ))}

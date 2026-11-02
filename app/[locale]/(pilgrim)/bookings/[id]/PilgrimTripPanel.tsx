@@ -3,12 +3,14 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FolderOpen, Link2, Plus, RefreshCw, Unlink } from 'lucide-react'
+import { FolderOpen, Link2, Plus, RefreshCw, Send, Unlink } from 'lucide-react'
+import type { PilgrimReviewStatus } from '@prisma/client'
 import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
 import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { checklistState, type ChecklistTone } from '@/lib/documents/checklistLabels'
+import { isReviewLocked, REVIEW_LABEL, REVIEW_TONE } from '@/lib/pilgrims/reviewState'
 
 // Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot — mengedit kartu
 // kemudian tidak mengubah booking sampai "Perbarui"), checklist kelengkapan (dihitung server), dan dokumen per perjalanan. Paspor/KTP diunggah di kartu.
@@ -20,11 +22,19 @@ type Props = {
   pilgrimId: string
   linked: { id: string; name: string } | null
   checklist: TripChecklistItem[]
+  /** Pemeriksaan petugas (Fase 6): `ready` = dokumen wajib siap (server); `note` = catatan perbaikan terakhir. */
+  review: { status: PilgrimReviewStatus; open: boolean; ready: boolean; note: string | null }
 }
 
 const VARIANT: Record<ChecklistTone, 'success' | 'warning' | 'destructive' | 'muted'> = { ok: 'success', warning: 'warning', danger: 'destructive', neutral: 'muted' }
+const REVIEW_HINT: Record<PilgrimReviewStatus, string> = {
+  draft: 'Setelah data dan dokumen lengkap, ajukan untuk diperiksa petugas.',
+  submitted: 'Sedang diperiksa petugas. Data jamaah dikunci selama pemeriksaan; mengganti dokumen membuat pemeriksaan diulang.',
+  needs_revision: 'Petugas meminta perbaikan. Perbaiki lalu ajukan lagi.',
+  verified: 'Data jamaah ini sudah diverifikasi petugas.',
+}
 
-export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checklist }: Props) {
+export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checklist, review }: Props) {
   const router = useRouter()
   const [options, setOptions] = useState<AutocompleteOption[]>([])
   const [q, setQ] = useState('')
@@ -48,10 +58,10 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
     return () => ctrl.abort()
   }, [q, linked])
 
-  async function call(method: 'PUT' | 'DELETE', body: object | undefined, done: string) {
+  async function call(method: 'PUT' | 'DELETE' | 'POST', body: object | undefined, done: string, path = 'card') {
     setBusy(true); setNotice(null); setConfirming(null)
     try {
-      const res = await fetch(`${base}/card`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
+      const res = await fetch(`${base}/${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       const json = await res.json().catch(() => null)
       if (!res.ok) { setNotice({ text: json?.error ?? 'Gagal menyimpan.', error: true }); return }
       setNotice({ text: done, error: false })
@@ -62,8 +72,23 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
     } finally { setBusy(false) }
   }
 
+  const locked = isReviewLocked(review.status)
   return (
     <div className="space-y-4">
+      <div className="space-y-2 rounded-md border bg-muted/30 p-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-sm font-medium">Pemeriksaan data</span>
+          <Badge variant={REVIEW_TONE[review.status]}>{REVIEW_LABEL[review.status]}</Badge>
+        </div>
+        <p className="text-sm text-muted-foreground">{REVIEW_HINT[review.status]}</p>
+        {review.note && <p className="text-sm text-destructive whitespace-pre-line">{review.note}</p>}
+        {review.open && (review.status === 'draft' || review.status === 'needs_revision') && (
+          <Button size="sm" onClick={() => call('POST', undefined, 'Data jamaah diajukan untuk diperiksa.', 'submit')} disabled={busy || !linked || !review.ready}>
+            <Send className="h-4 w-4" /> Ajukan untuk diperiksa
+          </Button>
+        )}
+      </div>
+
       {linked ? (
         <div className="space-y-2">
           <div className="flex flex-wrap items-center gap-2">
@@ -71,7 +96,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
               <FolderOpen className="h-4 w-4" /> {linked.name} — kelola data & dokumen di Jamaah Saya
             </Link>
           </div>
-          {confirming ? (
+          {locked ? null : confirming ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm">
               <span>{confirming === 'refresh'
                 ? 'Ganti data jamaah di booking ini dengan isi Jamaah Saya saat ini?'

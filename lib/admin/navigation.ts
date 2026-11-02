@@ -1,7 +1,7 @@
 import {
   Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, UserCheck, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge,
+  Users, UserCheck, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -14,6 +14,7 @@ const OPERASIONAL: NavItem[] = [
   { path: '/admin/bookings',      icon: BookOpen,        label: 'Booking' },
   { path: '/admin/customers',     icon: UserCheck,       label: 'Pelanggan' },
   { path: '/admin/payments',      icon: CreditCard,      label: 'Pembayaran' },
+  { path: '/admin/verifikasi-jamaah', icon: ClipboardCheck, label: 'Verifikasi Jamaah' },
   { path: '/admin/visa',          icon: FileText,        label: 'Visa Status' },
   { path: '/admin/quotas',        icon: BarChart3,       label: 'Quota' },
   { path: '/admin/margin',        icon: HeartPulse,      label: 'Kesehatan Margin' },

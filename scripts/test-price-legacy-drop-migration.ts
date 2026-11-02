@@ -12,6 +12,7 @@ import { PrismaClient } from '@prisma/client'
 import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
 import { assertThrowawayDb } from './lib/testDb'
 import { legacyUser } from './lib/legacyUser'
+import { legacyInsert } from './lib/legacyInsert'
 
 await assertThrowawayDb()
 
@@ -213,7 +214,7 @@ await t('riwayat kurs/vendor beku Visa dipindah ke snapshot (hanya yang kosong);
     const visa = await db.visaProduct.create({ data: { name: 'V', visaType: 'Umroh' } })
     const bk = await db.booking.create({ data: { bookingCode: `K${Date.now()}`, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: 3_000_000 }, select: { id: true } })
     const mk = async (hist: { fx: string[]; vendor: string[] } | null, snapVendors: string[]) => {
-      const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} }, select: { id: true } })
+      const pil = await legacyInsert(db, 'booking_pilgrims', { bookingId: bk.id })
       const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh' }, select: { id: true } })
       if (hist) await setLegacy(db, 'visa_applications', va.id, { exchangeRateIdsUsed: hist.fx, vendorIdsUsed: hist.vendor })
       // SQL mentah: klien Prisma proyek mengenal kolom snapshot yang lebih baru (rekomendasi, Fase 8A) daripada DB pra-migrasi ini.

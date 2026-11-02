@@ -55,6 +55,8 @@ model User {
   createdSavedPilgrims      SavedPilgrim[]           @relation("SavedPilgrimCreatedBy")
   uploadedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocUploadedBy")
   reviewedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocReviewedBy")
+  verifiedBookingPilgrims   BookingPilgrim[]         @relation("BookingPilgrimVerifiedBy")
+  pilgrimReviewEvents       PilgrimReviewEvent[]     @relation("PilgrimReviewActor")
   bookingPilgrims           BookingPilgrim[]         @relation("BookingPilgrimUser")
 
   @@map("users")
@@ -861,18 +863,70 @@ model BookingPilgrim {
   passportCipher  String?
   passportLast4   String?
 
-  booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  user            User?            @relation("BookingPilgrimUser", fields: [userId], references: [id], onDelete: SetNull)
-  savedPilgrim    SavedPilgrim?    @relation(fields: [savedPilgrimId], references: [id], onDelete: SetNull)
-  identity        PilgrimIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  // Pengajuan & verifikasi (docs/arsitektur-jamaah.md §8.4, Fase 6) — ditulis HANYA lib/pilgrims/review.ts.
+  reviewStatus PilgrimReviewStatus @default(draft)
+  submittedAt  DateTime?           @db.Timestamptz(3)
+  verifiedAt   DateTime?           @db.Timestamptz(3)
+  verifiedById String?
+
+  booking         Booking                  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user            User?                    @relation("BookingPilgrimUser", fields: [userId], references: [id], onDelete: SetNull)
+  verifiedBy      User?                    @relation("BookingPilgrimVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
+  reviewEvents    PilgrimReviewEvent[]
+  documents       BookingPilgrimDocument[]
+  savedPilgrim    SavedPilgrim?            @relation(fields: [savedPilgrimId], references: [id], onDelete: SetNull)
+  identity        PilgrimIdentity?         @relation(fields: [identityId], references: [id], onDelete: SetNull)
   visaApplication VisaApplication?
 
+  @@unique([bookingId, savedPilgrimId]) // satu kartu paling banyak satu jamaah per booking (NULL tak bentrok)
   @@index([bookingId])
   @@index([userId])
-  @@unique([bookingId, savedPilgrimId]) // satu kartu paling banyak satu jamaah per booking (NULL tak bentrok)
   @@index([savedPilgrimId])
   @@index([identityId])
+  @@index([reviewStatus, submittedAt]) // antrean Verifikasi Jamaah
+  @@index([verifiedById])
   @@map("booking_pilgrims")
+}
+
+enum PilgrimReviewStatus {
+  draft
+  submitted
+  needs_revision
+  verified
+
+  @@map("pilgrim_review_status")
+}
+
+// Riwayat pengajuan jamaah booking — append-only (trigger DB; hanya `note` boleh dikosongkan oleh hapus akun).
+model PilgrimReviewEvent {
+  id               String               @id @default(uuid())
+  bookingPilgrimId String
+  fromStatus       PilgrimReviewStatus?
+  toStatus         PilgrimReviewStatus
+  actorId          String?
+  note             String? // teks untuk pemesan/staf — dikosongkan saat akun dihapus
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+
+  bookingPilgrim BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
+  actor          User?          @relation("PilgrimReviewActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([bookingPilgrimId, createdAt])
+  @@index([actorId])
+  @@map("pilgrim_review_events")
+}
+
+// Dokumen yang dipakai pengajuan (tautan, berkas tidak disalin). Dokumen diganti/dihapus → tautan ikut hilang dan pengajuan aktif ditinjau ulang (§8.4).
+model BookingPilgrimDocument {
+  bookingPilgrimId  String
+  pilgrimDocumentId String
+  attachedAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  bookingPilgrim  BookingPilgrim  @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
+  pilgrimDocument PilgrimDocument @relation(fields: [pilgrimDocumentId], references: [id], onDelete: Cascade)
+
+  @@id([bookingPilgrimId, pilgrimDocumentId])
+  @@index([pilgrimDocumentId])
+  @@map("booking_pilgrim_documents")
 }
 
 // ─── DATA JAMAAH TERSIMPAN (docs/arsitektur-jamaah.md §4–§6, ADR-0005) ──────────
@@ -1032,11 +1086,12 @@ model PilgrimDocument {
   uploadedById   String
   createdAt      DateTime              @default(now()) @db.Timestamptz(3)
 
-  savedPilgrim SavedPilgrim @relation(fields: [savedPilgrimId], references: [id], onDelete: Restrict)
-  booking      Booking?     @relation(fields: [bookingId], references: [id], onDelete: Restrict)
-  documentType DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
-  reviewedBy   User?        @relation("PilgrimDocReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
-  uploadedBy   User         @relation("PilgrimDocUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+  savedPilgrim SavedPilgrim             @relation(fields: [savedPilgrimId], references: [id], onDelete: Restrict)
+  booking      Booking?                 @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  documentType DocumentType             @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+  reviewedBy   User?                    @relation("PilgrimDocReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  usedIn       BookingPilgrimDocument[]
+  uploadedBy   User                     @relation("PilgrimDocUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
 
   @@index([savedPilgrimId, documentTypeId])
   @@index([bookingId, savedPilgrimId])
@@ -1109,7 +1164,6 @@ enum VisaStatus {
 
   @@map("visa_status")
 }
-
 
 // ─── BOOKING COMPONENTS ───────────────────────────────────────
 
