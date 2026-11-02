@@ -29,7 +29,8 @@ export async function sweepErasedAccount(userId: string, deps: SweepDeps = defau
   const ids = pilgrims.map((p) => p.id)
 
   // Paralelisme terbatas: booking grup bisa berisi ratusan jamaah, tetapi MinIO tak boleh dibanjiri (dan satu panggilan lambat tak menahan semuanya).
-  let objects = 0
+  // Dokumen kartu jamaah tersimpan: satu awalan per akun (kartu sudah terhapus saat commit — kuncinya diawali id pemilik, lib/documents/storage.ts).
+  let objects = await deps.deleteByPrefix(`saved-pilgrims/${userId}/`)
   for (let i = 0; i < ids.length; i += SWEEP_CONCURRENCY) {
     const counts = await Promise.all(ids.slice(i, i + SWEEP_CONCURRENCY).map((id) => deps.deleteByPrefix(`pilgrims/${id}/`)))
     objects += counts.reduce((a, b) => a + b, 0)
@@ -43,7 +44,7 @@ export async function sweepErasedAccount(userId: string, deps: SweepDeps = defau
     data: { recipient: '[dihapus]', messagePreview: null, error: null },
   })).count
 
-  return { prefixes: ids.length, objects, documents, notificationLogs }
+  return { prefixes: ids.length + 1, objects, documents, notificationLogs }
 }
 
 export type SweepSummary = { accounts: number; objects: number; documents: number; notificationLogs: number; failed: number }

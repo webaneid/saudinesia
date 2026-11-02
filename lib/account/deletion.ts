@@ -36,6 +36,8 @@ export type ErasureCounts = {
   savedPilgrims: number
   /** Identitas jamaah global yang hanya dirujuk akun ini — ikut terhapus. */
   identities: number
+  /** Berkas dokumen kartu jamaah tersimpan (docs/arsitektur-jamaah.md §10). */
+  pilgrimDocuments: number
 }
 
 export type DeletionDeps = {
@@ -63,7 +65,7 @@ async function blockersFor(db: Db, userId: string, role: string, requestedAt: Da
 }
 
 async function countsFor(db: Db, userId: string, addressId: string | null): Promise<ErasureCounts> {
-  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens, savedPilgrims, identities] = await Promise.all([
+  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens, savedPilgrims, identities, pilgrimDocuments] = await Promise.all([
     db.booking.count({ where: { userId } }),
     db.bookingPilgrim.count({ where: { booking: { userId } } }),
     db.document.count({ where: { pilgrim: { booking: { userId } } } }),
@@ -72,8 +74,9 @@ async function countsFor(db: Db, userId: string, addressId: string | null): Prom
     db.authToken.count({ where: { userId } }),
     db.savedPilgrim.count({ where: { ownerId: userId } }),
     countErasableIdentities(db, userId),
+    db.pilgrimDocument.count({ where: { savedPilgrim: { ownerId: userId } } }),
   ])
-  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, address: addressId ? 1 : 0, savedPilgrims, identities }
+  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, address: addressId ? 1 : 0, savedPilgrims, identities, pilgrimDocuments }
 }
 
 export type DeletionPreview =
@@ -162,10 +165,14 @@ export async function executeDeletion(
 
       // Objek MinIO sekarang (syarat sudah final). Gagal → Abort → rollback.
       const docs = await tx.document.findMany({ where: { pilgrim: { booking: { userId } } }, select: { filePath: true } })
+      // Dokumen kartu jamaah tersimpan (Fase 4): unggahan baru menunggu kunci baris pengguna ini (FOR SHARE di lib/documents/service.ts), jadi
+      // daftar ini final; berkas yang tertinggal di awalan `saved-pilgrims/<id>/` disapu sesudah commit (sweepErasedAccount).
+      const cardDocs = await tx.pilgrimDocument.findMany({ where: { savedPilgrim: { ownerId: userId } }, select: { objectKey: true } })
+      const keys = [...docs.map((d) => d.filePath), ...cardDocs.map((d) => d.objectKey)]
       try {
-        await deleteObjects(docs.map((d) => d.filePath), deps)
+        await deleteObjects(keys, deps)
       } catch {
-        console.error(`[account-deletion] hapus objek penyimpanan gagal (${docs.length} berkas); dibatalkan, permintaan tetap pending`)
+        console.error(`[account-deletion] hapus objek penyimpanan gagal (${keys.length} berkas); dibatalkan, permintaan tetap pending`)
         throw new Abort({ ok: false, reason: 'storage_failed' })
       }
       await tx.document.deleteMany({ where: { pilgrim: { booking: { userId } } } })

@@ -9,6 +9,7 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { Badge } from '@/components/admin/ui/Badge'
 import { SavedPilgrimFields } from '@/components/shared/pilgrims/SavedPilgrimFields'
+import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { bodyFromForm, canSubmitPilgrim, formFromCard, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import type { SavedPilgrimView } from '@/lib/pilgrims/service'
 
@@ -79,6 +80,15 @@ export default function CustomerPilgrimEditPage() {
             Kosongkan kolom NIK atau nomor paspor untuk mempertahankan nilai tersimpan. Perubahan dicatat atas nama Anda.
           </p>
         )
+      }
+      after={
+        <section className="admin-form-panel space-y-3">
+          <div>
+            <h2 className="m-0 text-sm font-semibold text-admin-ink">Dokumen</h2>
+            <p className="m-0 text-[12px] text-admin-muted">Unggah atas nama pelanggan — tercatat sebagai unggahan petugas. Pemeriksaan dokumen menyusul di antrean verifikasi.</p>
+          </div>
+          <DocumentRepeater endpoint={`${endpoint}/documents`} readOnly={archived} />
+        </section>
       }
     >
       <fieldset disabled={archived} className="m-0 min-w-0 border-0 p-0">

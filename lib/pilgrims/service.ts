@@ -9,6 +9,8 @@ import { paginate, type ListParams, type PageMeta } from '@/lib/table/pagination
 import { escapeLike } from '@/lib/utils/search'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import { nameKeyOf } from './nameKey'
+import { deleteDocumentRowsOfCards, documentKeysOfCards } from '@/lib/documents/purge'
+import { cardDocPrefix, minioDocumentStorage, removeObjectsQuietly } from '@/lib/documents/storage'
 
 // SATU-SATUNYA penulis kartu jamaah (SavedPilgrim) dan gudang identitas (PilgrimIdentity) — docs/arsitektur-jamaah.md §4, ADR-0005.
 // Aturan inti:
@@ -102,6 +104,14 @@ async function lockOwner(tx: Tx, actor: Actor, ownerId: string): Promise<void> {
   const u = rows[0]
   if (!u) fail(404, 'Data jamaah tidak ditemukan')
   else if (u.role !== 'pilgrim' || !u.isActive || (u.email.startsWith('deleted-') && u.email.endsWith('@deleted.invalid'))) fail(422, 'Akun pelanggan tidak aktif')
+}
+
+/** `lockOwner` untuk layanan lain yang menulis data milik kartu (dokumen, lib/documents/service.ts): galat dikembalikan, bukan dilempar. */
+export async function lockCardOwner(tx: Tx, actor: Actor, ownerId: string): Promise<ServiceError | null> {
+  try { await lockOwner(tx, actor, ownerId); return null } catch (e) {
+    if (e instanceof Abort) return e.result
+    throw e
+  }
 }
 
 /** Kunci per identitas (hash NIK / hash paspor), diurutkan supaya dua transaksi yang mengunci dua identitas yang sama tak saling menunggu. */
@@ -379,8 +389,9 @@ export async function deleteSavedPilgrim(actor: Actor, ownerId: string, cardId: 
   if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, error: 'Data jamaah tidak ditemukan' }
   const limited = await rateLimited(actor)
   if (limited) return limited
+  let docKeys: string[] = []
   try {
-    return await prisma.$transaction(async (tx) => {
+    const out = await prisma.$transaction(async (tx) => {
       await lockOwner(tx, actor, ownerId)
       const cardSelect = { identityId: true, addressId: true, archivedAt: true, identity: { select: { nikHash: true, passportKeyHash: true } }, _count: { select: { bookingPilgrims: true } } } satisfies Prisma.SavedPilgrimSelect
       // Kunci identitas sebelum kunci baris kartu (SEC-174, sama dengan write).
@@ -396,6 +407,9 @@ export async function deleteSavedPilgrim(actor: Actor, ownerId: string, cardId: 
         if (!card.archivedAt) await tx.savedPilgrim.update({ where: { id: cardId }, data: { archivedAt: new Date() } })
         return { ok: true as const, result: 'archived' as const }
       }
+      // Dokumen kartu ikut terhapus (berkas dihapus sesudah commit — baris tak pernah menunjuk objek yang sudah hilang).
+      docKeys = await documentKeysOfCards(tx, [cardId])
+      await deleteDocumentRowsOfCards(tx, [cardId])
       await tx.savedPilgrim.delete({ where: { id: cardId } })
       if (card.addressId) await tx.address.delete({ where: { id: card.addressId } })
       if (card.identityId) {
@@ -404,6 +418,12 @@ export async function deleteSavedPilgrim(actor: Actor, ownerId: string, cardId: 
       }
       return { ok: true as const, result: 'deleted' as const }
     })
+    if (out.result === 'deleted') {
+      await removeObjectsQuietly(minioDocumentStorage, docKeys, 'pilgrims/delete')
+      // Unggahan yang mendarat di penyimpanan tepat saat kartu dihapus (barisnya ditolak) — sapu awalan kartu.
+      await minioDocumentStorage.removePrefix(cardDocPrefix(ownerId, cardId)).catch(() => console.error('[pilgrims/delete] sapuan berkas kartu gagal'))
+    }
+    return out
   } catch (e) {
     if (e instanceof Abort) return e.result
     throw e
@@ -487,6 +507,7 @@ export async function eraseSavedPilgrimsOf(tx: Tx, userId: string): Promise<{ sa
   const cardIds = cards.map(c => c.id)
   const a = await tx.bookingPilgrim.updateMany({ where: { savedPilgrimId: { in: cardIds } }, data: { savedPilgrimId: null } })
   const b = await tx.bookingPilgrim.updateMany({ where: { booking: { userId }, identityId: { not: null } }, data: { identityId: null } })
+  await deleteDocumentRowsOfCards(tx, cardIds) // objeknya sudah dihapus pemanggil (lib/account/deletion.ts) sebelum baris ini
   const { count } = await tx.savedPilgrim.deleteMany({ where: { ownerId: userId } })
   // Jejak identitas yang DIPERTAHANKAN (punya kartu akun lain) tak boleh lagi menautkan orang itu ke akun terhapus.
   await tx.pilgrimIdentityEvent.updateMany({ where: { actorId: userId }, data: { actorId: null } })

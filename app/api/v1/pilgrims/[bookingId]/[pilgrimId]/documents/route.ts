@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getSession, ADMIN_ROLES } from '@/lib/auth/session'
-import {
-  buildObjectKey, uploadBuffer, validateUpload,
-  deleteObject,
-} from '@/lib/storage/minio'
+import { buildObjectKey, uploadBuffer, deleteObject } from '@/lib/storage/minio'
+import { DocumentFileRejected, prepareDocumentFile } from '@/lib/documents/file'
+import { MAX_UPLOAD_BYTES } from '@/lib/media/image'
 import { ok, err } from '@/lib/validators'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
@@ -105,14 +104,17 @@ export async function POST(req: NextRequest, { params }: Params) {
     return NextResponse.json(err(`docType tidak valid`), { status: 400 })
   }
 
+  // D3 (docs/arsitektur-jamaah.md §3.2): jenis berkas dari ISI, bukan `file.type` klien; gambar dienkode ulang ke WebP (EXIF/GPS dibuang).
+  if (file.size > MAX_UPLOAD_BYTES) return NextResponse.json(err('Ukuran berkas maksimal 5 MB.'), { status: 400 })
+  let prepared
   try {
-    validateUpload(file.type, file.size)
+    prepared = await prepareDocumentFile(Buffer.from(await file.arrayBuffer()))
   } catch (e) {
-    return NextResponse.json(err((e as Error).message), { status: 400 })
+    if (e instanceof DocumentFileRejected) return NextResponse.json(err(e.message), { status: 400 })
+    throw e
   }
-
-  const buffer    = Buffer.from(await file.arrayBuffer())
-  const objectKey = buildObjectKey('pilgrims', pilgrimId, docType, file.name)
+  const fileName  = `${(file.name.replace(/\.[^.]*$/, '') || docType).slice(0, 80)}.${prepared.ext}`
+  const objectKey = buildObjectKey('pilgrims', pilgrimId, docType, fileName)
 
   const existing = await prisma.document.findFirst({
     where: { bookingPilgrimId: pilgrimId, docType },
@@ -123,7 +125,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   }
 
   try {
-    await uploadBuffer(objectKey, buffer, file.type)
+    await uploadBuffer(objectKey, prepared.body, prepared.mimeType)
   } catch {
     return NextResponse.json(err('Storage error. Please try again.'), { status: 500 })
   }
@@ -147,9 +149,9 @@ export async function POST(req: NextRequest, { params }: Params) {
       data: {
         bookingPilgrimId: pilgrimId,
         docType,
-        fileName:      file.name,
+        fileName,
         filePath:      objectKey,
-        fileSizeBytes: file.size,
+        fileSizeBytes: prepared.sizeBytes,
       },
       select: { id: true, docType: true, fileName: true, fileSizeBytes: true, uploadedAt: true },
     })

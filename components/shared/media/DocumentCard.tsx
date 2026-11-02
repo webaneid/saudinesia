@@ -31,7 +31,7 @@ function formatDate(iso: string): string {
 }
 
 function isImage(fileName: string): boolean {
-  return /\.(jpe?g|png)$/i.test(fileName)
+  return /\.(jpe?g|png|webp)$/i.test(fileName)
 }
 
 export function DocumentCard({ docType, label: labelProp, required = true, document, onUploadClick, onPreviewClick, onDeleteClick, readonly = false }: Props) {

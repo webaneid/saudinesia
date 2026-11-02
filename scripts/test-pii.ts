@@ -227,7 +227,9 @@ await t('PENJAGA KLIEN TRANSITIF (SEC-170): tak ada berkas "use client" yang —
     ]
     return specs.map(sp => resolve(file, sp)).filter((x): x is string => x !== null)
   }
+  // + modul server dokumen jamaah (Fase 4): berkas, kunci objek, dan penulis tabel tak boleh ikut ke bundel klien.
   const forbidden = (rel: string) => (rel.startsWith('lib/pii/') && rel !== 'lib/pii/mask.ts') || rel === 'lib/pilgrims/service.ts'
+    || /^lib\/documents\/(service|file|storage|types|purge|http)\.ts$/.test(rel)
   const clientFiles: string[] = []
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {

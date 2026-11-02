@@ -17,7 +17,7 @@ export function PreviewModal({ open, docId, fileName, onClose, onFetchUrl }: Pro
   const [error,   setError]   = useState<string | null>(null)
 
   const isPdf   = /\.pdf$/i.test(fileName)
-  const isImage = /\.(jpe?g|png)$/i.test(fileName)
+  const isImage = /\.(jpe?g|png|webp)$/i.test(fileName)
 
   useEffect(() => {
     if (!open || !docId) { setUrl(null); return }
