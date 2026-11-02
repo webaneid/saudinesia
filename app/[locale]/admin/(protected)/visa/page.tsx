@@ -22,7 +22,7 @@ type Props = {
 }
 
 type VisaRow = Prisma.VisaApplicationGetPayload<{
-  include: { pilgrim: { include: { booking: { select: { bookingCode: true; id: true } }; documents: { select: { docType: true } } } } }
+  include: { pilgrim: { select: { fieldValues: true; savedPilgrimId: true; booking: { select: { bookingCode: true; id: true } } } } }
 }>
 
 // hasOwnProperty, bukan `in` — `in` meloloskan "toString"/"constructor" dari prototype.
@@ -52,12 +52,8 @@ export default async function AdminVisa({ params, searchParams }: Props) {
       orderBy: [{ submittedAt: { sort: 'desc', nulls: 'last' } }, { id: 'desc' }],
       ...range,
       include: {
-        pilgrim: {
-          include: {
-            booking:   { select: { bookingCode: true, id: true } },
-            documents: { select: { docType: true } },
-          },
-        },
+        // select, bukan include: kolom NIK/paspor tersegel jamaah tak pernah dimuat (docs/arsitektur-jamaah.md §5.3).
+        pilgrim: { select: { fieldValues: true, savedPilgrimId: true, booking: { select: { bookingCode: true, id: true } } } },
       },
     }),
   )
@@ -90,7 +86,7 @@ export default async function AdminVisa({ params, searchParams }: Props) {
       ),
     },
     { key: 'type', header: 'Jenis Visa', cell: a => <span className="text-[12px] text-admin-muted">{VISA_TYPE_LABEL[a.visaType] ?? a.visaType}</span> },
-    { key: 'docs', header: 'Dokumen', cell: a => <span className="text-[12px] text-admin-muted">{a.pilgrim.documents.length} file</span> },
+    { key: 'docs', header: 'Dokumen', cell: a => a.pilgrim.savedPilgrimId ? <Badge tone="ok">Kartu tertaut</Badge> : <Badge tone="neutral">Belum ditautkan</Badge> },
     {
       key: 'status', header: 'Status',
       cell: a => <Badge tone={VISA_TONE[a.status] ?? 'neutral'}>{VISA_STATUS[a.status as keyof typeof VISA_STATUS]?.label ?? a.status}</Badge>,

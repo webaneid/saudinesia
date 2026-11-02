@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { unusablePasswordHash } from '@/lib/auth/googleAccounts'
 import { deleteObject as deleteStoredObject, deleteObjectsByPrefix } from '@/lib/storage/minio'
-import { sweepErasedAccount } from '@/lib/account/erasureSweep'
+import { SEALED_PII_CLEARED, sweepErasedAccount } from '@/lib/account/erasureSweep'
 import { revokeInvoiceLinksOfUser } from '@/lib/invoice/issue'
 import { countErasableIdentities, eraseSavedPilgrimsOf } from '@/lib/pilgrims/service'
 import { sendEmail, type EmailInput, type EmailResult } from '@/lib/email/resend'
@@ -27,7 +27,6 @@ export const earliestProcessAt = (requestedAt: Date) => new Date(requestedAt.get
 export type ErasureCounts = {
   bookings: number
   pilgrims: number
-  documents: number
   visaApplications: number
   notifications: number
   authTokens: number
@@ -65,10 +64,9 @@ async function blockersFor(db: Db, userId: string, role: string, requestedAt: Da
 }
 
 async function countsFor(db: Db, userId: string, addressId: string | null): Promise<ErasureCounts> {
-  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens, savedPilgrims, identities, pilgrimDocuments] = await Promise.all([
+  const [bookings, pilgrims, visaApplications, notifications, authTokens, savedPilgrims, identities, pilgrimDocuments] = await Promise.all([
     db.booking.count({ where: { userId } }),
     db.bookingPilgrim.count({ where: { booking: { userId } } }),
-    db.document.count({ where: { pilgrim: { booking: { userId } } } }),
     db.visaApplication.count({ where: { pilgrim: { booking: { userId } } } }),
     db.notificationLog.count({ where: { userId } }),
     db.authToken.count({ where: { userId } }),
@@ -76,7 +74,7 @@ async function countsFor(db: Db, userId: string, addressId: string | null): Prom
     countErasableIdentities(db, userId),
     db.pilgrimDocument.count({ where: { savedPilgrim: { ownerId: userId } } }),
   ])
-  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, address: addressId ? 1 : 0, savedPilgrims, identities, pilgrimDocuments }
+  return { bookings, pilgrims, visaApplications, notifications, authTokens, address: addressId ? 1 : 0, savedPilgrims, identities, pilgrimDocuments }
 }
 
 export type DeletionPreview =
@@ -164,23 +162,21 @@ export async function executeDeletion(
       const counts = await countsFor(tx, userId, u.addressId)
 
       // Objek MinIO sekarang (syarat sudah final). Gagal → Abort → rollback.
-      const docs = await tx.document.findMany({ where: { pilgrim: { booking: { userId } } }, select: { filePath: true } })
       // Dokumen kartu jamaah tersimpan (Fase 4): unggahan baru menunggu kunci baris pengguna ini (FOR SHARE di lib/documents/service.ts), jadi
-      // daftar ini final; berkas yang tertinggal di awalan `saved-pilgrims/<id>/` disapu sesudah commit (sweepErasedAccount).
+      // daftar ini final (dokumen per perjalanan juga milik kartu, Fase 7a); berkas yang tertinggal di awalan `saved-pilgrims/<id>/` disapu sesudah commit (sweepErasedAccount).
       const cardDocs = await tx.pilgrimDocument.findMany({ where: { savedPilgrim: { ownerId: userId } }, select: { objectKey: true } })
-      const keys = [...docs.map((d) => d.filePath), ...cardDocs.map((d) => d.objectKey)]
+      const keys = cardDocs.map((d) => d.objectKey)
       try {
         await deleteObjects(keys, deps)
       } catch {
         console.error(`[account-deletion] hapus objek penyimpanan gagal (${keys.length} berkas); dibatalkan, permintaan tetap pending`)
         throw new Abort({ ok: false, reason: 'storage_failed' })
       }
-      await tx.document.deleteMany({ where: { pilgrim: { booking: { userId } } } })
 
       // Data jamaah tersimpan: kartu + alamatnya dihapus, tautan manifest diputus, identitas yang hanya milik akun ini ikut terhapus (lewat penulis tunggalnya).
       await eraseSavedPilgrimsOf(tx, userId)
-      // Manifest jamaah pada booking pengguna: PII inti (paspor, KTP, tgl lahir, kontak) → kosong.
-      await tx.bookingPilgrim.updateMany({ where: { booking: { userId } }, data: { fieldValues: {}, userId: null } })
+      // Manifest jamaah pada booking pengguna: PII inti (paspor, KTP, tgl lahir, kontak) + NIK/paspor tersegel (Fase 7a) → kosong.
+      await tx.bookingPilgrim.updateMany({ where: { booking: { userId } }, data: { fieldValues: {}, userId: null, ...SEALED_PII_CLEARED } })
       // Tautan akun pada manifest booking ORANG LAIN diputus saja; isi manifest itu milik pemesannya.
       await tx.bookingPilgrim.updateMany({ where: { userId, booking: { userId: { not: userId } } }, data: { userId: null } })
       // Teks bebas yang bisa memuat nama/nomor/alamat (DEL-01). Refund.reason hanya berisi string sistem (lib/booking/cancel.ts) → dibiarkan.
