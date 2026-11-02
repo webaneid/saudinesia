@@ -35,6 +35,8 @@ export const LIMITS = {
   invoicePublicIp:    { limit: 60,  windowSec: 600 },  // halaman + PDF invoice publik per IP (token 256-bit tak tertebak; menahan pemindaian & beban PDF)
   invoicePublicToken: { limit: 120, windowSec: 3600 }, // per tautan — tautan yang tersebar luas tak bisa dipakai membebani server
   invoiceSendBooking: { limit: 5,   windowSec: 3600 }, // "Kirim ulang invoice" per booking — tiap kirim = email + WhatsApp ke pelanggan
+  pilgrimWriteUser:   { limit: 60,  windowSec: 3600 }, // simpan/ubah kartu jamaah per akun jamaah — menahan pemindaian NIK massal (respons tetap tanpa orakel, docs/arsitektur-jamaah.md §4.2)
+  pilgrimWriteStaff:  { limit: 600, windowSec: 3600 }, // sama, per staf yang mengisi atas nama pelanggan (rombongan besar)
 } as const satisfies Record<string, { limit: number; windowSec: number }>
 
 const MAX_ID_LENGTH = 128

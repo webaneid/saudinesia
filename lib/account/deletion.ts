@@ -4,6 +4,7 @@ import { unusablePasswordHash } from '@/lib/auth/googleAccounts'
 import { deleteObject as deleteStoredObject, deleteObjectsByPrefix } from '@/lib/storage/minio'
 import { sweepErasedAccount } from '@/lib/account/erasureSweep'
 import { revokeInvoiceLinksOfUser } from '@/lib/invoice/issue'
+import { countErasableIdentities, eraseSavedPilgrimsOf } from '@/lib/pilgrims/service'
 import { sendEmail, type EmailInput, type EmailResult } from '@/lib/email/resend'
 import { accountDeletedEmail, deletionRejectedEmail, deletionRequestedEmail } from '@/lib/email/accountTemplates'
 
@@ -31,6 +32,10 @@ export type ErasureCounts = {
   notifications: number
   authTokens: number
   address: number
+  /** Kartu jamaah tersimpan milik akun (docs/arsitektur-jamaah.md §10). */
+  savedPilgrims: number
+  /** Identitas jamaah global yang hanya dirujuk akun ini — ikut terhapus. */
+  identities: number
 }
 
 export type DeletionDeps = {
@@ -58,15 +63,17 @@ async function blockersFor(db: Db, userId: string, role: string, requestedAt: Da
 }
 
 async function countsFor(db: Db, userId: string, addressId: string | null): Promise<ErasureCounts> {
-  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens] = await Promise.all([
+  const [bookings, pilgrims, documents, visaApplications, notifications, authTokens, savedPilgrims, identities] = await Promise.all([
     db.booking.count({ where: { userId } }),
     db.bookingPilgrim.count({ where: { booking: { userId } } }),
     db.document.count({ where: { pilgrim: { booking: { userId } } } }),
     db.visaApplication.count({ where: { pilgrim: { booking: { userId } } } }),
     db.notificationLog.count({ where: { userId } }),
     db.authToken.count({ where: { userId } }),
+    db.savedPilgrim.count({ where: { ownerId: userId } }),
+    countErasableIdentities(db, userId),
   ])
-  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, address: addressId ? 1 : 0 }
+  return { bookings, pilgrims, documents, visaApplications, notifications, authTokens, address: addressId ? 1 : 0, savedPilgrims, identities }
 }
 
 export type DeletionPreview =
@@ -163,6 +170,8 @@ export async function executeDeletion(
       }
       await tx.document.deleteMany({ where: { pilgrim: { booking: { userId } } } })
 
+      // Data jamaah tersimpan: kartu + alamatnya dihapus, tautan manifest diputus, identitas yang hanya milik akun ini ikut terhapus (lewat penulis tunggalnya).
+      await eraseSavedPilgrimsOf(tx, userId)
       // Manifest jamaah pada booking pengguna: PII inti (paspor, KTP, tgl lahir, kontak) → kosong.
       await tx.bookingPilgrim.updateMany({ where: { booking: { userId } }, data: { fieldValues: {}, userId: null } })
       // Tautan akun pada manifest booking ORANG LAIN diputus saja; isi manifest itu milik pemesannya.

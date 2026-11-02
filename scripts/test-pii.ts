@@ -1,6 +1,7 @@
 // Uji fondasi PII Fase 1 data jamaah (docs/arsitektur-jamaah.md §6, ADR-0005): validasi kunci (kosong/lemah/sama/ganda ditolak, pesan tanpa nilai kunci),
 // AES-256-GCM (IV acak, ubah satu karakter / tukar tujuan / versi tak dikenal → ditolak, rotasi kunci), indeks HMAC (deterministik, berkunci, terpisah per tujuan),
-// NIK & paspor (normalisasi, aturan keras vs petunjuk), samaran, dan penjaga sumber (cipher & env PII hanya di lib/pii). Murni — tidak menyentuh DB.
+// NIK & paspor (normalisasi, aturan keras vs petunjuk), samaran, dan penjaga sumber (cipher & env PII hanya di lib/pii; tak ada jalur impor dari
+// komponen klien ke kode PII server — SEC-170, pengganti paket `server-only` yang melempar di skrip Bun/instrumentation). Murni — tidak menyentuh DB.
 import assert from 'node:assert/strict'
 import { createHash, randomBytes } from 'node:crypto'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
@@ -206,6 +207,59 @@ await t('PENJAGA SUMBER: cipher, env PII, dan modul internal lib/pii hanya dipak
   assert.match(gen, /PII_INDEX_KEY=\$\(acak 32\)/); assert.match(gen, /PII_ENCRYPTION_KEY=\$\(acak 32\)/)
   const example = readFileSync(join(root, '.env.production.example'), 'utf8')
   assert.match(example, /^PII_INDEX_KEY=$/m); assert.match(example, /^PII_ENCRYPTION_KEY=$/m)
+})
+
+await t('PENJAGA KLIEN TRANSITIF (SEC-170): tak ada berkas "use client" yang — lewat rantai impor apa pun — mencapai lib/pii (selain mask) atau lib/pilgrims/service', () => {
+  const root = new URL('..', import.meta.url).pathname
+  const exists = (p: string) => { try { return statSync(p).isFile() } catch { return false } }
+  const resolve = (from: string, spec: string): string | null => {
+    const baseDir = spec.startsWith('@/') ? join(root, spec.slice(2)) : spec.startsWith('.') ? join(from, '..', spec) : null
+    if (!baseDir) return null // paket npm
+    for (const c of [baseDir, `${baseDir}.ts`, `${baseDir}.tsx`, join(baseDir, 'index.ts'), join(baseDir, 'index.tsx')]) if (exists(c)) return c
+    return null
+  }
+  // Impor yang ikut dibundel: statis, ekspor ulang, dinamis — impor `type` saja dihapus kompiler, jadi dilewati.
+  const importsOf = (file: string): string[] => {
+    const src = readFileSync(file, 'utf8')
+    const specs = [
+      ...[...src.matchAll(/^\s*(?:import|export)\s+(?!type\s)(?:[^'"]*?\sfrom\s+)?['"]([^'"]+)['"]/gm)].map(m => m[1]!),
+      ...[...src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)].map(m => m[1]!),
+    ]
+    return specs.map(sp => resolve(file, sp)).filter((x): x is string => x !== null)
+  }
+  const forbidden = (rel: string) => (rel.startsWith('lib/pii/') && rel !== 'lib/pii/mask.ts') || rel === 'lib/pilgrims/service.ts'
+  const clientFiles: string[] = []
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      if (name === 'node_modules' || name.startsWith('.')) continue
+      const p = join(dir, name)
+      if (statSync(p).isDirectory()) walk(p)
+      else if (/\.(ts|tsx)$/.test(name) && /^['"]use client['"]/m.test(readFileSync(p, 'utf8'))) clientFiles.push(p)
+    }
+  }
+  for (const d of ['app', 'lib', 'components']) walk(join(root, d))
+  assert.ok(clientFiles.length > 50, `hanya ${clientFiles.length} berkas klien — penjaga tak bermakna`)
+  const bad: string[] = []
+  for (const start of clientFiles) {
+    const seen = new Map<string, string | null>([[start, null]])
+    const queue = [start]
+    while (queue.length) {
+      const cur = queue.shift()!
+      for (const next of importsOf(cur)) {
+        if (seen.has(next)) continue
+        seen.set(next, cur)
+        if (forbidden(relative(root, next))) {
+          const chain: string[] = []
+          for (let x: string | null = next; x; x = seen.get(x) ?? null) chain.unshift(relative(root, x))
+          bad.push(chain.join(' → '))
+        } else queue.push(next)
+      }
+    }
+  }
+  assert.deepEqual(bad, [])
+  // kontrol positif: penyelesai impor sungguh bekerja (mask.ts boleh dan memang terjangkau dari lib/pii/index.ts)
+  assert.ok(importsOf(join(root, 'lib/pii/index.ts')).some(f => f.endsWith('lib/pii/mask.ts')))
+  assert.ok(importsOf(join(root, 'lib/pilgrims/service.ts')).some(f => f.endsWith('lib/pii/index.ts')))
 })
 
 if (failed > 0) { console.log(`\n${failed} gagal`); process.exit(1) }

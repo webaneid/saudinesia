@@ -49,6 +49,11 @@ model User {
   consentLogs               ConsentLog[]
   deletionRequests          AccountDeletionRequest[] @relation("DeletionRequestUser")
   processedDeletionRequests AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
+  // Data jamaah tersimpan (docs/arsitektur-jamaah.md §5, ADR-0005)
+  savedPilgrims             SavedPilgrim[]           @relation("SavedPilgrimOwner")
+  selfPilgrim               SavedPilgrim?            @relation("SavedPilgrimSelf")
+  createdSavedPilgrims      SavedPilgrim[]           @relation("SavedPilgrimCreatedBy")
+  bookingPilgrims           BookingPilgrim[]         @relation("BookingPilgrimUser")
 
   @@map("users")
 }
@@ -839,12 +844,138 @@ model BookingPilgrim {
 
   fieldValues Json @default("{}")
 
+  // Tautan ke data jamaah tersimpan (docs/arsitektur-jamaah.md §5): kartu sumber + identitas global. fieldValues tetap SNAPSHOT beku.
+  savedPilgrimId String?
+  identityId     String?
+
   booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  user            User?            @relation("BookingPilgrimUser", fields: [userId], references: [id], onDelete: SetNull)
+  savedPilgrim    SavedPilgrim?    @relation(fields: [savedPilgrimId], references: [id], onDelete: SetNull)
+  identity        PilgrimIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
   visaApplication VisaApplication?
   documents       Document[]
 
   @@index([bookingId])
+  @@index([userId])
+  @@index([savedPilgrimId])
+  @@index([identityId])
   @@map("booking_pilgrims")
+}
+
+// ─── DATA JAMAAH TERSIMPAN (docs/arsitektur-jamaah.md §4–§6, ADR-0005) ──────────
+// Dua lapis: PilgrimIdentity = satu baris per ORANG (gudang global, hanya staf; unik HMAC(NIK) / HMAC(negara+paspor));
+// SavedPilgrim = "kartu" milik satu akun, isi persis yang diketik akun itu (pengguna hanya melihat kartunya sendiri).
+// NIK & paspor HANYA lewat lib/pii (indeks HMAC + AES-256-GCM); NIK tak punya digit polos sama sekali (SEC-165). Penulis: lib/pilgrims/service.ts.
+
+enum Gender {
+  male
+  female
+
+  @@map("gender")
+}
+
+enum PilgrimMatchStatus {
+  matched // tertaut ke identitas dan datanya cocok
+  conflict // kunci identitas cocok tetapi nama/tanggal lahir berbeda — antrean admin; TIDAK pernah ditampilkan ke pemilik kartu
+  unmatched // tanpa kunci identitas (bayi tanpa NIK) — dicocokkan admin
+
+  @@map("pilgrim_match_status")
+}
+
+model PilgrimIdentity {
+  id              String    @id @default(uuid())
+  nikHash         String?   @unique
+  nikCipher       String?
+  passportKeyHash String?   @unique // kunci identitas WNA (negara + nomor paspor); null untuk identitas berkunci NIK
+  // Data kanonik: awal = kartu pertama; diperbarui dari pengajuan yang lolos verifikasi (Fase 6). Tak pernah dikirim ke API jamaah.
+  fullName        String
+  nameKey         String
+  gender          Gender?
+  birthPlace      String?
+  birthDate       DateTime? @db.Date
+  nationality     String    @default("ID")
+  lastVerifiedAt  DateTime? @db.Timestamptz(3)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+
+  cards           SavedPilgrim[]
+  bookingPilgrims BookingPilgrim[]
+  events          PilgrimIdentityEvent[]
+
+  @@index([nameKey, birthDate])
+  @@map("pilgrim_identities")
+}
+
+model SavedPilgrim {
+  id               String             @id @default(uuid())
+  ownerId          String
+  identityId       String?
+  matchStatus      PilgrimMatchStatus @default(unmatched)
+  // "Saya sendiri": salinan ownerId HANYA pada kartu diri pemilik akun — kolom unik (Prisma tak punya indeks unik parsial; pola verifiedWhatsapp).
+  selfOfUserId     String?            @unique
+  fullName         String // sesuai paspor
+  nameKey          String
+  nikHash          String?
+  nikCipher        String?
+  gender           Gender?
+  birthPlace       String?
+  birthDate        DateTime?          @db.Date
+  nationality      String             @default("ID")
+  passportCipher   String?
+  passportLast4    String?
+  passportKeyHash  String?
+  passportIssuedAt DateTime?          @db.Date
+  passportExpiry   DateTime?          @db.Date
+  addressId        String?            @unique
+  phone            String? // E.164 tanpa "+" (bentuk sama User / ContactPicker)
+  whatsapp         String?
+  email            String?
+  createdById      String? // staf bila dibuat atas nama pelanggan; null = pemilik sendiri
+  archivedAt       DateTime?          @db.Timestamptz(3) // hapus-aman: kartu yang pernah dipakai booking diarsipkan
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
+
+  owner           User             @relation("SavedPilgrimOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  selfOf          User?            @relation("SavedPilgrimSelf", fields: [selfOfUserId], references: [id], onDelete: SetNull)
+  identity        PilgrimIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  address         Address?         @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  createdBy       User?            @relation("SavedPilgrimCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  bookingPilgrims BookingPilgrim[]
+
+  @@unique([ownerId, nikHash])
+  @@unique([ownerId, passportKeyHash])
+  @@index([ownerId, archivedAt, nameKey, id])
+  @@index([identityId])
+  @@index([matchStatus, createdAt])
+  @@index([createdById])
+  @@map("saved_pilgrims")
+}
+
+// Jejak append-only per identitas: created | linked | conflict | detached | merged | nik_revealed | canonical_updated. `detail` TANPA PII mentah.
+model PilgrimIdentityEvent {
+  id         String   @id @default(uuid())
+  identityId String
+  actorId    String?
+  kind       String
+  cardId     String?
+  detail     Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+
+  identity PilgrimIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
+  @@index([identityId, createdAt])
+  @@index([actorId])
+  @@map("pilgrim_identity_events")
+}
+
+// Nilai cek kunci PII (SEC-168): HMAC kunci indeks dan kanari per versi kunci enkripsi, ditulis pada pemakaian pertama. Kunci yang tertukar
+// (env dibuat ulang, staging/produksi tertukar) membuat lib/pii menolak bekerja, bukan diam-diam merusak keunikan NIK. Bukan rahasia.
+model PiiKeyCheck {
+  id        String   @id // 'index' | 'enc:<versi>'
+  value     String
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@map("pii_key_checks")
 }
 
 model VisaApplication {
@@ -1406,6 +1537,7 @@ model Address {
   user            User?
   vendor          Vendor?
   hotel           Hotel?
+  savedPilgrim    SavedPilgrim? // alamat kartu jamaah (docs/arsitektur-jamaah.md §5)
   invoiceSettings InvoiceSettings? // alamat perusahaan di Pengaturan Invoice (docs/arsitektur-booking-engine-v2.md §6)
 
   @@map("addresses")

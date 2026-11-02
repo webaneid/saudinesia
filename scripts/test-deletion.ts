@@ -143,7 +143,7 @@ await t('pratinjau: jamaah dengan booking selesai → layak, jumlah yang akan di
   const p = await previewDeletion(s.requestId)
   assert.equal(p.kind, 'ok'); if (p.kind !== 'ok') return
   assert.equal(p.eligible, true); assert.deepEqual(p.blockers, [])
-  assert.deepEqual(p.willErase, { bookings: 1, pilgrims: 1, documents: 2, visaApplications: 1, notifications: 2, authTokens: 1, address: 1 })
+  assert.deepEqual(p.willErase, { bookings: 1, pilgrims: 1, documents: 2, visaApplications: 1, notifications: 2, authTokens: 1, address: 1, savedPilgrims: 0, identities: 0 })
 })
 
 await t('blocker: booking masih berjalan (tiap status non-terminal) menolak; kontrol positif: completed/cancelled lolos', async () => {
@@ -233,7 +233,7 @@ await t('anonimisasi lengkap: tiap kolom PII hilang / diacak; ringkasan tercatat
   // permintaan: selesai + ringkasan tanpa PII
   const req = await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: s.requestId } })
   assert.equal(req.status, 'completed'); assert.equal(req.processedById, admin.id); assert.equal(req.note, 'sesuai permintaan'); assert.ok(req.processedAt)
-  assert.deepEqual(req.erasureSummary, { bookings: 1, pilgrims: 1, documents: 2, visaApplications: 1, notifications: 2, authTokens: 1, address: 1 })
+  assert.deepEqual(req.erasureSummary, { bookings: 1, pilgrims: 1, documents: 2, visaApplications: 1, notifications: 2, authTokens: 1, address: 1, savedPilgrims: 0, identities: 0 })
   assert.doesNotMatch(JSON.stringify(req), new RegExp(s.email.split('@')[0]!), 'email asli tak boleh muncul di catatan permintaan')
 })
 
@@ -583,7 +583,11 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
   const found = new Set<string>()
   for (const [, name, body] of schema.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm)) {
     if (name === 'User') continue
-    for (const line of body!.split('\n')) { const m = line.trim().match(/^(\w*[uU]serId|\w+ById)\s+String/); if (m) found.add(`${name}.${m[1]}`) }
+    for (const line of body!.split('\n')) {
+      const m = line.trim().match(/^(\w*[uU]serId|\w+ById|actorId)\s+String/); if (m) found.add(`${name}.${m[1]}`)
+      // Nama apa pun: setiap relasi ke User (mis. SavedPilgrim.ownerId) — nama kolom bukan satu-satunya petunjuk.
+      const rel = line.trim().match(/^\w+\s+User\??\s+@relation\(.*fields:\s*\[(\w+)\]/); if (rel) found.add(`${name}.${rel[1]}`)
+    }
   }
   // Perlakuan tiap kolom (harus cocok dengan lib/account/deletion.ts). Menambah kolom userId baru WAJIB menambah baris di sini DAN menanganinya di sana.
   const HANDLED: Record<string, string> = {
@@ -605,10 +609,14 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'Invoice.issuedById': 'dipertahankan (staf yang menerbitkan invoice; NULL untuk jalur jamaah — tak pernah menunjuk akun jamaah)',
     'BookingRevision.byUserId': 'dipertahankan (staf yang merevisi booking; catatan `reason` dibersihkan — bookingRevision.updateMany)',
     'PriceSnapshot.voidedById': 'dipertahankan (staf yang membatalkan baris harga lewat revisi)',
+    'SavedPilgrim.ownerId': 'kartu jamaah milik akun DIHAPUS beserta alamatnya (eraseSavedPilgrimsOf, lib/pilgrims/service.ts); Restrict menjamin tak ada yang terlewat',
+    'SavedPilgrim.selfOfUserId': 'salinan ownerId pada kartu "saya sendiri" (CHECK) — ikut terhapus bersama kartu',
+    'SavedPilgrim.createdById': 'dipertahankan (staf yang membuat kartu atas nama pelanggan; penghapusan hanya untuk jamaah)',
+    'PilgrimIdentityEvent.actorId': 'dikosongkan pada jejak identitas yang dipertahankan (eraseSavedPilgrimsOf, beserta cardId kartu akun itu); jejak identitas yang terhapus ikut hilang (Cascade)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')
-  for (const must of ['bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'document.deleteMany', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany']) assert.ok(src.includes(must), must)
+  for (const must of ['eraseSavedPilgrimsOf(tx, userId)', 'bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'document.deleteMany', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany']) assert.ok(src.includes(must), must)
   // Kolom teks bebas yang diketahui pada baris yang DIPERTAHANKAN harus dibersihkan (DEL-01).
   for (const col of ['pickupDetail', 'dropoffDetail']) assert.ok(src.includes(col), col)
   assert.ok(/notes: null/.test(src))
