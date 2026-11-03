@@ -14,6 +14,9 @@ import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
+import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
+import type { RequirementView } from '@/lib/documents/completeness'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -35,7 +38,11 @@ type PackageHotelOptionRow = { id: string; slot: string; hotelRoomScheduleId: st
 type PackageVisaOptionRow = { id: string; visaProductId: string; visaProduct: { name: string; price: string } }
 type PackageCateringOptionRow = { id: string; cateringOptionId: string; numPeople: number; numDays: number; cateringOption: { name: string } }
 
+/** Bagian yang disimpan tombol Terbitkan (bukan kotak komponen yang tersimpan sendiri). */
+type InfoForm = { name: string; description: string; priceLabel: string; highlights: string; isFeatured: boolean; isActive: boolean; reqs: RequirementRow[] }
+
 type PackageDetail = {
+  documentRequirements: RequirementView[]
   id: string; name: string; description: string | null; priceLabel: string | null; highlights: string[]; isActive: boolean; isFeatured: boolean
 
   hotelMakkahMode: Mode
@@ -118,7 +125,7 @@ export default function PackageBuilderPage({ params }: Props) {
 
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
   const [priceTick, setPriceTick] = useState(0) // naik setiap biaya/harga berubah → PriceCard memuat ulang
-  const EMPTY_FORM = { name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true }
+  const EMPTY_FORM: InfoForm = { name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true, reqs: [] }
   const [form, setForm] = useState(EMPTY_FORM)
   // Baseline info yang tersimpan — dasar penanda "belum disimpan" dan agar muat-ulang akibat kotak komponen TIDAK menimpa ketikan yang belum disimpan.
   const [baseline, setBaseline] = useState(EMPTY_FORM)
@@ -171,7 +178,7 @@ export default function PackageBuilderPage({ params }: Props) {
       if (resetInfo) {
         const info = {
           name: p.name, description: p.description ?? '', priceLabel: p.priceLabel ?? '',
-          highlights: (p.highlights ?? []).join('\n'), isFeatured: p.isFeatured, isActive: p.isActive,
+          highlights: (p.highlights ?? []).join('\n'), isFeatured: p.isFeatured, isActive: p.isActive, reqs: p.documentRequirements.map(rowFromView),
         }
         setForm(info); setBaseline(info)
       }
@@ -241,7 +248,7 @@ export default function PackageBuilderPage({ params }: Props) {
     const okSaved = await patch({
       name: form.name, description: form.description || null, priceLabel: form.priceLabel || null,
       highlights: form.highlights.split('\n').map(s => s.trim()).filter(Boolean),
-      isFeatured: form.isFeatured, isActive: form.isActive,
+      isFeatured: form.isFeatured, isActive: form.isActive, requirements: bodyFromRows(form.reqs),
     })
     setSaving(false)
     if (!okSaved) return
@@ -427,7 +434,7 @@ export default function PackageBuilderPage({ params }: Props) {
                 Tampilkan di halaman utama
               </label>
             }
-            hint="Tombol ini menyimpan nama, deskripsi, highlight, label harga, dan status. Kotak komponen di bawah tersimpan langsung saat diubah."
+            hint="Tombol ini menyimpan nama, deskripsi, highlight, label harga, persyaratan dokumen, dan status. Kotak komponen di bawah tersimpan langsung saat diubah."
             onSave={handleSaveInfo} saving={saving} dirty={dirty} saved={saved} canSave={!!form.name.trim()}
           />
           <MetaBox title="Foto Unggulan" icon={PackageIcon} collapsible={false}>
@@ -461,6 +468,8 @@ export default function PackageBuilderPage({ params }: Props) {
         <textarea className="admin-inp" rows={3} value={form.highlights} onChange={e => setForm(f => ({ ...f, highlights: e.target.value }))}
           placeholder={"Hotel bintang 5 Makkah & Madinah\nVisa Umroh termasuk\nMuthowif berpengalaman"} />
       </MetaBox>
+
+      <RequirementsEditor rows={form.reqs} onChange={reqs => setForm(f => ({ ...f, reqs }))} productNoun="paket ini" />
 
       {/* Hotel Makkah */}
       <MetaBox title="Hotel Makkah" icon={Building2} description="Pilih bagaimana hotel Makkah masuk ke paket ini — lihat docs/arsitektur-paket-umroh.md §3" defaultOpen={pkg.hotelMakkahMode !== 'none'} aside={<Badge tone={pkg.hotelMakkahMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.hotelMakkahMode]}</Badge>}>
