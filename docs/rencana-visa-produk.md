@@ -143,7 +143,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 |---|---|
 | V4a | Tautan jamaah ↔ paket/haji (§3.3): skema + migrasi + `lineItems`/`revise` + 422 jumlah — perilaku visa tidak berubah (dibuktikan uji pembanding) — ✔ 2026-11-04: migrasi `20261119090000_booking_pilgrim_members`, `lib/booking/members.ts`, uji `test-booking-members.ts` (pembanding > 500 kasus) + `test-booking-members-migration.ts` |
 | V4b | Syarat di produk Paket & Haji (§3.4): registry, API, editor, katalog publik — ✔ 2026-11-04: `REQUIREMENT_OWNERS.package/haji`, rute buat/ubah/baca, `RequirementsEditor` di halaman edit, `components/shared/RequiredDocuments` di katalog Visa/Paket/Haji, uji `test-document-requirements.ts` |
-| V4c | Penilaian gabungan (§3.5): `pilgrimRequirements`, semua pembaca, buka ulang, UI "Diminta oleh" |
+| V4c | Penilaian gabungan (§3.5): `pilgrimRequirements`, semua pembaca, buka ulang, UI "Diminta oleh" — ✔ 2026-11-04: `pilgrimRequirements(db, ids)` + `mergeRequirements` bersumber; `assess`, `reopenForChangedDocument`, `bookingChecklists` memakainya; checklist admin & jamaah menampilkan "Diminta oleh"; uji `test-pilgrim-requirements.ts` |
 
 ### 3.8 Keputusan pemilik (dijawab 2026-11-04 — semuanya sesuai rekomendasi)
 - **K1** — Visa yang termasuk paket: syarat visanya tetap diminta, digabung dengan syarat paket (rekomendasi: ya — visanya tetap diajukan ke kedutaan).
@@ -160,7 +160,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 | V1 | Editor produk visa: pilihan "Model penjualan" (only/plus) | ✔ 2026-11-03 (#106) |
 | V2 | Form booking (draf + revisi): baris Visa di `ItemRows`, kelompok ↔ slot jamaah | ✔ 2026-11-04 (#107) |
 | V3 | Daftar centang "Wajib dibeli bersama visa ini" (7 jenis, §2.1–2.2) + hapus pelonggaran per pelanggan (§2.3) + UI (§2.4) + migrasi (§2.5) | ✔ 2026-11-04 — migrasi `20261118090000_visa_required_components_v3`, uji `test-visa-v3-migration.ts` |
-| V4 | Syarat dokumen Paket Umroh + Haji (§3) — dipecah V4a/V4b/V4c (§3.7) | V4a ✔, V4b ✔ 2026-11-04; V4c belum |
+| V4 | Syarat dokumen Paket Umroh + Haji (§3) — dipecah V4a/V4b/V4c (§3.7) | V4a ✔, V4b ✔, V4c ✔ 2026-11-04 |
 | V5 | Dokumentasi: `arsitektur-booking-engine-v2.md`, `arsitektur-visa.md`, CLAUDE.md (pelonggaran dihapus, drift §6) | — |
 
 ## 5. Keputusan pemilik (tercatat)

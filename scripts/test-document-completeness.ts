@@ -66,12 +66,21 @@ t('MODEL LAMA (checkValidity=false): berkas tanpa tanggal tetap dihitung ada', (
   assert.equal(stateOf([passport], [D(passport, 'pending', null)], '2026-12-01', false).passport, 'pending')
 })
 
-t('GABUNGAN syarat beberapa produk: per jenis, urutan kemunculan pertama, wajib bila salah satu mewajibkan, label dari yang pertama', () => {
-  const visaA = [R('passport', { label: 'Paspor (visa)' }), R('kk', { required: false })]
-  const pkg = [R('kk', { required: true, label: 'KK paket' }), R('flight_ticket', { reusable: false })]
-  const merged = mergeRequirements([visaA, pkg])
-  assert.deepEqual(merged.map(m => [m.key, m.required, m.label]), [['passport', true, 'Paspor (visa)'], ['kk', true, 'kk'], ['flight_ticket', true, 'flight_ticket']])
-  assert.equal(visaA[1]!.required, false, 'masukan tidak diubah')
+t('GABUNGAN syarat beberapa produk: per jenis, urutan kemunculan pertama, wajib bila salah satu mewajibkan, label dari yang pertama, petunjuk digabung tanpa duplikat, sumber per produk', () => {
+  const pkg = [R('kk', { required: false, label: 'KK paket', description: 'Terbaru' }), R('flight_ticket', { reusable: false })]
+  const haji = [R('kk', { description: 'Terbaru' }), R('vaccine', { description: 'Meningitis' })]
+  const visaA = [R('passport', { label: 'Paspor (visa)' }), R('kk', { required: false, description: 'Legalisir' }), R('vaccine', { description: 'Meningitis' })]
+  const merged = mergeRequirements([{ source: 'Paket Hemat', requirements: pkg }, { source: 'Haji Khusus', requirements: haji }, { source: 'Visa Reguler', requirements: visaA }])
+  assert.deepEqual(merged.map(m => [m.key, m.required, m.label, m.description, m.sources]), [
+    ['kk', true, 'KK paket', 'Terbaru · Legalisir', ['Paket Hemat', 'Haji Khusus', 'Visa Reguler']],
+    ['flight_ticket', true, 'flight_ticket', '', ['Paket Hemat']],
+    ['vaccine', true, 'vaccine', 'Meningitis', ['Haji Khusus', 'Visa Reguler']],
+    ['passport', true, 'Paspor (visa)', '', ['Visa Reguler']],
+  ])
+  assert.equal(pkg[0]!.required, false, 'masukan tidak diubah')
+  assert.equal(pkg[0]!.description, 'Terbaru', 'masukan tidak diubah')
+  assert.deepEqual(mergeRequirements([{ source: 'Paket', requirements: [R('ktp')] }, { source: 'Paket', requirements: [R('ktp')] }])[0]!.sources, ['Paket'], 'nama produk sama tak dobel')
+  assert.deepEqual(mergeRequirements([]), [])
 })
 
 t('EDITOR (nilai murni): label sama dengan katalog dikirim null, baris tanpa jenis dibuang, urutan bisa digeser', () => {
