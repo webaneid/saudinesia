@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import type { DocumentRequirementInput } from '@/lib/validators/documents'
-import type { RequirementView } from './completeness'
+import { mergeRequirements, type RequirementView } from './completeness'
 
 // Syarat dokumen per produk (docs/arsitektur-jamaah.md §7.2/§7.6) — SATU-SATUNYA penulis `document_requirements`. Jenis dari katalog
 // `document_types`; label kosong = label katalog. Kelengkapan dinilai `lib/documents/completeness.ts`, bukan di sini.
@@ -69,16 +69,42 @@ export async function requirementsOf(productType: string, productId: string, db:
 }
 
 /** Syarat banyak produk sekaligus (satu kueri) — kunci peta `${productType}:${productId}`; produk tanpa syarat → []. */
-export async function requirementsOfMany(refs: readonly ProductRef[]): Promise<Map<string, RequirementView[]>> {
+export async function requirementsOfMany(refs: readonly ProductRef[], db: Tx | typeof prisma = prisma): Promise<Map<string, RequirementView[]>> {
   const out = new Map<string, RequirementView[]>(refs.map(r => [`${r.productType}:${r.productId}`, []]))
   if (refs.length === 0) return out
-  const rows = await prisma.documentRequirement.findMany({
+  const rows = await db.documentRequirement.findMany({
     where: { OR: refs.map(r => ({ productType: r.productType, productId: r.productId })) },
     orderBy: [{ order: 'asc' }, { id: 'asc' }],
     select: { ...viewSelect, productType: true, productId: true },
   })
   for (const r of rows) out.get(`${r.productType}:${r.productId}`)?.push(toView(r))
   return out
+}
+
+/**
+ * Syarat dokumen per JAMAAH BOOKING (docs/rencana-visa-produk.md §3.2, K1) — SATU pintu untuk semua penilai jamaah (verifikasi, checklist admin
+ * dan jamaah, buka ulang). Gabungan syarat produk yang memuat jamaah itu, urut Paket Umroh (anggota, `bookingPackageId`) → Haji (`bookingHajiId`)
+ * → visa yang ia pegang (visa sendiri ATAU visa dari paket). Jamaah tanpa produk bersyarat → []. Id yang tak ada tidak muncul di peta.
+ */
+export async function pilgrimRequirements(db: Tx | typeof prisma, bookingPilgrimIds: readonly string[]): Promise<Map<string, RequirementView[]>> {
+  if (bookingPilgrimIds.length === 0) return new Map()
+  const rows = await db.bookingPilgrim.findMany({
+    where: { id: { in: [...bookingPilgrimIds] } },
+    select: {
+      id: true,
+      bookingPackage: { select: { package: { select: { id: true, name: true } } } },
+      bookingHaji: { select: { hajiProduct: { select: { id: true, name: true } } } },
+      visaApplication: { select: { visaProduct: { select: { id: true, name: true } } } },
+    },
+  })
+  const productsOf = (r: (typeof rows)[number]) => [
+    ...(r.bookingPackage ? [{ productType: 'package', productId: r.bookingPackage.package.id, name: r.bookingPackage.package.name }] : []),
+    ...(r.bookingHaji ? [{ productType: 'haji', productId: r.bookingHaji.hajiProduct.id, name: r.bookingHaji.hajiProduct.name }] : []),
+    ...(r.visaApplication?.visaProduct ? [{ productType: 'visa', productId: r.visaApplication.visaProduct.id, name: r.visaApplication.visaProduct.name }] : []),
+  ]
+  const refs = new Map(rows.flatMap(productsOf).map(p => [`${p.productType}:${p.productId}`, p]))
+  const byProduct = await requirementsOfMany([...refs.values()], db)
+  return new Map(rows.map(r => [r.id, mergeRequirements(productsOf(r).map(p => ({ source: p.name, requirements: byProduct.get(`${p.productType}:${p.productId}`) ?? [] })))]))
 }
 
 /** Ganti seluruh syarat satu produk (urutan = urutan daftar) di dalam transaksi pemanggil. Jenis harus ada; jenis NONAKTIF hanya boleh

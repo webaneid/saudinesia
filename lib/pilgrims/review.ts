@@ -4,7 +4,7 @@ import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { completeness } from '@/lib/manifest/values'
-import { requirementsOf } from '@/lib/documents/requirements'
+import { pilgrimRequirements } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { notify } from '@/lib/notifications/notify'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
@@ -80,7 +80,8 @@ type Assessment = { fields: Awaited<ReturnType<typeof manifestFieldsOf>>; missin
 async function assess(tx: Tx, bp: Locked): Promise<Assessment> {
   const fields = await manifestFieldsOf(tx, bp.visaProductId)
   const data = completeness(fields, bp.fieldValues)
-  const requirements = bp.visaProductId ? await requirementsOf('visa', bp.visaProductId, tx) : []
+  // Gabungan syarat semua produk yang memuat jamaah ini (Paket → Haji → Visa, docs/rencana-visa-produk.md §3.2).
+  const requirements = (await pilgrimRequirements(tx, [bp.id])).get(bp.id) ?? []
   const typeIds = requirements.map(r => r.documentTypeId)
   const docs = bp.savedPilgrimId && typeIds.length > 0
     ? await tx.pilgrimDocument.findMany({
@@ -212,12 +213,10 @@ export async function reopenForChangedDocument(tx: Tx, doc: { savedPilgrimId: st
       ${doc.bookingId ? Prisma.sql`AND bp."bookingId" = ${doc.bookingId}` : Prisma.empty}
     ORDER BY bp."id" FOR UPDATE OF bp`
   let reopened = 0
+  // Disyaratkan = jenis ada di GABUNGAN syarat jamaah itu (paket/haji/visa), wajib maupun opsional — sama dengan yang dinilai `assess`.
+  const reqs = await pilgrimRequirements(tx, rows.map(r => r.id))
   for (const r of rows) {
-    const visa = await tx.visaApplication.findUnique({ where: { bookingPilgrimId: r.id }, select: { visaProductId: true } })
-    const required = visa?.visaProductId
-      ? await tx.documentRequirement.count({ where: { productType: 'visa', productId: visa.visaProductId, documentTypeId: doc.documentTypeId } })
-      : 0
-    if (required === 0) continue
+    if (!(reqs.get(r.id) ?? []).some(q => q.documentTypeId === doc.documentTypeId)) continue
     await tx.bookingPilgrim.update({ where: { id: r.id }, data: { reviewStatus: 'submitted', verifiedAt: null, verifiedById: null }, select: { id: true } })
     await tx.pilgrimReviewEvent.create({ data: { bookingPilgrimId: r.id, fromStatus: r.reviewStatus, toStatus: 'submitted', actorId, note: reason } })
     reopened++
