@@ -57,6 +57,9 @@ model User {
   reviewedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocReviewedBy")
   verifiedBookingPilgrims   BookingPilgrim[]         @relation("BookingPilgrimVerifiedBy")
   pilgrimReviewEvents       PilgrimReviewEvent[]     @relation("PilgrimReviewActor")
+  confirmedPilgrimMatches   SavedPilgrim[]           @relation("SavedPilgrimMatchConfirmedBy")
+  createdIdentityAliases    PilgrimIdentityAlias[]
+  identityErasures          PilgrimIdentityErasure[]
   bookingPilgrims           BookingPilgrim[]         @relation("BookingPilgrimUser")
 
   @@map("users")
@@ -962,14 +965,18 @@ model PilgrimIdentity {
   birthDate       DateTime? @db.Date
   nationality     String    @default("ID")
   lastVerifiedAt  DateTime? @db.Timestamptz(3)
+  // Data kanonik ditetapkan admin dari satu kartu (Fase 8) — sejak itu tidak digeser kartu tertua (sejajar lastVerifiedAt).
+  canonicalPinnedAt DateTime? @db.Timestamptz(3)
   createdAt       DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
 
   cards           SavedPilgrim[]
   bookingPilgrims BookingPilgrim[]
   events          PilgrimIdentityEvent[]
+  aliases         PilgrimIdentityAlias[]
 
   @@index([nameKey, birthDate])
+  @@index([nameKey(ops: raw("gin_trgm_ops"))], type: Gin, map: "pilgrim_identities_nameKey_trgm_idx")
   @@map("pilgrim_identities")
 }
 
@@ -999,6 +1006,11 @@ model SavedPilgrim {
   email            String?
   createdById      String? // staf bila dibuat atas nama pelanggan; null = pemilik sendiri
   archivedAt       DateTime?          @db.Timestamptz(3) // hapus-aman: kartu yang pernah dipakai booking diarsipkan
+  // Fase 8 (gudang admin): cocok manual "orang yang sama" — gugur bila NIK/nama/tanggal lahir kartu berubah (lib/pilgrims/service.ts).
+  matchConfirmedAt   DateTime?        @db.Timestamptz(3)
+  matchConfirmedById String?
+  // Dilepas admin karena NIK tidak sesuai: pesan generik ke pemilik + tak ditautkan ulang otomatis sampai NIK diubah.
+  nikCheckRequestedAt DateTime?       @db.Timestamptz(3)
   createdAt        DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
 
@@ -1007,6 +1019,7 @@ model SavedPilgrim {
   identity        PilgrimIdentity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
   address         Address?          @relation(fields: [addressId], references: [id], onDelete: SetNull)
   createdBy       User?             @relation("SavedPilgrimCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  matchConfirmedBy User?            @relation("SavedPilgrimMatchConfirmedBy", fields: [matchConfirmedById], references: [id], onDelete: SetNull)
   bookingPilgrims BookingPilgrim[]
   documents       PilgrimDocument[]
 
@@ -1016,10 +1029,44 @@ model SavedPilgrim {
   @@index([identityId])
   @@index([matchStatus, createdAt])
   @@index([createdById])
+  @@index([matchConfirmedById])
   @@map("saved_pilgrims")
 }
 
-// Jejak append-only per identitas: created | linked | conflict | detached | merged | nik_revealed | canonical_updated. `detail` TANPA PII mentah.
+// Kunci (hash NIK/paspor) identitas yang sudah DIGABUNG ke identitas lain (Fase 8): kartu berkunci lama tetap tertaut ke identitas tujuan.
+// Hanya hash — tanpa ciphertext. Satu hash tak pernah sekaligus kunci utama dan alias (dijaga lib/pilgrims/warehouse.ts di bawah kunci advisory).
+model PilgrimIdentityAlias {
+  id          String   @id @default(uuid())
+  identityId  String
+  keyHash     String   @unique
+  kind        String // nik | passport
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  identity  PilgrimIdentity @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  createdBy User?           @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([identityId])
+  @@index([createdById])
+  @@map("pilgrim_identity_aliases")
+}
+
+// Jejak hilangnya identitas karena tindakan petugas (Fase 8) — TANPA PII; jejak identitas sendiri ikut terhapus (Cascade), jadi jumlah pembukaan NIK/paspor dicatat di sini.
+model PilgrimIdentityErasure {
+  id            String   @id @default(uuid())
+  actorId       String?
+  reason        String // staff_erase (hapus atas permintaan subjek data) | staff_detach (identitas hilang karena petugas melepas kartu terakhirnya)
+  cardsDetached Int
+  revealEvents  Int // jejak buka NIK/paspor yang ikut terhapus — akuntabilitas K4 tetap terlihat (SEC-207)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+
+  actor User? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([actorId])
+  @@map("pilgrim_identity_erasures")
+}
+
+// Jejak append-only per identitas: created | linked | conflict | detached | merged | nik_revealed | passport_revealed | match_confirmed | canonical_updated. `detail` TANPA PII mentah.
 model PilgrimIdentityEvent {
   id         String   @id @default(uuid())
   identityId String

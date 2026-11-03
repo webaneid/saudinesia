@@ -47,6 +47,7 @@ export default async function SavedPilgrimsPage({ params, searchParams }: Props)
         <span className="inline-flex flex-wrap items-center gap-2">
           <Link href={`${base}/${p.id}`} className="text-[13px] font-semibold text-primary hover:underline">{p.fullName}</Link>
           {p.isSelf && <Badge variant="secondary">Saya sendiri</Badge>}
+          {p.needsNikCheck && <Badge variant="outline">Periksa NIK</Badge>}
         </span>
       ),
     },

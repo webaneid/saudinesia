@@ -648,6 +648,9 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'PilgrimDocument.reviewedById': 'dipertahankan (staf yang menilai dokumen; dokumen akun yang dihapus ikut hilang)',
     'BookingPilgrim.verifiedById': 'dipertahankan (staf yang memverifikasi data jamaah; tak pernah dikirim ke jamaah)',
     'PilgrimReviewEvent.actorId': 'dipertahankan (pelaku transisi pemeriksaan; catatan `note` jamaah akun yang dihapus dikosongkan — pilgrimReviewEvent.updateMany)',
+    'SavedPilgrim.matchConfirmedById': 'dipertahankan (staf yang menandai kartu cocok manual, Fase 8); kartu akun yang dihapus ikut hilang',
+    'PilgrimIdentityAlias.createdById': 'dipertahankan (staf yang menggabung identitas; alias hanya hash, ikut terhapus bersama identitasnya)',
+    'PilgrimIdentityErasure.actorId': 'dipertahankan (staf yang menghapus identitas atas permintaan subjek data; baris tanpa PII)',
     'PilgrimIdentityEvent.actorId': 'dikosongkan pada jejak identitas yang dipertahankan (eraseSavedPilgrimsOf, beserta cardId kartu akun itu); jejak identitas yang terhapus ikut hilang (Cascade)',
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')

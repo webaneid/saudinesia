@@ -1,5 +1,6 @@
 import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { completeness } from '@/lib/manifest/values'
@@ -137,9 +138,10 @@ async function run(actor: Actor, fn: (tx: Tx) => Promise<Done>): Promise<ReviewR
   if (limited) return limited
   let done: Done
   try {
-    done = await prisma.$transaction(fn)
+    done = await retryConflict(() => prisma.$transaction(fn)) // deadlock dengan gabung identitas (F8, SEC-205) → ulang
   } catch (e) {
     if (e instanceof Abort) return e.result
+    if (isRetryableConflict(e)) return { ok: false, status: 409, error: 'Data jamaah sedang diubah bersamaan — coba lagi' }
     // Dokumen yang hendak ditautkan dihapus di sela pembacaan dan penulisan tautan (FK) — muat ulang dan coba lagi.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') return { ok: false, status: 409, error: 'Dokumen jamaah baru saja berubah — muat ulang lalu coba lagi' }
     throw e

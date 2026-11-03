@@ -1,6 +1,6 @@
 # Arsitektur — Data Jamaah Tersimpan + Komponen Dokumen Dinamis
 
-> **Status: RENCANA DISETUJUI PEMILIK (2026-11-02) — keputusan Q1–Q12 (§2) dan konfirmasi C1–C3 (§14) final; fase §13 disetujui. Fase 1 (fondasi `lib/pii/`) SELESAI 2026-11-02 (§6 as-built); Fase 2 (skema identitas + kartu + layanan dedup + hapus akun) SELESAI 2026-11-02 (§5.1 as-built); Fase 3 (API + UI Jamaah Saya + admin atas nama pelanggan) SELESAI 2026-11-02 (§5.2 as-built); Fase 4 (dokumen jamaah: katalog jenis, unggah cek isi + WebP, repeater) SELESAI 2026-11-03 (§7.5 as-built); Fase 5 (syarat dokumen per produk atas katalog + evaluator kelengkapan + aturan paspor 6 bulan) SELESAI 2026-11-03 (§7.7 as-built); Fase 7a+7b (tautan kartu ↔ jamaah booking, segel NIK/paspor, sisi jamaah, alamat terstruktur) SELESAI 2026-11-03 (§5.4/§5.6 as-built); Fase 6 (pengajuan & verifikasi data jamaah) SELESAI 2026-11-03 (§8.5 as-built); Fase 8 belum.** Keputusan struktural (identitas global berkunci NIK + salinan per akun) dicatat sebagai ADR-0005 di Fase 1.
+> **Status: RENCANA DISETUJUI PEMILIK (2026-11-02) — keputusan Q1–Q12 (§2) dan konfirmasi C1–C3 (§14) final; fase §13 disetujui. Fase 1 (fondasi `lib/pii/`) SELESAI 2026-11-02 (§6 as-built); Fase 2 (skema identitas + kartu + layanan dedup + hapus akun) SELESAI 2026-11-02 (§5.1 as-built); Fase 3 (API + UI Jamaah Saya + admin atas nama pelanggan) SELESAI 2026-11-02 (§5.2 as-built); Fase 4 (dokumen jamaah: katalog jenis, unggah cek isi + WebP, repeater) SELESAI 2026-11-03 (§7.5 as-built); Fase 5 (syarat dokumen per produk atas katalog + evaluator kelengkapan + aturan paspor 6 bulan) SELESAI 2026-11-03 (§7.7 as-built); Fase 7a+7b (tautan kartu ↔ jamaah booking, segel NIK/paspor, sisi jamaah, alamat terstruktur) SELESAI 2026-11-03 (§5.4/§5.6 as-built); Fase 6 (pengajuan & verifikasi data jamaah) SELESAI 2026-11-03 (§8.5 as-built); Fase 8 (gudang identitas admin) SELESAI 2026-11-03 (§4.5 as-built) — seluruh rencana selesai.** Keputusan struktural (identitas global berkunci NIK + salinan per akun) dicatat sebagai ADR-0005 di Fase 1.
 >
 > Dokumen ini akan menjadi source of truth untuk: jamaah tersimpan per akun, gudang identitas jamaah global, dokumen jamaah, serta pengajuan & verifikasi data jamaah. Ia **memperluas** `docs/arsitektur-manifest.md` (form per booking tetap ada sebagai snapshot), **menggantikan** model `Document` dan `DocumentRequirement.docType` teks bebas di `docs/arsitektur-dokumen.md`, dan wajib diselaraskan dengan `docs/arsitektur-hapus-akun.md` dan `docs/arsitektur-booking-engine-v2.md`.
 
@@ -107,6 +107,54 @@ Dicek: `prisma/schema.prisma`, `lib/manifest/*`, `lib/documents/getRequirements.
 - Kartu bayi tanpa NIK (WNA memakai kunci paspor, C2) → admin melihat "kemungkinan duplikat" berdasarkan nama ternormalisasi + tanggal lahir, dan bisa menautkan ke identitas yang benar. Begitu bayi punya NIK, pengguna melengkapinya dan kartu tertaut otomatis.
 - Konflik: admin menetapkan identitas yang benar atau melepas kartu ("NIK tidak sesuai" → kartu kembali `unmatched`, pengguna diminta memeriksa NIK lewat pesan generik tanpa menyebut ada orang lain).
 - Gabung dua identitas, lepas kartu, buka NIK → dicatat di `PilgrimIdentityEvent` (append-only). Peran: admin, manager, superadmin (K4).
+
+### 4.4 Rancangan rinci Fase 8 — gudang identitas admin (2026-11-03, sebelum eksekusi)
+
+**Recheck (SOP 1):** skema `PilgrimIdentity`/`SavedPilgrim`/`PilgrimIdentityEvent` sama dengan §5; belum ada route/halaman admin identitas; `pg_trgm` tersedia di Postgres dev tetapi belum dipasang; CI membandingkan skema ↔ DB (`migrate diff`), jadi indeks trigram harus dinyatakan di `schema.prisma` (`@@index([nameKey(ops: raw("gin_trgm_ops"))], type: Gin)`), bukan hanya di SQL. Status cocok kartu bisa basi sesudah verifikasi F6 (deviasi §8.5 butir 3) → gudang menghitung status saat dibaca.
+
+**Keputusan pemilik (2026-11-03):**
+- **Gabung:** admin ditanya identitas mana yang dipakai, lalu yang lain digabung ke sana. Kunci (NIK/paspor) identitas yang digabung disimpan sebagai **alias** supaya kartu yang masih memakai kunci itu tetap tertaut ke identitas tujuan, tidak membuat identitas baru.
+- **Konflik:** "Orang yang sama" → kartu **cocok manual** (berlaku sampai NIK/nama/tanggal lahir kartu diubah); "NIK tidak sesuai" → kartu **dilepas**; admin juga dapat menjadikan data satu kartu sebagai data kanonik.
+- **Pesan generik** ke pemilik kartu yang dilepas: "Mohon periksa kembali NIK jamaah ini" di Jamaah Saya, hilang setelah NIK diubah; selama NIK belum diubah kartu tidak ditautkan ulang otomatis.
+- **Hapus identitas** hanya bila tak pernah dipakai booking (jamaah booking); bila pernah → ditolak dengan pesan (menunggu prosedur hukum). Kartu akun tetap milik akunnya (dilepas, tidak dihapus).
+
+**Skema (migrasi `pilgrim_identity_warehouse`):**
+- `CREATE EXTENSION IF NOT EXISTS pg_trgm` + indeks GIN trigram `pilgrim_identities.nameKey` (cari nama `contains` → ILIKE memakai indeks).
+- `PilgrimIdentityAlias` (`keyHash` unik, `kind` `nik|passport`, `identityId` FK Cascade, `createdById`) — hanya hash, tanpa ciphertext (minimisasi; kartu menyimpan salinannya sendiri). Satu hash tak boleh sekaligus kunci utama dan alias: dijaga di layanan di bawah kunci advisory.
+- `SavedPilgrim.matchConfirmedAt`/`matchConfirmedById` (cocok manual), `nikCheckRequestedAt` (pesan generik + tahan tautan otomatis).
+- `PilgrimIdentity.canonicalPinnedAt` (kanonik ditetapkan admin — tidak digeser kartu tertua, sejajar `lastVerifiedAt`).
+- `PilgrimIdentityErasure` (jejak penghapusan tanpa PII: pelaku, jumlah kartu dilepas, waktu) — jejak identitas ikut terhapus bersama identitasnya.
+
+**Kunci:** advisory lock selalu atas **kunci utama** identitas (atau kunci yang akan menjadi kunci utama bila identitas belum ada). Penulis kartu: kunci kartu → cari identitas lewat kunci utama ATAU alias tanpa kunci → kunci kunci utama identitas itu → baca ulang pemetaan (berubah karena gabung serentak → 409 "coba lagi"). Gabung mengunci kedua kunci utama (terurut). Pemegang baris kartu selalu sudah memegang kunci identitasnya (aturan SEC-174 tetap).
+
+**Layanan:** `lib/pilgrims/warehouse.ts` — satu-satunya penulis alias, cocok manual, lepas, pin kanonik, gabung, hapus identitas, dan jejak `nik_revealed`; membaca/menulis atas helper `service.ts` (`settleIdentity`, kunci). `service.ts` tetap satu-satunya penulis kartu dari formulir (menghormati alias, cocok manual, dan penahanan tautan). Semua fungsi menerima `Actor` staf (`ADMIN_ROLES`, K4), memanggil `ensurePiiKeysMatch()` sebelum membuka/menghitung indeks, dan berbatas laju per staf.
+
+**Route (semua `requireAdmin`, `.strict()`, galat lewat `lib/admin/errors.ts`):** `GET /api/v1/admin/identities` (cari: 16 digit → NIK tepat lewat hash/alias; selain itu nama; filter konflik/tanpa verifikasi; berpaginasi), `GET|DELETE /api/v1/admin/identities/[id]`, `POST …/[id]/reveal` (NIK identitas atau paspor kartu; `no-store`; jejak), `POST …/[id]/cards/[cardId]` (`confirm|detach|pin`), `POST …/[id]/merge` (`otherId`, `keep`), `GET /api/v1/admin/identities/unmatched` + `POST …/unmatched/[cardId]/link` (kartu bayi tanpa kunci → identitas, saran nama + tanggal lahir sama).
+
+**UI:** menu **Identitas Jamaah** (Operasional): daftar (`DataTable`, `FilterSelect`, cari) + tampilan "Kartu tanpa identitas"; halaman detail: data kanonik, kartu (pemilik, status, aksi), riwayat booking (jumlah), alias, jejak, Buka NIK, Gabung (pilih identitas yang dipakai), Hapus (`DeleteBox`). Jamaah Saya: pesan generik pada kartu yang ditandai.
+
+**Uji (`scripts/test-identity-warehouse.ts`):** peran (jamaah 403/404 di setiap route — penemu route), cari NIK tepat/nama, buka NIK berjejak + `no-store`, cocok manual lengket & gugur saat kartu diubah, lepas → tak tertaut ulang sampai NIK diubah + pesan generik, pin kanonik tahan kartu tertua, gabung → kartu/jamaah booking/alias pindah dan kartu berkunci lama tetap ke tujuan saat diedit, gabung serentak dengan edit kartu → tak deadlock (uji deterministik), hapus ditolak bila ada booking / berhasil bila tidak, jejak lengkap tanpa PII, penjaga penulis tunggal.
+
+**D6:** `arsitektur-manifest.md` §8 dan `arsitektur-komponen-kontak.md` diberi catatan basi (wizard/`PassportForm`/`lib/booking/draft.ts`/3 kolom kontak sudah dihapus).
+
+### 4.5 As-built Fase 8 (2026-11-03)
+
+**Skema** (migrasi `20261117090000_pilgrim_identity_warehouse`): `pg_trgm` + indeks GIN `pilgrim_identities_nameKey_trgm_idx` (dinyatakan di `schema.prisma` supaya `migrate diff` CI bersih); `PilgrimIdentity.canonicalPinnedAt`; `SavedPilgrim.matchConfirmedAt/ById` (CHECK pelaku ⇒ waktu) + `nikCheckRequestedAt`; `pilgrim_identity_aliases` (hash saja, `kind` CHECK `nik|passport`, Cascade); `pilgrim_identity_erasures` (`reason` CHECK `staff_erase|staff_detach`, `cardsDetached`, `revealEvents` — tanpa PII).
+
+**Kode:**
+- `lib/pilgrims/warehouse.ts` — satu-satunya penulis alias, cocok manual, lepas, pin, gabung, hapus, tautan kartu tanpa kunci, jejak buka NIK/paspor dan jejak hapus. Status cocok kartu dihitung saat dibaca (`liveStatus`). Transaksi diulang pada deadlock/serialisasi lalu 409 (`retryConflict`, juga dipakai `review.ts`/`bookingLink.ts`).
+- `lib/pilgrims/service.ts` — `identityByKey` (kunci utama ATAU alias), `primaryKeyOf`, kunci advisory selalu atas kunci utama, pemetaan dibaca ulang di dalam kunci (berubah → 409); `write()` menahan tautan bila `nikCheckRequestedAt` dan kunci tak berubah, mempertahankan tautan petugas pada kartu tanpa kunci, menggugurkan cocok manual saat kunci/nama/tanggal lahir/identitas berubah; `settleIdentity` menghormati `canonicalPinnedAt` dan `matchConfirmedAt`; `eraseSavedPilgrimsOf` membaca ulang identitas kartu di dalam kunci; DTO pemilik `needsNikCheck`.
+- Route `app/api/v1/admin/identities/**` (7), validator `lib/validators/identities.ts`, batas laju `identitySearchStaff` (cari NIK) dan `identityRevealStaff` (60/jam).
+- UI: menu **Identitas Jamaah** (`/admin/identitas-jamaah`: daftar + "Kartu tanpa identitas"; detail: data kanonik, kartu + aksi, riwayat booking, jejak, Buka NIK, Gabung dengan pilihan identitas yang dipakai, Hapus). Jamaah Saya: lencana "Periksa NIK" + pesan generik.
+- D6: catatan basi di `arsitektur-manifest.md` §8 dan `arsitektur-komponen-kontak.md`.
+
+**Deviasi / keputusan saat eksekusi:**
+1. Gabung menetapkan (pin) data kanonik identitas yang dipakai — itulah "identitas yang mau dipakai" pilihan petugas; `lastVerifiedAt` diambil dari yang digabung bila yang dipakai belum terverifikasi.
+2. Kartu yang dilepas tetap menyimpan NIK/paspornya sendiri (data akun pemiliknya). Hapus identitas TIDAK menahan tautan: simpanan kartu berikutnya oleh pemilik akun membentuk identitas baru dari kartunya (pemrosesan data akun itu) — **menunggu keputusan pemilik** (SEC-206).
+3. Jejak buka NIK/paspor ikut terhapus bersama identitasnya (Cascade); jumlahnya dicatat di `pilgrim_identity_erasures.revealEvents` saat petugas menghapus atau melepas kartu terakhir (SEC-207). Penghapusan akun UU PDP tidak mencatat baris ini (permintaan hapus akun sudah berjejak).
+4. Halaman server tidak mengirim `icon` ke `MetaBox` (komponen klien) — fungsi tak bisa diserialkan (ditemukan saat uji server dev; build tidak menangkapnya).
+
+**Bukti:** `scripts/test-identity-warehouse.ts` (14 skenario, termasuk uji mutasi: tanpa alias / tanpa penahanan tautan → 4 uji merah), `test-deletion` (3 kolom pelaku baru), `test-table-consistency`; uji API ke server dev dengan akun uji sementara (jamaah 403, kolom/aksi liar 400, buka NIK `no-store`, cocok manual, hapus; halaman daftar/kartu tanpa identitas/detail 200).
 
 ---
 
@@ -640,7 +688,7 @@ Permintaan hapus dari jamaah yang **bukan** pemilik akun (langsung ke Saudinesia
 | **5 — SELESAI 2026-11-03** | Syarat per produk: `DocumentRequirement.documentTypeId`, editor syarat di Visa (lalu produk lain), `lib/documents/completeness.ts` + aturan paspor 6 bulan; hapus `VisaProduct.requirements`/`REQUIRED_DOCUMENTS` (D5, D8) | kelengkapan per produk benar (tabel uji), paspor 5 bln 29 hr vs 6 bln tepat di beberapa `TZ` |
 | **6** (dikerjakan SESUDAH F7 — urutan ditukar 2026-11-03, §5.3) | Pengajuan & verifikasi (§8): status per jamaah + per dokumen, ajukan/kembalikan/verifikasi, riwayat, notifikasi, pembaruan data kanonik, antrean **Verifikasi Jamaah** admin (D9) | transisi tak sah ditolak; `verified` mustahil bila ada dokumen wajib belum diterima; e2e: unggah → tolak (kedaluwarsa) → perbaiki → ajukan ulang → verifikasi |
 | **7** (dikerjakan SEBELUM F6, §5.3; **7a SELESAI 2026-11-03** §5.4, **7b SELESAI 2026-11-03** §5.6) | Integrasi booking: pilih kartu di Data jamaah (admin; front-end pelanggan menyusul engine v2 Fase 11), snapshot via pengikat `role`, tautan dokumen, `fieldType='address'` sungguhan (D1) | e2e: kartu → booking → snapshot tetap setelah kartu diedit; manifest/ZIP admin benar |
-| **8** | Gudang admin: daftar identitas (cari nama trigram / NIK tepat via hash), konflik & kemungkinan duplikat, gabung/lepas, buka NIK berjejak, hapus identitas (hak subjek data); rapikan dokumen basi (D6) | tes peran (jamaah tak bisa mencapai satu pun route), jejak `PilgrimIdentityEvent` lengkap; security review subagent |
+| **8 — SELESAI 2026-11-03** (§4.5) | Gudang admin: daftar identitas (cari nama trigram / NIK tepat via hash), konflik & kemungkinan duplikat, gabung/lepas, buka NIK berjejak, hapus identitas (hak subjek data); rapikan dokumen basi (D6) | tes peran (jamaah tak bisa mencapai satu pun route), jejak `PilgrimIdentityEvent` lengkap; security review subagent |
 
 ---
 

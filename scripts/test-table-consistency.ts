@@ -33,6 +33,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'app/[locale]/admin/(protected)/page.tsx': { count: 1, reason: 'Overview: ringkasan tetap 5 booking terbaru; daftar lengkap berpaginasi di /admin/bookings' },
   'app/[locale]/admin/(protected)/quotas/page.tsx': { count: 1, reason: 'tabel pool Muthowif = 31 hari turunan dari kalender; tabel hotel di halaman yang sama berpaginasi' },
   'app/[locale]/admin/(protected)/reports/page.tsx': { count: 3, reason: 'ringkasan per produk/vendor/bulan = agregat berukuran tetap; daftar per booking berpaginasi' },
+  'app/[locale]/admin/(protected)/identitas-jamaah/[id]/page.tsx': { count: 2, reason: 'daftar bersarang milik SATU identitas: kartu yang menautnya (sedikit, satu orang) + 50 jamaah booking terbaru (jumlah total ditampilkan)' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },
 }
 
