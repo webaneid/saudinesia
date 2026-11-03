@@ -14,20 +14,23 @@ import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPa
 import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
+import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
+import type { RequirementView } from '@/lib/documents/completeness'
 
 type HajiDetail = {
   id: string; name: string; description: string | null; hajiType: string; year: number
   departureDate: string | null; returnDate: string | null; durationDays: number | null
   includes: string[]; price: number; totalQuota: number; pendingQuota: number; bookedQuota: number
-  isActive: boolean; bookingCount: number
+  isActive: boolean; bookingCount: number; documentRequirements: RequirementView[]
 }
-type Form = { name: string; description: string; hajiType: string; year: string; departureDate: string; returnDate: string; durationDays: string; includes: string; totalQuota: string; isActive: boolean }
+type Form = { name: string; description: string; hajiType: string; year: string; departureDate: string; returnDate: string; durationDays: string; includes: string; totalQuota: string; isActive: boolean; reqs: RequirementRow[] }
 
 const toForm = (h: HajiDetail): Form => ({
   name: h.name, description: h.description ?? '', hajiType: h.hajiType, year: String(h.year),
   departureDate: h.departureDate?.slice(0, 10) ?? '', returnDate: h.returnDate?.slice(0, 10) ?? '',
   durationDays: h.durationDays != null ? String(h.durationDays) : '', includes: h.includes.join('\n'),
-  totalQuota: String(h.totalQuota), isActive: h.isActive,
+  totalQuota: String(h.totalQuota), isActive: h.isActive, reqs: h.documentRequirements.map(rowFromView),
 })
 
 export default function HajiEditPage() {
@@ -63,7 +66,7 @@ export default function HajiEditPage() {
           departureDate: form.departureDate || null, returnDate: form.returnDate || null,
           durationDays: form.durationDays ? Number(form.durationDays) : null,
           includes: form.includes.split('\n').map(s => s.trim()).filter(Boolean),
-          totalQuota: Number(form.totalQuota), isActive: form.isActive,
+          totalQuota: Number(form.totalQuota), isActive: form.isActive, requirements: bodyFromRows(form.reqs),
         })
         if (ok) markClean(form)
       }}
@@ -89,6 +92,7 @@ export default function HajiEditPage() {
       }}
       after={
         <>
+        <RequirementsEditor rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="produk haji ini" />
         <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
         <CostComponentsPanel
           apiBase={`/api/v1/admin/products/haji/${id}/costs`}

@@ -6,8 +6,8 @@ import type { RequirementView } from './completeness'
 // Syarat dokumen per produk (docs/arsitektur-jamaah.md §7.2/§7.6) — SATU-SATUNYA penulis `document_requirements`. Jenis dari katalog
 // `document_types`; label kosong = label katalog. Kelengkapan dinilai `lib/documents/completeness.ts`, bukan di sini.
 //
-// Registry pemilik: produk yang boleh punya syarat. Hanya Visa di Fase 5 — produk lain ditambahkan saat masuk booking (Fase 7). Haji TIDAK:
-// "Visa Haji" konsep tersendiri (CLAUDE.md), jangan memakai syarat visa umroh untuknya.
+// Registry pemilik: produk yang boleh punya syarat — Visa, Paket Umroh, Haji (docs/rencana-visa-produk.md §3.4). Syarat Haji milik produk Haji
+// sendiri, BUKAN visa umroh ("Visa Haji" konsep tersendiri, CLAUDE.md). Syarat seorang jamaah = gabungan produk yang memuatnya (§3.2, V4c).
 type Tx = Prisma.TransactionClient
 
 type Owner = {
@@ -22,6 +22,16 @@ export const REQUIREMENT_OWNERS = {
     // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
     lock: async (tx, id) => (await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "visa_products" WHERE "id" = ${id} FOR UPDATE`).length > 0,
     defaults: ['passport', 'ktp', 'kk', 'flight_ticket'],
+  },
+  package: {
+    // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
+    lock: async (tx, id) => (await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "packages" WHERE "id" = ${id} FOR UPDATE`).length > 0,
+    defaults: ['passport', 'ktp', 'kk', 'vaccine'], // K3 (pemilik 2026-11-04)
+  },
+  haji: {
+    // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
+    lock: async (tx, id) => (await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "haji_products" WHERE "id" = ${id} FOR UPDATE`).length > 0,
+    defaults: ['passport', 'ktp', 'kk', 'vaccine'], // K3 (pemilik 2026-11-04)
   },
 } satisfies Record<string, Owner>
 

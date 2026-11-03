@@ -8,6 +8,8 @@ import { Badge } from '@/components/ui/badge'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { withSellPrice } from '@/lib/pricing/engine/read'
+import { requirementsOfMany } from '@/lib/documents/requirements'
+import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -18,6 +20,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
     orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }],
   }))
   const covers = await getFeaturedCards('package', packages.map(p => p.id))
+  const reqs = await requirementsOfMany(packages.map(p => ({ productType: 'package', productId: p.id })))
   const hasAddOns = (p: (typeof packages)[number]) =>
     [p.hotelMakkahMode, p.hotelMadinahMode, p.transportMode, p.muthowifMode, p.visaMode, p.flightMode, p.cateringMode]
       .includes('user_choice')
@@ -67,6 +70,8 @@ export default async function PackagesCatalogPage({ params }: Props) {
                   ))}
                 </ul>
               )}
+
+              <RequiredDocuments requirements={reqs.get(`package:${pkg.id}`) ?? []} />
 
               <div className="pt-3 border-t space-y-3">
                 <div>

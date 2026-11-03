@@ -15,7 +15,7 @@ export default function NewPackagePage() {
   return (
     <CreatePage
       icon={Package} title="Paket Umroh Baru" backHref={`/${locale}/admin/products/packages`} backLabel="Daftar Paket Umroh"
-      description="Isi info dasar dulu — hotel, kendaraan, muthowif, visa, tiket pesawat, katering, dan komponen biaya dikonfigurasi di halaman paket setelah dibuat."
+      description="Isi info dasar dulu — hotel, kendaraan, muthowif, visa, tiket pesawat, katering, dan komponen biaya dikonfigurasi di halaman paket setelah dibuat. Persyaratan dokumen bawaan (Paspor, KTP, KK, Sertifikat Vaksin) diisi otomatis dan bisa diubah di sana."
       onSubmit={() => submit(form)} saving={saving} canSubmit={!!form.name.trim()} error={error} submitLabel="Simpan & Lanjut"
     >
       <div className="grid gap-3">

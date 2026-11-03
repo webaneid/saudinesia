@@ -8,6 +8,7 @@ import { hajiProductCreateSchema } from '@/lib/validators/adminUpdates'
 import { emptyToNull } from '@/lib/validators/richText'
 import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
 import { canViewCost } from '@/lib/pricing/policy'
+import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
 
 export async function GET(req: Request) {
   try {
@@ -31,12 +32,19 @@ export async function POST(req: Request) {
     await requireManager()
     const parsed = hajiProductCreateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const { description, ...d } = parsed.data
-    const p = await prisma.hajiProduct.create({
-      // Belum ada titik harga = "belum ditetapkan" sampai Komponen Biaya diisi (tidak bisa dipesan — SEC-66).
-      data: { ...d, description: emptyToNull(description), priceLabel: 'per orang' },
-    })
-    return NextResponse.json(ok(p), { status: 201 })
+    const { description, requirements, ...d } = parsed.data
+    // Produk + syarat dokumen dalam SATU transaksi — syarat tak pernah setengah tersimpan.
+    const result = await prisma.$transaction(async (tx) => {
+      const p = await tx.hajiProduct.create({
+        // Belum ada titik harga = "belum ditetapkan" sampai Komponen Biaya diisi (tidak bisa dipesan — SEC-66).
+        data: { ...d, description: emptyToNull(description), priceLabel: 'per orang' },
+      })
+      const written = requirements ? await writeRequirements(tx, 'haji', p.id, requirements) : await writeDefaultRequirements(tx, 'haji', p.id)
+      if (!written.ok) throw new RequirementRejected(written.error, written.field)
+      return p
+    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
+    return NextResponse.json(ok(result), { status: 201 })
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
