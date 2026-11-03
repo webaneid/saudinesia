@@ -14,7 +14,7 @@ import { checklistState } from '@/lib/documents/checklistLabels'
 // Tautan jamaah booking ↔ data jamaah tersimpan pelanggan (docs/arsitektur-jamaah.md §5.3, Fase 7a). Menautkan / memperbarui mengisi field
 // berperan dari kartu (snapshot; kartu diedit kemudian tidak mengubahnya). Checklist dihitung server (evaluateCompleteness); dokumen milik orang
 // dikelola di kartu, dokumen per perjalanan (tiket, reservasi) diunggah di sini.
-export type ChecklistItem = { key: string; label: string; required: boolean; state: string }
+export type ChecklistItem = { key: string; label: string; required: boolean; state: string; sources: string[] }
 
 type Props = {
   locale: string
@@ -101,7 +101,10 @@ export function PilgrimCardPanel({ locale, bookingId, pilgrimId, customerId, lin
         <ul className="m-0 grid list-none gap-1 p-0 sm:grid-cols-2">
           {checklist.map(c => (
             <li key={c.key} className="flex items-center justify-between gap-2 text-[12px] text-admin-ink">
-              <span>{c.label}{c.required ? '' : ' (opsional)'}</span>
+              <span className="min-w-0">
+                {c.label}{c.required ? '' : ' (opsional)'}
+                {c.sources.length > 0 && <span className="block text-[11px] text-admin-muted">Diminta oleh: {c.sources.join(', ')}</span>}
+              </span>
               <Badge tone={checklistState(c.state).tone}>{checklistState(c.state).label}</Badge>
             </li>
           ))}

@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { VisaCheckoutForm } from '@/components/booking/VisaCheckoutForm'
+import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
 import { visaPriceSummary } from '@/lib/pricing/engine/read'
 
 type Props = {
@@ -12,11 +13,12 @@ type Props = {
 export default async function VisaCheckoutPage({ searchParams }: Props) {
   const { productId } = await searchParams
 
-  const products = await prisma.visaProduct.findMany({
+  // Checkout pendek hanya memuat visa: produk Visa plus (wajib dibeli bersama produk lain) tidak ditawarkan di sini — server juga menolaknya (lib/booking/rules.ts).
+  const products = (await prisma.visaProduct.findMany({
     where: { isActive: true },
     orderBy: [{ country: 'asc' }, { visaType: 'asc' }],
-    select: { id: true, name: true, country: true, visaType: true },
-  })
+    select: { id: true, name: true, country: true, visaType: true, requiredComponents: true },
+  })).filter(p => !visaSalesModel(parseRequiredComponents(p.requiredComponents).components).plus).map(({ requiredComponents: _rc, ...p }) => p) // eslint-disable-line @typescript-eslint/no-unused-vars
   const summary = await visaPriceSummary(products.map(p => p.id))
 
   return (

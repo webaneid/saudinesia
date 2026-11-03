@@ -2,7 +2,7 @@
 
 > **Status: SOURCE OF TRUTH untuk modul Haji (as-built, 2026-10-26).** Menggantikan bagian Haji di `docs/architecture.md`. Ditulis dari audit langsung ke kode aktual setelah rangkaian Komponen Biaya Fase 1-4 (`docs/arsitektur-komponen-biaya.md`); setiap rujukan berkas/baris diperiksa terhadap kode pada tanggal itu.
 >
-> **Ringkas:** produk Haji kini punya harga turunan (Komponen Biaya → HPP + kurs + margin per komponen), CRUD lengkap di API dan admin UI (hapus aman / nonaktif / aktifkan kembali), dan booking yang aman di sisi API (harga dihitung server, produk nonaktif/belum berharga ditolak, kuota ditahan atomik). **Yang BELUM ada:** checkout Haji di browser, konsep "Visa Haji" tersendiri, galeri gambar, dokumen/manifest khusus Haji — lihat §7.
+> **Ringkas:** produk Haji kini punya harga turunan (Komponen Biaya → HPP + kurs + margin per komponen), CRUD lengkap di API dan admin UI (hapus aman / nonaktif / aktifkan kembali), dan booking yang aman di sisi API (harga dihitung server, produk nonaktif/belum berharga ditolak, kuota ditahan atomik). **Yang BELUM ada:** checkout Haji di browser, konsep "Visa Haji" tersendiri, galeri gambar, manifest khusus Haji — lihat §7. **Pembaruan 2026-11-04 (Visa V4b):** produk Haji kini punya syarat dokumen sendiri (`REQUIREMENT_OWNERS.haji`, bawaan paspor/KTP/KK/vaksin; editor di halaman edit, daftar di katalog publik) — `docs/rencana-visa-produk.md` §3.4.
 
 ---
 

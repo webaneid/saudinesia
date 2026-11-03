@@ -10,34 +10,32 @@ datasource db {
 // ─── USERS & AUTH ────────────────────────────────────────────
 
 model User {
-  id                     String    @id @default(uuid())
-  email                  String    @unique
-  passwordHash           String
-  fullName               String
+  id                 String    @id @default(uuid())
+  email              String    @unique
+  passwordHash       String
+  fullName           String
   // Kontak (docs/arsitektur-auth.md §3.1): digit E.164 tanpa "+", TIDAK diverifikasi dan TIDAK unik — bukan identitas.
-  phone                  String?
-  whatsapp               String?
+  phone              String?
+  whatsapp           String?
   // Verifikasi WhatsApp lewat pesan MASUK (ADR-0002, docs/arsitektur-whatsapp-verifikasi.md). WhatsApp hanya dikirim ke nomor terverifikasi.
   // `verifiedWhatsapp` = salinan nomor yang terbukti, kolom UNIK: satu nomor hanya untuk satu akun TERVERIFIKASI (nomor belum terverifikasi boleh sama).
   // Prisma tak bisa mengekspresikan indeks unik parsial, jadi keunikan dicapai lewat kolom terpisah yang hanya terisi saat terverifikasi.
   // Mengubah `whatsapp` mengosongkan keduanya.
-  whatsappVerifiedAt     DateTime?
-  verifiedWhatsapp       String?   @unique
+  whatsappVerifiedAt DateTime?
+  verifiedWhatsapp   String?   @unique
   // Bukti email milik pemilik akun (tautan verifikasi / reset password / Google). Login mensyaratkan ini DAN isActive.
-  emailVerifiedAt        DateTime?
+  emailVerifiedAt    DateTime?
   // Identitas Google (klaim `sub` ID token — stabil, TIDAK berubah walau emailnya berubah). Hanya jamaah; staf tak pernah tersambung.
-  googleSub              String?   @unique
-  role                   UserRole  @default(pilgrim)
+  googleSub          String?   @unique
+  role               UserRole  @default(pilgrim)
   // Hanya "boleh login (tidak dinonaktifkan admin)" — BUKAN lagi penanda "belum verifikasi" (itu emailVerifiedAt).
-  isActive               Boolean   @default(true)
+  isActive           Boolean   @default(true)
   // Pencabutan sesi (SEC-18, docs/arsitektur-auth.md §11): JWT membawa `ver`; getSession() menolak token yang `ver`-nya ≠ kolom ini.
   // Dinaikkan saat password diganti/direset, akun dinonaktifkan, peran diubah, atau akun Google disambung ke akun lama.
-  sessionVersion         Int       @default(0)
-  // Pelonggaran aturan visa per pelanggan (docs/arsitektur-booking-engine-v2.md D5/§10.2): pelanggaran `requiredComponents` visa turun jadi peringatan.
-  allowVisaWithoutBundle Boolean   @default(false)
-  addressId              String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  sessionVersion     Int       @default(0)
+  addressId          String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
 
   address                   Address?                 @relation(fields: [addressId], references: [id])
   bookings                  Booking[]
@@ -468,7 +466,8 @@ model VisaProduct {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  // Komponen yang WAJIB ada di booking yang sama (docs/arsitektur-booking-engine-v2.md §4.1/§10.2): [{type:'flight'}, {type:'hotel'}, {type:'transport', categories?, tripIds?}].
+  // Produk yang WAJIB dibeli bersama visa ini di booking yang sama (docs/rencana-visa-produk.md §2.1): [{type:'flight'|'hotel_makkah'|'hotel_madinah'|'muthowif'|'tour'|'catering'},
+  // {type:'transport', categories?, tripIds?}]; kosong = visa stand alone.
   // Bentuk dijaga `visaRequiredComponentsSchema` (lib/validators/visa.ts); dievaluasi HANYA oleh lib/booking/rules.ts.
   requiredComponents Json @default("[]")
 
@@ -864,6 +863,10 @@ model BookingPilgrim {
   savedPilgrimId String?
   identityId     String?
 
+  // Anggota Paket Umroh / Haji di booking ini (docs/rencana-visa-produk.md §3.3) — dibagi HANYA lib/booking/members.ts (ditulis lineItems saat pesan, revise saat revisi); item dihapus → lepas.
+  bookingPackageId String?
+  bookingHajiId    String?
+
   // NIK & nomor paspor snapshot — DISEGEL lewat lib/pii (docs/arsitektur-jamaah.md §5.3 butir 3); fieldValues hanya menyimpan samarannya.
   // Disalin dari kartu saat ditautkan (ciphertext + indeks baris yang sama) atau disegel dari isian admin. Dikosongkan saat akun dihapus.
   nikHash         String?
@@ -886,6 +889,8 @@ model BookingPilgrim {
   documents       BookingPilgrimDocument[]
   savedPilgrim    SavedPilgrim?            @relation(fields: [savedPilgrimId], references: [id], onDelete: SetNull)
   identity        PilgrimIdentity?         @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  bookingPackage  BookingPackage?          @relation(fields: [bookingPackageId], references: [id], onDelete: SetNull)
+  bookingHaji     BookingHaji?             @relation(fields: [bookingHajiId], references: [id], onDelete: SetNull)
   visaApplication VisaApplication?
 
   @@unique([bookingId, savedPilgrimId]) // satu kartu paling banyak satu jamaah per booking (NULL tak bentrok)
@@ -893,6 +898,8 @@ model BookingPilgrim {
   @@index([userId])
   @@index([savedPilgrimId])
   @@index([identityId])
+  @@index([bookingPackageId])
+  @@index([bookingHajiId])
   @@index([reviewStatus, submittedAt]) // antrean Verifikasi Jamaah
   @@index([verifiedById])
   @@map("booking_pilgrims")
@@ -960,22 +967,22 @@ enum PilgrimMatchStatus {
 }
 
 model PilgrimIdentity {
-  id              String    @id @default(uuid())
-  nikHash         String?   @unique
-  nikCipher       String?
-  passportKeyHash String?   @unique // kunci identitas WNA (negara + nomor paspor); null untuk identitas berkunci NIK
+  id                String    @id @default(uuid())
+  nikHash           String?   @unique
+  nikCipher         String?
+  passportKeyHash   String?   @unique // kunci identitas WNA (negara + nomor paspor); null untuk identitas berkunci NIK
   // Data kanonik: awal = kartu pertama; diperbarui dari pengajuan yang lolos verifikasi (Fase 6). Tak pernah dikirim ke API jamaah.
-  fullName        String
-  nameKey         String
-  gender          Gender?
-  birthPlace      String?
-  birthDate       DateTime? @db.Date
-  nationality     String    @default("ID")
-  lastVerifiedAt  DateTime? @db.Timestamptz(3)
+  fullName          String
+  nameKey           String
+  gender            Gender?
+  birthPlace        String?
+  birthDate         DateTime? @db.Date
+  nationality       String    @default("ID")
+  lastVerifiedAt    DateTime? @db.Timestamptz(3)
   // Data kanonik ditetapkan admin dari satu kartu (Fase 8) — sejak itu tidak digeser kartu tertua (sejajar lastVerifiedAt).
   canonicalPinnedAt DateTime? @db.Timestamptz(3)
-  createdAt       DateTime  @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime  @updatedAt @db.Timestamptz(3)
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime  @updatedAt @db.Timestamptz(3)
 
   cards           SavedPilgrim[]
   bookingPilgrims BookingPilgrim[]
@@ -988,47 +995,47 @@ model PilgrimIdentity {
 }
 
 model SavedPilgrim {
-  id               String             @id @default(uuid())
-  ownerId          String
-  identityId       String?
-  matchStatus      PilgrimMatchStatus @default(unmatched)
+  id                  String             @id @default(uuid())
+  ownerId             String
+  identityId          String?
+  matchStatus         PilgrimMatchStatus @default(unmatched)
   // "Saya sendiri": salinan ownerId HANYA pada kartu diri pemilik akun — kolom unik (Prisma tak punya indeks unik parsial; pola verifiedWhatsapp).
-  selfOfUserId     String?            @unique
-  fullName         String // sesuai paspor
-  nameKey          String
-  nikHash          String?
-  nikCipher        String?
-  gender           Gender?
-  birthPlace       String?
-  birthDate        DateTime?          @db.Date
-  nationality      String             @default("ID")
-  passportCipher   String?
-  passportLast4    String?
-  passportKeyHash  String?
-  passportIssuedAt DateTime?          @db.Date
-  passportExpiry   DateTime?          @db.Date
-  addressId        String?            @unique
-  phone            String? // E.164 tanpa "+" (bentuk sama User / ContactPicker)
-  whatsapp         String?
-  email            String?
-  createdById      String? // staf bila dibuat atas nama pelanggan; null = pemilik sendiri
-  archivedAt       DateTime?          @db.Timestamptz(3) // hapus-aman: kartu yang pernah dipakai booking diarsipkan
+  selfOfUserId        String?            @unique
+  fullName            String // sesuai paspor
+  nameKey             String
+  nikHash             String?
+  nikCipher           String?
+  gender              Gender?
+  birthPlace          String?
+  birthDate           DateTime?          @db.Date
+  nationality         String             @default("ID")
+  passportCipher      String?
+  passportLast4       String?
+  passportKeyHash     String?
+  passportIssuedAt    DateTime?          @db.Date
+  passportExpiry      DateTime?          @db.Date
+  addressId           String?            @unique
+  phone               String? // E.164 tanpa "+" (bentuk sama User / ContactPicker)
+  whatsapp            String?
+  email               String?
+  createdById         String? // staf bila dibuat atas nama pelanggan; null = pemilik sendiri
+  archivedAt          DateTime?          @db.Timestamptz(3) // hapus-aman: kartu yang pernah dipakai booking diarsipkan
   // Fase 8 (gudang admin): cocok manual "orang yang sama" — gugur bila NIK/nama/tanggal lahir kartu berubah (lib/pilgrims/service.ts).
-  matchConfirmedAt   DateTime?        @db.Timestamptz(3)
-  matchConfirmedById String?
+  matchConfirmedAt    DateTime?          @db.Timestamptz(3)
+  matchConfirmedById  String?
   // Dilepas admin karena NIK tidak sesuai: pesan generik ke pemilik + tak ditautkan ulang otomatis sampai NIK diubah.
-  nikCheckRequestedAt DateTime?       @db.Timestamptz(3)
-  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
+  nikCheckRequestedAt DateTime?          @db.Timestamptz(3)
+  createdAt           DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt           DateTime           @updatedAt @db.Timestamptz(3)
 
-  owner           User              @relation("SavedPilgrimOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  selfOf          User?             @relation("SavedPilgrimSelf", fields: [selfOfUserId], references: [id], onDelete: SetNull)
-  identity        PilgrimIdentity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
-  address         Address?          @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  createdBy       User?             @relation("SavedPilgrimCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  matchConfirmedBy User?            @relation("SavedPilgrimMatchConfirmedBy", fields: [matchConfirmedById], references: [id], onDelete: SetNull)
-  bookingPilgrims BookingPilgrim[]
-  documents       PilgrimDocument[]
+  owner            User              @relation("SavedPilgrimOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  selfOf           User?             @relation("SavedPilgrimSelf", fields: [selfOfUserId], references: [id], onDelete: SetNull)
+  identity         PilgrimIdentity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  address          Address?          @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  createdBy        User?             @relation("SavedPilgrimCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  matchConfirmedBy User?             @relation("SavedPilgrimMatchConfirmedBy", fields: [matchConfirmedById], references: [id], onDelete: SetNull)
+  bookingPilgrims  BookingPilgrim[]
+  documents        PilgrimDocument[]
 
   @@unique([ownerId, nikHash])
   @@unique([ownerId, passportKeyHash])
@@ -1195,9 +1202,7 @@ model VisaApplication {
   isForceMajeure   Boolean    @default(false)
   notes            String?
 
-  // Snapshot harga saat booking dibuat (docs/arsitektur-harga.md §7) — field ada, TAPI BELUM
-  // DIISI kode manapun: menunggu Gap #1/#2 di docs/arsitektur-visa.md §7 diperbaiki dulu
-  // (visaProductId tidak pernah di-set saat create booking, wizard belum punya step pilih VisaProduct).
+  // Lama tinggal yang dipilih (hari) — memilih tier harga visa (`takeVisaTier`); diisi lib/booking/lineItems.ts. Harga beku ada di price_snapshots.
   selectedDurationDays Int?
   // Rencana tanggal berangkat jamaah (D1): bawaan = tiket pergi paling awal di booking yang sama, dapat diedit di form data jamaah.
   plannedTravelDate    DateTime? @db.Date
@@ -1350,8 +1355,9 @@ model BookingHaji {
   numPersons     Int     @default(1)
   totalPrice     Decimal @db.Decimal(14, 2)
 
-  booking     Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  hajiProduct HajiProduct @relation(fields: [hajiProductId], references: [id])
+  booking     Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  hajiProduct HajiProduct      @relation(fields: [hajiProductId], references: [id])
+  members     BookingPilgrim[]
 
   @@map("booking_haji")
 }
@@ -1372,9 +1378,10 @@ model BookingPackage {
   choices          Json     @default("{}") // id pilihan komponen user_choice (tanpa data pribadi)
   totalPrice       Decimal  @db.Decimal(14, 2)
 
-  booking        Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  package        Package         @relation(fields: [packageId], references: [id])
-  flightSchedule FlightSchedule? @relation(fields: [flightScheduleId], references: [id], onDelete: Restrict)
+  booking        Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  package        Package          @relation(fields: [packageId], references: [id])
+  flightSchedule FlightSchedule?  @relation(fields: [flightScheduleId], references: [id], onDelete: Restrict)
+  members        BookingPilgrim[]
 
   @@index([bookingId])
   @@index([packageId])
@@ -1466,7 +1473,7 @@ model NotificationLog {
 
 // ─── PRICING / HPP ────────────────────────────────────────────
 // Infrastruktur harga & HPP universal — lihat docs/arsitektur-harga.md untuk desain lengkap.
-// Scope awal: Visa saja (docs/arsitektur-visa.md §9). Skema generik untuk modul lain nanti.
+// Scope awal: Visa saja (docs/arsitektur-harga.md). Skema generik — kini dipakai semua modul berharga.
 
 // Entitas vendor TUNGGAL (ADR-0003, docs/arsitektur-vendor.md). Semua referensi vendor = FK ke sini.
 // Kolom lama (`category`, `country`, `contactInfo`) sudah dihapus oleh migrasi kontraksi F5; `nameKey`/`countryCode` NOT NULL.

@@ -23,7 +23,7 @@ export default function VisaPage() {
     { key: 'name', header: 'Nama', mobile: 'title', cell: v => <Link href={`${base}/${v.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{v.name}</Link> },
     { key: 'country', header: 'Negara', cell: v => <span className="text-[12px] text-admin-muted">{v.country || 'Saudi Arabia'}</span> },
     { key: 'type', header: 'Jenis', cell: v => <Badge tone="accent">{v.visaType}</Badge> },
-    { key: 'model', header: 'Model penjualan', cell: v => { const m = visaSalesModel(parseRequiredComponents(v.requiredComponents).components); return <Badge tone={m.plus ? 'accent' : 'neutral'} className="whitespace-nowrap">{m.label}</Badge> } },
+    { key: 'model', header: 'Model penjualan', cell: v => { const m = visaSalesModel(parseRequiredComponents(v.requiredComponents).components); return <div className="space-y-0.5"><Badge tone={m.plus ? 'accent' : 'neutral'} className="whitespace-nowrap">{m.label}</Badge>{m.plus && <p className="m-0 text-[11px] text-admin-muted">{m.parts.join(', ')}</p>}</div> } },
     { key: 'price', header: 'Harga', align: 'right', cell: v => <span className="text-[12px] font-semibold tabular-nums text-admin-ink/80">{formatRupiah(v.price)}</span> },
     { key: 'profit', header: 'Untung', align: 'right', hideBelowLg: true, cell: v => <ProfitCell profitIdr={v.profitIdr} marginPct={v.marginPct} /> },
     { key: 'process', header: 'Proses', align: 'right', cell: v => <span className="text-[12px] text-admin-muted">{v.processDays} hari</span> },
