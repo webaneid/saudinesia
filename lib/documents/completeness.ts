@@ -17,6 +17,8 @@ export type RequirementView = {
   reusable: boolean
   hasExpiry: boolean
   minValidityMonths: number | null
+  /** Nama produk yang meminta syarat ini — hanya diisi syarat gabungan per jamaah (`pilgrimRequirements`), untuk "Diminta oleh …". */
+  sources?: string[]
 }
 
 export type DocumentForCompleteness = {
@@ -44,14 +46,20 @@ export type Completeness = {
   missingRequired: CompletenessItem[]
 }
 
-/** Gabungkan syarat beberapa produk per jenis: urutan kemunculan pertama, wajib bila salah satu produk mewajibkan, label/petunjuk dari yang pertama. */
-export function mergeRequirements(lists: readonly (readonly RequirementView[])[]): RequirementView[] {
-  const merged = new Map<string, RequirementView>()
-  for (const list of lists) {
-    for (const r of list) {
+/**
+ * Gabungkan syarat beberapa produk per jenis (docs/rencana-visa-produk.md §3.2): urutan kemunculan pertama (pemanggil mengurutkan produk
+ * Paket → Haji → Visa), wajib bila SALAH SATU produk mewajibkan, label dari yang pertama, petunjuk digabung tanpa duplikat, `sources` = nama
+ * produk peminta (tanpa duplikat). Satu jenis = satu baris: dokumen tak pernah diminta dua kali.
+ */
+export function mergeRequirements(lists: readonly { source: string; requirements: readonly RequirementView[] }[]): RequirementView[] {
+  const merged = new Map<string, RequirementView & { sources: string[] }>()
+  for (const { source, requirements } of lists) {
+    for (const r of requirements) {
       const prev = merged.get(r.documentTypeId)
-      if (!prev) merged.set(r.documentTypeId, { ...r })
-      else if (r.required && !prev.required) prev.required = true
+      if (!prev) { merged.set(r.documentTypeId, { ...r, sources: [source] }); continue }
+      if (r.required) prev.required = true
+      if (r.description && !prev.description.split(' · ').includes(r.description)) prev.description = prev.description ? `${prev.description} · ${r.description}` : r.description
+      if (!prev.sources.includes(source)) prev.sources.push(source)
     }
   }
   return [...merged.values()]

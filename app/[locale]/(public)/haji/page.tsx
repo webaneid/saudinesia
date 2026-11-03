@@ -9,6 +9,8 @@ import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { hajiAvailable, hajiPriced } from '@/lib/haji/catalog'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { requirementsOfMany } from '@/lib/documents/requirements'
+import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
 import { DATE_LONG, formatCalendarDate } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string }> }
@@ -36,6 +38,7 @@ export default async function HajiCatalogPage({ params }: Props) {
 
   const covers = await getFeaturedCards('haji', products.map(p => p.id))
   const prices = await sellPrices('haji', products.map(p => p.id))
+  const reqs = await requirementsOfMany(products.map(p => ({ productType: 'haji', productId: p.id })))
 
   const byType = products.reduce<Record<string, typeof products>>((acc, p) => {
     (acc[p.hajiType] ??= []).push(p)
@@ -111,6 +114,8 @@ export default async function HajiCatalogPage({ params }: Props) {
                       )}
                     </ul>
                   )}
+
+                  <RequiredDocuments requirements={reqs.get(`haji:${p.id}`) ?? []} />
 
                   <div className="pt-2 border-t space-y-3">
                     <div>

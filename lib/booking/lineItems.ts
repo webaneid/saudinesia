@@ -2,6 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError, tagItem } from './errors'
 import { sealNewPilgrim } from '@/lib/pilgrims/bookingLink'
 import { packageLines, type PackageResolved } from './packageItem'
+import { assignMembers, memberProblem } from './members'
 import { calendarDateOf, dbDateOf } from '@/lib/time'
 import type { BookingItemInput } from '@/lib/validators/booking'
 import type { BookingInput } from './create'
@@ -35,13 +36,16 @@ export async function writeBookingItems(
   tx: Prisma.TransactionClient, bookingId: string, data: BookingInput, tourResolved: readonly TourPackageResolved[], packageResolved: readonly PackageResolved[] = [],
   /** Diisi metadata item yang ditulis, URUT `data.items` lalu visa per jamaah (revisi memakai id baris baru untuk harga khusus). */
   written?: ItemMeta[],
+  /** Pesan baru: anggota paket/haji + visa paket dibagi di sini. Revisi: `false` — `lib/booking/revise.ts` menyelaraskannya atas SEMUA item sesudah ditulis. */
+  opts: { assignMembers?: boolean } = {},
 ): Promise<number> {
   const pending: PendingItem[] = []
   const add = (meta: PendingItem['meta'], lines: SnapshotLine[]) => pending.push({ meta, lines })
   let tourIdx = 0
   let packageIdx = 0
-  // Slot visa dari paket (visa included/dipilih): jamaah TANPA visa sendiri dipasangkan berurutan; harganya sudah di baris paket (§10.2).
-  const packageVisaSlots: string[] = []
+  // Baris paket/haji yang ditulis — anggotanya dibagi `assignMembers` (lib/booking/members.ts); visa paket ikut ke anggota, harganya sudah di baris paket (§10.2).
+  const packageRows: Array<{ key: string; numPeople: number; visaProductId: string | null; name: string }> = []
+  const hajiRows: Array<{ key: string; numPeople: number }> = []
   // Rencana tanggal berangkat visa (D1): bawaan = tiket pergi paling awal di booking ini (tiket mandiri atau paket bertiket).
   const flightDates: string[] = []
 
@@ -160,6 +164,7 @@ export async function writeBookingItems(
           const row = await tx.bookingHaji.create({
             data: { bookingId, hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
           })
+          hajiRows.push({ key: row.id, numPeople: item.numPersons })
           add({ itemType: 'haji', itemId: row.id, label: haji.name, detail: `${item.numPersons} orang`, qty: item.numPersons }, lines)
           break
         }
@@ -197,7 +202,7 @@ export async function writeBookingItems(
               numPeople: item.numPeople, flightScheduleId: r.flightScheduleId, choices: r.choices as Prisma.InputJsonValue, totalPrice,
             },
           })
-          if (r.visaProductId) for (let i = 0; i < item.numPeople; i++) packageVisaSlots.push(r.visaProductId)
+          packageRows.push({ key: row.id, numPeople: item.numPeople, visaProductId: r.visaProductId, name: r.name })
           if (r.flightScheduleId) flightDates.push(r.departureDate)
           add({ itemType: 'package', itemId: row.id, label: r.name, detail: `${day(r.departureDate)} – ${day(r.returnDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
           break
@@ -213,10 +218,18 @@ export async function writeBookingItems(
   // titik harga yang memuat lama tinggal (harga manual menang); modal/jejak kurs-vendor beku ada di `price_snapshots`.
   const travel = flightDates.length > 0 ? [...flightDates].sort()[0]! : data.plannedTravelDate
   const plannedTravelDate = travel ? dbDateOf(travel) : null
-  for (const p of data.pilgrims) {
-    const fromPackage = p.visaProductId ? undefined : packageVisaSlots.shift()
+  const assign = opts.assignMembers ?? true
+  const members = assign
+    ? assignMembers(packageRows, hajiRows, data.pilgrims.map(p => ({ key: '', ownVisa: !!p.visaProductId, packageVisa: null, currentPackage: null, currentHaji: null })))
+    : null
+  if (members && !members.ok) throw new ItemNotBookableError(memberProblem(members, k => packageRows.find(r => r.key === k)?.name ?? 'paket'))
+  for (const [i, p] of data.pilgrims.entries()) {
+    const member = members?.ok ? members.members[i] : undefined
+    const fromPackage = (member?.package && packageRows.find(r => r.key === member.package)?.visaProductId) || undefined
     // Revisi: jamaah yang sudah ada hanya mendapat visa baru (data pribadinya tak disentuh). Jamaah baru: NIK/paspor disegel (docs/arsitektur-jamaah.md §5.3).
-    const pilgrim = p.pilgrimId ? { id: p.pilgrimId } : await createPilgrim(tx, bookingId, p.visaProductId ?? fromPackage ?? null, p.fieldValues ?? {})
+    const pilgrim = p.pilgrimId
+      ? { id: p.pilgrimId }
+      : await createPilgrim(tx, bookingId, p.visaProductId ?? fromPackage ?? null, p.fieldValues ?? {}, { bookingPackageId: member?.package ?? null, bookingHajiId: member?.haji ?? null })
     if (!p.visaProductId) {
       if (fromPackage) {
         const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
@@ -254,10 +267,13 @@ export async function writeBookingItems(
  * harganya dibaca dari titik harga sub-modul. Pilihan di luar daftar opsi paket ditolak (dulu diam-diam bernilai 0 padahal kuotanya ikut tertahan).
  */
 /** Jamaah booking baru: NIK/paspor (peran `nik`/`passport_number`) DISEGEL — `fieldValues` hanya menyimpan samaran. Isian tak valid → 422. */
-async function createPilgrim(tx: Prisma.TransactionClient, bookingId: string, visaProductId: string | null, values: Record<string, unknown>) {
+async function createPilgrim(
+  tx: Prisma.TransactionClient, bookingId: string, visaProductId: string | null, values: Record<string, unknown>,
+  links: { bookingPackageId: string | null; bookingHajiId: string | null },
+) {
   const sealed = await sealNewPilgrim(tx, visaProductId, values)
   if (!sealed.ok) throw new ItemNotBookableError(Object.values(sealed.errors)[0] ?? 'Data jamaah tidak valid')
-  return tx.bookingPilgrim.create({ data: { bookingId, fieldValues: sealed.values as Prisma.InputJsonValue, ...sealed.columns }, select: { id: true } })
+  return tx.bookingPilgrim.create({ data: { bookingId, fieldValues: sealed.values as Prisma.InputJsonValue, ...sealed.columns, ...links }, select: { id: true } })
 }
 
 async function tourPackageLines(

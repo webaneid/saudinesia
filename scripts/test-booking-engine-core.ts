@@ -152,7 +152,10 @@ await prisma.packageHotelOption.create({ data: { packageId: pkg.id, slot: 'madin
 await addCost('package', pkg.id, 'handling', 500_000)
 await repriceOwner('package', pkg.id)
 
-const data = (items: CreateBookingInput['items'], pilgrims: CreateBookingInput['pilgrims'] = [{ fieldValues: {} }]) =>
+// Jamaah bawaan = cukup untuk orang paket terbanyak (lib/booking/members.ts menolak jamaah kurang dari jumlah orang paket/haji).
+const enough = (items: CreateBookingInput['items']) =>
+  Array.from({ length: Math.max(1, items.reduce((s, i) => s + (i.itemType === 'package' ? i.numPeople : i.itemType === 'haji' ? i.numPersons : 0), 0)) }, () => ({ fieldValues: {} }))
+const data = (items: CreateBookingInput['items'], pilgrims: CreateBookingInput['pilgrims'] = enough(items)) =>
   ({ departureDate: '2090-06-01', returnDate: '2090-06-10', season: 'regular', bookingType: 'individual', totalPilgrims: pilgrims.length, items, pilgrims }) as CreateBookingInput
 async function book(d: CreateBookingInput, pkgs: PackageResolved[] = []) {
   return prisma.$transaction(async tx => {

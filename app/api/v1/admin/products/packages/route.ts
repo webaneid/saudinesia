@@ -9,6 +9,8 @@ import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { isAuthError } from '@/lib/admin/errors'
 import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
 import { canViewCost } from '@/lib/pricing/policy'
+import { documentRequirementListSchema } from '@/lib/validators/documents'
+import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
 
 // price TIDAK ada di sini secara sengaja — cache dari computePackageBreakdown()
 // (docs/arsitektur-paket-umroh.md §5), diisi lewat komponen biaya/mode di package builder,
@@ -22,7 +24,9 @@ const createSchema = z.object({
   highlights:  z.array(z.string()).default([]),
   isFeatured:  z.boolean().default(false),
   isActive:    z.boolean().default(true),
-})
+  // Syarat dokumen (docs/rencana-visa-produk.md §3.4): tidak dikirim = daftar bawaan (paspor, KTP, KK, vaksin), bisa diubah di halaman edit.
+  requirements: documentRequirementListSchema.optional(),
+}).strict()
 
 export async function GET(req: Request) {
   try {
@@ -43,9 +47,16 @@ export async function POST(req: Request) {
     await requireManager()
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const { highlights, ...rest } = parsed.data
-    const p = await prisma.package.create({ data: { ...rest, description: emptyToNull(rest.description), highlights } })
-    return NextResponse.json(ok(p), { status: 201 })
+    const { highlights, requirements, ...rest } = parsed.data
+    // Produk + syarat dokumen dalam SATU transaksi — syarat tak pernah setengah tersimpan.
+    const result = await prisma.$transaction(async (tx) => {
+      const p = await tx.package.create({ data: { ...rest, description: emptyToNull(rest.description), highlights } })
+      const written = requirements ? await writeRequirements(tx, 'package', p.id, requirements) : await writeDefaultRequirements(tx, 'package', p.id)
+      if (!written.ok) throw new RequirementRejected(written.error, written.field)
+      return p
+    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
+    return NextResponse.json(ok(result), { status: 201 })
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
     console.error('[admin/products/packages/POST]', e instanceof Error ? e.name : e)

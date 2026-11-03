@@ -14,7 +14,7 @@ import { isReviewLocked, REVIEW_LABEL, REVIEW_TONE } from '@/lib/pilgrims/review
 
 // Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot — mengedit kartu
 // kemudian tidak mengubah booking sampai "Perbarui"), checklist kelengkapan (dihitung server), dan dokumen per perjalanan. Paspor/KTP diunggah di kartu.
-export type TripChecklistItem = { key: string; label: string; required: boolean; state: string }
+export type TripChecklistItem = { key: string; label: string; required: boolean; state: string; sources: string[] }
 
 type Props = {
   locale: string
@@ -137,7 +137,10 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
               const st = checklistState(c.state)
               return (
                 <li key={c.key} className="flex items-center justify-between gap-2 text-sm">
-                  <span>{c.label}{c.required ? '' : ' (opsional)'}</span>
+                  <span className="min-w-0">
+                    {c.label}{c.required ? '' : ' (opsional)'}
+                    {c.sources.length > 0 && <span className="block text-xs text-muted-foreground">Diminta oleh: {c.sources.join(', ')}</span>}
+                  </span>
                   <Badge variant={VARIANT[st.tone]}>{st.label}</Badge>
                 </li>
               )
