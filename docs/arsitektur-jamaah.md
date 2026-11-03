@@ -150,7 +150,7 @@ Dicek: `prisma/schema.prisma`, `lib/manifest/*`, `lib/documents/getRequirements.
 
 **Deviasi / keputusan saat eksekusi:**
 1. Gabung menetapkan (pin) data kanonik identitas yang dipakai — itulah "identitas yang mau dipakai" pilihan petugas; `lastVerifiedAt` diambil dari yang digabung bila yang dipakai belum terverifikasi.
-2. Kartu yang dilepas tetap menyimpan NIK/paspornya sendiri (data akun pemiliknya). Hapus identitas TIDAK menahan tautan: simpanan kartu berikutnya oleh pemilik akun membentuk identitas baru dari kartunya (pemrosesan data akun itu) — **menunggu keputusan pemilik** (SEC-206).
+2. Kartu yang dilepas tetap menyimpan NIK/paspornya sendiri (data akun pemiliknya). Hapus identitas TIDAK menahan tautan: simpanan kartu berikutnya oleh pemilik akun membentuk identitas baru dari kartunya (pemrosesan data akun itu) — **diterima pemilik 2026-11-03** (SEC-206: kartu = data akun pemiliknya; gudang hanya dibentuk ulang dari kartu itu, riwayat lama tetap terhapus).
 3. Jejak buka NIK/paspor ikut terhapus bersama identitasnya (Cascade); jumlahnya dicatat di `pilgrim_identity_erasures.revealEvents` saat petugas menghapus atau melepas kartu terakhir (SEC-207). Penghapusan akun UU PDP tidak mencatat baris ini (permintaan hapus akun sudah berjejak).
 4. Halaman server tidak mengirim `icon` ke `MetaBox` (komponen klien) — fungsi tak bisa diserialkan (ditemukan saat uji server dev; build tidak menangkapnya).
 
