@@ -183,6 +183,7 @@ const EVENTS: NotificationEvent[] = [
   { type: 'payment_rejected', code: 'SND-0003' },
   { type: 'booking_expired', code: 'SND-0004' },
   { type: 'visa_status_change', code: 'SND-0005', status: 'Visa Terbit' },
+  { type: 'pilgrim_review', code: 'SND-0006', status: 'Terverifikasi' },
   { type: 'welcome', name: 'Budi Santoso' },
   { type: 'test' },
 ]

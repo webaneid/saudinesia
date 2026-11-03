@@ -47,16 +47,24 @@ export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimI
       )
     }
 
-    const updated = await prisma.visaApplication.update({
-      where: { bookingPilgrimId: pilgrimId },
-      data: {
-        status,
-        ...(notes ? { notes } : {}),
-        ...(rejectionReason ? { rejectionReason } : {}),
-        ...(status === 'submitted_to_syarikah' ? { submittedAt: new Date() } : {}),
-        ...(status === 'issued' ? { issuedAt: new Date() } : {}),
-      },
+    // Dikirim ke Syarikah hanya untuk data jamaah yang sudah diverifikasi petugas (docs/arsitektur-jamaah.md §8.4 butir 5). Status pemeriksaan
+    // dibaca ulang di dalam kunci FOR SHARE (SEC-202): pembukaan ulang serentak (dokumen diganti/ditolak) menunggu atau ditunggu, tak terselip.
+    const updated = await prisma.$transaction(async (tx) => {
+      // $queryRaw: Prisma ORM tidak punya SELECT ... FOR SHARE.
+      const held = await tx.$queryRaw<{ reviewStatus: string }[]>`SELECT "reviewStatus"::text AS "reviewStatus" FROM "booking_pilgrims" WHERE "id" = ${pilgrimId} FOR SHARE`
+      if (status === 'submitted_to_syarikah' && held[0]?.reviewStatus !== 'verified') return null
+      return tx.visaApplication.update({
+        where: { bookingPilgrimId: pilgrimId },
+        data: {
+          status,
+          ...(notes ? { notes } : {}),
+          ...(rejectionReason ? { rejectionReason } : {}),
+          ...(status === 'submitted_to_syarikah' ? { submittedAt: new Date() } : {}),
+          ...(status === 'issued' ? { issuedAt: new Date() } : {}),
+        },
+      })
     })
+    if (!updated) return NextResponse.json(err('Verifikasi data jamaah ini dulu sebelum dikirim ke Syarikah'), { status: 422 })
 
     // Notifikasi (WhatsApp + email) — best-effort, tidak memblokir respons
     void notify({

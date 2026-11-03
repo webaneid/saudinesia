@@ -179,6 +179,8 @@ export async function executeDeletion(
       await tx.bookingPilgrim.updateMany({ where: { booking: { userId } }, data: { fieldValues: {}, userId: null, ...SEALED_PII_CLEARED } })
       // Tautan akun pada manifest booking ORANG LAIN diputus saja; isi manifest itu milik pemesannya.
       await tx.bookingPilgrim.updateMany({ where: { userId, booking: { userId: { not: userId } } }, data: { userId: null } })
+      // Catatan pemeriksaan data jamaah (Fase 6 modul jamaah) = teks bebas staf → dikosongkan (trigger append-only hanya mengizinkan ini).
+      await tx.pilgrimReviewEvent.updateMany({ where: { bookingPilgrim: { booking: { userId } }, note: { not: null } }, data: { note: null } })
       // Teks bebas yang bisa memuat nama/nomor/alamat (DEL-01). Refund.reason hanya berisi string sistem (lib/booking/cancel.ts) → dibiarkan.
       await tx.visaApplication.updateMany({ where: { pilgrim: { booking: { userId } } }, data: { notes: null, rejectionReason: null } })
       await tx.booking.updateMany({ where: { userId }, data: { notes: null } })

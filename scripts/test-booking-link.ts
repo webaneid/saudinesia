@@ -373,7 +373,9 @@ await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ le
   }
   for (const d of ['app', 'lib', 'components']) walk(join(root, d))
   const bad: string[] = []
-  const SEAL_OK = new Set(['lib/pilgrims/bookingLink.ts', 'lib/pilgrims/service.ts', 'lib/account/erasureSweep.ts', 'lib/validators/pilgrims.ts'])
+  // lib/pilgrims/warehouse.ts: gudang identitas staf (Fase 8) — membuka NIK/paspor untuk staf (berjejak) dan mencari lewat indeks; tak menulis segel
+  // booking_pilgrims (dijaga scripts/test-identity-warehouse.ts).
+  const SEAL_OK = new Set(['lib/pilgrims/bookingLink.ts', 'lib/pilgrims/service.ts', 'lib/account/erasureSweep.ts', 'lib/validators/pilgrims.ts', 'lib/pilgrims/warehouse.ts'])
   for (const f of files) {
     const rel = relative(root, f)
     const src = readFileSync(f, 'utf8')

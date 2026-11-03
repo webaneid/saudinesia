@@ -18,6 +18,7 @@ import { ItemNotBookableError, itemIndexOf, remapItemIndex } from './errors'
 import { partialItemTotals } from './partialTotals'
 import type { RuleViolation } from './rules'
 import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
+import { reopenForChangedRequirements } from '@/lib/pilgrims/review'
 
 // Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, keputusan pemilik R1–R4). Masukan = isi booking LENGKAP sesudah edit; mesin menghitung selisihnya:
 // item lama hilang → HAPUS (kuota dilepas sesuai status konfirmasi, baris harga di-void, baris item dihapus), item lama berubah → GANTI (hapus + tambah), item tanpa rujukan
@@ -191,7 +192,7 @@ async function releaseRow(tx: Tx, b: State, c: CurrentItem) {
  * Visa dari Paket Umroh (tanpa baris harga sendiri) diselaraskan dengan paket SESUDAH revisi: jumlah visa per produk = Σ orang paket yang memuat visa itu.
  * Kelebihan dihapus (hanya bila R3), kekurangan dipasangkan ke jamaah tanpa visa — urut. Visa paket yang sedang diproses tak pernah dihapus diam-diam (422).
  */
-async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBooking, items: BookingItemInput[], plannedTravelDate: Date | null) {
+async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBooking, items: BookingItemInput[], plannedTravelDate: Date | null, byUserId: string) {
   const slots = new Map<string, number>()
   let pi = 0
   for (const it of items) {
@@ -217,6 +218,8 @@ async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBoo
     if (!vp) throw new RevisionError(422, 'Produk visa paket tidak tersedia')
     for (const p of free.splice(0, missing)) {
       await tx.visaApplication.create({ data: { bookingPilgrimId: p.id, visaProductId: v, visaType: vp.visaType, status: 'pending_documents', plannedTravelDate } })
+      // Syarat dokumen visa baru belum tercakup verifikasi lama (SEC-201).
+      await reopenForChangedRequirements(tx, p.id, byUserId, 'Visa ditambahkan lewat revisi booking — dokumen visa perlu diperiksa')
     }
   }
 }
@@ -283,7 +286,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
     }
   }
   // Produk baru SELALU ditahan `pending` (koreksi pemilik 2026-11-01) — juga pada booking yang sudah dikonfirmasi; dikonfirmasi saat pembayarannya diverifikasi.
-  await syncPackageVisas(tx, bookingId, prepared.full, p.full.items, plannedTravel ? dbDateOf(plannedTravel) : null)
+  await syncPackageVisas(tx, bookingId, prepared.full, p.full.items, plannedTravel ? dbDateOf(plannedTravel) : null, byUserId)
 
   // 4. harga khusus per item (R4): selisih terhadap harga item (tanpa harga khusus lamanya)
   const priceNotes: string[] = []

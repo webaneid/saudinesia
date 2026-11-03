@@ -14,6 +14,8 @@ export type NotificationEvent =
   | { type: 'payment_rejected'; code: string }
   | { type: 'booking_expired'; code: string }
   | { type: 'visa_status_change'; code: string; status: string }
+  /** Pemeriksaan data jamaah booking (Fase 6 modul jamaah): `status` = label tampil. Tanpa nama jamaah dan catatan petugas (dibaca di halaman booking). */
+  | { type: 'pilgrim_review'; code: string; status: string }
   | { type: 'contact_changed' }
   | { type: 'welcome'; name: string }
   | { type: 'test' }
@@ -40,6 +42,7 @@ export function waMessage(e: NotificationEvent): string | null {
       return waTemplates.paymentRejected(e.code)
     case 'booking_expired':
     case 'visa_status_change':
+    case 'pilgrim_review':
     case 'contact_changed':
     case 'welcome':
     case 'test':

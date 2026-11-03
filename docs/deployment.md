@@ -155,3 +155,8 @@ Migrasi memuat perbaikan data: pembayaran **terkonfirmasi bernilai 0** diisi tot
 - Kunci kosong/lemah tidak menjatuhkan server: boot mencatat `[pii] …` dan fitur data jamaah menolak bekerja (fail-closed) sampai diperbaiki.
 - **Rotasi kunci enkripsi**: pindahkan kunci lama ke `PII_ENCRYPTION_KEYS_RETIRED="<versi lama>:<hex lama>"`, isi `PII_ENCRYPTION_KEY` baru, naikkan `PII_ENCRYPTION_KEY_VERSION`, restart. Nilai lama tetap terbaca; enkripsi ulang bertahap memakai `needsReencrypt` (alat enkripsi ulang dibuat bersama tabel jamaah, Fase 2+). Kunci lama baru boleh dibuang setelah tidak ada ciphertext versi itu.
 - **`PII_INDEX_KEY` tidak dirotasi biasa**: menggantinya berarti menghitung ulang semua indeks NIK/paspor dari nilai terdekripsi (butuh alat khusus); lakukan hanya bila kunci bocor.
+
+## Catatan operasional: ekstensi `pg_trgm` (data jamaah Fase 8, migrasi `20261117090000_pilgrim_identity_warehouse`, 2026-11-03)
+- Migrasi menjalankan `CREATE EXTENSION IF NOT EXISTS pg_trgm` (indeks trigram pencarian nama di gudang identitas).
+- **Tidak perlu tindakan manual di production.** Image `postgres:16-alpine` (`docker-compose.prod.yml`, sama dengan CI) membawa modul contrib; `pg_trgm` adalah ekstensi *trusted* sejak PG13, jadi cukup pemilik database (tak harus superuser) — dan `POSTGRES_USER=saudinesia` buatan entrypoint memang superuser. Dibuktikan 2026-11-03 dengan peran `NOSUPERUSER` pemilik database sekali pakai di PG 16: `CREATE EXTENSION pg_trgm` berhasil (v1.6).
+- Bila kelak DB dipindah ke Postgres terkelola yang membatasi ekstensi, pastikan `pg_trgm` ada di daftar izinnya SEBELUM deploy (tanpa itu kontainer `migrate` gagal dan web tidak naik).
