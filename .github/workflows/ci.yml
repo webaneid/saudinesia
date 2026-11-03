@@ -135,8 +135,9 @@ jobs:
             -e APP_DOMAIN=http://app.test:8080 -e FILES_DOMAIN=http://files.test:8081 \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.4-alpine
           head -c 2000000 /dev/zero > 2mb; head -c 9000000 /dev/zero > 9mb; head -c 500000 /dev/zero > small
-          for i in $(seq 1 30); do curl -s -o /dev/null -H 'Host: app.test' http://localhost:8080/ && break; sleep 1; done
           code() { curl -s -o /dev/null -w '%{http_code}' -H 'Host: app.test' -X POST --data-binary "@$2" "http://localhost:8080$1"; }
+          # Tunggu sampai Caddy DAN upstream siap (200 lewat proxy) — 502 berarti upstream belum hidup, bukan hasil uji.
+          for i in $(seq 1 60); do test "$(code /api/v1/bookings small)" = 200 && break; sleep 1; done
           expect() { got=$(code "$2" "$3"); echo "$1 $2 ($3) -> $got"; test "$got" = "$1"; }
           expect 200 /api/v1/bookings small
           expect 413 /api/v1/bookings 2mb
