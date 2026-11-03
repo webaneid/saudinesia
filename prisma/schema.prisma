@@ -776,6 +776,13 @@ model TourPackageHotelOption {
 
 // ─── BOOKINGS ─────────────────────────────────────────────────
 
+/// Tabel KOSONG, hanya sasaran `LOCK TABLE` yang menyerialkan pembuat kode booking (lib/utils/bookingCode.ts — kenapa bukan advisory lock ada di sana). Tak pernah diisi.
+model BookingCodeLock {
+  id Int @id
+
+  @@map("booking_code_lock")
+}
+
 model Booking {
   id              String        @id @default(uuid())
   bookingCode     String        @unique
