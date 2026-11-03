@@ -1,6 +1,6 @@
 # Rencana — Visa sebagai produk utama di booking
 
-> Status: **V1 SELESAI 2026-11-03 (#106), V2 SELESAI 2026-11-04 (#107), V3 SELESAI 2026-11-04 (disetujui pemilik: "Setuju, mulai V3"). V4 butuh rancangan rinci + persetujuan sendiri; V5 = dokumentasi.**
+> Status: **V1 SELESAI 2026-11-03 (#106), V2 SELESAI 2026-11-04 (#107), V3 SELESAI 2026-11-04 (disetujui pemilik: "Setuju, mulai V3"), V4a/V4b/V4c SELESAI 2026-11-04 (#109–#111), V5 dokumentasi SELESAI 2026-11-04 — RENCANA TUNTAS.** As-built kini di `docs/arsitektur-visa.md` (ditulis ulang); dokumen ini tinggal riwayat keputusan.
 > Koreksi pemilik: *"KITA JUALAN VISA"* — visa adalah produk, sejajar tiket/hotel/transport, bukan tambahan per jamaah. Dasar: audit kode 2026-11-03
 > dan audit ulang 2026-11-04 (fakta di §1). Sesudah selesai, isi dokumen ini dipindah ke `docs/arsitektur-booking-engine-v2.md` dan `docs/arsitektur-visa.md` (V5).
 
@@ -161,7 +161,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 | V2 | Form booking (draf + revisi): baris Visa di `ItemRows`, kelompok ↔ slot jamaah | ✔ 2026-11-04 (#107) |
 | V3 | Daftar centang "Wajib dibeli bersama visa ini" (7 jenis, §2.1–2.2) + hapus pelonggaran per pelanggan (§2.3) + UI (§2.4) + migrasi (§2.5) | ✔ 2026-11-04 — migrasi `20261118090000_visa_required_components_v3`, uji `test-visa-v3-migration.ts` |
 | V4 | Syarat dokumen Paket Umroh + Haji (§3) — dipecah V4a/V4b/V4c (§3.7) | V4a ✔, V4b ✔, V4c ✔ 2026-11-04 |
-| V5 | Dokumentasi: `arsitektur-booking-engine-v2.md`, `arsitektur-visa.md`, CLAUDE.md (pelonggaran dihapus, drift §6) | — |
+| V5 | Dokumentasi: `arsitektur-booking-engine-v2.md`, `arsitektur-visa.md`, CLAUDE.md (pelonggaran dihapus, drift §6) | ✔ 2026-11-04 — `arsitektur-visa.md` ditulis ulang as-built; catatan V3 di engine-v2 D5/§3.6/§4.1/§10.2/§10.6b; komentar basi skema/validator dirapikan |
 
 ## 5. Keputusan pemilik (tercatat)
 - 2026-11-03: visa = produk utama; "Model penjualan" only/plus (V1).
@@ -170,7 +170,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 - 2026-11-04 (V4, §3.8): syarat jamaah = gabungan semua produk yang memuatnya (visa paket ikut); anggota paket/haji dibagi otomatis urut; bawaan Paspor/KTP/KK/Vaksin;
   visa lain untuk anggota paket yang visanya sudah termasuk → ditolak.
 
-## 6. Drift dokumen lama yang ditemukan audit (dibereskan di V5)
+## 6. Drift dokumen lama yang ditemukan audit (dibereskan di V5 ✔ 2026-11-04)
 - `arsitektur-booking-engine-v2.md` D5: "visa saja hanya lewat pelonggaran" — kode: visa dengan aturan kosong lolos untuk siapa pun. §4.1/§10.2 menyebut `evaluateBookingRules`; kode `evaluateVisaRules`/`visaRuleViolations`.
 - `arsitektur-visa.md`: masih menyebut `price`, `durationFeeRules`, `BookingVisa`, editor 3 tab, fallback `VisaProduct.price` (§9.3; kode menolak 422), syarat dari `visaProduct.requirements` (kini tabel `DocumentRequirement`).
 - Komentar basi: `prisma/schema.prisma` (`selectedDurationDays` "belum diisi" — sudah diisi `lineItems.ts`), `lib/validators/booking.ts` (`durationFeeRules`).

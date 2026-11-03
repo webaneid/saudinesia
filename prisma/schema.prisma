@@ -1195,9 +1195,7 @@ model VisaApplication {
   isForceMajeure   Boolean    @default(false)
   notes            String?
 
-  // Snapshot harga saat booking dibuat (docs/arsitektur-harga.md §7) — field ada, TAPI BELUM
-  // DIISI kode manapun: menunggu Gap #1/#2 di docs/arsitektur-visa.md §7 diperbaiki dulu
-  // (visaProductId tidak pernah di-set saat create booking, wizard belum punya step pilih VisaProduct).
+  // Lama tinggal yang dipilih (hari) — memilih tier harga visa (`takeVisaTier`); diisi lib/booking/lineItems.ts. Harga beku ada di price_snapshots.
   selectedDurationDays Int?
   // Rencana tanggal berangkat jamaah (D1): bawaan = tiket pergi paling awal di booking yang sama, dapat diedit di form data jamaah.
   plannedTravelDate    DateTime? @db.Date
@@ -1468,7 +1466,7 @@ model NotificationLog {
 
 // ─── PRICING / HPP ────────────────────────────────────────────
 // Infrastruktur harga & HPP universal — lihat docs/arsitektur-harga.md untuk desain lengkap.
-// Scope awal: Visa saja (docs/arsitektur-visa.md §9). Skema generik untuk modul lain nanti.
+// Scope awal: Visa saja (docs/arsitektur-harga.md). Skema generik — kini dipakai semua modul berharga.
 
 // Entitas vendor TUNGGAL (ADR-0003, docs/arsitektur-vendor.md). Semua referensi vendor = FK ke sini.
 // Kolom lama (`category`, `country`, `contactInfo`) sudah dihapus oleh migrasi kontraksi F5; `nameKey`/`countryCode` NOT NULL.
