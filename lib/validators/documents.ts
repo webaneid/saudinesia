@@ -89,3 +89,23 @@ export const documentUploadFieldsSchema = z.object({
 }).strict()
 
 export type DocumentUploadFields = z.infer<typeof documentUploadFieldsSchema>
+
+/** Satu syarat dokumen produk (docs/arsitektur-jamaah.md §7.6). Jenis dari katalog; `label` kosong = label katalog. */
+export const documentRequirementInputSchema = z.object({
+  documentTypeId: z.string().uuid('Jenis dokumen tidak valid'),
+  label: z.string().trim().max(80).nullish().transform(v => (v ? v : null)).refine(v => v === null || v.length >= 2, 'Label minimal 2 karakter'),
+  description: z.string().trim().max(300).default(''),
+  required: z.boolean().default(true),
+}).strict()
+
+/** Daftar syarat satu produk (urutan = urutan tampil). Satu jenis paling banyak sekali. */
+export const documentRequirementListSchema = z.array(documentRequirementInputSchema).max(30, 'Maksimal 30 syarat dokumen')
+  .superRefine((list, ctx) => {
+    const seen = new Set<string>()
+    list.forEach((r, i) => {
+      if (seen.has(r.documentTypeId)) ctx.addIssue({ code: 'custom', path: [i, 'documentTypeId'], message: 'Jenis dokumen yang sama dipilih dua kali' })
+      seen.add(r.documentTypeId)
+    })
+  })
+
+export type DocumentRequirementInput = z.infer<typeof documentRequirementInputSchema>

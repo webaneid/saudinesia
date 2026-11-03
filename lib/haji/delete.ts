@@ -1,6 +1,7 @@
 import { purgeProductMedia } from '@/lib/media/service'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { deleteRequirementsOf } from '@/lib/documents/requirements'
 
 export type HajiDeleteResult =
   | { found: false }
@@ -32,7 +33,7 @@ export async function deleteOrDeactivateHaji(id: string): Promise<HajiDeleteResu
       const scope = { productType: 'haji', productId: id }
       await tx.productCost.deleteMany({ where: scope })
       await tx.preferredVendor.deleteMany({ where: scope })
-      await tx.documentRequirement.deleteMany({ where: scope })
+      await deleteRequirementsOf(tx, 'haji', [id])
       await tx.manifestFieldRequirement.deleteMany({ where: scope })
       await tx.pricePoint.deleteMany({ where: { ownerType: 'haji', ownerId: id } })
       await tx.hajiProduct.delete({ where: { id } })
