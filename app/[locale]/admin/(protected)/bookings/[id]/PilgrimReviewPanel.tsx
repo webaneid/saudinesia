@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ClipboardCheck, FileSearch, Send, Undo2, X } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardCheck, FileSearch, Send, Undo2, X } from 'lucide-react'
 import type { PilgrimReviewStatus } from '@prisma/client'
 import { Badge, type BadgeTone } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
@@ -19,7 +19,7 @@ export type ReviewDoc = {
   /** Status syarat dari evaluator kelengkapan (kedaluwarsa / kurang masa berlaku → saran alasan `expired`). */
   requirementState: string | null
 }
-export type ReviewEvent = { id: string; from: PilgrimReviewStatus | null; to: PilgrimReviewStatus; note: string | null; actorName: string | null; byStaff: boolean; at: string }
+export type ReviewEvent = { id: string; from: PilgrimReviewStatus | null; to: PilgrimReviewStatus; note: string | null; actorName: string | null; byStaff: boolean; byViewer: boolean; at: string }
 
 type Props = {
   bookingId: string
@@ -52,6 +52,8 @@ export function PilgrimReviewPanel({ bookingId, pilgrimId, status, active, linke
   const [returning, setReturning] = useState(false)
   const [note, setNote] = useState('')
   const base = `/api/v1/admin/bookings/${bookingId}/pilgrims/${pilgrimId}`
+  // Pemisahan tugas (keputusan pemilik 2026-11-03): hanya mengingatkan bila pengajuan yang sedang ditinjau diajukan petugas ini sendiri.
+  const selfSubmitted = status === 'submitted' && !!history.find(h => h.to === 'submitted')?.byViewer
 
   async function send(url: string, method: 'POST' | 'PUT', body: object | undefined, done: string): Promise<boolean> {
     setBusy(true); setNotice(null)
@@ -87,7 +89,9 @@ export function PilgrimReviewPanel({ bookingId, pilgrimId, status, active, linke
   }
 
   async function verify() {
-    if (!(await ask({ title: 'Verifikasi data jamaah?', body: 'Data dan dokumen jamaah ini dinyatakan benar. Data identitas jamaah diperbarui dari data yang diverifikasi.', confirmLabel: 'Verifikasi', tone: 'primary' }))) return
+    const body = 'Data dan dokumen jamaah ini dinyatakan benar. Data identitas jamaah diperbarui dari data yang diverifikasi.'
+      + (selfSubmitted ? ' Pengajuan ini Anda ajukan sendiri — sebaiknya diperiksa petugas lain.' : '')
+    if (!(await ask({ title: 'Verifikasi data jamaah?', body, confirmLabel: 'Verifikasi', tone: 'primary' }))) return
     await send(`${base}/review`, 'POST', { decision: 'verified' }, 'Data jamaah terverifikasi.')
   }
 
@@ -134,6 +138,12 @@ export function PilgrimReviewPanel({ bookingId, pilgrimId, status, active, linke
             </li>
           ))}
         </ul>
+      )}
+
+      {active && selfSubmitted && (
+        <p className="m-0 flex items-start gap-1.5 rounded-md bg-admin-warning/10 px-2.5 py-2 text-[11.5px] text-admin-warning" role="note">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" /> Anda yang mengajukan data ini atas nama pemesan. Sebaiknya diverifikasi petugas lain — tetap boleh dilanjutkan.
+        </p>
       )}
 
       {active && (
