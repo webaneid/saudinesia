@@ -282,7 +282,7 @@ await t('KODE BOOKING jalur penuh `POST /bookings`: 20 pesanan serentak → semu
   const big = await prisma.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-06-30'), totalSeats: 100 } })
   await addCost('flight', big.id, 'tiket', 5_000_000); await repriceOwner('flight', big.id)
   const top = await topUrut()
-  const prepared = await prepareBooking({ items: [{ itemType: 'flight', flightScheduleId: big.id, departureDate: '2090-06-10', numPassengers: 1 }], pilgrims: [{}], departureDate: '2090-06-10', totalPilgrims: 1 }, customer.id)
+  const prepared = await prepareBooking({ items: [{ itemType: 'flight', flightScheduleId: big.id, departureDate: '2090-06-10', numPassengers: 1 }], pilgrims: [{}], departureDate: '2090-06-10', totalPilgrims: 1 })
   const made = await Promise.all(Array.from({ length: 20 }, () => retrySerializable(() => withBookingCode(async (tx, bookingCode) => {
     const bk = await tx.booking.create({ data: { bookingCode, userId: customer.id, status: 'active', departureDate: new Date('2090-06-10'), returnDate: new Date('2090-06-20'), season: 'regular', totalAmount: 0 } })
     await writeBooking(tx, prepared, bk.id)
