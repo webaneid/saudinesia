@@ -233,7 +233,7 @@ async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBoo
 }
 
 export type RevisionResult = {
-  revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]
+  revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]
   /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[]
   /** Harga jual tiap item SESUDAH revisi, URUT `input.items` (subtotal baris di editor). */ itemTotals: number[]
   /** Harga jual visa milik tiap jamaah SESUDAH revisi, URUT `input.pilgrims` (0 = tanpa visa sendiri; visa paket ada di baris paketnya). */ pilgrimVisaTotals: number[]
@@ -353,7 +353,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
     const id = 'write' in src ? visaMetas[src.write]?.itemId : src.appId
     return id ? sells.get(`visa:${id}`) ?? 0 : 0
   })
-  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices, itemTotals, pilgrimVisaTotals }
+  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, notices, itemTotals, pilgrimVisaTotals }
 }
 
 /** Rencana + resolusi di LUAR transaksi (bacaan saja): aturan visa atas isi LENGKAP sesudah revisi, resolusi item yang akan ditulis. */
@@ -363,10 +363,10 @@ async function prepare(bookingId: string, input: BookingRevisionInput) {
   if (b.status !== 'active') throw new RevisionError(409, 'Hanya booking aktif yang dapat diedit (batal/hangus/selesai tidak)')
   if (b.invoice && b.invoice.revision !== input.expectedRevision) throw new RevisionError(409, 'Booking sudah diubah orang lain sejak halaman dibuka — muat ulang lalu ulangi')
   const p = plan(b, input)
-  const full = await prepareBooking(p.full, b.userId)
+  const full = await prepareBooking(p.full)
   // Item yang ditulis = SUBSET masukan: nomor galatnya dipetakan kembali ke baris editor.
   const toInput = (k: number) => p.writes[k]?.index
-  const writes = await prepareBooking({ items: p.writes.map(w => w.item), pilgrims: p.pilgrimWrites, totalPilgrims: p.full.pilgrims.length }, b.userId, { rules: false })
+  const writes = await prepareBooking({ items: p.writes.map(w => w.item), pilgrims: p.pilgrimWrites, totalPilgrims: p.full.pilgrims.length }, { rules: false })
     .catch(e => remapItemIndex(e, toInput))
   return { planned: p, prepared: { full, writes } }
 }

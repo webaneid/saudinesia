@@ -8,6 +8,7 @@ import { formatRupiah } from '@/lib/utils'
 import { requirementsOfMany } from '@/lib/documents/requirements'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { visaPriceSummary } from '@/lib/pricing/engine/read'
+import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -148,11 +149,22 @@ export default async function VisaCatalogPage({ params }: Props) {
                   )}
 
                   <div className="pt-2 border-t border-border">
-                    <Button asChild className="w-full" size="sm">
-                      <Link href={`/${locale}/bookings/checkout/visa?productId=${v.id}`}>
-                        Ajukan Sekarang <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
+                    {/* Visa plus wajib dibeli bersama produk lain (docs/rencana-visa-produk.md §2.4) — checkout pendek hanya memuat visa, jadi dipesan lewat admin. */}
+                    {(() => {
+                      const model = visaSalesModel(parseRequiredComponents(v.requiredComponents).components)
+                      return model.plus ? (
+                        <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>Dipesan bersama: <span className="font-medium text-foreground">{model.parts.join(', ')}</span>. Hubungi admin Saudinesia untuk pemesanan.</span>
+                        </p>
+                      ) : (
+                        <Button asChild className="w-full" size="sm">
+                          <Link href={`/${locale}/bookings/checkout/visa?productId=${v.id}`}>
+                            Ajukan Sekarang <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                      )
+                    })()}
                   </div>
                   </div>
                 </div>

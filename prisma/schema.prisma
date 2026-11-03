@@ -33,8 +33,6 @@ model User {
   // Pencabutan sesi (SEC-18, docs/arsitektur-auth.md §11): JWT membawa `ver`; getSession() menolak token yang `ver`-nya ≠ kolom ini.
   // Dinaikkan saat password diganti/direset, akun dinonaktifkan, peran diubah, atau akun Google disambung ke akun lama.
   sessionVersion         Int       @default(0)
-  // Pelonggaran aturan visa per pelanggan (docs/arsitektur-booking-engine-v2.md D5/§10.2): pelanggaran `requiredComponents` visa turun jadi peringatan.
-  allowVisaWithoutBundle Boolean   @default(false)
   addressId              String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
@@ -468,7 +466,8 @@ model VisaProduct {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  // Komponen yang WAJIB ada di booking yang sama (docs/arsitektur-booking-engine-v2.md §4.1/§10.2): [{type:'flight'}, {type:'hotel'}, {type:'transport', categories?, tripIds?}].
+  // Produk yang WAJIB dibeli bersama visa ini di booking yang sama (docs/rencana-visa-produk.md §2.1): [{type:'flight'|'hotel_makkah'|'hotel_madinah'|'muthowif'|'tour'|'catering'},
+  // {type:'transport', categories?, tripIds?}]; kosong = visa stand alone.
   // Bentuk dijaga `visaRequiredComponentsSchema` (lib/validators/visa.ts); dievaluasi HANYA oleh lib/booking/rules.ts.
   requiredComponents Json @default("[]")
 

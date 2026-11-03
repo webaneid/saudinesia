@@ -1,51 +1,63 @@
-import { parseRequiredComponents, type RequiredComponent } from '@/lib/validators/visa'
+import { parseRequiredComponents, REQUIRED_COMPONENT_LABEL, type RequiredComponent, type RequiredComponentType } from '@/lib/validators/visa'
 
 // Aturan booking (docs/arsitektur-booking-engine-v2.md D5, §4.1, §10.2). SATU tempat evaluasi — dipakai POST /bookings sekarang, form admin (Fase 5), dan front-end (Fase 11).
 // Fungsi di sini MURNI: pemanggil mengumpulkan komponen booking (item + isi paket) lebih dulu, lalu meneruskannya ke sini.
 
-/** Komponen yang ADA di booking: dari item mandiri dan dari isi Paket Umroh (`included`, atau `user_choice` yang sudah dipilih). */
+/**
+ * Komponen yang ADA di booking: dari item mandiri, isi Paket Umroh (`included`, atau `user_choice` yang sudah dipilih) dan isi Paket Ziarah yang benar-benar ditagih.
+ * Dikumpulkan `bookingCoverage` (ruleContext.ts); di sini hanya dinilai.
+ */
 export type BookingCoverage = {
   flight: boolean
-  hotel: boolean
+  hotelCities: ReadonlyArray<'makkah' | 'madinah'>
   transports: Array<{ tripId: string; category: string }>
+  muthowif: boolean
+  tour: boolean
+  catering: boolean
 }
 
 export type VisaRuleSubject = { visaProductId: string; visaName: string; requiredComponents: unknown }
 
+/** Setiap pelanggaran MENOLAK booking — aturan ditentukan produk visa, tak ada pelonggaran per pelanggan (docs/rencana-visa-produk.md §2.3). */
 export type RuleViolation = {
   visaProductId: string
   visaName: string
-  missing: RequiredComponent['type'] | 'rule'
-  /** `error` menolak booking; `warning` = dilonggarkan untuk pelanggan ini (`User.allowVisaWithoutBundle`). */
-  severity: 'error' | 'warning'
+  missing: RequiredComponentType | 'rule'
   message: string
 }
 
-const NAMES: Record<RequiredComponent['type'], string> = { flight: 'tiket pesawat', hotel: 'hotel', transport: 'transport' }
-
 function satisfied(c: RequiredComponent, cov: BookingCoverage): boolean {
-  if (c.type === 'flight') return cov.flight
-  if (c.type === 'hotel') return cov.hotel
-  const cats = c.categories ?? []
-  const trips = c.tripIds ?? []
-  if (cats.length === 0 && trips.length === 0) return cov.transports.length > 0
-  return cov.transports.some(t => trips.includes(t.tripId) || cats.includes(t.category))
+  switch (c.type) {
+    case 'flight': return cov.flight
+    case 'hotel_makkah': return cov.hotelCities.includes('makkah')
+    case 'hotel_madinah': return cov.hotelCities.includes('madinah')
+    case 'muthowif': return cov.muthowif
+    case 'tour': return cov.tour
+    case 'catering': return cov.catering
+    case 'transport': {
+      const cats = c.categories ?? []
+      const trips = c.tripIds ?? []
+      if (cats.length === 0 && trips.length === 0) return cov.transports.length > 0
+      return cov.transports.some(t => trips.includes(t.tripId) || cats.includes(t.category))
+    }
+  }
 }
 
 function describe(c: RequiredComponent): string {
-  if (c.type !== 'transport') return NAMES[c.type]
+  const name = REQUIRED_COMPONENT_LABEL[c.type].toLowerCase()
+  if (c.type !== 'transport') return name
   const cats = c.categories ?? []
   const trips = c.tripIds ?? []
-  if (cats.length === 0 && trips.length === 0) return 'transport'
+  if (cats.length === 0 && trips.length === 0) return name
   const parts = [cats.length > 0 ? `kategori ${cats.join(', ')}` : '', trips.length > 0 ? `${trips.length} rute tertentu` : ''].filter(Boolean)
-  return `transport (${parts.join(' atau ')})`
+  return `${name} (${parts.join(' atau ')})`
 }
 
 /**
  * Pelanggaran aturan visa untuk komponen booking yang ada. Tiap produk visa dievaluasi SEKALI (beberapa jamaah dengan visa yang sama = satu aturan).
- * Aturan tersimpan yang tak sah selalu `error` (fail-closed: data rusak tak boleh meloloskan booking diam-diam).
+ * Aturan tersimpan yang tak sah selalu melanggar (fail-closed: data rusak tak boleh meloloskan booking diam-diam).
  */
-export function evaluateVisaRules(visas: readonly VisaRuleSubject[], coverage: BookingCoverage, allowVisaWithoutBundle: boolean): RuleViolation[] {
+export function evaluateVisaRules(visas: readonly VisaRuleSubject[], coverage: BookingCoverage): RuleViolation[] {
   const out: RuleViolation[] = []
   const seen = new Set<string>()
   for (const v of visas) {
@@ -53,19 +65,13 @@ export function evaluateVisaRules(visas: readonly VisaRuleSubject[], coverage: B
     seen.add(v.visaProductId)
     const { components, invalid } = parseRequiredComponents(v.requiredComponents)
     if (invalid) {
-      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: 'rule', severity: 'error', message: `Aturan produk ${v.visaName} tidak valid — hubungi admin` })
+      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: 'rule', message: `Aturan produk ${v.visaName} tidak valid — hubungi admin` })
       continue
     }
     for (const c of components) {
       if (satisfied(c, coverage)) continue
-      out.push({
-        visaProductId: v.visaProductId, visaName: v.visaName, missing: c.type,
-        severity: allowVisaWithoutBundle ? 'warning' : 'error',
-        message: `${v.visaName} mewajibkan ${describe(c)} dalam booking yang sama`,
-      })
+      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: c.type, message: `${v.visaName} mewajibkan ${describe(c)} dalam booking yang sama` })
     }
   }
   return out
 }
-
-export const blockingViolations = (v: readonly RuleViolation[]): RuleViolation[] => v.filter(x => x.severity === 'error')

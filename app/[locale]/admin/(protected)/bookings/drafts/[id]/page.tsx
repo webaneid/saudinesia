@@ -9,12 +9,11 @@ import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { Button } from '@/components/admin/ui/Button'
-import { Badge } from '@/components/admin/ui/Badge'
 import { formatRupiah } from '@/lib/utils'
 import type { TaxLine } from '@/lib/invoice/tax'
 import type { BookingDraft } from '@/lib/validators/booking'
-import { MODULE_LABEL, type Catalog, type ModuleKey } from './catalog'
-import { ItemRows, newRow, rowFromItem, rowToItem, type ItemRow } from './ItemRows'
+import type { Catalog, ModuleKey } from './catalog'
+import { ItemRows, rowForMissing, rowFromItem, rowToItem, type ItemRow } from './ItemRows'
 import { applyVisaRows, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlots, type VisaSlot } from './visaRows'
 
 // Editor draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): draf tersimpan di database (dapat dilanjutkan). Produk = editor BARIS inline (§10.4, arahan
@@ -22,11 +21,10 @@ import { applyVisaRows, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlot
 // di-rollback — angka mengikat). Terbitkan = kuota ditahan + harga dibekukan + invoice terbit, lalu ke detail booking untuk mengisi data jamaah.
 
 type Props = { params: Promise<{ locale: string; id: string }> }
-type Violation = { visaName: string; missing: string; severity: 'error' | 'warning'; message: string }
-type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; tax: TaxLine[]; taxAdded: number; grandTotal: number; dueDays: number; warnings: Violation[]; itemTotals: number[]; pilgrimVisaTotals: number[] }
-type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; user: { id: string; fullName: string; email: string; allowVisaWithoutBundle: boolean } }
+type Violation = { visaName: string; missing: string; message: string }
+type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; tax: TaxLine[]; taxAdded: number; grandTotal: number; dueDays: number; itemTotals: number[]; pilgrimVisaTotals: number[] }
+type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; user: { id: string; fullName: string; email: string } }
 
-const MISSING_MODULE: Record<string, ModuleKey> = { flight: 'flight', hotel: 'hotel', transport: 'transport' }
 const PREVIEW_DELAY_MS = 800
 
 export default function DraftEditorPage({ params }: Props) {
@@ -212,7 +210,7 @@ export default function DraftEditorPage({ params }: Props) {
             {problem.violations.length > 0 && (
               <ul className="m-0 list-disc space-y-1 pl-5 text-admin-ink">
                 {problem.violations.map((v, i) => (
-                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => changeRows([...rows, newRow(people, MISSING_MODULE[v.missing])])}>tambah baris {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
+                  <li key={i}>{v.message}{(() => { const add = rowForMissing(people, v.missing); return add && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => changeRows([...rows, add.row])}>tambah baris {add.label}</button></> })()}</li>
                 ))}
               </ul>
             )}
@@ -220,9 +218,6 @@ export default function DraftEditorPage({ params }: Props) {
         )}
         {preview ? (
           <div className="space-y-1 text-sm">
-            {preview.warnings.length > 0 && (
-              <p className="m-0 mb-2 rounded-lg bg-admin-warning/10 p-2 text-xs text-admin-ink">Dilonggarkan untuk pelanggan ini: {preview.warnings.map(w => w.message).join('; ')}</p>
-            )}
             <p className="m-0 flex justify-between text-admin-ink/80"><span>Subtotal</span><span className="tabular-nums">{formatRupiah(preview.total)}</span></p>
             {preview.tax.map((t, i) => (
               <p key={i} className="m-0 flex justify-between text-admin-ink/80"><span>{t.name} {t.ratePercent}%{t.mode === 'included' ? ' (termasuk)' : ''}</span><span className="tabular-nums">{formatRupiah(t.amountIdr)}</span></p>
@@ -238,7 +233,7 @@ export default function DraftEditorPage({ params }: Props) {
   const sidebar = (
     <>
       <PublishBox onSave={() => void save()} saving={saving} dirty={dirty} saved={saved && !dirty} canSave={dirty} saveLabel="Simpan draf"
-        meta={<span>Pemesan: <b>{loaded.user.fullName}</b>{loaded.user.allowVisaWithoutBundle && <> · <Badge tone="warning">aturan visa dilonggarkan</Badge></>}</span>}
+        meta={<span>Pemesan: <b>{loaded.user.fullName}</b></span>}
         options={
           <label className="flex items-center justify-between gap-2 text-sm text-admin-ink">
             Jatuh tempo (hari)

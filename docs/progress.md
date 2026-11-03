@@ -863,11 +863,12 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] Fase 8 — gudang admin (identitas, konflik, gabung, buka NIK berjejak) — selesai 2026-11-03 (`docs/arsitektur-jamaah.md` §4.5): `lib/pilgrims/warehouse.ts`, menu Identitas Jamaah, alias kunci saat gabung, cocok manual/lepas/pin kanonik, hapus identitas tanpa booking, kartu bayi tanpa NIK, D6. Temuan keamanan SEC-205..210. **Seluruh rencana modul jamaah (Fase 0–8) selesai.**
 
 ### Visa sebagai produk utama (koreksi pemilik 2026-11-03)
-Rencana: `docs/rencana-visa-produk.md` (disetujui 2026-11-03). Keputusan §4 (pelonggaran per pelanggan; bukti booking otomatis terpenuhi) menunggu pemilik.
+Rencana: `docs/rencana-visa-produk.md` (disetujui 2026-11-03, V3–V5 direvisi + V3 disetujui 2026-11-04). Keputusan pemilik §5: pelonggaran per pelanggan dihapus; bukti booking dari luar = dokumen biasa (tanpa aturan otomatis).
 - [x] V1 — editor produk visa: pilihan "Model penjualan" (Visa only / Visa plus + komponen wajib), turunan `requiredComponents` lewat `visaSalesModel` (`lib/validators/visa.ts`); lencana di header editor dan kolom daftar produk (2026-11-03)
 - [x] V2 — form booking (draf + revisi): Visa sebagai baris produk (`ItemRows`; produk + lama tinggal + jumlah orang), kelompok ↔ slot jamaah (`drafts/[id]/visaRows.ts`), kotak Jamaah tanpa pemilih visa, subtotal baris dari server (`pilgrimVisaTotals`, `visaPriceIdr`) (2026-11-04)
-- [ ] V3 — bukti booking otomatis terpenuhi bila komponen dibeli dari kita
-- [ ] V4 — dokumentasi arsitektur + drift lama
+- [x] V3 — daftar centang "Wajib dibeli bersama visa ini" (Tiket · Hotel Makkah · Hotel Madinah · Transportasi · Muthowif · Wisata · Katering; satu daftar `REQUIRED_COMPONENT_TYPES`), setiap pelanggaran menolak (422) untuk semua pelanggan, `User.allowVisaWithoutBundle` + route/komponen/penulisnya dihapus (migrasi kontraksi fail-closed, `hotel` lama → Makkah + Madinah), tombol "tambah baris …" per komponen kurang di form booking, katalog publik & checkout jamaah tak menawarkan visa plus (2026-11-04)
+- [ ] V4 — syarat dokumen Paket Umroh + Haji (rancangan rinci + persetujuan dulu)
+- [ ] V5 — dokumentasi arsitektur + drift lama (§6 rencana)
 
 ## Booking Engine v2 (admin lebih dulu, invoice, pembayaran bertahap, buku kas) — dirancang 2026-10-30
 Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0 recheck, §5 zona waktu, §10 fase); ADR-0004 (Proposed).

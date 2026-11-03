@@ -5,7 +5,8 @@
 //
 // PENGAMAN: menulis data sementara → menolak jalan kecuali nama database memuat "test", "ci" atau "tmp".
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { join } from 'node:path'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
@@ -13,7 +14,7 @@ import { repriceOwner, setManualSell, clearManualSell, getPricePoint, sweepOrpha
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { writeBookingItems } from '@/lib/booking/lineItems'
 import { resolvePackageItem, type PackageResolved } from '@/lib/booking/packageItem'
-import { evaluateVisaRules, blockingViolations, type BookingCoverage } from '@/lib/booking/rules'
+import { evaluateVisaRules, type BookingCoverage } from '@/lib/booking/rules'
 import { bookingCoverage, visaRuleViolations } from '@/lib/booking/ruleContext'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import { recomputeBookingDates } from '@/lib/booking/dates'
@@ -21,10 +22,8 @@ import { cancelBooking } from '@/lib/booking/cancel'
 import { ItemNotBookableError } from '@/lib/booking/errors'
 import { reserveFlightQuota } from '@/lib/quota'
 import { quotaAdapters } from '@/lib/quota/adapters'
-import { visaRequiredComponentsSchema, parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
+import { visaRequiredComponentsSchema, parseRequiredComponents, visaSalesModel, REQUIRED_COMPONENT_TYPES, type RequiredComponentType } from '@/lib/validators/visa'
 import { createBookingSchema, type CreateBookingInput } from '@/lib/validators/booking'
-import { customerPolicySchema } from '@/lib/validators/customers'
-import { setCustomerBookingPolicy } from '@/lib/customers/bookingPolicy'
 import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
 import { calendarDateOf } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
@@ -43,48 +42,53 @@ const flat = (cost: number) => [{ minDays: 0, maxDays: 9999, cost }]
 const rejectsNotBookable = (fn: () => Promise<unknown>, re: RegExp) => assert.rejects(fn, (e: unknown) => e instanceof ItemNotBookableError && re.test((e as Error).message))
 
 // ── murni: aturan visa ───────────────────────────────────────────────────────────────────────────────────────────────
-const none: BookingCoverage = { flight: false, hotel: false, transports: [] }
+const none: BookingCoverage = { flight: false, hotelCities: [], transports: [], muthowif: false, tour: false, catering: false }
+const all: BookingCoverage = { flight: true, hotelCities: ['makkah', 'madinah'], transports: [{ tripId: 't', category: 'x' }], muthowif: true, tour: true, catering: true }
 const V = (requiredComponents: unknown, id = 'v1') => ({ visaProductId: id, visaName: 'Visa Uji', requiredComponents })
-await t('aturan visa: tabel nilai — komponen ada/tidak × pelonggaran; tanpa aturan = tanpa pelanggaran; visa yang sama dievaluasi sekali', () => {
-  const rule = [{ type: 'flight' }, { type: 'hotel' }]
-  assert.deepEqual(evaluateVisaRules([V([])], none, false), [])
-  const both = evaluateVisaRules([V(rule)], none, false)
-  assert.deepEqual(both.map(v => [v.missing, v.severity]), [['flight', 'error'], ['hotel', 'error']])
-  assert.match(both[0]!.message, /Visa Uji mewajibkan tiket pesawat/)
-  assert.deepEqual(evaluateVisaRules([V(rule)], { ...none, flight: true }, false).map(v => v.missing), ['hotel'])
-  assert.deepEqual(evaluateVisaRules([V(rule)], { ...none, flight: true, hotel: true }, false), [])
-  assert.deepEqual(evaluateVisaRules([V(rule)], none, true).map(v => v.severity), ['warning', 'warning'], 'pelonggaran → peringatan')
-  assert.equal(blockingViolations(evaluateVisaRules([V(rule)], none, true)).length, 0)
-  assert.equal(evaluateVisaRules([V(rule), V(rule)], none, false).length, 2, 'dua jamaah dengan visa sama = satu aturan')
+await t('aturan visa: tabel nilai — tiap tipe komponen ada/tidak; tanpa aturan = tanpa pelanggaran; visa yang sama dievaluasi sekali', () => {
+  assert.deepEqual(evaluateVisaRules([V([])], none), [])
+  const rule = REQUIRED_COMPONENT_TYPES.map(type => ({ type }))
+  assert.deepEqual(evaluateVisaRules([V(rule)], none).map(v => v.missing), [...REQUIRED_COMPONENT_TYPES], 'urutan = urutan aturan')
+  assert.deepEqual(evaluateVisaRules([V(rule)], all), [])
+  // Satu komponen hilang → tepat komponen itu yang dilaporkan.
+  const flip: Record<RequiredComponentType, Partial<BookingCoverage>> = {
+    flight: { flight: false }, hotel_makkah: { hotelCities: ['madinah'] }, hotel_madinah: { hotelCities: ['makkah'] }, transport: { transports: [] },
+    muthowif: { muthowif: false }, tour: { tour: false }, catering: { catering: false },
+  }
+  for (const type of REQUIRED_COMPONENT_TYPES) assert.deepEqual(evaluateVisaRules([V(rule)], { ...all, ...flip[type] }).map(v => v.missing), [type], type)
+  const both = evaluateVisaRules([V([{ type: 'flight' }, { type: 'hotel_makkah' }])], none)
+  assert.match(both[0]!.message, /Visa Uji mewajibkan tiket pesawat/); assert.match(both[1]!.message, /hotel makkah/)
+  assert.deepEqual(evaluateVisaRules([V([{ type: 'hotel_makkah' }, { type: 'hotel_madinah' }])], { ...none, hotelCities: ['makkah'] }).map(v => v.missing), ['hotel_madinah'], 'hotel kota lain tidak memenuhi')
+  assert.equal(evaluateVisaRules([V(rule), V(rule)], none).length, REQUIRED_COMPONENT_TYPES.length, 'dua jamaah dengan visa sama = satu aturan')
 })
 await t('aturan visa: transport — tanpa filter = apa pun; kategori ATAU rute tertentu; kategori lain tidak memenuhi', () => {
   const air = { tripId: 'trip-air', category: 'airport' }
   const city = { tripId: 'trip-city', category: 'intercity' }
-  assert.deepEqual(evaluateVisaRules([V([{ type: 'transport' }])], { ...none, transports: [city] }, false), [])
-  assert.equal(evaluateVisaRules([V([{ type: 'transport' }])], none, false).length, 1)
-  assert.deepEqual(evaluateVisaRules([V([{ type: 'transport', categories: ['airport'] }])], { ...none, transports: [air] }, false), [])
-  const miss = evaluateVisaRules([V([{ type: 'transport', categories: ['airport'] }])], { ...none, transports: [city] }, false)
+  assert.deepEqual(evaluateVisaRules([V([{ type: 'transport' }])], { ...none, transports: [city] }), [])
+  assert.equal(evaluateVisaRules([V([{ type: 'transport' }])], none).length, 1)
+  assert.deepEqual(evaluateVisaRules([V([{ type: 'transport', categories: ['airport'] }])], { ...none, transports: [air] }), [])
+  const miss = evaluateVisaRules([V([{ type: 'transport', categories: ['airport'] }])], { ...none, transports: [city] })
   assert.equal(miss.length, 1); assert.match(miss[0]!.message, /kategori airport/)
-  assert.deepEqual(evaluateVisaRules([V([{ type: 'transport', tripIds: ['00000000-0000-4000-8000-000000000001'] }])], { ...none, transports: [{ tripId: '00000000-0000-4000-8000-000000000001', category: '' }] }, false), [])
+  assert.deepEqual(evaluateVisaRules([V([{ type: 'transport', tripIds: ['00000000-0000-4000-8000-000000000001'] }])], { ...none, transports: [{ tripId: '00000000-0000-4000-8000-000000000001', category: '' }] }), [])
 })
-await t('aturan visa: data tersimpan tak sah (string lama, tipe liar, duplikat) → SELALU error, walau dilonggarkan (fail-closed)', () => {
-  for (const bad of [['hotel'], [{ type: 'kapal' }], [{ type: 'hotel' }, { type: 'hotel' }], 'x', null, [{ type: 'transport', extra: 1 }]]) {
+await t('aturan visa: data tersimpan tak sah (string lama, tipe liar / tipe lama "hotel", duplikat, kunci liar) → SELALU pelanggaran "rule" (fail-closed)', () => {
+  for (const bad of [['hotel'], [{ type: 'hotel' }], [{ type: 'kapal' }], [{ type: 'flight' }, { type: 'flight' }], 'x', null, [{ type: 'transport', extra: 1 }], [{ type: 'muthowif', categories: ['x'] }]]) {
     assert.equal(parseRequiredComponents(bad).invalid, true, JSON.stringify(bad))
-    const v = evaluateVisaRules([V(bad)], { flight: true, hotel: true, transports: [] }, true)
-    assert.deepEqual(v.map(x => [x.missing, x.severity]), [['rule', 'error']], JSON.stringify(bad))
+    assert.deepEqual(evaluateVisaRules([V(bad)], all).map(x => x.missing), ['rule'], JSON.stringify(bad))
   }
-  assert.equal(visaRequiredComponentsSchema.safeParse([{ type: 'flight' }, { type: 'transport', categories: ['airport'] }]).success, true)
+  assert.equal(visaRequiredComponentsSchema.safeParse([{ type: 'flight' }, { type: 'transport', categories: ['airport'] }, { type: 'catering' }]).success, true)
+  assert.equal(visaRequiredComponentsSchema.safeParse(REQUIRED_COMPONENT_TYPES.map(type => ({ type }))).success, true, 'ketujuh tipe sekaligus sah')
 })
-await t('model penjualan visa: turunan aturan — kosong = Visa only, urutan label tetap tiket → hotel → transport', () => {
-  assert.deepEqual(visaSalesModel([]), { plus: false, label: 'Visa only' })
-  assert.deepEqual(visaSalesModel([{ type: 'hotel' }, { type: 'flight' }]), { plus: true, label: 'Visa plus tiket + hotel' })
-  assert.deepEqual(visaSalesModel([{ type: 'transport', categories: ['airport'] }]), { plus: true, label: 'Visa plus transport' })
-  assert.equal(visaSalesModel([{ type: 'transport' }, { type: 'hotel' }, { type: 'flight' }]).label, 'Visa plus tiket + hotel + transport')
+await t('model penjualan visa: turunan aturan — kosong = Visa only; label jumlah komponen; bagian berurutan tetap (urutan daftar tipe)', () => {
+  assert.deepEqual(visaSalesModel([]), { plus: false, label: 'Visa only', parts: [] })
+  assert.deepEqual(visaSalesModel([{ type: 'hotel_madinah' }, { type: 'flight' }]), { plus: true, label: 'Visa plus · 2 komponen', parts: ['Tiket pesawat', 'Hotel Madinah'] })
+  assert.deepEqual(visaSalesModel([{ type: 'transport', categories: ['airport'] }]), { plus: true, label: 'Visa plus · 1 komponen', parts: ['Transportasi'] })
+  assert.deepEqual(visaSalesModel([{ type: 'catering' }, { type: 'muthowif' }, { type: 'tour' }]).parts, ['Muthowif', 'Wisata (Paket Ziarah)', 'Katering'])
   // Data tersimpan tak sah dibaca sebagai "tanpa aturan" + invalid — pemanggil (rules.ts) yang menolak, label tidak boleh menyamarkannya jadi aman.
   assert.equal(parseRequiredComponents('flight').invalid, true)
 })
 
-await t('validator: item tiket & paket ketat (kunci pilihan liar ditolak, penumpang/orang ≥ 1); kebijakan pelanggan hanya satu kolom', () => {
+await t('validator: item tiket & paket ketat (kunci pilihan liar ditolak, penumpang/orang ≥ 1)', () => {
   const base = { departureDate: '2090-06-01', returnDate: '2090-06-10', season: 'regular', bookingType: 'individual', totalPilgrims: 1, pilgrims: [{ fieldValues: {} }] }
   const item = (i: unknown) => createBookingSchema.innerType().safeParse({ ...base, items: [i] }).success
   const id = '00000000-0000-4000-8000-000000000001'
@@ -92,8 +96,6 @@ await t('validator: item tiket & paket ketat (kunci pilihan liar ditolak, penump
   assert.equal(item({ itemType: 'flight', flightScheduleId: id, departureDate: '2090-06-01', numPassengers: 0 }), false)
   assert.equal(item({ itemType: 'package', packageId: id, departureDate: '2090-06-01', numPeople: 2, choices: { hotelMakkahScheduleId: id } }), true)
   assert.equal(item({ itemType: 'package', packageId: id, departureDate: '2090-06-01', numPeople: 2, choices: { price: 1 } }), false)
-  assert.equal(customerPolicySchema.safeParse({ allowVisaWithoutBundle: true }).success, true)
-  assert.equal(customerPolicySchema.safeParse({ allowVisaWithoutBundle: true, role: 'superadmin' }).success, false)
 })
 
 // ── dunia uji ────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -132,7 +134,7 @@ async function quotaOn(tripId: string) {
 const air = await quotaOn(tripAir.id)
 const city = await quotaOn(tripCity.id)
 
-const visa = await prisma.visaProduct.create({ data: { name: `${tag} Visa Reguler`, visaType: 'Umroh', requiredComponents: [{ type: 'flight' }, { type: 'hotel' }] } })
+const visa = await prisma.visaProduct.create({ data: { name: `${tag} Visa Reguler`, visaType: 'Umroh', requiredComponents: [{ type: 'flight' }, { type: 'hotel_makkah' }] } })
 await addCost('visa', visa.id, 'visa', 1_000_000); await repriceOwner('visa', visa.id)
 const visaAir = await prisma.visaProduct.create({ data: { name: `${tag} Visa Transport`, visaType: 'Umroh', requiredComponents: [{ type: 'transport', categories: ['airport'] }] } })
 
@@ -282,35 +284,52 @@ await t('INVOICE: paket terurai satu baris per komponen (label = komponen, qty =
 
 // ── aturan visa dengan konteks DB ────────────────────────────────────────────────────────────────────────────────────
 const visaPilgrim = (id = visa.id) => [{ fieldValues: {}, visaProductId: id }]
-await t('ATURAN (DB): visa wajib tiket+hotel — tanpa apa-apa → 2 error; tiket+hotel mandiri → lolos; Paket berisi keduanya → lolos (P: paket memenuhi aturan)', async () => {
-  assert.deepEqual((await visaRuleViolations(data([], visaPilgrim()), user.id, [], [])).map(v => [v.missing, v.severity]), [['flight', 'error'], ['hotel', 'error']])
+await t('ATURAN (DB): visa wajib tiket+hotel Makkah — tanpa apa-apa → 2 pelanggaran; tiket+hotel Makkah mandiri → lolos; Paket berisi keduanya → lolos (P: paket memenuhi aturan)', async () => {
+  assert.deepEqual((await visaRuleViolations(data([], visaPilgrim()), [], [])).map(v => v.missing), ['flight', 'hotel_makkah'])
   const items: CreateBookingInput['items'] = [
     { itemType: 'flight', flightScheduleId: flight.id, departureDate: '2090-06-05', numPassengers: 1 },
     { itemType: 'hotel', hotelRoomScheduleId: room.id, checkIn: '2090-06-05', checkOut: '2090-06-08', nights: 3, numRooms: 1 },
   ]
-  assert.deepEqual(await visaRuleViolations(data(items, visaPilgrim()), user.id, [], []), [])
-  assert.deepEqual(await visaRuleViolations(data([pkgItem()], visaPilgrim()), user.id, [await resolvePackageItem(pkgItem())], []), [])
+  assert.deepEqual(await visaRuleViolations(data(items, visaPilgrim()), [], []), [])
+  assert.deepEqual(await visaRuleViolations(data([pkgItem()], visaPilgrim()), [await resolvePackageItem(pkgItem())], []), [])
 })
 await t('ATURAN (DB): Paket dengan tiket user_choice yang BELUM dipilih tidak memenuhi; transport kategori airport dipenuhi trip bandara, bukan antarkota (item atau isi paket)', async () => {
   const noFlight = await prisma.package.create({ data: { name: `${tag} Paket Tanpa Tiket`, flightMode: 'user_choice', flightRouteId: route.id, hotelMakkahMode: 'included', includedHotelMakkahScheduleId: room.id, includedHotelMakkahNights: 2, includedHotelMakkahOccupancy: 4, includedHotelMakkahPrice: 1_200_000 } })
   await repriceOwner('package', noFlight.id)
   const item = { ...pkgItem(), packageId: noFlight.id }
   const r = await resolvePackageItem(item)
-  assert.deepEqual((await visaRuleViolations(data([item], visaPilgrim()), user.id, [r], [])).map(v => v.missing), ['flight'])
+  assert.deepEqual((await visaRuleViolations(data([item], visaPilgrim()), [r], [])).map(v => v.missing), ['flight'])
   const chosen = { ...item, choices: { flightScheduleId: flight.id } }
-  assert.deepEqual(await visaRuleViolations(data([chosen], visaPilgrim()), user.id, [await resolvePackageItem(chosen)], []), [])
+  assert.deepEqual(await visaRuleViolations(data([chosen], visaPilgrim()), [await resolvePackageItem(chosen)], []), [])
 
   const tr = (quotaId: string) => ({ itemType: 'transport' as const, transportQuotaId: quotaId, numPassengers: 1 })
-  assert.deepEqual(await visaRuleViolations(data([tr(air.quota.id)], visaPilgrim(visaAir.id)), user.id, [], []), [])
-  assert.equal((await visaRuleViolations(data([tr(city.quota.id)], visaPilgrim(visaAir.id)), user.id, [], [])).length, 1)
-  assert.deepEqual(await visaRuleViolations(data([pkgItem()], visaPilgrim(visaAir.id)), user.id, [await resolvePackageItem(pkgItem())], []), [], 'kendaraan paket = trip bandara')
+  assert.deepEqual(await visaRuleViolations(data([tr(air.quota.id)], visaPilgrim(visaAir.id)), [], []), [])
+  assert.equal((await visaRuleViolations(data([tr(city.quota.id)], visaPilgrim(visaAir.id)), [], [])).length, 1)
+  assert.deepEqual(await visaRuleViolations(data([pkgItem()], visaPilgrim(visaAir.id)), [await resolvePackageItem(pkgItem())], []), [], 'kendaraan paket = trip bandara')
 })
-await t('ATURAN (DB): pelonggaran dibaca dari akun PEMESAN — allowVisaWithoutBundle → peringatan, booking lolos; visa paket sendiri tidak dievaluasi', async () => {
-  await prisma.user.update({ where: { id: user.id }, data: { allowVisaWithoutBundle: true } })
-  const v = await visaRuleViolations(data([], visaPilgrim()), user.id, [], [])
-  assert.deepEqual([v.length, blockingViolations(v).length], [2, 0])
-  await prisma.user.update({ where: { id: user.id }, data: { allowVisaWithoutBundle: false } })
-  assert.deepEqual(await visaRuleViolations(data([pkgItem()]), user.id, [await resolvePackageItem(pkgItem())], []), [], 'jamaah tanpa visa sendiri: tak ada aturan yang dievaluasi')
+await t('ATURAN (DB): berlaku untuk SEMUA pelanggan (tak ada pelonggaran); visa included paket tidak dievaluasi; kota hotel dari DB', async () => {
+  assert.ok(!('allowVisaWithoutBundle' in (await prisma.user.findUniqueOrThrow({ where: { id: user.id } }))), 'kolom pengecualian sudah dibuang')
+  assert.deepEqual(await visaRuleViolations(data([pkgItem()]), [await resolvePackageItem(pkgItem())], []), [], 'jamaah tanpa visa sendiri: tak ada aturan yang dievaluasi')
+  const madinah = await prisma.visaProduct.create({ data: { name: `${tag} Visa Madinah`, visaType: 'Umroh', requiredComponents: [{ type: 'hotel_madinah' }] } })
+  const hotelItem = { itemType: 'hotel' as const, hotelRoomScheduleId: room.id, checkIn: '2090-06-05', checkOut: '2090-06-08', nights: 3, numRooms: 1 }
+  assert.deepEqual((await bookingCoverage(data([hotelItem]), [], [])).hotelCities, ['makkah'])
+  assert.deepEqual((await visaRuleViolations(data([hotelItem], visaPilgrim(madinah.id)), [], [])).map(v => v.missing), ['hotel_madinah'], 'hotel Makkah tidak memenuhi wajib hotel Madinah')
+  // Paket Hemat: hotel Madinah user_choice → baru dihitung setelah dipilih.
+  assert.deepEqual((await visaRuleViolations(data([pkgItem()], visaPilgrim(madinah.id)), [await resolvePackageItem(pkgItem())], [])).map(v => v.missing), ['hotel_madinah'])
+  const chosen = pkgItem({ choices: { hotelMadinahScheduleId: room2.id } })
+  assert.deepEqual(await visaRuleViolations(data([chosen], visaPilgrim(madinah.id)), [await resolvePackageItem(chosen)], []), [])
+})
+await t('ATURAN (DB): muthowif / katering / wisata — item mandiri memenuhi; muthowif paket hanya bila DITAGIH (included berharga > 0)', async () => {
+  const cov = (items: unknown[], pkgs: PackageResolved[] = []) => bookingCoverage(data(items as CreateBookingInput['items']), pkgs, [])
+  const empty = await cov([])
+  assert.deepEqual([empty.muthowif, empty.catering, empty.tour], [false, false, false])
+  const items = await cov([{ itemType: 'muthowif' }, { itemType: 'catering' }, { itemType: 'tourPackage' }])
+  assert.deepEqual([items.muthowif, items.catering, items.tour], [true, true, true])
+  await prisma.package.update({ where: { id: pkg.id }, data: { muthowifMode: 'included', includedMuthowifPrice: 0 } })
+  assert.equal((await cov([pkgItem()], [await resolvePackageItem(pkgItem())])).muthowif, false, 'muthowif "termasuk" Rp0 tidak ditagih = tidak memenuhi')
+  await prisma.package.update({ where: { id: pkg.id }, data: { includedMuthowifPrice: 300_000 } })
+  assert.equal((await cov([pkgItem()], [await resolvePackageItem(pkgItem())])).muthowif, true, 'kontrol positif')
+  await prisma.package.update({ where: { id: pkg.id }, data: { muthowifMode: 'none', includedMuthowifPrice: null } })
 })
 
 await t('SEC-124: hotel Paket Ziarah hanya memenuhi aturan bila BENAR-BENAR ditagih — id hotel sembarang / tanpa jumlah kamar / mode bukan pilihan tidak dihitung', async () => {
@@ -318,20 +337,20 @@ await t('SEC-124: hotel Paket Ziarah hanya memenuhi aturan bila BENAR-BENAR dita
   await prisma.tourPackageHotelOption.create({ data: { tourPackageId: tour.id, hotelRoomScheduleId: room.id, nights: 2 } })
   const tours = [{ breakdown: await computeTourPackageBreakdown(tour.id), transportQuotaId: null }]
   const tp = (o: Record<string, unknown>) => data([{ itemType: 'tourPackage', tourPackageId: tour.id, numPeople: 1, ...o } as CreateBookingInput['items'][number]])
-  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: '00000000-0000-4000-8000-0000000000ff' }), [], tours)).hotel, false, 'id palsu tanpa kamar')
-  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: room.id }), [], tours)).hotel, false, 'opsi sah tapi tanpa jumlah kamar = tak ditagih')
-  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: '00000000-0000-4000-8000-0000000000ff', chosenHotelNumRooms: 1 }), [], tours)).hotel, false, 'di luar daftar opsi')
-  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: room.id, chosenHotelNumRooms: 1 }), [], tours)).hotel, true, 'kontrol positif')
+  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: '00000000-0000-4000-8000-0000000000ff' }), [], tours)).hotelCities.includes('makkah'), false, 'id palsu tanpa kamar')
+  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: room.id }), [], tours)).hotelCities.includes('makkah'), false, 'opsi sah tapi tanpa jumlah kamar = tak ditagih')
+  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: '00000000-0000-4000-8000-0000000000ff', chosenHotelNumRooms: 1 }), [], tours)).hotelCities.includes('makkah'), false, 'di luar daftar opsi')
+  assert.equal((await bookingCoverage(tp({ chosenHotelRoomScheduleId: room.id, chosenHotelNumRooms: 1 }), [], tours)).hotelCities.includes('makkah'), true, 'kontrol positif')
 })
 await t('SEC-125: visa yang DIPILIH di Paket dievaluasi aturannya (paket serba-pilihan); visa INCLUDED paket tidak', async () => {
   const choice = await prisma.package.create({ data: { name: `${tag} Paket Pilihan`, visaMode: 'user_choice', flightMode: 'user_choice', flightRouteId: route.id } })
   await prisma.packageVisaOption.create({ data: { packageId: choice.id, visaProductId: visa.id } })
   await addCost('package', choice.id, 'layanan', 100_000); await repriceOwner('package', choice.id)
   const item = { ...pkgItem(), packageId: choice.id, choices: { visaProductId: visa.id } }
-  const v = await visaRuleViolations(data([item]), user.id, [await resolvePackageItem(item)], [])
-  assert.deepEqual(v.map(x => x.missing).sort(), ['flight', 'hotel'])
+  const v = await visaRuleViolations(data([item]), [await resolvePackageItem(item)], [])
+  assert.deepEqual(v.map(x => x.missing).sort(), ['flight', 'hotel_makkah'])
   const withFlight = { ...item, choices: { visaProductId: visa.id, flightScheduleId: flight.id } }
-  assert.deepEqual((await visaRuleViolations(data([withFlight]), user.id, [await resolvePackageItem(withFlight)], [])).map(x => x.missing), ['hotel'])
+  assert.deepEqual((await visaRuleViolations(data([withFlight]), [await resolvePackageItem(withFlight)], [])).map(x => x.missing), ['hotel_makkah'])
 })
 await t('SEC-126: tanggal menginap paket harus di periode harga hotel paket (included maupun pilihan); kontrol positif di dalam periode', async () => {
   const hotelOnly = await prisma.package.create({ data: { name: `${tag} Paket Hotel`, hotelMakkahMode: 'included', includedHotelMakkahScheduleId: room.id, includedHotelMakkahNights: 3, includedHotelMakkahOccupancy: 2, includedHotelMakkahPrice: 1_200_000 } })
@@ -347,27 +366,13 @@ await t('SEC-127: visa paket (included) yang NONAKTIF → 422, tak bisa menjadi 
   await prisma.visaProduct.update({ where: { id: visa.id }, data: { isActive: true } })
 })
 
-// ── kebijakan pelanggan ──────────────────────────────────────────────────────────────────────────────────────────────
-await t('KEBIJAKAN PELANGGAN: ubah → kolom + satu jejak audit (sebelum/sesudah, staf); nilai sama → tanpa jejak; staf/akun terhapus ditolak', async () => {
-  const audits = () => prisma.settingsAudit.findMany({ where: { entity: 'customer_policy', entityId: user.id } })
-  const r1 = await setCustomerBookingPolicy(user.id, { allowVisaWithoutBundle: true }, staff.id)
-  assert.deepEqual(r1, { ok: true, changed: true })
-  assert.equal((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).allowVisaWithoutBundle, true)
-  const a = await audits()
-  assert.equal(a.length, 1); assert.deepEqual([a[0]!.staffId, a[0]!.summary], [staff.id, { allowVisaWithoutBundle: [false, true] }])
-  assert.deepEqual(await setCustomerBookingPolicy(user.id, { allowVisaWithoutBundle: true }, staff.id), { ok: true, changed: false })
-  assert.equal((await audits()).length, 1)
-  assert.equal((await setCustomerBookingPolicy(staff.id, { allowVisaWithoutBundle: true }, staff.id)).ok, false, 'bukan pelanggan → 404')
-  await setCustomerBookingPolicy(user.id, { allowVisaWithoutBundle: false }, staff.id)
-})
-
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 await t('PENJAGA: aturan visa hanya di rules.ts (validator tak lagi membaca requiredComponents); route POST menolak 422 + meta.violations SEBELUM transaksi; kursi tiket/paket ditahan', () => {
   assert.ok(!read('lib/validators/booking.ts').includes('requiredComponents'), 'superRefine lama dihapus')
   const route = read('app/api/v1/bookings/route.ts')
   const engine = read('lib/booking/create.ts')
   assert.ok(route.indexOf('prepareBooking(') < route.indexOf('prisma.$transaction'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
-  assert.match(engine, /if \(blocking\.length > 0\) throw new RuleViolationError\(blocking\)/)
+  assert.match(engine, /if \(violations\.length > 0\) throw new RuleViolationError\(violations\)/)
   assert.match(route, /status: 422/); assert.match(route, /meta: \{ violations: error\.violations \}/)
   assert.match(engine, /case 'flight':\s*\n\s*await reserveFlightQuota\(tx, item\.flightScheduleId, item\.numPassengers\)/)
   assert.match(engine, /if \(r\.flightScheduleId\) await reserveFlightQuota\(tx, r\.flightScheduleId, item\.numPeople\)/)
@@ -376,7 +381,9 @@ await t('PENJAGA: aturan visa hanya di rules.ts (validator tak lagi membaca requ
   }
   for (const f of ['lib/booking/expire.ts', 'app/api/v1/bookings/[id]/route.ts', 'lib/payments/process.ts']) assert.match(read(f), /flights: true, packages: true/, f)
   assert.match(read('app/api/v1/admin/products/visa/[id]/route.ts'), /requiredComponents: visaRequiredComponentsSchema\.optional\(\)/)
-  assert.match(read('app/api/v1/admin/customers/[id]/policy/route.ts'), /requireCustomerManage\(\)/)
+  for (const f of ['app/api/v1/admin/customers/[id]/policy/route.ts', 'lib/customers/bookingPolicy.ts']) assert.ok(!existsSync(join(root, f)), `${f} dihapus`)
+  const hits = execSync("grep -rln 'allowVisaWithoutBundle' app lib components || true", { cwd: root, encoding: 'utf8' }).trim()
+  assert.equal(hits, '', 'tak ada sisa pengecualian per pelanggan')
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -398,9 +405,6 @@ await prisma.productCost.deleteMany({ where: { vendorId: vendor.id } })
 await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } })
 await sweepOrphanPricePoints()
 await prisma.vendor.delete({ where: { id: vendor.id } })
-await prisma.$executeRawUnsafe(`ALTER TABLE settings_audit DISABLE TRIGGER settings_audit_no_change`) // pembersihan uji: jejak append-only milik akun uji
-await prisma.settingsAudit.deleteMany({ where: { entity: 'customer_policy', entityId: user.id } })
-await prisma.$executeRawUnsafe(`ALTER TABLE settings_audit ENABLE TRIGGER settings_audit_no_change`)
 await prisma.user.deleteMany({ where: { id: { in: [user.id, staff.id] } } })
 await prisma.pricingRule.deleteMany({})
 for (const r of savedRules) await prisma.pricingRule.create({ data: { productType: r.productType, defaultMarginPercent: r.defaultMarginPercent, roundingIncrement: r.roundingIncrement, warnBelowPercent: r.warnBelowPercent } })

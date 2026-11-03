@@ -12,8 +12,8 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { formatRupiah } from '@/lib/utils'
 import type { BookingRevisionInput } from '@/lib/validators/booking'
 import type { RevisionEditorState } from '@/lib/booking/revise'
-import { MODULE_LABEL, type Catalog, type ModuleKey } from '../../drafts/[id]/catalog'
-import { ItemRows, newRow, rowFromItem, rowToItem, type ItemRow } from '../../drafts/[id]/ItemRows'
+import type { Catalog, ModuleKey } from '../../drafts/[id]/catalog'
+import { ItemRows, rowForMissing, rowFromItem, rowToItem, type ItemRow } from '../../drafts/[id]/ItemRows'
 import { applyVisaRows, lockedMembers, syncVisaCounts, visaRowTotal, visaRowsFromSlots } from '../../drafts/[id]/visaRows'
 
 // Editor REVISI booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, R1): isi booking sekarang dimuat, beberapa perubahan sekaligus → pratinjau (mesin yang sama,
@@ -26,10 +26,9 @@ type Pilgrim = BookingRevisionInput['pilgrims'][number] & { position?: number; l
 type Change = { kind: string; label: string; detail?: string }
 type Preview = {
   lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>
-  totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; warnings: Violation[]; notices: string[]; itemTotals: number[]; pilgrimVisaTotals: number[]
+  totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; notices: string[]; itemTotals: number[]; pilgrimVisaTotals: number[]
 }
 
-const MISSING_MODULE: Record<string, ModuleKey> = { flight: 'flight', hotel: 'hotel', transport: 'transport' }
 const PREVIEW_DELAY_MS = 800
 /** Sidik isi editor (tanpa kunci baris acak) — penanda belum-disimpan. */
 const fingerprint = (rows: ItemRow[], ps: Pilgrim[], invoiceDate: string, dueDate: string) =>
@@ -183,7 +182,7 @@ export default function BookingRevisionPage({ params }: Props) {
             {error.violations.length > 0 && (
               <ul className="m-0 list-disc space-y-1 pl-5 text-admin-ink">
                 {error.violations.map((v, i) => (
-                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => changeRows([...rows, newRow(pilgrims.length, MISSING_MODULE[v.missing])])}>tambah baris {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
+                  <li key={i}>{v.message}{(() => { const add = rowForMissing(pilgrims.length, v.missing); return add && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => changeRows([...rows, add.row])}>tambah baris {add.label}</button></> })()}</li>
                 ))}
               </ul>
             )}
