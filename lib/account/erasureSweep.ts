@@ -6,11 +6,14 @@ import { deleteObjectsByPrefix } from '@/lib/storage/minio'
 // pengguna tak menahannya) dan `notify()` yang sedang terbang (menulis NotificationLog dengan penerima asli SESUDAH mengirim).
 // Baris BookingPilgrim tetap ada setelah anonimisasi, jadi awalan objek `pilgrims/<id>/` selalu diketahui dan bisa disapu kapan saja.
 
+/** Kolom NIK/paspor tersegel jamaah booking (docs/arsitektur-jamaah.md §5.3) — dikosongkan bersama `fieldValues` (penghapusan + penyapuan). */
+export const SEALED_PII_CLEARED = { nikHash: null, nikCipher: null, passportCountry: null, passportKeyHash: null, passportCipher: null, passportLast4: null } as const
+
 export type SweepDeps = { deleteByPrefix: (prefix: string) => Promise<number> }
 const defaultDeps: SweepDeps = { deleteByPrefix: (prefix) => deleteObjectsByPrefix(prefix) }
 export const SWEEP_CONCURRENCY = 5
 
-export type SweepResult = { prefixes: number; objects: number; documents: number; notificationLogs: number }
+export type SweepResult = { prefixes: number; objects: number; notificationLogs: number }
 
 const ERASED_EMAIL = /^deleted-[0-9a-f-]{36}@deleted\.invalid$/
 
@@ -36,18 +39,17 @@ export async function sweepErasedAccount(userId: string, deps: SweepDeps = defau
     objects += counts.reduce((a, b) => a + b, 0)
   }
 
-  const documents = (await prisma.document.deleteMany({ where: { bookingPilgrimId: { in: ids } } })).count
-  await prisma.bookingPilgrim.updateMany({ where: { id: { in: ids } }, data: { fieldValues: {}, userId: null } })
+  await prisma.bookingPilgrim.updateMany({ where: { id: { in: ids } }, data: { fieldValues: {}, userId: null, ...SEALED_PII_CLEARED } })
   // Log yang ditulis terlambat dengan penerima/isi asli: scrub ulang (baris dipertahankan untuk audit pengiriman).
   const notificationLogs = (await prisma.notificationLog.updateMany({
     where: { userId, NOT: { recipient: '[dihapus]' } },
     data: { recipient: '[dihapus]', messagePreview: null, error: null },
   })).count
 
-  return { prefixes: ids.length + 1, objects, documents, notificationLogs }
+  return { prefixes: ids.length + 1, objects, notificationLogs }
 }
 
-export type SweepSummary = { accounts: number; objects: number; documents: number; notificationLogs: number; failed: number }
+export type SweepSummary = { accounts: number; objects: number; notificationLogs: number; failed: number }
 
 /** Semua penghapusan yang selesai dalam `days` hari terakhir (jendela tempat tulis terlambat masuk akal). Per akun terisolasi: satu gagal tak menghentikan yang lain. */
 export async function sweepRecentErasures(days = 7, deps: SweepDeps = defaultDeps): Promise<SweepSummary> {
@@ -57,12 +59,12 @@ export async function sweepRecentErasures(days = 7, deps: SweepDeps = defaultDep
     select: { userId: true },
     distinct: ['userId'],
   })
-  const total: SweepSummary = { accounts: 0, objects: 0, documents: 0, notificationLogs: 0, failed: 0 }
+  const total: SweepSummary = { accounts: 0, objects: 0, notificationLogs: 0, failed: 0 }
   for (const { userId } of requests) {
     try {
       const r = await sweepErasedAccount(userId, deps)
       if (!r) continue
-      total.accounts++; total.objects += r.objects; total.documents += r.documents; total.notificationLogs += r.notificationLogs
+      total.accounts++; total.objects += r.objects; total.notificationLogs += r.notificationLogs
     } catch (e) {
       total.failed++
       console.error('[erasure-sweep] satu akun gagal disapu:', e instanceof Error ? e.name : e) // tanpa id/PII

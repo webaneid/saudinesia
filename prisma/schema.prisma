@@ -512,8 +512,9 @@ model ManifestFieldRequirement {
   // Peran sistem — OPSIONAL. Beberapa fitur (dashboard admin, pencocokan dokumen) tetap butuh
   // tahu field mana yang berperan "nama"/"nomor HP" TANPA hardcode fieldKey (yang bebas admin
   // atur) — lihat docs/arsitektur-manifest.md §4.
-  role String? // 'display_name' | 'whatsapp' | 'phone' | 'email' | 'passport_number' | null
+  role String? // pengikat ke atribut kartu jamaah — daftar tunggal MANIFEST_ROLES di lib/manifest/roles.ts (CHECK di DB); null = field bebas
 
+  @@unique([productType, productId, role], map: "manifest_field_requirements_role_key")
   @@index([productType, productId])
   @@map("manifest_field_requirements")
 }
@@ -794,6 +795,7 @@ model Booking {
   confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
 
   pilgrims       BookingPilgrim[]
+  tripDocuments  PilgrimDocument[]
   hotels         BookingHotel[]
   transports     BookingTransport[]
   flights        BookingFlight[]
@@ -850,15 +852,24 @@ model BookingPilgrim {
   savedPilgrimId String?
   identityId     String?
 
+  // NIK & nomor paspor snapshot — DISEGEL lewat lib/pii (docs/arsitektur-jamaah.md §5.3 butir 3); fieldValues hanya menyimpan samarannya.
+  // Disalin dari kartu saat ditautkan (ciphertext + indeks baris yang sama) atau disegel dari isian admin. Dikosongkan saat akun dihapus.
+  nikHash         String?
+  nikCipher       String?
+  passportCountry String?
+  passportKeyHash String?
+  passportCipher  String?
+  passportLast4   String?
+
   booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   user            User?            @relation("BookingPilgrimUser", fields: [userId], references: [id], onDelete: SetNull)
   savedPilgrim    SavedPilgrim?    @relation(fields: [savedPilgrimId], references: [id], onDelete: SetNull)
   identity        PilgrimIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
   visaApplication VisaApplication?
-  documents       Document[]
 
   @@index([bookingId])
   @@index([userId])
+  @@unique([bookingId, savedPilgrimId]) // satu kartu paling banyak satu jamaah per booking (NULL tak bentrok)
   @@index([savedPilgrimId])
   @@index([identityId])
   @@map("booking_pilgrims")
@@ -1002,6 +1013,8 @@ model DocumentType {
 model PilgrimDocument {
   id             String                @id @default(uuid())
   savedPilgrimId String
+  // Dokumen PER PERJALANAN (jenis `reusable = false`: tiket, reservasi) menempel ke booking; null = dokumen milik orang (paspor, KTP…) — Fase 7a.
+  bookingId      String?
   documentTypeId String
   label          String // label katalog saat diunggah, atau label bebas untuk jenis `other`
   referenceCode  String?
@@ -1020,11 +1033,13 @@ model PilgrimDocument {
   createdAt      DateTime              @default(now()) @db.Timestamptz(3)
 
   savedPilgrim SavedPilgrim @relation(fields: [savedPilgrimId], references: [id], onDelete: Restrict)
+  booking      Booking?     @relation(fields: [bookingId], references: [id], onDelete: Restrict)
   documentType DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
   reviewedBy   User?        @relation("PilgrimDocReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
   uploadedBy   User         @relation("PilgrimDocUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
 
   @@index([savedPilgrimId, documentTypeId])
+  @@index([bookingId, savedPilgrimId])
   @@index([documentTypeId])
   @@index([status, createdAt])
   @@index([reviewedById])
@@ -1095,20 +1110,6 @@ enum VisaStatus {
   @@map("visa_status")
 }
 
-model Document {
-  id               String   @id @default(uuid())
-  bookingPilgrimId String
-  docType          String
-  fileName         String
-  filePath         String
-  fileSizeBytes    Int?
-  uploadedAt       DateTime @default(now())
-
-  pilgrim BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
-
-  @@index([bookingPilgrimId])
-  @@map("documents")
-}
 
 // ─── BOOKING COMPONENTS ───────────────────────────────────────
 

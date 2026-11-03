@@ -167,16 +167,17 @@ await t('HARGA KHUSUS (R4): item tiket 10.000.000 → baris penyesuaian item (mo
   await i4(id)
 })
 
-await t('JAMAAH (R3): tambah jamaah + visa → baris visa baru; hapus jamaah BER-DOKUMEN → 422; hapus jamaah tanpa dokumen → visa di-void; ganti visa yang sudah diproses → 422', async () => {
+await t('JAMAAH (R3): tambah jamaah + visa → baris visa baru; hapus jamaah BERTAUT KARTU → 422; hapus jamaah tanpa dokumen → visa di-void; ganti visa yang sudah diproses → 422', async () => {
   const id = await published(DRAFT)
   const input = await base(id)
   input.pilgrims.push({ visaProductId: visa.id })
   await reviseBooking(id, input, staff.id)
   assert.equal(await prisma.bookingPilgrim.count({ where: { bookingId: id } }), 3)
   const ps = await prisma.bookingPilgrim.findMany({ where: { bookingId: id }, orderBy: { id: 'asc' }, include: { visaApplication: true } })
-  await prisma.document.create({ data: { bookingPilgrimId: ps[0]!.id, docType: 'passport', fileName: 'p.pdf', filePath: `pilgrims/${ps[0]!.id}/passport/x.pdf` } })
+  const card = await prisma.savedPilgrim.create({ data: { ownerId: customer.id, fullName: 'Uji Revisi', nameKey: 'uji revisi' } })
+  await prisma.bookingPilgrim.update({ where: { id: ps[0]!.id }, data: { savedPilgrimId: card.id } }) // (uji) setara linkCard
   const rm1 = await base(id); rm1.pilgrims = rm1.pilgrims.filter(p => p.pilgrimId !== ps[0]!.id)
-  await assert.rejects(() => reviseBooking(id, rm1, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /dokumen/.test(e.message))
+  await assert.rejects(() => reviseBooking(id, rm1, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /data jamaah tersimpan/.test(e.message))
   const rm2 = await base(id); rm2.pilgrims = rm2.pilgrims.filter(p => p.pilgrimId !== ps[1]!.id)
   await reviseBooking(id, rm2, staff.id)
   assert.equal(await prisma.bookingPilgrim.count({ where: { id: ps[1]!.id } }), 0)
@@ -278,12 +279,10 @@ await t('PASCA-AUDIT: kelebihan bayar & bukti menunggu → PENGINGAT (tak menola
   const drift = await base(id); drift.reason = 'uji'; drift.items.push({ item: TR })
   await assert.rejects(() => reviseBooking(id, drift, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 409 && /rincian harga/.test(e.message))
 })
-await t('PASCA-AUDIT (Medium): unggah dokumen menulis baris di bawah kunci FOR SHARE booking dan MEMBUANG berkas bila jamaah sudah dihapus revisi (tak ada objek yatim)', () => {
-  const up = read('app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts')
-  const post = up.slice(up.indexOf('export async function POST'))
-  assert.match(post, /FOR SHARE/)
-  assert.ok(post.indexOf('FOR SHARE') < post.indexOf('tx.document.create'), 'kunci sebelum menulis baris')
-  assert.match(post, /if \(!doc\) \{\s*await deleteObject\(objectKey\)/)
+await t('PASCA-AUDIT: hapus jamaah lewat revisi memeriksa ulang tautan kartu di baris itu sendiri (balapan dengan linkCard → 409, bukan terhapus diam-diam)', () => {
+  const src = read('lib/booking/revise.ts')
+  assert.match(src, /bookingPilgrim\.deleteMany\(\{ where: \{ id: pg\.id, savedPilgrimId: null \} \}\)/)
+  assert.doesNotMatch(src, /bookingPilgrim\.delete\(/)
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -311,11 +310,12 @@ await t('PENJAGA: setiap pembacaan price_snapshots menyaring baris void (`voided
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
-await prisma.document.deleteMany({ where: { pilgrim: { booking: { userId: customer.id } } } })
+await prisma.bookingPilgrim.updateMany({ where: { booking: { userId: customer.id } }, data: { savedPilgrimId: null } })
 await prisma.payment.deleteMany({ where: { booking: { userId: customer.id } } })
 await prisma.refund.deleteMany({ where: { booking: { userId: customer.id } } })
 await prisma.booking.deleteMany({ where: { userId: customer.id } })
 await prisma.visaProduct.deleteMany({ where: { name: { startsWith: tag } } })
+await prisma.savedPilgrim.deleteMany({ where: { ownerId: customer.id } })
 await prisma.transportQuota.deleteMany({ where: { pricingId: pricing.id } })
 await prisma.transportPricing.delete({ where: { id: pricing.id } })
 await prisma.transportTrip.delete({ where: { id: trip.id } })

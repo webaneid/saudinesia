@@ -5,7 +5,7 @@
 // PENGAMAN: menulis banyak baris → assertThrowawayDb() menolak jalan kecuali database uji lokal.
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { compare, hash } from 'bcryptjs'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
@@ -54,7 +54,7 @@ function fakeDeps(opts: { failKeys?: boolean } = {}) {
 
 type Seeded = {
   userId: string; email: string; number: string; googleSub: string; addressId: string
-  bookingId: string; pilgrimId: string; docKeys: string[]; requestId: string
+  bookingId: string; pilgrimId: string; cardId: string; docKeys: string[]; requestId: string
   paymentId: string; refundId: string; adjustmentId: string; costActualId: string; vendorCostId: string; transportId: string; consentIds: string[]; crossPilgrimId: string
 }
 
@@ -96,8 +96,15 @@ async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 
     include: { pilgrims: true },
   })
   const pilgrim = booking.pilgrims[0]!
-  const docKeys = [`pilgrims/${pilgrim.id}/passport/${uniq()}-scan.pdf`, `pilgrims/${pilgrim.id}/ktp/${uniq()}-ktp.jpg`]
-  for (const k of docKeys) await prisma.document.create({ data: { bookingPilgrimId: pilgrim.id, docType: 'passport', fileName: 'scan.pdf', filePath: k } })
+  // Fase 7a: dokumen jamaah = dokumen kartu tertaut (milik orang, bookingId null) + dokumen per perjalanan (bookingId); jamaah booking menyimpan
+  // NIK/paspor TERSEGEL (nilai uji tiruan — bentuk saja, bukan ciphertext sungguhan).
+  const card = await prisma.savedPilgrim.create({ data: { ownerId: user.id, fullName: 'Budi Santoso', nameKey: 'budi santoso' } })
+  const docType = await prisma.documentType.findUniqueOrThrow({ where: { key: 'passport' } })
+  const docKeys = [`saved-pilgrims/${user.id}/${card.id}/passport/${uniq()}.pdf`, `saved-pilgrims/${user.id}/${card.id}/ticket/${uniq()}.webp`]
+  for (const [i, objectKey] of docKeys.entries()) {
+    await prisma.pilgrimDocument.create({ data: { savedPilgrimId: card.id, bookingId: i === 1 ? booking.id : null, documentTypeId: docType.id, label: 'Paspor', objectKey, mimeType: 'application/pdf', sizeBytes: 10, sha256: 'a'.repeat(64), uploadedById: user.id } })
+  }
+  await prisma.bookingPilgrim.update({ where: { id: pilgrim.id }, data: { savedPilgrimId: card.id, nikHash: 'h-uji', nikCipher: 'c-uji', passportCountry: 'ID', passportKeyHash: 'ph-uji', passportCipher: 'pc-uji', passportLast4: '4567' } })
   await prisma.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaType: 'umrah', notes: 'paspor kedua atas nama istri', rejectionReason: 'foto buram, hubungi 0812-RAHASIA' } })
   const payment = await prisma.payment.create({ data: { bookingId: booking.id, amount: new Decimal(12_500_000), method: 'transfer', status: 'confirmed', buktiTransferPath: `payments/${uniq()}/bukti.jpg`, notes: 'nama pengirim beda: Ahmad 0812-RAHASIA' } })
   const refund = await prisma.refund.create({ data: { bookingId: booking.id, amount: new Decimal(500_000), reason: 'selisih', notes: 'transfer ke rekening istri BCA 123456', status: opts.refundStatus ?? 'paid' } })
@@ -127,7 +134,7 @@ async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 
 
   const request = await prisma.accountDeletionRequest.create({ data: { userId: user.id, requestedAt: new Date(Date.now() - (opts.freshRequest ? 1 : MIN_WAIT_HOURS + 28) * 3_600_000) } })
   return {
-    userId: user.id, email, number, googleSub, addressId: address.id, bookingId: booking.id, pilgrimId: pilgrim.id, docKeys, requestId: request.id,
+    userId: user.id, email, number, googleSub, addressId: address.id, bookingId: booking.id, pilgrimId: pilgrim.id, cardId: card.id, docKeys, requestId: request.id,
     paymentId: payment.id, refundId: refund.id, adjustmentId: adjustment.id, costActualId: costActual.id, vendorCostId: vendorForCost.id, transportId: transport.id, consentIds: user.consentLogs.map((c) => c.id), crossPilgrimId: otherBooking.pilgrims[0]!.id,
   }
 }
@@ -143,7 +150,7 @@ await t('pratinjau: jamaah dengan booking selesai → layak, jumlah yang akan di
   const p = await previewDeletion(s.requestId)
   assert.equal(p.kind, 'ok'); if (p.kind !== 'ok') return
   assert.equal(p.eligible, true); assert.deepEqual(p.blockers, [])
-  assert.deepEqual(p.willErase, { bookings: 1, pilgrims: 1, documents: 2, visaApplications: 1, notifications: 2, authTokens: 1, address: 1, savedPilgrims: 0, identities: 0, pilgrimDocuments: 0 })
+  assert.deepEqual(p.willErase, { bookings: 1, pilgrims: 1, visaApplications: 1, notifications: 2, authTokens: 1, address: 1, savedPilgrims: 1, identities: 0, pilgrimDocuments: 2 })
 })
 
 await t('blocker: booking masih berjalan (tiap status non-terminal) menolak; kontrol positif: completed/cancelled lolos', async () => {
@@ -208,8 +215,9 @@ await t('anonimisasi lengkap: tiap kolom PII hilang / diacak; ringkasan tercatat
   assert.equal(await prisma.address.findUnique({ where: { id: s.addressId } }), null, 'alamat rumah dihapus')
   // manifest & dokumen
   const p = await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: s.pilgrimId } })
-  assert.deepEqual(p.fieldValues, {}); assert.equal(p.userId, null)
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 0)
+  assert.deepEqual(p.fieldValues, {}); assert.equal(p.userId, null); assert.equal(p.savedPilgrimId, null)
+  for (const k of ['nikHash', 'nikCipher', 'passportCountry', 'passportKeyHash', 'passportCipher', 'passportLast4'] as const) assert.equal(p[k], null, `kolom tersegel ${k} dikosongkan`)
+  assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: s.cardId } }), 0)
   assert.deepEqual([...f.deleted].sort(), [...s.docKeys].sort(), 'tepat berkas milik jamaah yang dihapus dari penyimpanan')
   // teks bebas
   assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id: s.bookingId } })).notes, null)
@@ -233,7 +241,7 @@ await t('anonimisasi lengkap: tiap kolom PII hilang / diacak; ringkasan tercatat
   // permintaan: selesai + ringkasan tanpa PII
   const req = await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: s.requestId } })
   assert.equal(req.status, 'completed'); assert.equal(req.processedById, admin.id); assert.equal(req.note, 'sesuai permintaan'); assert.ok(req.processedAt)
-  assert.deepEqual(req.erasureSummary, { bookings: 1, pilgrims: 1, documents: 2, visaApplications: 1, notifications: 2, authTokens: 1, address: 1, savedPilgrims: 0, identities: 0, pilgrimDocuments: 0 })
+  assert.deepEqual(req.erasureSummary, { bookings: 1, pilgrims: 1, visaApplications: 1, notifications: 2, authTokens: 1, address: 1, savedPilgrims: 1, identities: 0, pilgrimDocuments: 2 })
   assert.doesNotMatch(JSON.stringify(req), new RegExp(s.email.split('@')[0]!), 'email asli tak boleh muncul di catatan permintaan')
 })
 
@@ -260,7 +268,8 @@ await t('akun LAIN tak tersentuh (kontrol): data pengguna kedua utuh seluruhnya'
   await executeDeletion(gone.requestId, admin.id, { confirmEmail: gone.email }, fakeDeps().deps)
   const u = await prisma.user.findUniqueOrThrow({ where: { id: keep.userId } })
   assert.equal(u.email, keep.email); assert.equal(u.fullName, 'Budi Santoso'); assert.equal(u.verifiedWhatsapp, keep.number); assert.equal(u.isActive, true); assert.ok(u.addressId)
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: keep.pilgrimId } }), 2)
+  assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: keep.cardId } }), 2)
+  assert.equal((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: keep.pilgrimId } })).nikCipher, 'c-uji', 'kolom tersegel akun lain utuh')
   assert.notDeepEqual((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: keep.pilgrimId } })).fieldValues, {})
   assert.equal((await prisma.notificationLog.findMany({ where: { userId: keep.userId } })).every((l) => l.recipient !== '[dihapus]'), true)
   assert.equal(await prisma.authToken.count({ where: { userId: keep.userId } }), 1)
@@ -302,7 +311,7 @@ await t('penyimpanan gagal → DB TIDAK berubah, permintaan tetap pending, tak a
   assert.equal(!r.ok && r.reason, 'storage_failed')
   const u = await prisma.user.findUniqueOrThrow({ where: { id: s.userId } })
   assert.equal(u.email, s.email); assert.equal(u.isActive, true)
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 2)
+  assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: s.cardId } }), 2)
   assert.equal((await prisma.accountDeletionRequest.findUniqueOrThrow({ where: { id: s.requestId } })).status, 'pending')
   assert.equal(f.mails.length, 0)
   f.setFailing(false)
@@ -394,7 +403,7 @@ await t('balapan (DEL-03): tolak/tarik vs eksekusi bersamaan → tepat satu mena
     const u = await prisma.user.findUniqueOrThrow({ where: { id: s.userId } })
     if (!exec.ok) {
       assert.equal(f.deleted.length, 0, 'berkas tak boleh terhapus bila eksekusi kalah'); assert.equal(u.email, s.email); assert.equal(u.isActive, true)
-      assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 2)
+      assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: s.cardId } }), 2)
     } else {
       assert.equal(u.email, `deleted-${s.userId}@deleted.invalid`)
     }
@@ -431,10 +440,9 @@ await t('permintaan pending ke-2 pada akun yang SUDAH dianonimkan → not_pendin
 
 console.log('== penyapuan tulis terlambat (SEC-57) ==')
 
-/** Menyuntikkan tulis TERLAMBAT pada akun yang sudah dianonimkan: baris dokumen, manifest berisi PII, dan log notifikasi dengan penerima asli. */
+/** Menyuntikkan tulis TERLAMBAT pada akun yang sudah dianonimkan: manifest berisi PII (+ NIK tersegel), dan log notifikasi dengan penerima asli. */
 async function injectLateWrites(s: Seeded, email: string) {
-  await prisma.document.create({ data: { bookingPilgrimId: s.pilgrimId, docType: 'passport', fileName: 'terlambat.pdf', filePath: `pilgrims/${s.pilgrimId}/passport/terlambat.pdf` } })
-  await prisma.bookingPilgrim.update({ where: { id: s.pilgrimId }, data: { fieldValues: { fullName: 'Muncul Lagi', passportNumber: 'LATE999' } } })
+  await prisma.bookingPilgrim.update({ where: { id: s.pilgrimId }, data: { fieldValues: { fullName: 'Muncul Lagi', passportNumber: 'LATE999' }, nikHash: 'h-late', nikCipher: 'c-late' } })
   await prisma.notificationLog.create({ data: { userId: s.userId, channel: 'email', type: 'booking_submitted', recipient: email, messagePreview: 'isi asli', status: 'sent' } })
 }
 
@@ -445,10 +453,10 @@ await t('penyapuan: tulis terlambat (dokumen, manifest, log dengan penerima asli
   await injectLateWrites(s, s.email)
   const r = await sweepErasedAccount(s.userId, { deleteByPrefix: f.deps.deleteByPrefix })
   assert.ok(r, 'akun terhapus harus disapu')
-  assert.equal(r!.documents, 1); assert.equal(r!.notificationLogs, 1); assert.equal(r!.prefixes, 2) // awalan jamaah booking + awalan dokumen kartu akun
+  assert.equal(r!.notificationLogs, 1); assert.equal(r!.prefixes, 2) // awalan jamaah booking + awalan dokumen kartu akun
   assert.ok(f.prefixes.includes(`saved-pilgrims/${s.userId}/`), 'awalan dokumen kartu jamaah tersimpan akun ikut disapu')
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 0)
-  assert.deepEqual((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: s.pilgrimId } })).fieldValues, {})
+  const bp = await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: s.pilgrimId } })
+  assert.deepEqual(bp.fieldValues, {}); assert.equal(bp.nikCipher, null); assert.equal(bp.nikHash, null)
   for (const l of await prisma.notificationLog.findMany({ where: { userId: s.userId } })) { assert.equal(l.recipient, '[dihapus]'); assert.equal(l.messagePreview, null) }
 })
 
@@ -457,7 +465,7 @@ await t('penyapuan KONSERVATIF: akun hidup, atau berformat terhapus tanpa permin
   await injectLateWrites(live, live.email) // data yang SAH pada akun hidup — tidak boleh tersapu
   assert.equal(await sweepErasedAccount(live.userId, { deleteByPrefix: f.deps.deleteByPrefix }), null)
   assert.equal(f.prefixes.length, 0, 'tidak ada panggilan penyimpanan untuk akun hidup')
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: live.pilgrimId } }), 3)
+  assert.equal((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: live.pilgrimId } })).nikCipher, 'c-late')
   assert.notDeepEqual((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: live.pilgrimId } })).fieldValues, {})
   // berformat email terhapus tetapi TANPA permintaan selesai (mis. manipulasi manual) → tetap ditolak
   const fake = await seed()
@@ -485,10 +493,11 @@ await t('sweepRecentErasures: hanya completed dalam jendela; terlalu lama / pend
   try { sum = await sweepRecentErasures(7, deps) } finally { console.error = origErr }
   assert.ok(seen.includes(`pilgrims/${recent.pilgrimId}/`), 'akun baru disapu')
   assert.ok(!seen.includes(`pilgrims/${old.pilgrimId}/`), 'akun di luar jendela diabaikan'); assert.ok(!seen.includes(`pilgrims/${pending.pilgrimId}/`), 'pending diabaikan')
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: recent.pilgrimId } }), 0)
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: old.pilgrimId } }), 1, 'di luar jendela: tak disentuh')
+  const nikOf = async (id: string) => (await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id } })).nikCipher
+  assert.equal(await nikOf(recent.pilgrimId), null)
+  assert.equal(await nikOf(old.pilgrimId), 'c-late', 'di luar jendela: tak disentuh')
   assert.ok(sum.failed >= 1, 'kegagalan dihitung'); assert.ok(sum.accounts >= 1, 'yang lain tetap diproses')
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: flaky.pilgrimId } }), 1, 'akun yang gagal tak setengah-tersapu menghapus baris tanpa objek')
+  assert.equal(await nikOf(flaky.pilgrimId), 'c-late', 'akun yang gagal tidak setengah-tersapu (dicoba lagi utuh pada sapuan berikutnya)')
 })
 
 await t('S57-LOW1: kegagalan PARSIAL removeObjects dilempar (bukan dilaporkan sukses) tanpa membocorkan nama kunci; semua berhasil → jumlah; daftar kosong → 0', async () => {
@@ -500,18 +509,18 @@ await t('S57-LOW1: kegagalan PARSIAL removeObjects dilempar (bukan dilaporkan su
   await assert.rejects(deleteObjectsByPrefix(prefix, { list: async () => { throw new Error('list gagal') }, remove: async () => [] }), /list gagal/)
 })
 
-await t('S57-LOW1 end-to-end: removeObjects parsial gagal → baris Document TIDAK dihapus (berkas masih ada, jangan dilaporkan bersih) dan dihitung gagal', async () => {
+await t('S57-LOW1 end-to-end: removeObjects parsial gagal → sapuan dilempar (jangan dilaporkan bersih), dihitung gagal, dan dituntaskan sesudah pulih', async () => {
   const s = await seed(); const f = fakeDeps()
   assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, f.deps)).ok, true)
   await injectLateWrites(s, s.email)
   const failing = { deleteByPrefix: (prefix: string) => deleteObjectsByPrefix(prefix, { list: async () => [`${prefix}terlambat.pdf`], remove: async () => [{ Code: 'AccessDenied' }] }) }
   await assert.rejects(sweepErasedAccount(s.userId, failing), /gagal dihapus/)
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 1, 'baris Document harus tetap ada agar sapuan berikutnya mencoba lagi')
+  assert.equal((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: s.pilgrimId } })).nikCipher, 'c-late', 'sapuan gagal tidak setengah jalan')
   const origErr = console.error; console.error = () => {}
   try { const sum = await sweepRecentErasures(7, failing); assert.ok(sum.failed >= 1) } finally { console.error = origErr }
   // kontrol: setelah penyimpanan pulih, sapuan berikutnya menuntaskan
   assert.ok(await sweepErasedAccount(s.userId, { deleteByPrefix: async () => 1 }))
-  assert.equal(await prisma.document.count({ where: { bookingPilgrimId: s.pilgrimId } }), 0)
+  assert.equal((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: s.pilgrimId } })).nikCipher, null)
 })
 
 await t('S57-LOW3: sapuan memakai paralelisme TERBATAS (≤5 sekaligus, >1 membuktikan paralel) untuk booking dengan banyak jamaah', async () => {
@@ -570,10 +579,9 @@ await t('route pengajuan: hanya pilgrim + rate limit + lewat submit/withdraw; GE
 })
 
 await t('SEC-57 penjaga sumber: unggah dokumen memeriksa ulang pemilik sebelum menulis baris; cron penyapuan terdaftar; penyapuan memeriksa akun terhapus + completed', async () => {
-  const up = readFileSync('app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts', 'utf8')
-  const post = up.slice(up.indexOf('export async function POST'))
-  const guard = post.search(/if \(!owner\?\.isActive\) \{[\s\S]*?deleteObject\(objectKey\)[\s\S]*?return NextResponse\.json\(err\('Unauthorized'\), \{ status: 401 \}\)/)
-  assert.ok(guard > 0 && guard < post.indexOf('document.create'), 'pemilik nonaktif → buang berkas + 401, SEBELUM document.create') // baris ditulis lewat tx.document.create di bawah kunci booking (Fase 6b)
+  // Rute dokumen booking lama (tabel `documents`) dihapus di Fase 7a; unggahan apa pun lewat lib/documents/service.ts yang mengunci baris pengguna
+  // pemilik (akun nonaktif/terhapus ditolak di dalam kunci yang sama dengan penghapusan — diuji scripts/test-pilgrim-documents.ts).
+  assert.ok(!existsSync('app/api/v1/pilgrims'), 'rute dokumen booking lama tidak boleh kembali')
   assert.match(readFileSync('instrumentation-node.ts', 'utf8'), /startErasureSweepJob\(\)/)
   const sw = readFileSync('lib/account/erasureSweep.ts', 'utf8')
   assert.ok(sw.includes('ERASED_EMAIL.test') && sw.includes("status: 'completed'"))
@@ -586,7 +594,7 @@ await t('DOKUMEN KARTU JAMAAH (Fase 4): berkas dihapus SEBELUM commit (gagal →
   const ktp = await prisma.documentType.findUniqueOrThrow({ where: { key: 'ktp' } })
   for (const objectKey of keys) await prisma.pilgrimDocument.create({ data: { savedPilgrimId: card.id, documentTypeId: ktp.id, label: 'KTP', objectKey, mimeType: 'image/webp', sizeBytes: 10, sha256: 'c'.repeat(64), uploadedById: s.userId } })
   const p = await previewDeletion(s.requestId)
-  assert.equal(p.kind === 'ok' && p.willErase.pilgrimDocuments, 2)
+  assert.equal(p.kind === 'ok' && p.willErase.pilgrimDocuments, 4) // + 2 dokumen kartu tertaut dari seed()
   const down = fakeDeps({ failKeys: true })
   assert.deepEqual(await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, down.deps), { ok: false, reason: 'storage_failed' })
   assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: card.id } }), 2, 'penyimpanan gagal → baris tetap (rollback)')
@@ -638,7 +646,7 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')
-  for (const must of ['eraseSavedPilgrimsOf(tx, userId)', 'pilgrimDocument.findMany', 'bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'document.deleteMany', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany']) assert.ok(src.includes(must), must)
+  for (const must of ['eraseSavedPilgrimsOf(tx, userId)', 'pilgrimDocument.findMany', 'bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'SEALED_PII_CLEARED', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany']) assert.ok(src.includes(must), must)
   // Kolom teks bebas yang diketahui pada baris yang DIPERTAHANKAN harus dibersihkan (DEL-01).
   for (const col of ['pickupDetail', 'dropoffDetail']) assert.ok(src.includes(col), col)
   assert.ok(/notes: null/.test(src))
@@ -650,6 +658,9 @@ const bookingIds = (await prisma.booking.findMany({ where: { userId: { in: ids }
 await prisma.payment.deleteMany({ where: { bookingId: { in: bookingIds } } })
 await prisma.refund.deleteMany({ where: { bookingId: { in: bookingIds } } })
 await prisma.notificationLog.deleteMany({ where: { userId: { in: ids } } })
+await prisma.pilgrimDocument.deleteMany({ where: { savedPilgrim: { ownerId: { in: ids } } } }) // FK Restrict ke booking (dokumen perjalanan) dan kartu
+await prisma.bookingPilgrim.updateMany({ where: { bookingId: { in: bookingIds } }, data: { savedPilgrimId: null } })
+await prisma.savedPilgrim.deleteMany({ where: { ownerId: { in: ids } } })
 await prisma.booking.deleteMany({ where: { id: { in: bookingIds } } }) // cascade: snapshot, penyesuaian, pengeluaran aktual
 await prisma.vendor.deleteMany({ where: { name: { startsWith: 'Vendor Hapus ' } } })
 if (chain.pricing) { await prisma.transportQuota.deleteMany({ where: { pricingId: chain.pricing } }); await prisma.transportPricing.delete({ where: { id: chain.pricing } }); await prisma.transportTrip.delete({ where: { id: chain.trip! } }); await prisma.transportVehicle.delete({ where: { id: chain.vehicle! } }) }

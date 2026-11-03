@@ -13,7 +13,8 @@ import { minioDocumentStorage, newDocumentKey, removeObjectsQuietly, type Docume
 // - Urutan kunci sama dengan layanan kartu: baris pemilik FOR SHARE (penghapusan akun menunggu) → baris kartu FOR UPDATE (hapus kartu dan
 //   unggahan lain pada kartu yang sama berurutan). Berkas diunggah SEBELUM transaksi; bila transaksi menolak, berkas baru dibuang.
 // - Jenis `allowMultiple = false`: unggahan baru MENGGANTI berkas jenis itu (baris lama dihapus, objek lama dihapus sesudah commit — K12).
-// - Fase 4 hanya jenis `reusable` (milik orang); dokumen per perjalanan (tiket/reservasi) diunggah per booking mulai Fase 7.
+// - Dua cakupan: kartu (`bookingId` null — jenis `reusable`: paspor, KTP…) dan PERJALANAN (`bookingId` = booking yang menautkan kartu ini —
+//   jenis non-reusable: tiket, reservasi; Fase 7a). Cakupan perjalanan hanya bila jamaah booking itu memang tertaut ke kartu (dicek di dalam kunci).
 
 export const MAX_DOCUMENTS_PER_CARD = 30
 export const PREVIEW_TTL_SECONDS = 900
@@ -70,18 +71,22 @@ class Abort extends Error {
   constructor(readonly result: DocServiceError) { super(result.error) }
 }
 
-/** Jenis yang bisa diunggah ke kartu (aktif + milik orang), urut katalog. */
-export function uploadableTypes(): Promise<DocumentTypeOption[]> {
-  return prisma.documentType.findMany({ where: { isActive: true, reusable: true }, select: typeSelect, orderBy: [{ order: 'asc' }, { label: 'asc' }, { id: 'asc' }] })
+/** Cakupan dokumen: kartu (milik orang) atau satu perjalanan (booking yang menautkan kartu). */
+export type DocScope = { bookingId: string | null }
+const CARD_SCOPE: DocScope = { bookingId: null }
+
+/** Jenis yang bisa diunggah di cakupan itu (aktif; milik orang untuk kartu, per perjalanan untuk booking), urut katalog. */
+export function uploadableTypes(scope: DocScope = CARD_SCOPE): Promise<DocumentTypeOption[]> {
+  return prisma.documentType.findMany({ where: { isActive: true, reusable: scope.bookingId === null }, select: typeSelect, orderBy: [{ order: 'asc' }, { label: 'asc' }, { id: 'asc' }] })
 }
 
 /** Dokumen kartu milik `ownerId`; `null` = bukan haknya / kartu tidak ada (404 yang sama). */
-export async function listCardDocuments(actor: Actor, ownerId: string, cardId: string): Promise<PilgrimDocumentView[] | null> {
+export async function listCardDocuments(actor: Actor, ownerId: string, cardId: string, scope: DocScope = CARD_SCOPE): Promise<PilgrimDocumentView[] | null> {
   if (!allowed(actor, ownerId)) return null
   const card = await prisma.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: { id: true } })
   if (!card) return null
   const rows = await prisma.pilgrimDocument.findMany({
-    where: { savedPilgrimId: cardId }, select: docSelect,
+    where: { savedPilgrimId: cardId, bookingId: scope.bookingId }, select: docSelect,
     orderBy: [{ documentType: { order: 'asc' } }, { createdAt: 'asc' }, { id: 'asc' }],
   })
   return rows.map(toView)
@@ -101,6 +106,18 @@ async function lockCard(tx: Prisma.TransactionClient, actor: Actor, ownerId: str
   const card = rows[0]
   if (!card) throw new Abort(notFound())
   if (card.archivedAt) throw new Abort({ ok: false, status: 409, error: 'Data jamaah ini diarsipkan — pulihkan dulu sebelum mengubah dokumennya' })
+}
+
+/** Cakupan perjalanan: ada jamaah booking `bookingId` (bukan draf, milik `ownerId`) yang tertaut ke kartu — dikunci FOR SHARE supaya lepas-tautan
+ *  (lib/pilgrims/bookingLink.ts, FOR UPDATE) menunggu unggahan ini dan sebaliknya. */
+async function lockTripScope(tx: Prisma.TransactionClient, ownerId: string, cardId: string, scope: DocScope): Promise<void> {
+  if (scope.bookingId === null) return
+  // $queryRaw: Prisma ORM tidak punya SELECT ... FOR SHARE.
+  const rows = await tx.$queryRaw<{ id: string }[]>`
+    SELECT bp."id" FROM "booking_pilgrims" bp JOIN "bookings" b ON b."id" = bp."bookingId"
+    WHERE bp."bookingId" = ${scope.bookingId} AND bp."savedPilgrimId" = ${cardId} AND b."userId" = ${ownerId} AND b."status" <> 'draft'
+    FOR SHARE OF bp`
+  if (rows.length === 0) throw new Abort(notFound())
 }
 
 type Checked = { label: string; referenceCode: string | null; issuedAt: CalendarDate | null; expiresAt: CalendarDate | null }
@@ -131,11 +148,11 @@ export function checkUploadFields(type: DocumentTypeOption, f: DocumentUploadFie
 }
 
 export function createDocumentService(storage: DocumentStorage = minioDocumentStorage) {
-  async function upload(actor: Actor, ownerId: string, cardId: string, fields: DocumentUploadFields, file: Buffer): Promise<{ ok: true; document: PilgrimDocumentView } | DocServiceError> {
+  async function upload(actor: Actor, ownerId: string, cardId: string, fields: DocumentUploadFields, file: Buffer, scope: DocScope = CARD_SCOPE): Promise<{ ok: true; document: PilgrimDocumentView } | DocServiceError> {
     if (!allowed(actor, ownerId)) return notFound()
     const limited = await rateLimited(actor)
     if (limited) return limited
-    const type = await prisma.documentType.findFirst({ where: { id: fields.documentTypeId, isActive: true, reusable: true }, select: typeSelect })
+    const type = await prisma.documentType.findFirst({ where: { id: fields.documentTypeId, isActive: true, reusable: scope.bookingId === null }, select: typeSelect })
     if (!type) return bad('Jenis dokumen tidak tersedia', 'documentTypeId')
     const checked = checkUploadFields(type, fields)
     if ('ok' in checked) return checked
@@ -160,8 +177,9 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
     try {
       const row = await prisma.$transaction(async (tx) => {
         await lockCard(tx, actor, ownerId, cardId)
+        await lockTripScope(tx, ownerId, cardId, scope)
         if (!type.allowMultiple) {
-          const old = await tx.pilgrimDocument.findMany({ where: { savedPilgrimId: cardId, documentTypeId: type.id }, select: { id: true, objectKey: true } })
+          const old = await tx.pilgrimDocument.findMany({ where: { savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: type.id }, select: { id: true, objectKey: true } })
           replaced = old.map(o => o.objectKey)
           if (old.length > 0) await tx.pilgrimDocument.deleteMany({ where: { id: { in: old.map(o => o.id) } } })
         }
@@ -170,7 +188,7 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
         }
         return tx.pilgrimDocument.create({
           data: {
-            savedPilgrimId: cardId, documentTypeId: type.id, label: checked.label, referenceCode: checked.referenceCode,
+            savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: type.id, label: checked.label, referenceCode: checked.referenceCode,
             objectKey: key, mimeType: prepared.mimeType, sizeBytes: prepared.sizeBytes, sha256: prepared.sha256,
             issuedAt: checked.issuedAt ? dbDateOf(checked.issuedAt) : null, expiresAt: checked.expiresAt ? dbDateOf(checked.expiresAt) : null,
             uploadedById: actor.userId,
@@ -189,14 +207,15 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
     }
   }
 
-  async function remove(actor: Actor, ownerId: string, cardId: string, docId: string): Promise<{ ok: true } | DocServiceError> {
+  async function remove(actor: Actor, ownerId: string, cardId: string, docId: string, scope: DocScope = CARD_SCOPE): Promise<{ ok: true } | DocServiceError> {
     if (!allowed(actor, ownerId)) return notFound()
     const limited = await rateLimited(actor)
     if (limited) return limited
     try {
       const key = await prisma.$transaction(async (tx) => {
         await lockCard(tx, actor, ownerId, cardId)
-        const doc = await tx.pilgrimDocument.findFirst({ where: { id: docId, savedPilgrimId: cardId }, select: { objectKey: true } })
+        await lockTripScope(tx, ownerId, cardId, scope)
+        const doc = await tx.pilgrimDocument.findFirst({ where: { id: docId, savedPilgrimId: cardId, bookingId: scope.bookingId }, select: { objectKey: true } })
         if (!doc) throw new Abort({ ok: false, status: 404, error: 'Dokumen tidak ditemukan' })
         await tx.pilgrimDocument.delete({ where: { id: docId } })
         return doc.objectKey
@@ -210,10 +229,10 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
   }
 
   /** URL presigned 15 menit untuk melihat satu dokumen — hanya pemilik kartu atau staf. Bucket tetap privat. */
-  async function previewUrl(actor: Actor, ownerId: string, cardId: string, docId: string): Promise<{ ok: true; url: string; mimeType: string } | DocServiceError> {
+  async function previewUrl(actor: Actor, ownerId: string, cardId: string, docId: string, scope: DocScope = CARD_SCOPE): Promise<{ ok: true; url: string; mimeType: string } | DocServiceError> {
     if (!allowed(actor, ownerId)) return notFound()
     const doc = await prisma.pilgrimDocument.findFirst({
-      where: { id: docId, savedPilgrimId: cardId, savedPilgrim: { ownerId } }, select: { objectKey: true, mimeType: true },
+      where: { id: docId, savedPilgrimId: cardId, bookingId: scope.bookingId, savedPilgrim: { ownerId } }, select: { objectKey: true, mimeType: true },
     })
     if (!doc) return { ok: false, status: 404, error: 'Dokumen tidak ditemukan' }
     try {
