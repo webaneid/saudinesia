@@ -119,6 +119,36 @@ jobs:
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.11.4-alpine caddy validate --config /etc/caddy/Caddyfile
 
+      # Batas body sungguhan (SEC-211, scripts/test-body-limit.ts mengunci isinya): Caddyfile production di depan "web" palsu
+      # yang membaca seluruh body. JSON > 1 MB ditolak, unggahan 2 MB lolos, unggahan > 8 MB ditolak, `..` tak meminjam 8 MB.
+      - name: Uji batas body Caddy
+        run: |
+          docker network create bodylimit
+          docker run -d --name web --network bodylimit python:3.12-alpine python -c "
+          import http.server as h
+          class H(h.BaseHTTPRequestHandler):
+              def do_POST(s):
+                  s.rfile.read(int(s.headers.get('Content-Length') or 0)); s.send_response(200); s.end_headers(); s.wfile.write(b'ok')
+              do_PATCH = do_POST
+          h.HTTPServer(('', 3000), H).serve_forever()"
+          docker run -d --name edge --network bodylimit -p 8080:8080 \
+            -e APP_DOMAIN=http://app.test:8080 -e FILES_DOMAIN=http://files.test:8081 \
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.4-alpine
+          head -c 2000000 /dev/zero > 2mb; head -c 9000000 /dev/zero > 9mb; head -c 500000 /dev/zero > small
+          for i in $(seq 1 30); do curl -s -o /dev/null -H 'Host: app.test' http://localhost:8080/ && break; sleep 1; done
+          code() { curl -s -o /dev/null -w '%{http_code}' -H 'Host: app.test' -X POST --data-binary "@$2" "http://localhost:8080$1"; }
+          expect() { got=$(code "$2" "$3"); echo "$1 $2 ($3) -> $got"; test "$got" = "$1"; }
+          expect 200 /api/v1/bookings small
+          expect 413 /api/v1/bookings 2mb
+          expect 413 /api/v1/admin/bookings/x/revise 2mb
+          expect 200 /api/v1/bookings/cm9x/payment/bukti 2mb
+          expect 200 /api/v1/account/pilgrims/cm9x/documents 2mb
+          expect 200 /api/v1/admin/media/hotel/cm9x 2mb
+          expect 413 /api/v1/bookings/cm9x/payment/bukti 9mb
+          expect 413 /api/v1/account/pilgrims/..%2F..%2Fbookings/documents 2mb
+          got=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: app.test' -X PATCH --data-binary @2mb http://localhost:8080/api/v1/admin/media/hotel/cm9x)
+          echo "PATCH media 2mb -> $got"; test "$got" = 413
+
       - name: Build image web (target runner) dan migrate
         run: |
           docker build -t "ghcr.io/$IMG_REPO/web:$IMG_TAG" --target runner .

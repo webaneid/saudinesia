@@ -156,6 +156,11 @@ Migrasi memuat perbaikan data: pembayaran **terkonfirmasi bernilai 0** diisi tot
 - **Rotasi kunci enkripsi**: pindahkan kunci lama ke `PII_ENCRYPTION_KEYS_RETIRED="<versi lama>:<hex lama>"`, isi `PII_ENCRYPTION_KEY` baru, naikkan `PII_ENCRYPTION_KEY_VERSION`, restart. Nilai lama tetap terbaca; enkripsi ulang bertahap memakai `needsReencrypt` (alat enkripsi ulang dibuat bersama tabel jamaah, Fase 2+). Kunci lama baru boleh dibuang setelah tidak ada ciphertext versi itu.
 - **`PII_INDEX_KEY` tidak dirotasi biasa**: menggantinya berarti menghitung ulang semua indeks NIK/paspor dari nilai terdekripsi (butuh alat khusus); lakukan hanya bila kunci bocor.
 
+## Catatan operasional: batas ukuran body di Caddy (SEC-211, 2026-11-03)
+- Body maksimum 1 MB untuk semua request ke aplikasi, KECUALI POST ke route unggah (`@unggah` di `Caddyfile`, 8 MB). Melebihi → 413 dari Caddy.
+- Menambah route unggah (multipart) = tambahkan jalurnya ke `path_regexp @unggah`; `scripts/test-body-limit.ts` merah bila lupa.
+- Alasannya: Zod 3 kehabisan memori pada array raksasa (GHSA-mrhx-c7xc-m3w5). Aplikasi JANGAN diekspos tanpa Caddy di depannya sampai migrasi ke zod ≥ 4.6.6.
+
 ## Catatan operasional: ekstensi `pg_trgm` (data jamaah Fase 8, migrasi `20261117090000_pilgrim_identity_warehouse`, 2026-11-03)
 - Migrasi menjalankan `CREATE EXTENSION IF NOT EXISTS pg_trgm` (indeks trigram pencarian nama di gudang identitas).
 - **Tidak perlu tindakan manual di production.** Image `postgres:16-alpine` (`docker-compose.prod.yml`, sama dengan CI) membawa modul contrib; `pg_trgm` adalah ekstensi *trusted* sejak PG13, jadi cukup pemilik database (tak harus superuser) — dan `POSTGRES_USER=saudinesia` buatan entrypoint memang superuser. Dibuktikan 2026-11-03 dengan peran `NOSUPERUSER` pemilik database sekali pakai di PG 16: `CREATE EXTENSION pg_trgm` berhasil (v1.6).
