@@ -8,7 +8,7 @@ import { writeBookingItems, type TourPackageResolved } from './lineItems'
 import type { ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { resolvePackageItem, type PackageResolved } from './packageItem'
 import { visaRuleViolations } from './ruleContext'
-import { blockingViolations, type RuleViolation } from './rules'
+import type { RuleViolation } from './rules'
 import { recomputeBookingDates } from './dates'
 import { ItemNotBookableError, tagItem } from './errors'
 
@@ -30,8 +30,6 @@ export type PreparedBooking = {
   data: BookingInput
   tours: TourPackageResolved[]
   packages: PackageResolved[]
-  /** Pelanggaran aturan yang DILONGGARKAN untuk pelanggan ini (peringatan, tidak menghalangi). */
-  warnings: RuleViolation[]
 }
 
 export class RuleViolationError extends Error {
@@ -39,10 +37,10 @@ export class RuleViolationError extends Error {
 }
 
 /**
- * Resolusi di LUAR transaksi (bacaan saja): kendaraan Paket Ziarah, isi Paket Umroh, aturan visa untuk pemilik booking.
- * Melempar `RuleViolationError` (aturan tak dilonggarkan) atau `ItemNotBookableError` (item tak dapat dijual).
+ * Resolusi di LUAR transaksi (bacaan saja): kendaraan Paket Ziarah, isi Paket Umroh, aturan visa (dari produk visa, sama untuk setiap pelanggan).
+ * Melempar `RuleViolationError` (komponen wajib visa tak ada) atau `ItemNotBookableError` (item tak dapat dijual).
  */
-export async function prepareBooking(data: BookingInput, ownerId: string, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
+export async function prepareBooking(data: BookingInput, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
   // Kendaraan Paket Ziarah: mode included → kuota kendaraan dicari dari tanggal tur; user_choice → kuota yang dikirim (docs/arsitektur-ziarah.md §12.6).
   const tours = await Promise.all(data.items.flatMap((i, index) => (i.itemType === 'tourPackage' ? [{ tp: i, index }] : [])).map(async ({ tp, index }) => { try {
     const breakdown = await computeTourPackageBreakdown(tp.tourPackageId)
@@ -62,11 +60,10 @@ export async function prepareBooking(data: BookingInput, ownerId: string, opts: 
   } catch (e) { return tagItem(e, index) } }))
   const packages = await Promise.all(data.items.flatMap((i, index) => (i.itemType === 'package' ? [resolvePackageItem(i).catch(e => tagItem(e, index))] : [])))
   // Revisi menulis SUBSET item; aturan visa dievaluasi atas isi booking LENGKAP lewat pemanggilan terpisah (rules: true) — bukan atas subset.
-  if (opts.rules === false) return { data, tours, packages, warnings: [] }
-  const violations = await visaRuleViolations(data, ownerId, packages, tours)
-  const blocking = blockingViolations(violations)
-  if (blocking.length > 0) throw new RuleViolationError(blocking)
-  return { data, tours, packages, warnings: violations.filter(v => v.severity === 'warning') }
+  if (opts.rules === false) return { data, tours, packages }
+  const violations = await visaRuleViolations(data, packages, tours)
+  if (violations.length > 0) throw new RuleViolationError(violations)
+  return { data, tours, packages }
 }
 
 /**

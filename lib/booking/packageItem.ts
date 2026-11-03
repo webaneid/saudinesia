@@ -24,8 +24,8 @@ export type PackageResolved = {
   visaProductId: string | null
   /** Pilihan yang BERLAKU (hanya komponen `user_choice`), disimpan di BookingPackage.choices. */
   choices: PackageChoices
-  /** Komponen yang dimuat paket — dipakai aturan visa (lib/booking/rules.ts). */
-  coverage: { flight: boolean; hotel: boolean; transport: { tripId: string; category: string } | null }
+  /** Komponen yang dimuat DAN ditagih paket — dipakai aturan visa (lib/booking/rules.ts); sama dengan syarat penagihan di `packageLines`. */
+  coverage: { flight: boolean; hotelMakkah: boolean; hotelMadinah: boolean; transport: { tripId: string; category: string } | null; muthowif: boolean; catering: boolean }
 }
 
 const notApplicable = (what: string) => new ItemNotBookableError(`Pilihan ${what} tidak berlaku untuk paket ini`)
@@ -91,8 +91,11 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
     throw new ItemNotBookableError('Visa paket ini tidak tersedia')
   }
 
-  const hasHotel = (b.hotelMakkahMode === 'included' && b.hotelMakkah != null) || (b.hotelMadinahMode === 'included' && b.hotelMadinah != null)
-    || choices.hotelMakkahScheduleId !== undefined || choices.hotelMadinahScheduleId !== undefined
+  const hotelMakkah = (b.hotelMakkahMode === 'included' && b.hotelMakkah != null) || choices.hotelMakkahScheduleId !== undefined
+  const hotelMadinah = (b.hotelMadinahMode === 'included' && b.hotelMadinah != null) || choices.hotelMadinahScheduleId !== undefined
+  // Muthowif/katering `included` dihitung hanya bila ikut ditagih (harga > 0) — syarat yang sama dengan `packageLines` (pola SEC-124).
+  const muthowif = b.muthowifMode === 'included' && (b.includedMuthowifPrice ?? 0) > 0
+  const catering = (b.cateringMode === 'included' && !!b.includedCateringOptionId && (b.includedCateringPrice ?? 0) > 0) || choices.cateringOptionId !== undefined
   const transport = b.transportMode === 'included' && b.includedTripId
     ? { tripId: b.includedTripId, category: b.includedTripCategory ?? '' }
     : choices.transportPricingId && b.transportTripId ? { tripId: b.transportTripId, category: b.tripCategory ?? '' } : null
@@ -102,7 +105,7 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
     flightScheduleId,
     visaProductId,
     choices,
-    coverage: { flight: flightScheduleId != null, hotel: hasHotel, transport },
+    coverage: { flight: flightScheduleId != null, hotelMakkah, hotelMadinah, transport, muthowif, catering },
   }
 }
 

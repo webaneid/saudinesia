@@ -20,7 +20,7 @@ export default function NewHajiPage() {
   return (
     <CreatePage
       icon={Star} title="Produk Haji Baru" backHref={`/${locale}/admin/products/haji`} backLabel="Daftar Produk Haji"
-      description="Harga dihitung otomatis dari Komponen Biaya (HPP + kurs + margin) — diisi di halaman produk setelah dibuat. Selama belum berharga, produk tidak dapat dipesan."
+      description="Harga dihitung otomatis dari Komponen Biaya (HPP + kurs + margin) — diisi di halaman produk setelah dibuat. Selama belum berharga, produk tidak dapat dipesan. Persyaratan dokumen bawaan (Paspor, KTP, KK, Sertifikat Vaksin) diisi otomatis dan bisa diubah di halaman produk."
       onSubmit={() => submit({
         ...form, year: +form.year, durationDays: +form.durationDays, totalQuota: +form.totalQuota,
         includes: form.includes.split('\n').map(s => s.trim()).filter(Boolean),

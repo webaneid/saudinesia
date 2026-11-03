@@ -52,7 +52,7 @@ export default async function AdminBookingDetail({ params }: Props) {
 
   // Kartu tertaut + kelengkapan dokumen per jamaah (docs/arsitektur-jamaah.md §5.3) — dihitung server, satu kueri per jenis data.
   const checklists = await bookingChecklists(id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(p => ({
-    id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
+    id: p.id, savedPilgrimId: p.savedPilgrimId,
     plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
   })))
   const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), true, session.userId)
@@ -280,7 +280,7 @@ export default async function AdminBookingDetail({ params }: Props) {
                   pilgrimId={p.id}
                   customerId={booking.userId}
                   linked={check?.card ?? null}
-                  checklist={(check?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state }))}
+                  checklist={(check?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state, sources: i.sources ?? [] }))}
                 />
 
                 <PilgrimReviewPanel
