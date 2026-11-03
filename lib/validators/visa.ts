@@ -22,3 +22,13 @@ export function parseRequiredComponents(json: unknown): { components: RequiredCo
   const parsed = visaRequiredComponentsSchema.safeParse(json)
   return parsed.success ? { components: parsed.data, invalid: false } : { components: [], invalid: true }
 }
+
+// Model penjualan visa (docs/rencana-visa-produk.md §2.1) — TURUNAN dari `requiredComponents`, bukan kolom sendiri:
+// kosong = "Visa only" (cukup lengkapi dokumen), berisi = "Visa plus …" (komponen itu wajib dibeli dari kita di booking yang sama).
+const COMPONENT_NOUN: Record<RequiredComponent['type'], string> = { flight: 'tiket', hotel: 'hotel', transport: 'transport' }
+const COMPONENT_ORDER: readonly RequiredComponent['type'][] = ['flight', 'hotel', 'transport']
+
+export function visaSalesModel(components: readonly RequiredComponent[]): { plus: boolean; label: string } {
+  const types = COMPONENT_ORDER.filter(t => components.some(c => c.type === t))
+  return types.length === 0 ? { plus: false, label: 'Visa only' } : { plus: true, label: `Visa plus ${types.map(t => COMPONENT_NOUN[t]).join(' + ')}` }
+}
