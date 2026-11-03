@@ -31,7 +31,7 @@ export async function POST(req: Request) {
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
 
     const parsed = customerCreateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const created = await createCustomer(parsed.data)
     if (!created.ok) return NextResponse.json(err(created.message), { status: created.status })

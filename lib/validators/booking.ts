@@ -97,7 +97,7 @@ export const createBookingSchema = z.object({
   // tetap ada lewat .max(2000) murni mencegah payload abuse.
   totalPilgrims: z.number().int().min(1).max(2000),
 
-  items: z.array(bookingItemSchema).default([]),
+  items: z.array(bookingItemSchema).max(50, 'Maksimal 50 item per booking').default([]),
 
   // docs/arsitektur-manifest.md §3 — fieldValues generik menggantikan kolom baku (fullName,
   // gender, email, phone/whatsapp+countryCode, dst.) — bentuk & wajib-tidaknya field ditentukan

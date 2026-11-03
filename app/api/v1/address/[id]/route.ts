@@ -39,7 +39,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id } = await params
     if (!(await canAccessAddress(session, id))) return NextResponse.json(err('Alamat tidak ditemukan'), { status: 404 })
     const parsed = addressSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const prepared = await prepareAddressData(parsed.data)
     if (!prepared.ok) return NextResponse.json(err(prepared.message), { status: 400 })

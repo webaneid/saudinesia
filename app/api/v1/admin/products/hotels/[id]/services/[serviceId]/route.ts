@@ -22,7 +22,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const session = await requireManager()
     const { serviceId } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     // Harga lewat mesin harga (audit + penulisan ganda ke kolom lama), bidang lain langsung.
     const { price, ...rest } = parsed.data

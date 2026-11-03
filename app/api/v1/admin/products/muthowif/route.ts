@@ -12,7 +12,7 @@ import { emptyToNull, richTextField } from '@/lib/validators/richText'
 const createSchema = z.object({
   name:          z.string().min(1),
   bio:           richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
-  languages:     z.array(z.string()).default([]),
+  languages:     z.array(z.string()).max(50).default([]),
   dailyCapacity: z.coerce.number().int().positive().default(50),
   isActive:      z.boolean().default(true),
 })
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   try {
     await requireManager()
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const m = await prisma.muthowif.create({ data: { ...parsed.data, bio: emptyToNull(parsed.data.bio) } })
     return NextResponse.json(ok(m), { status: 201 })
   } catch (e) {

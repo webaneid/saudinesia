@@ -13,7 +13,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const session = await requireBookingAdjust()
     const { id } = await params
     const parsed = bookingTotalSetSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const result = await setBookingTotal({ bookingId: id, ...parsed.data, byUserId: session.userId })
     return NextResponse.json(ok(result))
   } catch (e) {

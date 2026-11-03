@@ -13,7 +13,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const session = await requireBookingAdjust()
     const { id, adjId } = await params
     const parsed = adjustmentReverseSchema.safeParse(await req.json().catch(() => ({})))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const result = await reverseAdjustment({ bookingId: id, adjustmentId: adjId, reason: parsed.data.reason, byUserId: session.userId })
     return NextResponse.json(ok(result), { status: 201 })
   } catch (e) {

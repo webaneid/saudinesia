@@ -31,7 +31,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     const parsed = hajiProductUpdateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     // Kuota total tidak boleh di bawah yang sudah dipesan/ditahan — pendingQuota/bookedQuota milik mesin booking.
     if (parsed.data.totalQuota !== undefined) {

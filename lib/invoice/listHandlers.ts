@@ -26,7 +26,7 @@ const codeOf = (e: unknown) => (typeof e === 'object' && e !== null ? (e as { co
 export function createListHandlers<T>(opts: {
   tag: string; label: string; entity: AuditEntity
   /** Skema BUAT (bawaan boleh) dan skema UBAH (PUT = penggantian penuh; `isActive`/`sortOrder` wajib). */
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>; updateSchema: z.ZodType<T, z.ZodTypeDef, unknown>
+  schema: z.ZodType<T, unknown>; updateSchema: z.ZodType<T, unknown>
   adapter: ListAdapter<T>
   /** Disuntik hanya oleh uji (tanpa cookie); bawaan = `requireSuperAdmin`. */
   requireStaff?: () => Promise<{ userId: string }>
@@ -44,7 +44,7 @@ export function createListHandlers<T>(opts: {
   async function staff(action: string): Promise<{ staffId: string } | { response: NextResponse }> {
     try { return { staffId: (await requireStaff()).userId } } catch (e) { return { response: authFailureResponse(e, `${tag}/${action}`) } }
   }
-  const invalid = (parsed: { error: z.ZodError }) => NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+  const invalid = (parsed: { error: z.ZodError }) => NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
   return {
     async GET() {

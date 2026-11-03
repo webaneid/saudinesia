@@ -26,7 +26,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const session = await requireSuperAdmin()
     const { id } = await params
     const parsed = userAdminUpdateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const result = await updateUserByAdmin(id, parsed.data, session.userId)
     if (!result.ok) {

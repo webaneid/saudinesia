@@ -17,7 +17,7 @@ export async function POST(request: Request) {
       if (!h.allowed) return tooManyRequests(h.retryAfterSec)
     }
     const parsed = googleCompleteSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
 
     const identity = await readSignupCookie(await readSignupCookieValue())
     if (!identity) return NextResponse.json(err('Sesi pendaftaran Google berakhir. Mulai lagi dari tombol Google.'), { status: 401 })

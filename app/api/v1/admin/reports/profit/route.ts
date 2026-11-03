@@ -11,7 +11,7 @@ export async function GET(req: Request) {
   try {
     await requirePricingView()
     const parsed = profitQuerySchema.safeParse(Object.fromEntries(new URL(req.url).searchParams))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Parameter tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Parameter tidak valid'), { status: 400 })
     const q = parsed.data
     const def = defaultPeriod()
     const params = { from: q.from ?? def.from, to: q.to ?? def.to, scope: q.scope }

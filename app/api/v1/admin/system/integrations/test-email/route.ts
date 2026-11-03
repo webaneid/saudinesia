@@ -20,7 +20,7 @@ export async function POST(req: Request) {
     if (!rl.allowed) return tooManyRequests(rl.retryAfterSec)
 
     const parsed = bodySchema.safeParse(await req.json().catch(() => ({})))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     // Tanpa `to` → kirim ke email akun admin sendiri (kasus normal; tidak bisa dipakai mengirim ke pihak lain tanpa sengaja).
     const admin = await prisma.user.findUnique({ where: { id: session.userId }, select: { email: true, fullName: true } })

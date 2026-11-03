@@ -9,7 +9,7 @@ import { ok, err } from '@/lib/validators'
 export async function POST(request: Request) {
   try {
     const parsed = forgotPasswordSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
     const { email, locale } = parsed.data
 
     // Batas dihitung SEBELUM mencari akun dan sama untuk email yang ada maupun tidak — 429 tidak boleh membocorkan apakah email terdaftar.

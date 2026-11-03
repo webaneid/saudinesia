@@ -76,8 +76,7 @@ await t('aturan visa: data tersimpan tak sah (string lama, tipe liar, duplikat) 
   assert.equal(visaRequiredComponentsSchema.safeParse([{ type: 'flight' }, { type: 'transport', categories: ['airport'] }]).success, true)
 })
 await t('validator: item tiket & paket ketat (kunci pilihan liar ditolak, penumpang/orang ≥ 1); kebijakan pelanggan hanya satu kolom', () => {
-  const base = { departureDate: '2090-06-01', returnDate: '2090-06-10', season: 'regular', bookingType: 'individual', totalPilgrims: 1, pilgrims: [{ fieldValues: {} }] }
-  const item = (i: unknown) => createBookingSchema.innerType().safeParse({ ...base, items: [i] }).success
+  const item = (i: unknown) => createBookingSchema.shape.items.safeParse([i]).success
   const id = '00000000-0000-4000-8000-000000000001'
   assert.equal(item({ itemType: 'flight', flightScheduleId: id, departureDate: '2090-06-01', numPassengers: 1 }), true)
   assert.equal(item({ itemType: 'flight', flightScheduleId: id, departureDate: '2090-06-01', numPassengers: 0 }), false)

@@ -16,7 +16,7 @@ type Ctx = { params: Promise<{ id: string }> }
 type Options = { requireRead?: () => Promise<Pick<SessionPayload, 'role'>>; requireWrite?: () => Promise<unknown> }
 
 const bad = (message: string, status = 400) => NextResponse.json(err(message), { status })
-const firstIssue = (e: { errors: Array<{ message: string }> }) => e.errors[0]?.message ?? 'Data tidak valid'
+const firstIssue = (e: { issues: ReadonlyArray<{ message: string }> }) => e.issues[0]?.message ?? 'Data tidak valid'
 
 export function createVendorHandlers(options: Options = {}) {
   const requireRead = options.requireRead ?? requireManager

@@ -17,7 +17,7 @@ const updateSchema = z.object({
   name:        z.string().min(1).optional(),
   description: richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   priceLabel:  z.string().nullable().optional(),
-  highlights:  z.array(z.string()).optional(),
+  highlights:  z.array(z.string()).max(100).optional(),
   isActive:    z.boolean().optional(),
   isFeatured:  z.boolean().optional(),
 
@@ -122,7 +122,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const data: Record<string, unknown> = { ...parsed.data }
     if (parsed.data.description !== undefined) data.description = emptyToNull(parsed.data.description)

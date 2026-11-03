@@ -42,7 +42,7 @@ export async function PUT(req: Request) {
   try {
     const session = await requirePricingEdit()
     const parsed = setManualSellSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const view = await setManualSell({ ...parsed.data, byUserId: session.userId })
     return NextResponse.json(ok(view))
   } catch (e) {
@@ -55,7 +55,7 @@ export async function DELETE(req: Request) {
   try {
     const session = await requirePricingEdit()
     const parsed = clearManualSellSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const view = await clearManualSell({ ...parsed.data, byUserId: session.userId })
     return NextResponse.json(ok(view))
   } catch (e) {
@@ -69,7 +69,7 @@ export async function PATCH(req: Request) {
   try {
     const session = await requirePricingEdit()
     const parsed = setManualCostSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const view = await setManualCost({ ...parsed.data, byUserId: session.userId })
     return NextResponse.json(ok(view))
   } catch (e) {

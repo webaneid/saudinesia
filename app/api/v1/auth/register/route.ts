@@ -12,7 +12,7 @@ export async function POST(request: Request) {
   try {
     const parsed = registerSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
-      return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
+      return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
     }
     const input = parsed.data
 
