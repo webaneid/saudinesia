@@ -17,7 +17,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const { id } = await params
     const b = await prisma.booking.findUnique({
       where: { id },
-      select: { id: true, bookingCode: true, status: true, draft: true, updatedAt: true, createdAt: true, user: { select: { id: true, fullName: true, email: true, allowVisaWithoutBundle: true } } },
+      select: { id: true, bookingCode: true, status: true, draft: true, updatedAt: true, createdAt: true, user: { select: { id: true, fullName: true, email: true } } },
     })
     if (!b || b.status !== 'draft') return NextResponse.json(err('Draf tidak ditemukan'), { status: 404 })
     const { defaultDueDays } = await getInvoiceSettings()

@@ -7,7 +7,7 @@ import { Button } from '@/components/admin/ui/Button'
 import { formatRupiah } from '@/lib/utils'
 import { daysBetween, formatCalendarDate, type CalendarDate } from '@/lib/time'
 import { hotelsOf, noPeriodMessage, resolveHotelSchedule, roomsOf } from '@/lib/booking/hotelPick'
-import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
+import { parseRequiredComponents, REQUIRED_COMPONENT_LABEL, REQUIRED_COMPONENT_TYPES, visaSalesModel, type RequiredComponentType } from '@/lib/validators/visa'
 import { MODULE_LABEL, type Catalog, type DraftItem, type ModuleKey, type VisaOpt } from './catalog'
 
 // Editor BARIS produk (docs/arsitektur-booking-engine-v2.md §10.4, arahan pemilik 2026-11-01 — gaya baris invoice): satu baris per item, semua kolom langsung dapat diubah,
@@ -47,6 +47,19 @@ const hotelLegacy = (row: ItemRow, catalog: Catalog) => !!row.f.pick && !hotelSe
 
 export function newRow(people: number, module: ModuleKey | '' = ''): ItemRow {
   return { key: newRowKey(), module, f: empty(people) }
+}
+
+/** Komponen wajib visa yang kurang (`RuleViolation.missing`) → baris produk yang memenuhinya; hotel tersaring ke kota yang diminta (`extra.city`, hanya di klien). */
+const MISSING_ROW: Record<RequiredComponentType, { module: ModuleKey; city?: 'makkah' | 'madinah' }> = {
+  flight: { module: 'flight' }, hotel_makkah: { module: 'hotel', city: 'makkah' }, hotel_madinah: { module: 'hotel', city: 'madinah' },
+  transport: { module: 'transport' }, muthowif: { module: 'muthowif' }, tour: { module: 'tourPackage' }, catering: { module: 'catering' },
+}
+export function rowForMissing(people: number, missing: string): { row: ItemRow; label: string } | null {
+  const m = (REQUIRED_COMPONENT_TYPES as readonly string[]).includes(missing) ? MISSING_ROW[missing as RequiredComponentType] : undefined
+  if (!m) return null
+  const row = newRow(people, m.module)
+  if (m.city) row.f.extra = { ...row.f.extra, city: m.city }
+  return { row, label: REQUIRED_COMPONENT_LABEL[missing as RequiredComponentType].toLowerCase() }
 }
 
 /** Baris dari item yang sudah ada (draf tersimpan / isi booking saat revisi). */
@@ -269,7 +282,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                   options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(v === 'visa' ? Math.max(1, defaultVisaPeople ?? defaultPeople) : defaultPeople), label: undefined })} />
                 {hsel ? <>
                   <ChoiceSelect size="sm" ariaLabel={`Hotel baris ${i + 1}`} value={hsel.hotel} clearable={false}
-                    options={hotelsOf(catalog.hotel ?? []).map(h => ({ id: h.id, label: h.name, hint: [h.city, h.stars ? `bintang ${h.stars}` : ''].filter(Boolean).join(' · ') }))}
+                    options={hotelsOf(catalog.hotel ?? []).filter(h => !f.extra.city || h.city === f.extra.city).map(h => ({ id: h.id, label: h.name, hint: [h.city, h.stars ? `bintang ${h.stars}` : ''].filter(Boolean).join(' · ') }))}
                     placeholder={!catalog.hotel ? 'Memuat…' : legacyHotel ? (row.label ?? 'Hotel (tidak tersedia di katalog)') : catalog.hotel.length ? '— pilih hotel —' : 'Belum ada hotel berharga'}
                     onChange={v => setHotel(i, { hotel: v, room: '' })} />
                   <ChoiceSelect size="sm" ariaLabel={`Tipe kamar baris ${i + 1}`} value={hsel.room} clearable={false} disabled={!hsel.hotel}
@@ -298,7 +311,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                 {row.module === 'package' && date('Berangkat', 'start')}
                 {row.module === 'visa' && <>
                   <label className="flex items-center gap-2"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">Tinggal</span><input type="number" min={1} className="admin-inp-xs min-w-0 flex-1" aria-label={`Lama tinggal baris ${i + 1}`} placeholder="hari" disabled={visaLocked > 0} value={f.extra.days ?? ''} onChange={e => setX(i, 'days', e.target.value)} /></label>
-                  {visa && <p className="m-0 text-[11px] text-admin-muted">{visaSalesModel(parseRequiredComponents(visa.requiredComponents).components).label}</p>}
+                  {visa && (() => { const m = visaSalesModel(parseRequiredComponents(visa.requiredComponents).components); return <p className="m-0 text-[11px] text-admin-muted">{m.plus ? `Visa plus — wajib: ${m.parts.join(', ')}` : m.label}</p> })()}
                 </>}
                 {row.module === 'transport' && <p className="m-0 flex items-center gap-2 py-1 text-sm"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">Tanggal</span>{transport ? fmt(transport.date) : '—'}</p>}
               </div>

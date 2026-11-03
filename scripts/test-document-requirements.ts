@@ -8,7 +8,8 @@ import { join, relative } from 'node:path'
 import { prisma } from '@/lib/db'
 import { REQUIREMENT_OWNERS, requirementsOf, requirementsOfMany, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
 import { createDocumentType, deleteDocumentType } from '@/lib/documents/types'
-import { deleteVisaProduct } from '@/lib/admin/productDelete'
+import { deletePackage, deleteVisaProduct } from '@/lib/admin/productDelete'
+import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
 import { documentTypeCreateSchema } from '@/lib/validators/documents'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -110,6 +111,53 @@ await t('PENJAGA: document_requirements hanya ditulis lib/documents/requirements
     if (/['"]use client['"]/.test(src) && /from ['"]@\/lib\/documents\/requirements['"]/.test(src.replace(/import type [^;]+;?/g, ''))) bad.push(`${rel}: komponen klien mengimpor penulis syarat`)
   }
   assert.deepEqual(bad, [])
+})
+
+await t('PAKET & HAJI (V4b): bawaan K3 paspor/KTP/KK/vaksin wajib berurutan; produk tak ada → 404; ganti-semua; hapus produk membersihkan syaratnya', async () => {
+  assert.deepEqual([...REQUIREMENT_OWNERS.package.defaults], ['passport', 'ktp', 'kk', 'vaccine'])
+  assert.deepEqual([...REQUIREMENT_OWNERS.haji.defaults], ['passport', 'ktp', 'kk', 'vaccine'])
+  const pkg = await prisma.package.create({ data: { name: `${tag} paket` }, select: { id: true } })
+  const haji = await prisma.hajiProduct.create({ data: { name: `${tag} haji`, hajiType: 'khusus', year: 2027 }, select: { id: true } })
+  for (const [owner, id] of [['package', pkg.id], ['haji', haji.id]] as const) {
+    assert.deepEqual(await prisma.$transaction(tx => writeDefaultRequirements(tx, owner, id)), { ok: true })
+    assert.deepEqual((await requirementsOf(owner, id)).map(r => [r.key, r.required]), [['passport', true], ['ktp', true], ['kk', true], ['vaccine', true]], owner)
+    assert.deepEqual(await prisma.$transaction(tx => writeRequirements(tx, owner, id, [item('kk', { required: false })])), { ok: true })
+    assert.deepEqual((await requirementsOf(owner, id)).map(r => [r.key, r.required]), [['kk', false]], `${owner} ganti-semua`)
+    assert.deepEqual(await prisma.$transaction(tx => writeRequirements(tx, owner, 'tidak-ada', [item('ktp')])), { ok: false, status: 404, error: 'Produk tidak ditemukan' })
+    // Syarat terpisah per pemilik: id yang sama di jenis produk lain tak ikut terbaca.
+    assert.deepEqual(await requirementsOf(owner === 'package' ? 'haji' : 'package', id), [])
+  }
+  assert.equal((await deletePackage(pkg.id)).deleted, true)
+  assert.equal(await prisma.documentRequirement.count({ where: { productType: 'package', productId: pkg.id } }), 0, 'hapus paket → syarat bersih')
+  const hd = await deleteOrDeactivateHaji(haji.id)
+  assert.ok(hd.found && hd.deleted, 'haji belum pernah dipesan → terhapus')
+  assert.equal(await prisma.documentRequirement.count({ where: { productType: 'haji', productId: haji.id } }), 0, 'hapus haji → syarat bersih')
+})
+
+await t('PENJAGA V4b: rute buat/ubah Paket & Haji menulis syarat lewat writeRequirements di transaksi produk (buat tanpa daftar = bawaan), GET mengembalikan documentRequirements; katalog publik memakai RequiredDocuments', () => {
+  const root = new URL('..', import.meta.url).pathname
+  const src = (f: string) => readFileSync(join(root, f), 'utf8')
+  for (const [f, owner, isCreate] of [
+    ['app/api/v1/admin/products/packages/route.ts', 'package', true],
+    ['app/api/v1/admin/products/packages/[id]/route.ts', 'package', false],
+    ['app/api/v1/admin/products/haji/route.ts', 'haji', true],
+    ['app/api/v1/admin/products/haji/[id]/route.ts', 'haji', false],
+  ] as const) {
+    const s = src(f)
+    assert.match(s, new RegExp(`\\$transaction\\([\\s\\S]*writeRequirements\\(tx, '${owner}'`), f)
+    if (isCreate) assert.match(s, new RegExp(`writeDefaultRequirements\\(tx, '${owner}'`), f)
+    else assert.match(s, new RegExp(`requirementsOf\\('${owner}', id\\)`), f)
+  }
+  assert.match(src('lib/validators/adminUpdates.ts'), /requirements: documentRequirementListSchema\.optional\(\),\n  \}\)\n  \.strict\(\)/)
+  for (const [f, owner] of [['app/[locale]/(public)/packages/page.tsx', 'package'], ['app/[locale]/(public)/haji/page.tsx', 'haji'], ['app/[locale]/(public)/visa/page.tsx', 'visa']] as const) {
+    const s = src(f)
+    assert.match(s, /<RequiredDocuments requirements=/, f)
+    assert.match(s, new RegExp(`productType: '${owner}'`), f)
+  }
+  for (const f of ['app/[locale]/admin/(protected)/products/packages/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/haji/[id]/page.tsx']) {
+    assert.match(src(f), /<RequirementsEditor /, f)
+    assert.match(src(f), /requirements: bodyFromRows\(/, f)
+  }
 })
 
 // Bersihkan (DB uji).

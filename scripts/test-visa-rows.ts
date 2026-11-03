@@ -2,7 +2,8 @@
 // per jamaah. Murni (tanpa DB). Yang dikunci: kelompok per (produk, lama tinggal); jumlah naik mengisi jamaah tanpa visa dulu; jumlah turun/hapus
 // melepas dari belakang; visa terkunci (revisi R3) dan visa paket tak pernah tersentuh; subtotal baris = Σ angka server anggotanya.
 import assert from 'node:assert/strict'
-import type { ItemRow } from '../app/[locale]/admin/(protected)/bookings/drafts/[id]/ItemRows'
+import { rowForMissing, type ItemRow } from '../app/[locale]/admin/(protected)/bookings/drafts/[id]/ItemRows'
+import { REQUIRED_COMPONENT_TYPES } from '../lib/validators/visa'
 import { applyVisaRows, lockedMembers, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlots, type VisaSlot } from '../app/[locale]/admin/(protected)/bookings/drafts/[id]/visaRows'
 
 let failed = 0
@@ -88,6 +89,16 @@ await t('subtotal baris = Σ angka server anggotanya (urut slot); tanpa pratinja
   assert.equal(visaRowTotal(slots, rows[0]!.key, [100, 0, 250, 100]), 200)
   assert.equal(visaRowTotal(slots, rows[1]!.key, [100, 0, 250, 100]), 250)
   assert.equal(visaRowTotal(slots, rows[0]!.key, undefined), undefined)
+})
+
+await t('komponen wajib visa yang kurang → baris produk yang memenuhinya (semua tipe terpetakan); hotel tersaring ke kota yang diminta; "rule" → tanpa baris', () => {
+  const mod = Object.fromEntries(REQUIRED_COMPONENT_TYPES.map(type => [type, rowForMissing(2, type)?.row.module]))
+  assert.deepEqual(mod, { flight: 'flight', hotel_makkah: 'hotel', hotel_madinah: 'hotel', transport: 'transport', muthowif: 'muthowif', tour: 'tourPackage', catering: 'catering' })
+  const m = rowForMissing(3, 'hotel_madinah')!
+  assert.deepEqual([m.row.f.extra, m.row.f.people, m.label], [{ city: 'madinah' }, '3', 'hotel madinah'])
+  assert.deepEqual(rowForMissing(1, 'hotel_makkah')!.row.f.extra, { city: 'makkah' })
+  assert.deepEqual(rowForMissing(1, 'flight')!.row.f.extra, {})
+  assert.equal(rowForMissing(1, 'rule'), null)
 })
 
 if (failed) {

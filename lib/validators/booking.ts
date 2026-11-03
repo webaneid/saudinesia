@@ -114,7 +114,7 @@ export const createBookingSchema = z.object({
     fieldValues: z.record(z.string(), z.unknown()).default({}),
     visaProductId: z.string().uuid('Pilih jenis visa yang valid').optional(),
     // Jumlah hari dipilih jamaah untuk visa day-based (mis. varian Non-Hotel) — opsional,
-    // hanya relevan kalau VisaProduct terkait punya durationFeeRules. Lihat docs/arsitektur-visa.md §9.
+    // memilih tier harga visa (rentang hari, `takeVisaTier`). Lihat docs/arsitektur-visa.md §3.
     selectedDurationDays: z.number().int().min(1).optional(),
   })).min(1, 'Minimal 1 jamaah').max(2000, 'Maksimal 2000 jamaah per booking'),
 
@@ -135,7 +135,7 @@ export const createBookingSchema = z.object({
   const idsWithVisa = [...new Set(data.pilgrims.filter(p => p.visaProductId).map(p => p.visaProductId!))]
 
   // Validasi visaProductId terhadap VisaProduct aktif di database — menutup Gap #3
-  // docs/arsitektur-visa.md §7 (dulu z.enum hardcode, sekarang query DB asli).
+  // Dulu z.enum hardcode, sekarang query DB asli (riwayat audit visa 2026-07; as-built: docs/arsitektur-visa.md).
   const found = idsWithVisa.length > 0
     ? await prisma.visaProduct.findMany({
         where: { id: { in: idsWithVisa }, isActive: true },
