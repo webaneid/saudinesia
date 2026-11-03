@@ -30,7 +30,7 @@ type Preview = {
   user: { fullName: string; email: string }
   eligible: boolean
   blockers: string[]
-  willErase: { bookings: number; pilgrims: number; documents: number; visaApplications: number; notifications: number; authTokens: number; address: number; savedPilgrims: number; identities: number }
+  willErase: { bookings: number; pilgrims: number; visaApplications: number; notifications: number; authTokens: number; address: number; savedPilgrims: number; identities: number; pilgrimDocuments?: number }
 }
 
 const STATUS_LABEL: Record<DeletionRequest['status'], string> = {
@@ -148,7 +148,7 @@ export default function DeletionRequestsPage() {
               <p className="m-0 text-[13px] font-semibold">{preview.user.fullName} · {preview.user.email}</p>
               <p className="m-0 text-[13px] text-admin-muted">
                 Yang akan dihapus/dianonimkan permanen: {preview.willErase.bookings} booking (angka &amp; kode tetap disimpan), {preview.willErase.pilgrims} data jamaah,
-                {' '}{preview.willErase.documents} dokumen (berkas ikut dihapus), {preview.willErase.notifications} log notifikasi, {preview.willErase.savedPilgrims} jamaah tersimpan ({preview.willErase.identities} identitas jamaah hanya milik akun ini), {preview.willErase.address} alamat, profil &amp; kontak.
+                {' '}{preview.willErase.notifications} log notifikasi, {preview.willErase.savedPilgrims} jamaah tersimpan beserta {preview.willErase.pilgrimDocuments ?? 0} dokumennya ({preview.willErase.identities} identitas jamaah hanya milik akun ini), {preview.willErase.address} alamat, profil &amp; kontak.
               </p>
               {preview.blockers.map(b => <p key={b} className="m-0 text-[13px] text-admin-danger">{b}</p>)}
               {preview.eligible && (

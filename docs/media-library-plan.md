@@ -1,7 +1,7 @@
 # Media Library — Perencanaan Implementasi
 
 > Dibuat: 2026-05-21  
-> Status: DRAFT — belum diimplementasi  
+> Status: **DIGANTIKAN** — implementasi dokumen booking lama (tabel `documents`, `components/shared/media/*`, rute `api/v1/pilgrims/…`) DIHAPUS di Fase 7a jamaah (2026-11-03); acuan sekarang `docs/arsitektur-jamaah.md` §7 dan §5.3–§5.4. Dokumen ini arsip.  
 > Terkait: M7 (Visa Documentation Module), M5 (Pilgrim Dashboard)
 
 ---

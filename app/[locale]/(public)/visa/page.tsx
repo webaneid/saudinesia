@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { KeyRound, Clock, FileText, ArrowRight, Globe, ShieldCheck, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
-import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { requirementsOfMany } from '@/lib/documents/requirements'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { visaPriceSummary } from '@/lib/pricing/engine/read'
 
@@ -18,12 +18,9 @@ export default async function VisaCatalogPage({ params }: Props) {
     orderBy: [{ country: 'asc' }, { visaType: 'asc' }],
   })
 
-  // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
-  // parseRequirements(visaProduct.requirements)
-  const requirementsByProduct = new Map<string, Awaited<ReturnType<typeof getDocumentRequirements>>>()
-  for (const p of products) {
-    requirementsByProduct.set(p.id, await getDocumentRequirements('visa', p.id))
-  }
+  // Syarat dokumen per produk (lib/documents/requirements.ts) — label publik + petunjuk saja.
+  const visaReqs = await requirementsOfMany(products.map(p => ({ productType: 'visa', productId: p.id })))
+  const requirementsByProduct = new Map(products.map(p => [p.id, visaReqs.get(`visa:${p.id}`) ?? []]))
 
   const covers = await getFeaturedCards('visa', products.map(p => p.id))
   const priceSummary = await visaPriceSummary(products.map(p => p.id))
@@ -147,22 +144,6 @@ export default async function VisaCatalogPage({ params }: Props) {
                           </ul>
                         </div>
                       )}
-                    </div>
-                  )}
-
-                  {/* Old string[] fallback — if requirements is still plain strings */}
-                  {requirements.length === 0 && Array.isArray(v.requirements) && (v.requirements as unknown[]).length > 0 && (
-                    <div className="space-y-1.5 pt-1 border-t border-border">
-                      <p className="text-xs font-semibold flex items-center gap-1.5">
-                        <FileText className="h-3.5 w-3.5" /> Persyaratan Dokumen
-                      </p>
-                      <ul className="space-y-1">
-                        {(v.requirements as unknown as string[]).map((req, i) => (
-                          <li key={i} className="text-xs text-muted-foreground flex items-start gap-1.5">
-                            <span className="text-teal-500 mt-0.5">•</span> {req}
-                          </li>
-                        ))}
-                      </ul>
                     </div>
                   )}
 

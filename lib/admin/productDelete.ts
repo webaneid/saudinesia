@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { purgeProductMedia } from '@/lib/media/service'
 import type { MediaProductType } from '@/lib/media/owners'
 import { deleteOrDeactivate, type DeleteOutcome } from '@/lib/admin/safeDelete'
+import { deleteRequirementsOf } from '@/lib/documents/requirements'
 
 // Hapus-aman produk admin yang belum punya semantiknya (docs/arsitektur-admin-editor.md §6; aturan "CRUD lengkap selalu"): hapus SUNGGUHAN hanya bila
 // tak ada riwayat yang merujuk, selain itu NONAKTIF. Memakai `deleteOrDeactivate` (satu semantik); di sini ditambah tiga hal yang tak bisa diserahkan ke FK:
@@ -33,7 +34,7 @@ export async function dropPolymorphic(tx: Tx, productType: string, ids: string[]
   const scope = { productType, productId: { in: ids } }
   await tx.productCost.deleteMany({ where: scope })
   await tx.preferredVendor.deleteMany({ where: scope })
-  await tx.documentRequirement.deleteMany({ where: scope })
+  await deleteRequirementsOf(tx, productType, ids)
   await tx.manifestFieldRequirement.deleteMany({ where: scope })
   await tx.pricePoint.deleteMany({ where: { ownerType: productType, ownerId: { in: ids } } }) // titik harga (mesin harga) milik produk ini
 }

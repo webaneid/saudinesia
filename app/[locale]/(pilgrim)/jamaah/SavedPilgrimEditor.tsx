@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import { ArrowLeft, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SavedPilgrimFields } from '@/components/shared/pilgrims/SavedPilgrimFields'
+import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { WARNING_TEXT } from '@/components/shared/pilgrims/warningText'
 import { EMPTY_PILGRIM_FORM, bodyFromForm, canSubmitPilgrim, formFromCard, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import type { PilgrimWarning, SavedPilgrimView } from '@/lib/pilgrims/service'
@@ -113,6 +114,16 @@ export function SavedPilgrimEditor({ locale, card, initialWarnings = [], initial
             <Button asChild variant="ghost"><Link href={base}>Batal</Link></Button>
           </div>
         </form>
+      )}
+
+      {card && (
+        <section className="space-y-3 rounded-xl border bg-card p-6">
+          <div>
+            <h2 className="text-sm font-semibold">Dokumen</h2>
+            <p className="text-xs text-muted-foreground">Paspor, KTP, dan dokumen milik jamaah ini — tersimpan untuk dipakai lagi di pemesanan berikutnya.</p>
+          </div>
+          <DocumentRepeater endpoint={`${API}/${card.id}/documents`} readOnly={archived} />
+        </section>
       )}
 
       {card && !archived && (
