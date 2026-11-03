@@ -1,4 +1,4 @@
-import type { VisaRequirement } from '@/lib/types/visa'
+import type { RequirementView } from '@/lib/documents/completeness'
 
 export type ProductDetail = {
   id: string
@@ -12,8 +12,8 @@ export type ProductDetail = {
   isActive: boolean
   durationFeeRules?: unknown
   requiredComponents: unknown // aturan ketergantungan (lib/validators/visa.ts)
-  // docs/arsitektur-dokumen.md §4 — sumber kebenaran syarat dokumen (Json `requirements` lama sudah deprecated)
-  documentRequirements: VisaRequirement[]
+  // Syarat dokumen produk (lib/documents/requirements.ts, docs/arsitektur-jamaah.md §7.6)
+  documentRequirements: RequirementView[]
 }
 
 export type InfoForm = {

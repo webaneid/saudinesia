@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { getCancellationPolicy } from '@/lib/utils/cancellationPolicy'
 import {
   DEFAULT_APP_TIMEZONE, DATETIME_LONG, DATETIME_MEDIUM, DATE_LONG, DATE_MEDIUM, DATE_NUMERIC,
-  addDays, calendarDateOf, getAppTimezone, isCanonicalTimezone, isValidTimezone, setAppTimezone, dateInApp, daysBetween, dbDateOf, eachDay, endOfDayExclusiveInApp, formatCalendarDate, formatInstant, instantFromWallClock,
+  addDays, addMonths, calendarDateOf, getAppTimezone, isCanonicalTimezone, isValidTimezone, setAppTimezone, dateInApp, daysBetween, dbDateOf, eachDay, endOfDayExclusiveInApp, formatCalendarDate, formatInstant, instantFromWallClock,
   isCalendarDate, offsetMsAt, parseAppDateTime, startOfDayInApp, toAppDateTimeInput, todayInApp, wallClockOf, yearInApp, zoneLabel,
 } from '@/lib/time'
 
@@ -34,6 +34,16 @@ t('matriks TZ sungguhan: zona proses = TZ yang diminta (kalau tidak, jaminan lin
 t('isCalendarDate: hanya tanggal yang ada di kalender (tahun kabisat benar, 30 Februari/bulan 13/format salah ditolak)', () => {
   for (const ok of ['2026-10-30', '2028-02-29', '2026-12-31', '2000-01-01']) assert.equal(isCalendarDate(ok), true, ok)
   for (const bad of ['2026-02-29', '2026-02-30', '2026-13-01', '2026-00-10', '2026-1-1', '26-10-30', '2026-10-30T00:00', '', 'abc', 20261030, null, undefined]) assert.equal(isCalendarDate(bad), false, String(bad))
+})
+
+t('addMonths (tabel nilai): akhir bulan dijepit, tahun kabisat, lintas tahun, mundur, nol; masukan tak sah ditolak', () => {
+  const table: [string, number, string][] = [
+    ['2026-12-01', 6, '2027-06-01'], ['2026-08-31', 6, '2027-02-28'], ['2027-08-31', 6, '2028-02-29'], ['2026-01-31', 1, '2026-02-28'],
+    ['2026-03-31', -1, '2026-02-28'], ['2026-05-15', 0, '2026-05-15'], ['2026-11-30', 14, '2028-01-30'], ['2026-01-15', -13, '2024-12-15'],
+  ]
+  for (const [d, n, want] of table) assert.equal(addMonths(d, n), want, `${d} ${n}`)
+  assert.throws(() => addMonths('2026-02-30', 1), RangeError)
+  assert.throws(() => addMonths('2026-02-01', 1.5), RangeError)
 })
 
 t('addDays/daysBetween/eachDay (tabel nilai): melewati akhir bulan/tahun/Februari, mundur, nol, dan 25 jam DST tak memengaruhi hari kalender', () => {

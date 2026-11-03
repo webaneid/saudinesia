@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isEmptyAddress, manifestAddressInputSchema } from './addressValue'
 
 // Nilai field manifest jamaah (docs/arsitektur-manifest.md, docs/arsitektur-booking-engine-v2.md §10.3): validasi BENTUK per `fieldType` dan kelengkapan field wajib —
 // satu tempat, dipakai route admin pengisian data jamaah dan indikator kelengkapan. Field kosong SAH saat disimpan (data boleh dilanjutkan, D3); wajib → kelengkapan.
@@ -13,6 +14,7 @@ const optionValues = (options: unknown): string[] =>
 export function isEmptyValue(value: unknown): boolean {
   if (value === undefined || value === null || value === '') return true
   if (typeof value === 'object' && 'number' in value) return !(value as { number?: unknown }).number
+  if (isEmptyAddress(value)) return true
   return false
 }
 
@@ -26,7 +28,9 @@ function schemaFor(f: FieldDef): z.ZodTypeAny {
     case 'phone': return phoneSchema
     case 'select': return z.string().refine(v => optionValues(f.options).includes(v), `${f.label}: pilihan tidak dikenal`)
     case 'textarea': return z.string().max(2000)
-    default: return z.string().max(500) // text, address (teks bebas)
+    // Alamat berjenjang (D1): bentuk di sini; hierarki wilayah + `text` dari DB diperiksa server (lib/manifest/address.ts → resolveAddressValues).
+    case 'address': return manifestAddressInputSchema
+    default: return z.string().max(500)
   }
 }
 

@@ -29,18 +29,6 @@ export const VISA_TYPE_LABEL: Record<string, string> = {
   work:     'Visa Kerja',
 }
 
-export const REQUIRED_DOCUMENTS = ['passport', 'ktp', 'kk', 'evaksin', 'etiket'] as const
-export type DocType = (typeof REQUIRED_DOCUMENTS)[number]
-
-export const DOC_LABEL: Record<DocType | string, string> = {
-  passport: 'Paspor (scan)',
-  ktp:      'KTP / NIK',
-  kk:       'Kartu Keluarga',
-  evaksin:  'Sertifikat Vaksin',
-  etiket:   'E-Tiket Pesawat PP',
-  iqomah:   'Iqomah / Penjamin Saudi',
-}
-
 export const PAYMENT_DEADLINE_HOURS = 24
 export const CANCELLATION_POLICY = {
   full:    { daysMin: 61, refundPct: 100, label: '>60 hari: refund penuh' },

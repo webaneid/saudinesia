@@ -3,6 +3,8 @@
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { CountryCodeSelect } from '@/components/shared/CountryCodeSelect'
+import { AddressPicker } from '@/components/shared/AddressPicker'
+import { toPickerAddress } from '@/lib/manifest/addressValue'
 import { cn } from '@/lib/utils'
 
 // Bentuk field seperti dikembalikan getManifestFieldRequirements() (docs/arsitektur-manifest.md
@@ -39,7 +41,7 @@ export function ManifestFieldsForm({ fields, values, onChange, errors }: Props) 
   return (
     <div className="grid md:grid-cols-2 gap-4">
       {[...fields].sort((a, b) => a.order - b.order).map(field => (
-        <div key={field.id} className={cn('space-y-2', field.fieldType === 'textarea' && 'md:col-span-2')}>
+        <div key={field.id} className={cn('space-y-2', (field.fieldType === 'textarea' || field.fieldType === 'address') && 'md:col-span-2')}>
           <Label>
             {field.label} {field.required && <span className="text-destructive">*</span>}
           </Label>
@@ -96,9 +98,8 @@ function ManifestFieldInput({ field, value, onChange }: { field: ManifestField; 
       )
     }
     case 'address':
-      // Belum diwire — docs/arsitektur-alamat.md sengaja belum menyentuh BookingPilgrim.
-      // Fallback teks bebas kalau admin sempat mengatur fieldType='address' sebelum itu terjadi.
-      return <Input type="text" placeholder="Alamat lengkap" value={(value as string) ?? ''} onChange={e => onChange(e.target.value)} />
+      // Alamat berjenjang (D1, docs/arsitektur-jamaah.md §5.5): nilai = objek alamat; server memeriksa hierarki dan menurunkan teksnya.
+      return <AddressPicker value={toPickerAddress(value)} onChange={onChange} />
     case 'text':
     default:
       return <Input type="text" value={(value as string) ?? ''} onChange={e => onChange(e.target.value)} />

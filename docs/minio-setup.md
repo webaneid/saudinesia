@@ -204,10 +204,9 @@ docker exec -it saudinesia_minio_1 mc mb local/saudinesia-docs
 | `lib/storage/minio.ts` | Satu-satunya tempat MinIO SDK dipanggil |
 | `lib/storage/minio-loader.ts` | Next.js image loader untuk URL MinIO |
 | `app/api/v1/admin/products/hotels/[id]/images/route.ts` | API upload foto hotel |
-| `app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/route.ts` | API upload dokumen jamaah |
-| `app/api/v1/pilgrims/[bookingId]/[pilgrimId]/documents/[docId]/route.ts` | Presigned URL + delete |
+| `lib/documents/service.ts` + `lib/documents/storage.ts` | Dokumen jamaah (kartu + per perjalanan) — satu-satunya penulis, kunci `saved-pilgrims/{pemilik}/{kartu}/…` (`docs/arsitektur-jamaah.md` §7) |
+| `app/api/v1/account/pilgrims/[id]/documents/…`, `app/api/v1/admin/customers/[id]/pilgrims/[cardId]/documents/…`, `app/api/v1/admin/bookings/[id]/pilgrims/[pilgrimId]/documents/…` | Unggah / presigned URL / hapus dokumen jamaah |
 | `app/api/v1/admin/bookings/[id]/documents/zip/route.ts` | ZIP download semua dokumen |
 | `components/admin/media/ProductMediaGallery.tsx` | Gallery foto produk |
 | `components/admin/media/ImageUploadModal.tsx` | Modal upload foto |
-| `components/shared/media/DocumentGrid.tsx` | Grid dokumen jamaah |
-| `components/shared/media/UploadModal.tsx` | Modal upload dokumen |
+| `components/shared/documents/DocumentRepeater.tsx` | UI dokumen jamaah (satu komponen untuk semua area) |

@@ -56,6 +56,17 @@ const utcMsToCal = (ms: number): CalendarDate => new Date(ms).toISOString().slic
 
 /** Tambah (atau kurangi) hari pada tanggal kalender — aritmetika murni kalender, tak terpengaruh DST/zona. */
 export function addDays(s: CalendarDate, n: number): CalendarDate { return utcMsToCal(calToUtcMs(s) + n * DAY_MS) }
+/** Tambah (atau kurangi) bulan kalender; tanggal yang tak ada di bulan tujuan DIJEPIT ke hari terakhirnya (31 Agu + 6 bln = 28/29 Feb). */
+export function addMonths(s: CalendarDate, n: number): CalendarDate {
+  assertCal(s)
+  if (!Number.isInteger(n)) throw new RangeError(`Jumlah bulan harus bilangan bulat: ${n}`)
+  const [y, mo, d] = s.split('-').map(Number) as [number, number, number]
+  const idx = y * 12 + (mo - 1) + n
+  const ty = Math.floor(idx / 12)
+  const tm = idx - ty * 12
+  const last = new Date(Date.UTC(ty, tm + 1, 0)).getUTCDate()
+  return utcMsToCal(Date.UTC(ty, tm, Math.min(d, last)))
+}
 /** Selisih hari kalender `b − a` (bilangan bulat, bisa negatif). */
 export function daysBetween(a: CalendarDate, b: CalendarDate): number { return Math.round((calToUtcMs(b) - calToUtcMs(a)) / DAY_MS) }
 /** Tiap tanggal dari `start` sampai `end` (inklusif). */

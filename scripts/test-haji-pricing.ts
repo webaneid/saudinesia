@@ -144,7 +144,7 @@ await t('belum pernah dipesan → HAPUS SUNGGUHAN beserta komponen/vendor piliha
   for (const scope of [mine, theirs]) {
     await prisma.productCost.create({ data: { ...scope, vendorId: vendor.id, costComponent: 'K', currency: 'IDR', costTiers: flat(1000) } })
     await prisma.preferredVendor.create({ data: { ...scope, costComponent: 'K', vendorId: vendor.id } })
-    await prisma.documentRequirement.create({ data: { ...scope, docType: 'passport', label: 'Paspor' } })
+    await prisma.documentRequirement.create({ data: { ...scope, documentTypeId: (await prisma.documentType.findUniqueOrThrow({ where: { key: 'passport' } })).id, label: 'Paspor' } })
     await prisma.manifestFieldRequirement.create({ data: { ...scope, fieldKey: `f_${randomUUID().slice(0, 6)}`, label: 'F', fieldType: 'text' } })
   }
   assert.deepEqual(await deleteOrDeactivateHaji(h.id), { found: true, deleted: true })

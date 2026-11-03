@@ -8,10 +8,10 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Tabs, tabId, tabPanelId, type TabItem } from '@/components/admin/ui/Tabs'
 import { formatRupiah } from '@/lib/utils'
-import type { VisaRequirement } from '@/lib/types/visa'
 import { CostTiersTab } from './CostTiersTab'
 import { ProductInfoTab } from './ProductInfoTab'
-import { RequirementsTab } from './RequirementsTab'
+import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
+import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import { RulesTab } from './RulesTab'
 import { parseRequiredComponents, type RequiredComponent } from '@/lib/validators/visa'
 import type { DeleteResult, InfoForm, ProductDetail } from './types'
@@ -19,8 +19,8 @@ import type { DeleteResult, InfoForm, ProductDetail } from './types'
 type TabKey = 'info' | 'docs' | 'rules' | 'price'
 type Props = { params: Promise<{ locale: string; id: string }> }
 
-const snapshotOf = (form: InfoForm, reqs: VisaRequirement[], rules: RequiredComponent[]) => JSON.stringify({ form, reqs, rules })
-const cleanReqs = (reqs: VisaRequirement[]) => reqs.filter(r => r.docType.trim() && r.label.trim())
+// Snapshot memakai BADAN API syarat (bukan baris mentah) — label yang diketik sama dengan katalog tidak dihitung perubahan.
+const snapshotOf = (form: InfoForm, reqs: RequirementRow[], rules: RequiredComponent[]) => JSON.stringify({ form, reqs: bodyFromRows(reqs), rules })
 
 export default function VisaEditPage({ params }: Props) {
   const { locale, id } = use(params)
@@ -28,7 +28,8 @@ export default function VisaEditPage({ params }: Props) {
 
   const [product, setProduct] = useState<ProductDetail | null>(null)
   const [form, setForm] = useState<InfoForm | null>(null)
-  const [reqs, setReqs] = useState<VisaRequirement[]>([])
+  const [reqs, setReqs] = useState<RequirementRow[]>([])
+  const [baseReqs, setBaseReqs] = useState<RequirementRow[]>([]) // baris tersimpan, untuk Batalkan
   const [rules, setRules] = useState<RequiredComponent[]>([])
   const [snapshot, setSnapshot] = useState('')
   const [tab, setTab] = useState<TabKey>('info')
@@ -51,12 +52,11 @@ export default function VisaEditPage({ params }: Props) {
         name: v.name, country: v.country, visaType: v.visaType, description: v.description ?? '',
         processDays: String(v.processDays), isActive: v.isActive,
       }
-      const nextReqs = Array.isArray(v.documentRequirements)
-        ? v.documentRequirements.map(r => ({ docType: r.docType, label: r.label, description: r.description, required: r.required }))
-        : []
+      const nextReqs = v.documentRequirements.map(rowFromView)
       const nextRules = parseRequiredComponents(v.requiredComponents).components
       setForm(nextForm)
       setReqs(nextReqs)
+      setBaseReqs(nextReqs)
       setRules(nextRules)
       setSnapshot(snapshotOf(nextForm, nextReqs, nextRules))
     })
@@ -80,13 +80,13 @@ export default function VisaEditPage({ params }: Props) {
   const ruleCount = Array.isArray(product.durationFeeRules) ? product.durationFeeRules.length : 0
 
   const patchForm = (patch: Partial<InfoForm>) => { setForm(f => (f ? { ...f, ...patch } : f)); setJustSaved(false) }
-  const setRequirements = (next: VisaRequirement[]) => { setReqs(next); setJustSaved(false) }
+  const setRequirements = (next: RequirementRow[]) => { setReqs(next); setJustSaved(false) }
   const setRuleList = (next: RequiredComponent[]) => { setRules(next); setJustSaved(false) }
 
   function discard() {
-    const saved = JSON.parse(snapshot) as { form: InfoForm; reqs: VisaRequirement[]; rules: RequiredComponent[] }
+    const saved = JSON.parse(snapshot) as { form: InfoForm; rules: RequiredComponent[] }
     setForm(saved.form)
-    setReqs(saved.reqs)
+    setReqs(baseReqs)
     setRules(saved.rules)
     setError(null)
   }
@@ -95,7 +95,7 @@ export default function VisaEditPage({ params }: Props) {
     if (!form) return
     setSaving(true)
     setError(null)
-    const requirements = cleanReqs(reqs)
+    const requirements = bodyFromRows(reqs)
     const res = await fetch(`/api/v1/admin/products/visa/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -110,8 +110,10 @@ export default function VisaEditPage({ params }: Props) {
       setSaving(false)
       return
     }
-    setReqs(requirements)
-    setSnapshot(snapshotOf(form, requirements, rules))
+    const kept = reqs.filter(r => r.documentTypeId)
+    setReqs(kept)
+    setBaseReqs(kept)
+    setSnapshot(snapshotOf(form, kept, rules))
     await refreshProduct()
     setSaving(false)
     setJustSaved(true)
@@ -126,7 +128,7 @@ export default function VisaEditPage({ params }: Props) {
       if (j.data.deleted) { router.push(`/${locale}/admin/products/visa`); return null }
       // Status di formulir DAN baseline ikut nonaktif, ketikan lain yang belum disimpan tetap terhitung "belum disimpan".
       setForm(f => (f ? { ...f, isActive: false } : f))
-      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; reqs: VisaRequirement[]; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, saved.reqs, saved.rules) })
+      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, baseReqs, saved.rules) })
       await refreshProduct()
       return { notice: j.data.message ?? 'Dipakai sehingga dinonaktifkan.' }
     } catch {
@@ -164,7 +166,7 @@ export default function VisaEditPage({ params }: Props) {
         <ProductInfoTab productId={product.id} form={form} onChange={patchForm} price={price} locale={locale} productName={product.name} onShowPrice={() => setTab('price')} onDelete={remove} />
       </div>
       <div id={tabPanelId('docs')} role="tabpanel" aria-labelledby={tabId('docs')} hidden={tab !== 'docs'}>
-        <RequirementsTab reqs={reqs} onChange={setRequirements} />
+        <RequirementsEditor rows={reqs} onChange={setRequirements} productNoun="visa ini" />
       </div>
       <div id={tabPanelId('rules')} role="tabpanel" aria-labelledby={tabId('rules')} hidden={tab !== 'rules'}>
         <RulesTab rules={rules} onChange={setRuleList} />

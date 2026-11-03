@@ -124,7 +124,7 @@ async function fullWorld(db: PrismaClient, withGap = 0) {
   const bc = await db.bookingCatering.create({ data: { bookingId: bk.id, cateringOptionId: cat.id, startDate: d('2027-06-01'), endDate: d('2027-06-04'), numDays: 3, numPeople: 3, totalPrice: 900_000 } })
   const btp = await legacyInsert(db, 'booking_tour_packages', { bookingId: bk.id, tourPackageId: tour.id, tourDate: d('2027-06-02'), numPeople: 4, totalPrice: 2_000_000 })
   const bj = await legacyInsert(db, 'booking_haji', { bookingId: bk.id, hajiProductId: haji.id, numPersons: 2, totalPrice: 12_000_000 })
-  const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
+  const pil = await legacyInsert(db, 'booking_pilgrims', { bookingId: bk.id })
   const va = await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaProductId: visa.id, visaType: 'Umroh', selectedDurationDays: 30 }, select: { id: true } })
   await setLegacy(db, 'visa_applications', va.id, { hppSnapshotRupiah: 1_500_000, sellPriceSnapshot: 1_800_000 })
   return { booking: bk.id, bh: bh.id, bt: bt.id, bm: bm.id, bc: bc.id, btp: btp.id, bj: bj.id, va: va.id, sch: sch.id }
@@ -173,7 +173,7 @@ await t('Visa tanpa HPP (0) → modal null; visa tanpa harga beku tidak dibuatka
     await setLegacy(db, 'visa_applications', w.va!, { hppSnapshotRupiah: 0 })
     const u = await mkUser(db)
     const bk = await mkBooking(db, u.id, 0)
-    const pil = await db.bookingPilgrim.create({ data: { bookingId: bk.id, fieldValues: {} } })
+    const pil = await legacyInsert(db, 'booking_pilgrims', { bookingId: bk.id })
     await db.visaApplication.create({ data: { bookingPilgrimId: pil.id, visaType: 'Umroh' }, select: { id: true } })
     return { a: w.booking, b: bk.id }
   })

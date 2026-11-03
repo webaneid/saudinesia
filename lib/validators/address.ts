@@ -10,10 +10,10 @@ const addressFields = z.object({
 
   // AddressPicker (form terkontrol) selalu mengirim null untuk field yang belum dipilih,
   // bukan undefined — schema harus terima keduanya.
-  provinceId: z.string().min(1).nullish(),
-  regencyId:  z.string().min(1).nullish(),
-  districtId: z.string().min(1).nullish(),
-  villageId:  z.string().min(1).nullish(),
+  provinceId: z.string().min(1).max(20).nullish(), // kode wilayah Kemendagri ≤ 13 karakter
+  regencyId:  z.string().min(1).max(20).nullish(),
+  districtId: z.string().min(1).max(20).nullish(),
+  villageId:  z.string().min(1).max(20).nullish(),
 
   countryCode: z.string().length(2).nullish(),
   city:        z.string().max(100, 'Nama kota terlalu panjang').nullish(),

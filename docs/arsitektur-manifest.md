@@ -135,6 +135,8 @@ Komponen `<ManifestRepeater productType productId onChange>` — pola:
 
 ## 8. Verifikasi (2026-07-24)
 
+> **Catatan basi (D6, 2026-11-03, `docs/arsitektur-jamaah.md`):** wizard `bookings/new/pilgrims`, `PassportForm`, dan `lib/booking/draft.ts` yang disebut di bukti di bawah **sudah dihapus** (checkout pendek per produk sejak 2026-07-25; draf booking admin = `lib/booking/drafts.ts`). Data jamaah booking kini diisi dari kartu jamaah tersimpan (`lib/pilgrims/bookingLink.ts`, NIK/paspor disegel) dan diperiksa petugas (Fase 6, `lib/pilgrims/review.ts`). Bagian ini = riwayat verifikasi saat itu.
+
 **Audit blast radius dulu** (Explore agent, read-only) sebelum sentuh schema: 11 file bergantung kolom baku `BookingPilgrim` langsung. Temuan penting yang mengoreksi asumsi §2 lama: `passportNumber`/`passportExpiry`/`nationality`/`dateOfBirth` ternyata **tidak pernah diisi di wizard** — cuma diisi admin belakangan via `PassportForm`/endpoint terpisah; `isLeader` genuinely tidak pernah dibaca kode manapun (murni disiapkan fitur Group yang 0% jalan). Ini tidak mengubah rencana migrasi, cuma menegaskan field mana yang benar-benar aktif dipakai hari ini.
 
 **Migrasi**: `20260724120000_manifest_field_requirement` (model baru, additive) lalu `20260724130000_manifest_collapse_booking_pilgrim` (DROP 11 kolom baku, ADD `fieldValues Json`) — dijalankan aman karena `BookingPilgrim` di DB dev 0 baris saat migrasi (dikonfirmasi count dulu), jadi tidak perlu script backfill data.
