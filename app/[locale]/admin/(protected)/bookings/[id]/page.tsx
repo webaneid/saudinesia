@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { displayStatus } from '@/lib/booking/lifecycle'
-import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL, REQUIRED_DOCUMENTS } from '@/lib/constants/booking'
+import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
 import { ArrowLeft, FileDown, Pencil } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
 import { InvoiceBox } from './InvoiceBox'
@@ -12,8 +12,9 @@ import type { TaxLine } from '@/lib/invoice/tax'
 import { VisaActions } from './VisaActions'
 import { PilgrimDataForm } from './PilgrimDataForm'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
-import { PilgrimDocuments } from '@/components/admin/PilgrimDocuments'
-import { getDocumentRequirements } from '@/lib/documents/getRequirements'
+import { PilgrimCardPanel } from './PilgrimCardPanel'
+import { BOOKING_PILGRIM_SAFE_SELECT, bookingChecklists } from '@/lib/pilgrims/bookingLink'
+import { cardBoundKeys } from '@/lib/manifest/roles'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
@@ -39,7 +40,7 @@ export default async function AdminBookingDetail({ params }: Props) {
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
       flights:    { include: { flightSchedule: { include: { route: true } } } },
       packages:   { include: { package: { select: { name: true } } } },
-      pilgrims:   { include: { visaApplication: { include: { visaProduct: true } }, documents: true } },
+      pilgrims:   { select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
       payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] },
       invoice:    true,
     },
@@ -47,25 +48,19 @@ export default async function AdminBookingDetail({ params }: Props) {
   if (!booking) notFound()
   if (booking.status === 'draft') redirect(`/${locale}/admin/bookings/drafts/${id}`) // draf diedit di editor draf (§10.3)
 
-  // docs/arsitektur-dokumen.md §4 — getDocumentRequirements() menggantikan
-  // parseRequirements(visaProduct.requirements), dikumpulkan per pilgrim (server component, jadi
-  // dihitung sekali sebelum render, bukan dipanggil sinkron di dalam .map()).
-  const requirementsByPilgrim = new Map<string, Awaited<ReturnType<typeof getDocumentRequirements>>>()
-  // docs/arsitektur-manifest.md §4 — getManifestFieldRequirements()/getFieldByRole() menggantikan
-  // pembacaan langsung p.fullName dkk (kolom baku sudah dihapus, sekarang fieldValues generik).
+  // Kartu tertaut + kelengkapan dokumen per jamaah (docs/arsitektur-jamaah.md §5.3) — dihitung server, satu kueri per jenis data.
+  const checklists = await bookingChecklists(id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(p => ({
+    id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
+    plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
+  })))
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {
-      requirementsByPilgrim.set(p.id, await getDocumentRequirements('visa', p.visaApplication.visaProductId))
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements('visa', p.visaApplication.visaProductId))
     } else {
       // docs/arsitektur-booking.md §6 Step 6a — pilgrim tanpa visa (mis. checkout Transport-only)
       // tetap punya field manifest generik untuk menampilkan nama dkk. — bukan 'Jamaah' fallback.
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))
-      // [] eksplisit (BUKAN dibiarkan undefined) — PilgrimDocuments jatuh ke REQUIRED_DOCUMENTS
-      // (daftar hardcode paspor/KTP/dst.) kalau requirements undefined, yang salah untuk pilgrim
-      // tanpa visa sama sekali (mis. Transport-only) — tidak ada dokumen yang wajib diupload.
-      requirementsByPilgrim.set(p.id, [])
     }
   }
   function displayName(p: NonNullable<typeof booking>['pilgrims'][number]): string {
@@ -243,23 +238,6 @@ export default async function AdminBookingDetail({ params }: Props) {
       {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
       <RevisionHistory rows={revisions} />
 
-      {/* Dokumen per jamaah */}
-      {booking.pilgrims.length > 0 && (
-        <div className="space-y-3">
-          <h2 className="text-[14px] font-bold text-admin-ink">Dokumen Jamaah</h2>
-          {booking.pilgrims.map(p => (
-            <PilgrimDocuments
-              key={p.id}
-              bookingId={id}
-              pilgrimId={p.id}
-              pilgrimName={displayName(p)}
-              bookingCode={booking.bookingCode}
-              requirements={requirementsByPilgrim.get(p.id)}
-            />
-          ))}
-        </div>
-      )}
-
       {/* Pilgrim list */}
       <div className="admin-card overflow-hidden">
         <div className="px-5 py-3.5 border-b border-admin-line">
@@ -270,10 +248,10 @@ export default async function AdminBookingDetail({ params }: Props) {
         <div className="divide-y divide-admin-line">
           {booking.pilgrims.map((p) => {
             const visaCfg = VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]
-            const pilgrimRequirements = requirementsByPilgrim.get(p.id) ?? null
-            const requiredDocCount = pilgrimRequirements
-              ? pilgrimRequirements.filter(r => r.required).length
-              : REQUIRED_DOCUMENTS.length
+            const check = checklists.get(p.id)
+            const required = (check?.items ?? []).filter(i => i.required)
+            const okCount = required.filter(i => i.state === 'pending' || i.state === 'accepted').length
+            const fields = manifestFieldsByPilgrim.get(p.id) ?? []
             return (
               <div key={p.id} className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-4">
@@ -288,15 +266,26 @@ export default async function AdminBookingDetail({ params }: Props) {
                       {visaCfg?.label}
                     </span>
                     <p className="text-[10.5px] text-admin-muted">
-                      {p.documents.length}/{requiredDocCount} dok
+                      {okCount}/{required.length} dok
                     </p>
                   </div>
                 </div>
 
-                <PilgrimDataForm
+                <PilgrimCardPanel
+                  locale={locale}
                   bookingId={id}
                   pilgrimId={p.id}
-                  fields={(manifestFieldsByPilgrim.get(p.id) ?? []).map(f => ({ id: f.id, fieldKey: f.fieldKey, label: f.label, fieldType: f.fieldType, options: f.options, required: f.required, role: f.role, order: f.order }))}
+                  customerId={booking.userId}
+                  linked={check?.card ?? null}
+                  checklist={(check?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state }))}
+                />
+
+                <PilgrimDataForm
+                  key={JSON.stringify(p.fieldValues)}
+                  bookingId={id}
+                  pilgrimId={p.id}
+                  cardBound={p.savedPilgrimId ? cardBoundKeys(fields) : []}
+                  fields={fields.map(f => ({ id: f.id, fieldKey: f.fieldKey, label: f.label, fieldType: f.fieldType, options: f.options, required: f.required, role: f.role, order: f.order }))}
                   initial={p.fieldValues as Record<string, unknown>}
                   plannedTravelDate={p.visaApplication ? (p.visaApplication.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null) : undefined}
                 />

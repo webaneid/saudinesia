@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
 import { requireSession } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { cancelBooking } from '@/lib/booking/cancel'
@@ -19,7 +20,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         muthowif:   { include: { muthowif: true } },
         catering:   { include: { cateringOption: true } },
         tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
-        pilgrims:   { include: { visaApplication: true, documents: true } }, // modal/jejak beku ada di price_snapshots (tak pernah di-include untuk pilgrim — I5)
+        // select aman: tanpa kolom NIK/paspor tersegel (docs/arsitektur-jamaah.md §5.3); modal/jejak beku ada di price_snapshots (tak pernah untuk pilgrim — I5)
+        pilgrims:   { select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: true } },
         // select eksplisit: `notes` (catatan staf) dan `confirmedById` TIDAK boleh sampai ke jamaah (Fase 7: catatan jumlah pembayaran bersifat internal)
         payments:   { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, status: true, amount: true, method: true, buktiTransferUploadedAt: true, confirmedAt: true, createdAt: true } },
       },

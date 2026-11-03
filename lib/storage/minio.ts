@@ -1,8 +1,7 @@
 // All MinIO SDK interactions live here. Never import minio SDK outside this file.
 import { Client } from 'minio'
 
-const ALLOWED_MIMES = new Set(['image/jpeg', 'image/png', 'application/pdf'])
-const MAX_BYTES = 5 * 1024 * 1024 // 5 MB
+// Validasi unggahan TIDAK di sini: MIME dari klien tak dipercaya (D3). Dokumen → lib/documents/file.ts, foto produk → lib/media/image.ts (cek isi berkas).
 
 export const BUCKET = process.env.MINIO_BUCKET ?? 'saudinesia-docs'
 // Region bucket (dipakai makeBucket) — juga region tanda tangan presigned, harus sama dengan MINIO_SITE_REGION di server.
@@ -57,15 +56,6 @@ export function buildObjectKey(
   return `${entity}/${entityId}/${docType}/${Date.now()}-${safe}`
 }
 
-export function validateUpload(mimeType: string, sizeBytes: number): void {
-  if (!ALLOWED_MIMES.has(mimeType)) {
-    throw new Error('File type not allowed. Use JPG, PNG, or PDF.')
-  }
-  if (sizeBytes > MAX_BYTES) {
-    throw new Error('File exceeds the 5 MB limit.')
-  }
-}
-
 export async function uploadBuffer(
   objectKey: string,
   buffer: Buffer,
@@ -99,9 +89,11 @@ export async function getObjectBuffer(objectKey: string): Promise<Buffer> {
   })
 }
 
-// Awalan yang boleh disapu: HANYA satu direktori entitas `pilgrims/<uuid>/`. Validasi ketat karena awalan kosong / terlalu pendek (`""`,
-// `pilgrims/`) akan menghapus seluruh bucket dokumen — kesalahan pemanggil tidak boleh sampai ke SDK.
-const SWEEP_PREFIX = /^pilgrims\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/$/
+// Awalan yang boleh disapu: HANYA satu direktori entitas — `pilgrims/<uuid>/` (berkas manifest booking), `saved-pilgrims/<pemilik>/` (semua
+// dokumen kartu jamaah satu akun) atau `saved-pilgrims/<pemilik>/<kartu>/` (D7). Validasi ketat karena awalan kosong / terlalu pendek (`""`,
+// `pilgrims/`, `saved-pilgrims/`) akan menghapus seluruh bucket dokumen — kesalahan pemanggil tidak boleh sampai ke SDK.
+const UUID_SEG = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
+const SWEEP_PREFIX = new RegExp(`^(pilgrims/${UUID_SEG}/|saved-pilgrims/${UUID_SEG}/(${UUID_SEG}/)?)$`)
 
 /** Pintu I/O untuk penyapuan — dapat disuntik di tes (kegagalan per objek tak bisa dipicu dari MinIO lokal biasa). */
 export type PrefixIo = {
@@ -122,7 +114,7 @@ const sdkPrefixIo: PrefixIo = {
 }
 
 /**
- * Hapus SEMUA objek di bawah `pilgrims/<uuid>/` (penyapuan setelah penghapusan akun, SEC-57). Mengembalikan jumlah objek yang dihapus.
+ * Hapus SEMUA objek di bawah satu awalan entitas (lihat SWEEP_PREFIX; penyapuan setelah penghapusan akun SEC-57 / kartu jamaah). Mengembalikan jumlah objek yang dihapus.
  * `removeObjects` di SDK TIDAK melempar saat sebagian objek gagal (hanya mengembalikan daftar galat) — di sini kegagalan parsial dilempar,
  * supaya pemanggil tak menghapus baris `Document` dan melaporkan sukses sementara berkas PII masih ada (S57-LOW1). Pesan tanpa nama kunci.
  */

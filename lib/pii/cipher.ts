@@ -5,7 +5,7 @@ import { requirePiiKeys } from './keys'
 // Ciphertext: `v<versi>.<iv base64url>.<ciphertext+tag base64url>` — AES-256-GCM, IV 12 byte acak per nilai, tag 16 byte.
 // AAD = tujuan ('nik' | 'passport'): ciphertext NIK yang dipindah ke kolom paspor (atau sebaliknya) gagal dibuka.
 
-export type PiiPurpose = 'nik' | 'passport'
+export type PiiPurpose = 'nik' | 'passport' | 'key-check' // key-check: nilai cek kunci di DB (./keyCheck.ts), bukan data
 
 const IV_BYTES = 12
 const TAG_BYTES = 16

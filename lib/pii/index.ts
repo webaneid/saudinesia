@@ -4,3 +4,4 @@ export { normalizeNik, nikProblem, nikProvinceCode, nikHints, sealNik, nikIndex,
 export { normalizePassport, passportIndex, sealPassport, openPassport, type PassportNumber, type SealedPassport } from './passport'
 export { needsReencrypt, PiiDecryptError } from './cipher'
 export { NIK_MASK, maskPassport } from './mask'
+export { ensurePiiKeysMatch, PiiKeyMismatchError } from './keyCheck'

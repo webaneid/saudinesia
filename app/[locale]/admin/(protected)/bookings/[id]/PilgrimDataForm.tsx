@@ -14,11 +14,13 @@ type Props = {
   pilgrimId: string
   fields: ManifestField[]
   initial: Record<string, unknown>
+  /** Kunci field yang terisi dari kartu tertaut (lib/manifest/roles.ts) — ditandai; perubahan di sini hanya untuk booking ini. */
+  cardBound?: string[]
   /** null = jamaah tanpa visa (tak ada rencana tanggal visa). */
   plannedTravelDate: string | null | undefined
 }
 
-export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, plannedTravelDate }: Props) {
+export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, plannedTravelDate, cardBound = [] }: Props) {
   const [values, setValues] = useState<Record<string, unknown>>(initial)
   const [planned, setPlanned] = useState(plannedTravelDate ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -49,6 +51,11 @@ export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, planned
         <p className="m-0 text-[12px] font-semibold text-admin-ink">Data jamaah</p>
         <Badge tone={status.complete ? 'ok' : 'warning'}>{status.filled}/{status.required} wajib terisi</Badge>
       </div>
+      {cardBound.length > 0 && (
+        <p className="m-0 text-[11.5px] text-admin-muted">
+          Terisi dari kartu jamaah: {fields.filter(f => cardBound.includes(f.fieldKey)).map(f => f.label).join(', ')}. Mengubahnya di sini hanya berlaku untuk booking ini; NIK/paspor tersamar = tetap.
+        </p>
+      )}
       {fields.length === 0
         ? <p className="m-0 text-[12px] text-admin-muted">Produk ini belum punya daftar field data jamaah.</p>
         : <ManifestFieldsForm fields={fields} values={values} onChange={v => { setValues(v); setNotice(null) }} errors={errors} />}
