@@ -18,6 +18,16 @@
     }
 }
 
+# Proxy ke aplikasi — dipakai kedua cabang batas body di {$APP_DOMAIN}.
+(aplikasi) {
+    reverse_proxy web:3000 {
+        # IP klien = alamat yang benar-benar terhubung ke Caddy (Caddy adalah tepi, tanpa CDN di depan).
+        # X-Forwarded-For kiriman klien SELALU ditimpa, supaya rate limit & audit per IP tidak bisa diakali dengan
+        # memalsukan header. Bila kelak memakai CDN/Cloudflare: atur trusted_proxies dan hapus baris ini.
+        header_up X-Forwarded-For {remote_host}
+    }
+}
+
 # MinIO publik: HANYA baca objek (GET/HEAD). Unggah & operasi tulis lewat server aplikasi (jaringan internal),
 # bukan dari internet — jadi semua metode lain ditolak di sini.
 (files) {
@@ -42,15 +52,26 @@
     header Content-Security-Policy "frame-ancestors 'self'"
     header X-Frame-Options "SAMEORIGIN"
     encode zstd gzip
-    # Unggah dokumen maks 5 MB (+ overhead multipart); Server Actions dibatasi 6 MB di next.config.ts.
-    request_body {
-        max_size 8MB
+    # Batas body: 8 MB HANYA untuk POST ke route unggah (dokumen/bukti/foto maks 5 MB + overhead multipart);
+    # semua body lain maks 1 MB. Zod 3 memvalidasi SEMUA elemen array meski `.max()` sudah terlampaui (GHSA-mrhx-c7xc-m3w5):
+    # JSON 8 MB berisi array → ±2 GB RAM per request. Body JSON sah terbesar (teks kaya ≤ 100 ribu karakter) jauh di bawah 1 MB.
+    # Ditentukan dari JALUR, bukan Content-Type (req.json() tak memeriksa Content-Type); segmen tanpa titik/persen
+    # supaya `..` tak bisa meminjam batas unggah. Route unggah baru WAJIB ditambahkan — dijaga scripts/test-body-limit.ts.
+    @unggah {
+        method POST
+        path_regexp ^/api/v1/((admin/)?bookings/[A-Za-z0-9_-]+/pilgrims/[A-Za-z0-9_-]+/documents|bookings/[A-Za-z0-9_-]+/payment/bukti|admin/customers/[A-Za-z0-9_-]+/pilgrims/[A-Za-z0-9_-]+/documents|account/pilgrims/[A-Za-z0-9_-]+/documents|admin/media/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+)/?$
     }
-    reverse_proxy web:3000 {
-        # IP klien = alamat yang benar-benar terhubung ke Caddy (Caddy adalah tepi, tanpa CDN di depan).
-        # X-Forwarded-For kiriman klien SELALU ditimpa, supaya rate limit & audit per IP tidak bisa diakali dengan
-        # memalsukan header. Bila kelak memakai CDN/Cloudflare: atur trusted_proxies dan hapus baris ini.
-        header_up X-Forwarded-For {remote_host}
+    handle @unggah {
+        request_body {
+            max_size 8MB
+        }
+        import aplikasi
+    }
+    handle {
+        request_body {
+            max_size 1MB
+        }
+        import aplikasi
     }
 }
 
