@@ -10,4 +10,7 @@ regexes = [
   # Positif palsu `generic-api-key` di docs/decisions.md (catatan keputusan editor teks, 2026-10-23): kalimat
   # "Uji penolakan API dari sesi admin: tautan/gambar/H1/kunci tak dikenal/..." terbaca sebagai `api … : <nilai>`.
   '''tautan/gambar/H1/kunci''',
+  # Positif palsu `generic-api-key` di scripts/test-pii.ts: kunci PII rusak buatan (blok 16 hex berulang) untuk menguji bahwa
+  # piiKeysProblem MENOLAK kunci berentropi rendah (SEC-166) — bukan kunci sungguhan.
+  '''0123456789abcdef'\.repeat\(4\)''',
 ]
