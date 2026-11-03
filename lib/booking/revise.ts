@@ -19,6 +19,7 @@ import { partialItemTotals } from './partialTotals'
 import type { RuleViolation } from './rules'
 import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
 import { reopenForChangedRequirements } from '@/lib/pilgrims/review'
+import { assignMembers, memberProblem } from './members'
 
 // Revisi booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, keputusan pemilik R1–R4). Masukan = isi booking LENGKAP sesudah edit; mesin menghitung selisihnya:
 // item lama hilang → HAPUS (kuota dilepas sesuai status konfirmasi, baris harga di-void, baris item dihapus), item lama berubah → GANTI (hapus + tambah), item tanpa rujukan
@@ -33,8 +34,8 @@ export class RevisionError extends Error {
 }
 
 const stateInclude = {
-  hotels: true, transports: true, muthowif: true, catering: true, tourPackages: true, flights: true, packages: true, haji: { select: { id: true } },
-  pilgrims: { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: true } }, // tanpa kolom NIK/paspor tersegel
+  hotels: true, transports: true, muthowif: true, catering: true, tourPackages: true, flights: true, packages: true, haji: { select: { id: true, numPersons: true } },
+  pilgrims: { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, bookingPackageId: true, bookingHajiId: true, visaApplication: true } }, // tanpa kolom NIK/paspor tersegel
   invoice: { select: { revision: true, invoiceDate: true, dueDate: true } },
   payments: { where: { status: 'confirmed' }, select: { id: true } },
   priceSnapshots: { where: { voidedAt: null }, select: { itemType: true, itemId: true, lineKey: true, itemLabel: true, itemDetail: true, itemQty: true, totalSellIdr: true } },
@@ -93,6 +94,8 @@ type Plan = {
   /** Jamaah lama yang visa MILIKNYA berubah/dihapus (baris visa lama di-void). */
   visaRemoves: PilgrimState[]
   pilgrimWrites: BookingInput['pilgrims']
+  /** Asal harga visa tiap jamaah masukan (urut `input.pilgrims`). */
+  visaSources: Array<{ write: number } | { appId: string } | null>
   full: BookingInput
   changes: RevisionChange[]
 }
@@ -122,11 +125,15 @@ function plan(b: State, input: BookingRevisionInput): Plan {
   const sentP = new Set<string>()
   const pilgrimWrites: BookingInput['pilgrims'] = []
   const visaRemoves: PilgrimState[] = []
+  // Asal harga visa tiap jamaah masukan (urut `input.pilgrims`): nomor urut visa yang DITULIS revisi ini, id pengajuan visa lama yang dipertahankan, atau tanpa visa sendiri.
+  const visaSources: Array<{ write: number } | { appId: string } | null> = []
+  let visaWrites = 0
   let newCount = 0
   for (const sp of input.pilgrims) {
     if (!sp.pilgrimId) {
       newCount++
       pilgrimWrites.push({ visaProductId: sp.visaProductId, selectedDurationDays: sp.selectedDurationDays })
+      visaSources.push(sp.visaProductId ? { write: visaWrites++ } : null)
       continue
     }
     const p = pById.get(sp.pilgrimId)
@@ -138,12 +145,14 @@ function plan(b: State, input: BookingRevisionInput): Plan {
     if (!own && p.visaApplication) {
       // Visa dari paket: diatur lewat itemnya, bukan per jamaah.
       if (sp.visaProductId && sp.visaProductId !== p.visaApplication.visaProductId) throw new RevisionError(422, `Visa Jamaah ke-${pos.get(p.id)} berasal dari paket — ubah paketnya, bukan visa jamaah`)
+      visaSources.push(null)
       continue
     }
-    if (before === after) continue
+    if (before === after) { visaSources.push(own ? { appId: p.visaApplication!.id } : null); continue }
     if (!r3(p)) throw new RevisionError(422, `Visa Jamaah ke-${pos.get(p.id)} sudah diproses atau jamaahnya sudah memakai data jamaah tersimpan — urus lewat modul Visa`)
     if (own) visaRemoves.push(p)
     if (sp.visaProductId) pilgrimWrites.push({ pilgrimId: p.id, visaProductId: sp.visaProductId, selectedDurationDays: sp.selectedDurationDays })
+    visaSources.push(sp.visaProductId ? { write: visaWrites++ } : null)
     changes.push({ kind: 'visa_change', label: `Jamaah ke-${pos.get(p.id)}`, detail: sp.visaProductId ? 'visa diganti' : 'visa dihapus' })
   }
   const pilgrimRemoves = b.pilgrims.filter(p => !sentP.has(p.id))
@@ -162,7 +171,7 @@ function plan(b: State, input: BookingRevisionInput): Plan {
     ...pilgrimWrites.filter(p => !p.pilgrimId),
   ]
   const full: BookingInput = { items: input.items.map(i => i.item), pilgrims: resultingPilgrims, totalPilgrims: resultingPilgrims.length }
-  return { removed, writes, kept, pilgrimRemoves, visaRemoves, pilgrimWrites, full, changes }
+  return { removed, writes, kept, pilgrimRemoves, visaRemoves, pilgrimWrites, visaSources, full, changes }
 }
 
 const itemDelegate = (tx: Tx, t: ItemType) => ({
@@ -189,45 +198,47 @@ async function releaseRow(tx: Tx, b: State, c: CurrentItem) {
 }
 
 /**
- * Visa dari Paket Umroh (tanpa baris harga sendiri) diselaraskan dengan paket SESUDAH revisi: jumlah visa per produk = Σ orang paket yang memuat visa itu.
- * Kelebihan dihapus (hanya bila R3), kekurangan dipasangkan ke jamaah tanpa visa — urut. Visa paket yang sedang diproses tak pernah dihapus diam-diam (422).
+ * Anggota Paket Umroh + visa paketnya diselaraskan dengan item SESUDAH revisi lewat aturan tunggal `assignMembers` (lib/booking/members.ts): anggota lama
+ * dipertahankan, kursi kosong diisi urut, jamaah yang keluar paket kehilangan visa paketnya (hanya bila R3 — visa paket yang sedang diproses tak pernah
+ * dihapus diam-diam, 422), anggota baru paket bervisa mendapat pengajuan visa dan verifikasinya dibuka ulang (SEC-201). Booking ber-Haji tak dapat direvisi.
  */
-async function syncPackageVisas(tx: Tx, bookingId: string, prepared: PreparedBooking, items: BookingItemInput[], plannedTravelDate: Date | null, byUserId: string) {
-  const slots = new Map<string, number>()
-  let pi = 0
-  for (const it of items) {
-    if (it.itemType !== 'package') continue
-    const r = prepared.packages[pi++]!
-    if (r.visaProductId) slots.set(r.visaProductId, (slots.get(r.visaProductId) ?? 0) + it.numPeople)
-  }
+async function syncMembers(tx: Tx, bookingId: string, rows: Array<{ key: string; numPeople: number; visaProductId: string | null; name: string }>, plannedTravelDate: Date | null, byUserId: string) {
   const b = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: stateInclude })
-  const pkgApps = b.pilgrims.filter(p => p.visaApplication && !ownVisa(b, p))
-  const keep = new Map<string, number>()
-  for (const p of pkgApps) {
-    const v = p.visaApplication!.visaProductId!
-    const left = slots.get(v) ?? 0
-    if ((keep.get(v) ?? 0) < left) { keep.set(v, (keep.get(v) ?? 0) + 1); continue }
-    if (!r3(p)) throw new RevisionError(422, 'Visa dari paket sedang diproses atau jamaahnya sudah memakai data jamaah tersimpan — paket tak dapat dikurangi lewat edit')
-    await tx.visaApplication.delete({ where: { id: p.visaApplication!.id } })
-  }
-  const free = b.pilgrims.filter(p => !p.visaApplication)
-  for (const [v, n] of slots) {
-    const missing = n - (keep.get(v) ?? 0)
-    if (missing <= 0 || free.length === 0) continue // jamaah lebih sedikit dari kursi paket: sisa slot visa tak dipasangkan (sama dengan pesan baru)
-    const vp = await tx.visaProduct.findUnique({ where: { id: v }, select: { visaType: true } })
-    if (!vp) throw new RevisionError(422, 'Produk visa paket tidak tersedia')
-    for (const p of free.splice(0, missing)) {
-      await tx.visaApplication.create({ data: { bookingPilgrimId: p.id, visaProductId: v, visaType: vp.visaType, status: 'pending_documents', plannedTravelDate } })
+  const pilgrims = b.pilgrims.map(p => {
+    const own = ownVisa(b, p)
+    return { key: p.id, ownVisa: own, packageVisa: !own ? p.visaApplication?.visaProductId ?? null : null, currentPackage: p.bookingPackageId, currentHaji: p.bookingHajiId }
+  })
+  const r = assignMembers(rows, b.haji.map(h => ({ key: h.id, numPeople: h.numPersons })), pilgrims)
+  if (!r.ok) throw new RevisionError(422, memberProblem(r, k => rows.find(x => x.key === k)?.name ?? 'paket'))
+  const visaOf = new Map(rows.map(x => [x.key, x.visaProductId]))
+  for (const [i, pg] of b.pilgrims.entries()) {
+    const m = r.members[i]!
+    if (m.package !== pg.bookingPackageId || m.haji !== pg.bookingHajiId) {
+      await tx.bookingPilgrim.update({ where: { id: pg.id }, data: { bookingPackageId: m.package, bookingHajiId: m.haji }, select: { id: true } })
+    }
+    if (pilgrims[i]!.ownVisa) continue // visa milik sendiri diatur lewat jamaah (plan), bukan paket
+    const had = pilgrims[i]!.packageVisa
+    const want = (m.package && visaOf.get(m.package)) || null
+    if (had === want) continue
+    if (had) {
+      if (!r3(pg)) throw new RevisionError(422, 'Visa dari paket sedang diproses atau jamaahnya sudah memakai data jamaah tersimpan — paket tak dapat dikurangi lewat edit')
+      await tx.visaApplication.delete({ where: { id: pg.visaApplication!.id } })
+    }
+    if (want) {
+      const vp = await tx.visaProduct.findUnique({ where: { id: want }, select: { visaType: true } })
+      if (!vp) throw new RevisionError(422, 'Produk visa paket tidak tersedia')
+      await tx.visaApplication.create({ data: { bookingPilgrimId: pg.id, visaProductId: want, visaType: vp.visaType, status: 'pending_documents', plannedTravelDate } })
       // Syarat dokumen visa baru belum tercakup verifikasi lama (SEC-201).
-      await reopenForChangedRequirements(tx, p.id, byUserId, 'Visa ditambahkan lewat revisi booking — dokumen visa perlu diperiksa')
+      await reopenForChangedRequirements(tx, pg.id, byUserId, 'Visa ditambahkan lewat revisi booking — dokumen visa perlu diperiksa')
     }
   }
 }
 
 export type RevisionResult = {
-  revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]; warnings: RuleViolation[]
+  revision: number; totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; changes: RevisionChange[]
   /** Pengingat uang (kelebihan bayar, bukti menunggu) — tak menolak. */ notices: string[]
   /** Harga jual tiap item SESUDAH revisi, URUT `input.items` (subtotal baris di editor). */ itemTotals: number[]
+  /** Harga jual visa milik tiap jamaah SESUDAH revisi, URUT `input.pilgrims` (0 = tanpa visa sendiri; visa paket ada di baris paketnya). */ pilgrimVisaTotals: number[]
 }
 
 async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byUserId: string, prepared: { full: PreparedBooking; writes: PreparedBooking }, planned: Plan, opts: { requireReason: boolean; allowNoChange?: boolean } = { requireReason: true }): Promise<RevisionResult> {
@@ -280,19 +291,27 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   if (p.writes.length > 0 || p.pilgrimWrites.length > 0) {
     try {
       await reserveItems(tx, prepared.writes)
-      await writeBookingItems(tx, bookingId, { ...prepared.writes.data, plannedTravelDate: plannedTravel }, prepared.writes.tours, prepared.writes.packages, written)
+      await writeBookingItems(tx, bookingId, { ...prepared.writes.data, plannedTravelDate: plannedTravel }, prepared.writes.tours, prepared.writes.packages, written, { assignMembers: false })
     } catch (e) {
       remapItemIndex(e, k => p.writes[k]?.index) // nomor subset → baris editor
     }
   }
   // Produk baru SELALU ditahan `pending` (koreksi pemilik 2026-11-01) — juga pada booking yang sudah dikonfirmasi; dikonfirmasi saat pembayarannya diverifikasi.
-  await syncPackageVisas(tx, bookingId, prepared.full, p.full.items, plannedTravel ? dbDateOf(plannedTravel) : null, byUserId)
-
-  // 4. harga khusus per item (R4): selisih terhadap harga item (tanpa harga khusus lamanya)
-  const priceNotes: string[] = []
   const itemIdOf = new Map<number, { itemType: string; itemId: string }>()
   p.kept.forEach(k => itemIdOf.set(k.index, k.cur.ref))
   p.writes.forEach((w, i) => { const m = written[i]; if (m) itemIdOf.set(w.index, { itemType: m.itemType, itemId: m.itemId }) })
+  // Baris paket SESUDAH revisi, urut masukan; visa paket = hasil resolusi (included atau pilihan) dari isi lengkap.
+  let pkgIdx = 0
+  const packageRows = input.items.flatMap((it, index) => {
+    if (it.item.itemType !== 'package') return []
+    const r = prepared.full.packages[pkgIdx++]!
+    const id = itemIdOf.get(index)?.itemId
+    return id ? [{ key: id, numPeople: it.item.numPeople, visaProductId: r.visaProductId, name: r.name }] : []
+  })
+  await syncMembers(tx, bookingId, packageRows, plannedTravel ? dbDateOf(plannedTravel) : null, byUserId)
+
+  // 4. harga khusus per item (R4): selisih terhadap harga item (tanpa harga khusus lamanya)
+  const priceNotes: string[] = []
   for (const [index, ref] of itemIdOf) {
     const want = input.items[index]!.customSellIdr ?? null
     const kept = p.kept.find(k => k.index === index)
@@ -337,7 +356,14 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   if (pays.some(x => x.status === 'pending')) notices.push('Ada bukti transfer yang menunggu verifikasi — jumlahnya mungkin tak lagi sama dengan tagihan baru.')
   const sells = await itemSellTotals(tx, bookingId)
   const itemTotals = input.items.map((_, i) => { const r = itemIdOf.get(i); return r ? sells.get(`${r.itemType}:${r.itemId}`) ?? 0 : 0 })
-  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, warnings: prepared.full.warnings, notices, itemTotals }
+  // Visa yang ditulis revisi ini menyusul item yang ditulis, urut `pilgrimWrites` (lib/booking/lineItems.ts); visa lama yang dipertahankan dibaca dari pengajuannya.
+  const visaMetas = written.slice(p.writes.length)
+  const pilgrimVisaTotals = p.visaSources.map(src => {
+    if (!src) return 0
+    const id = 'write' in src ? visaMetas[src.write]?.itemId : src.appId
+    return id ? sells.get(`visa:${id}`) ?? 0 : 0
+  })
+  return { revision, totalBefore, totalAfter: sellIdr, taxBefore: inv.taxBefore, taxAfter: inv.taxAfter, changes: p.changes, notices, itemTotals, pilgrimVisaTotals }
 }
 
 /** Rencana + resolusi di LUAR transaksi (bacaan saja): aturan visa atas isi LENGKAP sesudah revisi, resolusi item yang akan ditulis. */
@@ -347,10 +373,10 @@ async function prepare(bookingId: string, input: BookingRevisionInput) {
   if (b.status !== 'active') throw new RevisionError(409, 'Hanya booking aktif yang dapat diedit (batal/hangus/selesai tidak)')
   if (b.invoice && b.invoice.revision !== input.expectedRevision) throw new RevisionError(409, 'Booking sudah diubah orang lain sejak halaman dibuka — muat ulang lalu ulangi')
   const p = plan(b, input)
-  const full = await prepareBooking(p.full, b.userId)
+  const full = await prepareBooking(p.full)
   // Item yang ditulis = SUBSET masukan: nomor galatnya dipetakan kembali ke baris editor.
   const toInput = (k: number) => p.writes[k]?.index
-  const writes = await prepareBooking({ items: p.writes.map(w => w.item), pilgrims: p.pilgrimWrites, totalPilgrims: p.full.pilgrims.length }, b.userId, { rules: false })
+  const writes = await prepareBooking({ items: p.writes.map(w => w.item), pilgrims: p.pilgrimWrites, totalPilgrims: p.full.pilgrims.length }, { rules: false })
     .catch(e => remapItemIndex(e, toInput))
   return { planned: p, prepared: { full, writes } }
 }
@@ -391,7 +417,7 @@ export async function revisionPartialTotals(bookingId: string, input: BookingRev
 export type RevisionEditorState = {
   revision: number; invoiceDate: string; dueDate: string; confirmed: boolean; hasPayments: boolean; customerId: string
   items: CurrentItem[]
-  pilgrims: Array<{ pilgrimId: string; position: number; visaProductId: string | null; selectedDurationDays: number | null; visaFromPackage: boolean; locked: boolean; lockReason: string | null }>
+  pilgrims: Array<{ pilgrimId: string; position: number; visaProductId: string | null; selectedDurationDays: number | null; visaFromPackage: boolean; locked: boolean; lockReason: string | null; visaPriceIdr: number }>
 }
 
 /** Isi editor revisi: item & jamaah sekarang + mana yang terkunci (R3). Data pribadi jamaah TIDAK disertakan (editor memakai urutan "Jamaah ke-N"). */
@@ -404,9 +430,12 @@ export async function revisionEditorState(bookingId: string): Promise<RevisionEd
     pilgrims: b.pilgrims.map((p, i) => {
       const fromPackage = !!p.visaApplication && !ownVisa(b, p)
       const locked = !r3(p)
+      // Harga jual visa sendiri (baris snapshot berlaku) — subtotal baris Visa di editor sebelum ada pratinjau; visa paket ada di baris paketnya.
+      const visaPriceIdr = p.visaApplication && !fromPackage
+        ? b.priceSnapshots.filter(l => l.itemType === 'visa' && l.itemId === p.visaApplication!.id).reduce((sum, l) => sum + cents(Number(l.totalSellIdr)), 0) / 100 : 0
       return {
         pilgrimId: p.id, position: i + 1, visaProductId: p.visaApplication?.visaProductId ?? null, selectedDurationDays: p.visaApplication?.selectedDurationDays ?? null,
-        visaFromPackage: fromPackage, locked, lockReason: locked ? (p.savedPilgrimId !== null ? 'Sudah memakai data jamaah tersimpan' : 'Visa sudah diproses') : null,
+        visaFromPackage: fromPackage, locked, lockReason: locked ? (p.savedPilgrimId !== null ? 'Sudah memakai data jamaah tersimpan' : 'Visa sudah diproses') : null, visaPriceIdr,
       }
     }),
   }

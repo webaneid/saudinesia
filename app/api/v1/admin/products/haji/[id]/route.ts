@@ -7,6 +7,7 @@ import { emptyToNull } from '@/lib/validators/richText'
 import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
 import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
 import { sellPrice } from '@/lib/pricing/engine/read'
+import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -19,8 +20,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     const { id } = await params
     const product = await prisma.hajiProduct.findUnique({ where: { id } })
     if (!product) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
-    const bookingCount = await prisma.bookingHaji.count({ where: { hajiProductId: id } })
-    return NextResponse.json(ok({ ...product, price: await sellPrice('haji', id), bookingCount }))
+    const [bookingCount, documentRequirements] = await Promise.all([prisma.bookingHaji.count({ where: { hajiProductId: id } }), requirementsOf('haji', id)])
+    return NextResponse.json(ok({ ...product, price: await sellPrice('haji', id), bookingCount, documentRequirements }))
   } catch (e) {
     return authFailureResponse(e, 'admin/products/haji/[id]/GET')
   }
@@ -42,12 +43,21 @@ export async function PUT(req: Request, { params }: Ctx) {
       }
     }
 
-    const { description, ...fields } = parsed.data
-    const updated = await prisma.hajiProduct.update({
-      where: { id },
-      data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
-    })
-    return NextResponse.json(ok({ ...updated, price: await sellPrice('haji', id) }))
+    const { description, requirements, ...fields } = parsed.data
+    // Produk + syarat dokumen dalam SATU transaksi — syarat tak pernah setengah tersimpan.
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.hajiProduct.update({
+        where: { id },
+        data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
+      })
+      if (requirements) {
+        const written = await writeRequirements(tx, 'haji', id, requirements)
+        if (!written.ok) throw new RequirementRejected(written.error, written.field)
+      }
+      return updated
+    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
+    return NextResponse.json(ok({ ...result, price: await sellPrice('haji', id) }))
   } catch (e) {
     if (isRecordNotFound(e)) return NextResponse.json(err('Produk haji tidak ditemukan'), { status: 404 })
     return authFailureResponse(e, 'admin/products/haji/[id]/PUT')

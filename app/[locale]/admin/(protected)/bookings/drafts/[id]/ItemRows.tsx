@@ -7,7 +7,8 @@ import { Button } from '@/components/admin/ui/Button'
 import { formatRupiah } from '@/lib/utils'
 import { daysBetween, formatCalendarDate, type CalendarDate } from '@/lib/time'
 import { hotelsOf, noPeriodMessage, resolveHotelSchedule, roomsOf } from '@/lib/booking/hotelPick'
-import { MODULE_LABEL, type Catalog, type DraftItem, type ModuleKey } from './catalog'
+import { parseRequiredComponents, REQUIRED_COMPONENT_LABEL, REQUIRED_COMPONENT_TYPES, visaSalesModel, type RequiredComponentType } from '@/lib/validators/visa'
+import { MODULE_LABEL, type Catalog, type DraftItem, type ModuleKey, type VisaOpt } from './catalog'
 
 // Editor BARIS produk (docs/arsitektur-booking-engine-v2.md §10.4, arahan pemilik 2026-11-01 — gaya baris invoice): satu baris per item, semua kolom langsung dapat diubah,
 // subtotal baris & total dihitung SERVER (pratinjau otomatis oleh induk). Dipakai form draf dan editor revisi. Harga satuan tidak diketik; di revisi ada kolom harga khusus (R4).
@@ -24,7 +25,8 @@ export type ItemRow = {
   priceNote?: string
 }
 
-export const ROW_MODULES: ModuleKey[] = ['package', 'flight', 'hotel', 'transport', 'muthowif', 'catering', 'tourPackage']
+// Visa paling depan: visa adalah produk utama yang kita jual (docs/rencana-visa-produk.md §0). Barisnya dipetakan ke slot jamaah oleh ./visaRows.ts.
+export const ROW_MODULES: ModuleKey[] = ['visa', 'package', 'flight', 'hotel', 'transport', 'muthowif', 'catering', 'tourPackage']
 const num = (v: string) => Math.max(0, Math.trunc(Number(v) || 0))
 const span = (a: string, b: string) => (a && b ? daysBetween(a as CalendarDate, b as CalendarDate) : 0)
 const fmt = (iso: string) => formatCalendarDate(iso)
@@ -45,6 +47,19 @@ const hotelLegacy = (row: ItemRow, catalog: Catalog) => !!row.f.pick && !hotelSe
 
 export function newRow(people: number, module: ModuleKey | '' = ''): ItemRow {
   return { key: newRowKey(), module, f: empty(people) }
+}
+
+/** Komponen wajib visa yang kurang (`RuleViolation.missing`) → baris produk yang memenuhinya; hotel tersaring ke kota yang diminta (`extra.city`, hanya di klien). */
+const MISSING_ROW: Record<RequiredComponentType, { module: ModuleKey; city?: 'makkah' | 'madinah' }> = {
+  flight: { module: 'flight' }, hotel_makkah: { module: 'hotel', city: 'makkah' }, hotel_madinah: { module: 'hotel', city: 'madinah' },
+  transport: { module: 'transport' }, muthowif: { module: 'muthowif' }, tour: { module: 'tourPackage' }, catering: { module: 'catering' },
+}
+export function rowForMissing(people: number, missing: string): { row: ItemRow; label: string } | null {
+  const m = (REQUIRED_COMPONENT_TYPES as readonly string[]).includes(missing) ? MISSING_ROW[missing as RequiredComponentType] : undefined
+  if (!m) return null
+  const row = newRow(people, m.module)
+  if (m.city) row.f.extra = { ...row.f.extra, city: m.city }
+  return { row, label: REQUIRED_COMPONENT_LABEL[missing as RequiredComponentType].toLowerCase() }
 }
 
 /** Baris dari item yang sudah ada (draf tersimpan / isi booking saat revisi). */
@@ -68,8 +83,8 @@ export function rowFromItem(it: DraftItem, extra: Partial<ItemRow> = {}): ItemRo
   }
 }
 
-/** Baris → item masukan pesan; `error` = alasan baris belum lengkap (ditampilkan di baris, menahan simpan/terbit). */
-export function rowToItem(row: ItemRow, catalog: Catalog): { item: DraftItem } | { error: string } {
+/** Baris → item masukan pesan; `error` = alasan baris belum lengkap (ditampilkan di baris, menahan simpan/terbit). Baris Visa bukan item: `visa` (disimpan per jamaah). */
+export function rowToItem(row: ItemRow, catalog: Catalog): { item: DraftItem } | { visa: true } | { error: string } {
   const { module, f } = row
   const n = num(f.people)
   if (!module) return { error: 'Pilih jenis produk' }
@@ -128,7 +143,8 @@ export function rowToItem(row: ItemRow, catalog: Catalog): { item: DraftItem } |
       return { item: { itemType: 'package', packageId: f.pick, departureDate: f.start, numPeople: n, choices } }
     }
     case 'visa':
-      return { error: 'Visa dipasang per jamaah di kotak Jamaah' }
+      if (!f.pick) return { error: 'Pilih produk visa' }
+      return n < 1 ? { error: 'Jumlah orang minimal 1' } : { visa: true }
   }
 }
 
@@ -145,6 +161,23 @@ type Props = {
   customPrice?: boolean
   /** Galat server yang menunjuk satu baris (`meta.itemIndex`): mis. tanggal di luar periode harga, kuota kurang. */
   rowError?: { index: number; message: string }
+  /** Jumlah orang awal baris Visa baru = jamaah yang belum bervisa (min. 1), bukan seluruh jamaah. */
+  defaultVisaPeople?: number
+  /** Revisi: jumlah anggota TERKUNCI per baris Visa (R3) — produk/lama tinggal terkunci, jumlah tak boleh di bawahnya, baris tak bisa dihapus. */
+  visaLocks?: Record<string, number>
+}
+
+/**
+ * Tarif visa (katalog, harga jual). `days` kosong = tarif termurah sebagai "mulai" (petunjuk di daftar pilihan; tanpa "mulai" bila semua tier bertarif sama). Harga satuan baris memakai lama tinggal yang
+ * SAMA dengan server: kosong → 1 hari (`DEFAULT_DURATION_PROBE_DAY`, lib/booking/lineItems.ts); di luar semua rentang → "mulai" (server menolaknya 422).
+ */
+function visaTier(o: VisaOpt, days: number | null): { fee: number; from: boolean } | null {
+  if (o.tiers.length === 0) return null
+  const hit = days === null ? undefined : o.tiers.find(t => days >= t.minDays && days <= t.maxDays)
+  if (hit) return { fee: hit.fee, from: false }
+  const fees = o.tiers.map(t => t.fee)
+  // Petunjuk daftar pilihan: satu tarif untuk semua lama tinggal = harga pasti, bukan "mulai".
+  return { fee: Math.min(...fees), from: days !== null || new Set(fees).size > 1 }
 }
 
 /** Harga jual satuan dari katalog (server) — tampil langsung, tanpa menunggu pratinjau. Subtotal tetap dari server (harga tak dihitung di klien). */
@@ -159,6 +192,7 @@ function unitPrice(row: ItemRow, catalog: Catalog): { amount: number; unit: stri
     case 'catering': { const o = catalog.catering?.find(x => x.id === id); return o?.prices ? { amount: o.prices.regular, unit: '/orang/hari (reguler)' } : null }
     case 'tourPackage': { const o = catalog.tourPackage?.find(x => x.id === id); return o ? { amount: o.price, unit: '(dasar)' } : null }
     case 'package': { const o = catalog.package?.find(x => x.id === id); return o ? { amount: o.pricePerPerson, unit: '/orang (dasar)' } : null }
+    case 'visa': { const o = catalog.visa?.find(x => x.id === id); const t = o && visaTier(o, num(row.f.extra.days ?? '') || 1); return t ? { amount: t.fee, unit: t.from ? '/orang (mulai)' : '/orang' } : null }
     default: return null
   }
 }
@@ -170,7 +204,7 @@ function Field({ label, children, className = '' }: { label: string; children: R
   return <label className={`block space-y-0.5 ${className}`}><span className="block text-[11px] text-admin-muted">{label}</span>{children}</label>
 }
 
-export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice, rowError }: Props) {
+export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice, rowError, defaultVisaPeople, visaLocks }: Props) {
   const modulesInUse = [...new Set(rows.map(r => r.module).filter((m): m is ModuleKey => m !== ''))]
   useEffect(() => { for (const m of modulesInUse) void load(m) }, [modulesInUse.join(','), load]) // eslint-disable-line react-hooks/exhaustive-deps
   const needsTransport = rows.some(r => r.module === 'tourPackage' && catalog.tourPackage?.find(t => t.id === r.f.pick)?.transportMode === 'user_choice')
@@ -199,6 +233,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
         case 'catering': return (catalog.catering ?? []).map(o => ({ id: o.id, label: o.name, hint: o.prices ? `${formatRupiah(o.prices.regular)}/orang/hari (reguler)` : '' }))
         case 'tourPackage': return (catalog.tourPackage ?? []).map(o => ({ id: o.id, label: o.name, hint: formatRupiah(o.price) }))
         case 'package': return (catalog.package ?? []).map(o => ({ id: o.id, label: o.name, hint: `${formatRupiah(o.pricePerPerson)}/orang (dasar)` }))
+        case 'visa': return (catalog.visa ?? []).map(o => { const t = visaTier(o, null); return { id: o.id, label: o.name, hint: [visaSalesModel(parseRequiredComponents(o.requiredComponents).components).label, t ? `${t.from ? 'mulai ' : ''}${formatRupiah(t.fee)}/orang` : 'belum berharga'].join(' · ') } })
         default: return []
       }
     })()
@@ -208,7 +243,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
 
   return (
     <div className="space-y-2">
-      {rows.length === 0 && <p className="m-0 text-sm text-admin-muted">Belum ada produk. Visa dipasang per jamaah di kotak Jamaah.</p>}
+      {rows.length === 0 && <p className="m-0 text-sm text-admin-muted">Belum ada produk.</p>}
       {rows.length > 0 && (
         <div aria-hidden className={`hidden gap-x-3 px-2.5 text-[11px] font-medium uppercase tracking-wide text-admin-muted xl:grid ${GRID}`}>
           <span>Produk</span><span>Tanggal</span><span>Jumlah</span><span className="text-right">Harga jual</span><span className="text-right">Subtotal</span><span />
@@ -235,24 +270,26 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
         const unit = unitPrice(row, catalog)
         const serverError = rowError?.index === i ? rowError.message : null
         const nights = span(f.start, f.end)
+        const visaLocked = row.module === 'visa' ? visaLocks?.[row.key] ?? 0 : 0
+        const visa = row.module === 'visa' ? catalog.visa?.find(x => x.id === f.pick) : undefined
         const days = f.start && f.end ? span(f.start, f.end) + 1 : 0
         return (
           <div key={row.key} className={`rounded-lg border bg-white p-2.5 ${serverError ? 'border-admin-danger' : 'border-admin-line'}`}>
             <div className={`grid grid-cols-2 gap-x-3 gap-y-2 xl:items-start ${GRID}`}>
               {/* 1. Produk: jenis + produk */}
               <div className="col-span-2 space-y-1.5 xl:col-span-1">
-                <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref} placeholder="— pilih jenis —"
-                  options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(defaultPeople), label: undefined })} />
+                <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref || visaLocked > 0} placeholder="— pilih jenis —"
+                  options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(v === 'visa' ? Math.max(1, defaultVisaPeople ?? defaultPeople) : defaultPeople), label: undefined })} />
                 {hsel ? <>
                   <ChoiceSelect size="sm" ariaLabel={`Hotel baris ${i + 1}`} value={hsel.hotel} clearable={false}
-                    options={hotelsOf(catalog.hotel ?? []).map(h => ({ id: h.id, label: h.name, hint: [h.city, h.stars ? `bintang ${h.stars}` : ''].filter(Boolean).join(' · ') }))}
+                    options={hotelsOf(catalog.hotel ?? []).filter(h => !f.extra.city || h.city === f.extra.city).map(h => ({ id: h.id, label: h.name, hint: [h.city, h.stars ? `bintang ${h.stars}` : ''].filter(Boolean).join(' · ') }))}
                     placeholder={!catalog.hotel ? 'Memuat…' : legacyHotel ? (row.label ?? 'Hotel (tidak tersedia di katalog)') : catalog.hotel.length ? '— pilih hotel —' : 'Belum ada hotel berharga'}
                     onChange={v => setHotel(i, { hotel: v, room: '' })} />
                   <ChoiceSelect size="sm" ariaLabel={`Tipe kamar baris ${i + 1}`} value={hsel.room} clearable={false} disabled={!hsel.hotel}
                     options={roomsOf(catalog.hotel ?? [], hsel.hotel).map(r => ({ id: r.id, label: r.name, hint: `isi ${r.capacity} · ${r.minPrice === r.maxPrice ? formatRupiah(r.minPrice) : `${formatRupiah(r.minPrice)} – ${formatRupiah(r.maxPrice)}`}/malam` }))}
                     placeholder={hsel.hotel ? '— pilih tipe kamar —' : 'Pilih hotel dulu'} onChange={v => setHotel(i, { room: v })} />
                 </> : (
-                  <ChoiceSelect size="sm" ariaLabel={`Produk baris ${i + 1}`} value={f.pick} disabled={!row.module} options={optionsFor(row)}
+                  <ChoiceSelect size="sm" ariaLabel={`Produk baris ${i + 1}`} value={f.pick} disabled={!row.module || visaLocked > 0} options={optionsFor(row)}
                     placeholder={row.module ? (optionsFor(row).length ? '— pilih produk —' : 'Memuat / belum ada produk') : 'Pilih jenis dulu'} onChange={v => setF(i, { pick: v })} />
                 )}
               </div>
@@ -272,12 +309,17 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                 </>}
                 {row.module === 'tourPackage' && date('Tanggal tur', 'start')}
                 {row.module === 'package' && date('Berangkat', 'start')}
+                {row.module === 'visa' && <>
+                  <label className="flex items-center gap-2"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">Tinggal</span><input type="number" min={1} className="admin-inp-xs min-w-0 flex-1" aria-label={`Lama tinggal baris ${i + 1}`} placeholder="hari" disabled={visaLocked > 0} value={f.extra.days ?? ''} onChange={e => setX(i, 'days', e.target.value)} /></label>
+                  {visa && (() => { const m = visaSalesModel(parseRequiredComponents(visa.requiredComponents).components); return <p className="m-0 text-[11px] text-admin-muted">{m.plus ? `Visa plus — wajib: ${m.parts.join(', ')}` : m.label}</p> })()}
+                </>}
                 {row.module === 'transport' && <p className="m-0 flex items-center gap-2 py-1 text-sm"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">Tanggal</span>{transport ? fmt(transport.date) : '—'}</p>}
               </div>
 
               {/* 3. Jumlah */}
               <div className="space-y-1.5">
-                {row.module === 'hotel' ? count('Kamar', 'rooms')
+                {row.module === 'visa' ? <Field label="Orang"><input type="number" min={Math.max(1, visaLocked)} className="admin-inp-xs" aria-label={`Orang baris ${i + 1}`} value={f.people} onChange={e => setF(i, { people: e.target.value })} /></Field>
+                  : row.module === 'hotel' ? count('Kamar', 'rooms')
                   : row.module === 'flight' || row.module === 'transport' ? count('Penumpang', 'people')
                   : row.module ? count('Orang', 'people') : null}
               </div>
@@ -299,12 +341,12 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                 </span>
               </div>
               <div className="flex justify-end">
-                <button type="button" aria-label={`Hapus baris ${i + 1}`} onClick={() => onChange(rows.filter((_, j) => j !== i))} className="rounded p-1 text-admin-muted hover:text-admin-danger"><Trash2 className="size-4" /></button>
+                <button type="button" aria-label={`Hapus baris ${i + 1}`} disabled={visaLocked > 0} title={visaLocked > 0 ? 'Sebagian visa sudah diproses — urus lewat modul Visa' : undefined} onClick={() => onChange(rows.filter((_, j) => j !== i))} className="rounded p-1 text-admin-muted hover:text-admin-danger disabled:opacity-40"><Trash2 className="size-4" /></button>
               </div>
             </div>
 
             {/* Baris kedua: pilihan per jenis (jika ada) */}
-            {(row.module === 'transport' || tour?.transportMode === 'user_choice' || tour?.hotelMode === 'user_choice' || (pkg && Object.values(pkg.modes).includes('user_choice')) || customPrice) && (
+            {(row.module === 'transport' || tour?.transportMode === 'user_choice' || tour?.hotelMode === 'user_choice' || (pkg && Object.values(pkg.modes).includes('user_choice')) || (customPrice && row.module !== 'visa')) && (
               <div className="mt-2 flex flex-wrap items-end gap-2 border-t border-admin-line pt-2">
                 {row.module === 'transport' && <>
                   <Field label="Detail penjemputan" className="min-w-40 flex-1"><input className="admin-inp-xs" maxLength={300} value={f.extra.pickup ?? ''} onChange={e => setX(i, 'pickup', e.target.value)} /></Field>
@@ -327,7 +369,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                       options={pkg.options[k].map(o => ({ id: o.id, label: o.name, hint: o.perPerson != null ? `${formatRupiah(o.perPerson)}/orang` : o.price != null ? formatRupiah(o.price) : '' }))} />
                   </Field>
                 ))}
-                {customPrice && <>
+                {customPrice && row.module !== 'visa' && <>
                   <Field label="Harga khusus (opsional)" className="w-40"><input type="number" min={1} className="admin-inp-xs" aria-label={`Harga khusus baris ${i + 1}`} value={row.customSellIdr ?? ''} onChange={e => set(i, { customSellIdr: Number(e.target.value) > 0 ? Number(e.target.value) : null })} /></Field>
                   {row.customSellIdr != null && <Field label="Catatan harga khusus (wajib bila diubah)" className="min-w-48 flex-1"><input className="admin-inp-xs" aria-label={`Catatan harga khusus baris ${i + 1}`} maxLength={300} value={row.priceNote ?? ''} onChange={e => set(i, { priceNote: e.target.value })} /></Field>}
                 </>}
@@ -335,6 +377,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
             )}
             {'error' in check && row.module && <p className="m-0 mt-1.5 text-[11px] text-admin-warning">{check.error}</p>}
             {serverError && !('error' in check) && <p role="alert" className="m-0 mt-1.5 text-xs font-medium text-admin-danger">{serverError}</p>}
+            {visaLocked > 0 && <p className="m-0 mt-1.5 text-[11px] text-admin-muted">{visaLocked} visa di baris ini sudah diproses / memakai data jamaah tersimpan — produk dan lama tinggal terkunci, urus lewat modul Visa.</p>}
           </div>
         )
       })}

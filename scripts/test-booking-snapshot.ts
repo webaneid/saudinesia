@@ -102,7 +102,12 @@ await repriceOwner('tour_package', tour.id)
 type Items = CreateBookingInput['items']
 type Pilgrims = CreateBookingInput['pilgrims']
 const snapCount = () => prisma.priceSnapshot.count()
-async function book(items: Items, pilgrims: Pilgrims = [{ fieldValues: {} }], tourResolved: TourPackageResolved[] = []) {
+// Jamaah bawaan = cukup untuk orang paket/haji terbanyak (lib/booking/members.ts menolak jamaah kurang dari jumlah orang paket/haji).
+const enough = (items: Items): Pilgrims => {
+  const need = (k: 'haji' | 'package') => (items as Array<{ itemType: string; numPersons?: number; numPeople?: number }>).filter(i => i.itemType === k).reduce((s, i) => s + (i.numPersons ?? i.numPeople ?? 0), 0)
+  return Array.from({ length: Math.max(1, need('haji'), need('package')) }, () => ({ fieldValues: {} }))
+}
+async function book(items: Items, pilgrims: Pilgrims = enough(items), tourResolved: TourPackageResolved[] = []) {
   const data = { departureDate: '2090-06-01', returnDate: '2090-06-10', season, bookingType: 'individual', totalPilgrims: pilgrims.length, items, pilgrims } as unknown as CreateBookingInput
   return prisma.$transaction(async tx => {
     const bk = await tx.booking.create({ data: { bookingCode: `${tag}-${bookings.length}-${Math.random().toString(36).slice(2, 6)}`, userId: user.id, departureDate: new Date('2090-06-01'), returnDate: new Date('2090-06-10'), season, totalAmount: 0 } })
@@ -428,7 +433,9 @@ await t('INVOICE dari snapshot: satu baris per ITEM (paket = satu baris), jumlah
     { itemType: 'hotel', hotelRoomScheduleId: hotelA.schedule.id, checkIn: '2090-06-01', checkOut: '2090-06-04', nights: 3, numRooms: 2 },
     { itemType: 'tourPackage', tourPackageId: tour.id, numPeople: 4 },
     { itemType: 'haji', hajiProductId: haji.id, numPersons: 2 },
-  ], [{ fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 20 }], await resolveTour())
+  ], [{ fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 20 }, { fieldValues: {} }], await resolveTour()) // 2 jamaah = 2 orang haji
+  const hajiRow = await prisma.bookingHaji.findFirstOrThrow({ where: { bookingId: b.id }, select: { id: true } })
+  assert.deepEqual((await prisma.bookingPilgrim.findMany({ where: { bookingId: b.id }, select: { bookingHajiId: true } })).map(p => p.bookingHajiId), [hajiRow.id, hajiRow.id], 'kedua jamaah anggota haji')
   const inv = await loadInvoice(b.id)
   assert.deepEqual(inv.lineItems.map(l => [l.qty, l.amount]), [[2, 7_200_000], [4, 4_100_000], [2, 5_000_000], [1, 2_400_000]])
   assert.equal(inv.lineItems[0]!.unitPrice, 3_600_000, 'harga satuan = total ÷ qty')

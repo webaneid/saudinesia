@@ -59,7 +59,7 @@ export default async function BookingDetailPage({ params }: Props) {
 
   // Kartu tertaut + kelengkapan dokumen per jamaah — aturan yang sama dengan halaman admin (lib/pilgrims/bookingLink.ts → evaluateCompleteness).
   const checklists = await bookingChecklists(booking.id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(p => ({
-    id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
+    id: p.id, savedPilgrimId: p.savedPilgrimId,
     plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
   })))
   // Catatan perbaikan terakhir dari petugas (Fase 6) — nama petugas tidak dikirim ke pemesan.
@@ -244,7 +244,7 @@ export default async function BookingDetailPage({ params }: Props) {
             <PilgrimTripPanel
               locale={safeLocale(locale)} bookingId={booking.id} pilgrimId={p.id}
               linked={checklists.get(p.id)?.card ?? null}
-              checklist={(checklists.get(p.id)?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state }))}
+              checklist={(checklists.get(p.id)?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state, sources: i.sources ?? [] }))}
               review={{
                 status: p.reviewStatus,
                 open: booking.status === 'active',

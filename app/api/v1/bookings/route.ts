@@ -62,7 +62,7 @@ export async function POST(request: Request) {
     const { defaultDueDays } = await getInvoiceSettings()
 
     // Resolusi + aturan visa di luar transaksi, lalu kuota + item + snapshot di dalam — mesin yang SAMA dengan penerbitan draf admin (lib/booking/create.ts).
-    const prepared = await prepareBooking({ items: data.items, pilgrims: data.pilgrims, departureDate: data.departureDate, totalPilgrims: data.totalPilgrims }, session.userId)
+    const prepared = await prepareBooking({ items: data.items, pilgrims: data.pilgrims, departureDate: data.departureDate, totalPilgrims: data.totalPilgrims })
     const booking = await withBookingCode(bookingCode => retrySerializable(() => prisma.$transaction(async (tx) => {
       const bk = await tx.booking.create({
         data: {

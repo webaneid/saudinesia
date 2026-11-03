@@ -38,7 +38,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ pilgrimI
     if (!pilgrim) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
     if (!pilgrim.visaApplication) return NextResponse.json(err('Visa application tidak ditemukan'), { status: 404 })
 
-    // Validasi transisi status server-side — docs/arsitektur-visa.md §7 Gap #5 (sebelumnya
+    // Validasi transisi status server-side — docs/arsitektur-visa.md §4 (dulu Gap #5: sebelumnya
     // hanya ditegakkan di client, endpoint ini bisa dipanggil langsung untuk melompat status)
     if (!isValidVisaStatusTransition(pilgrim.visaApplication.status, status)) {
       return NextResponse.json(

@@ -117,8 +117,10 @@ await t('aturan visa: string lama → objek {type}; objek yang sudah benar tetap
   ].join('\n'))
   assert.equal(r.code, 0, `migrasi harus berhasil:\n${r.out.slice(-500)}`)
   const rows = Object.fromEntries(await visaRules(r.name))
-  assert.deepEqual(new Set((rows.V1 as Array<{ type: string }>).map(x => x.type)), new Set(['hotel', 'transport']))
-  assert.deepEqual(rows.V2, []); assert.deepEqual(rows.V3, [{ type: 'flight' }]); assert.deepEqual(rows.V4, [{ type: 'hotel' }])
+  // Setelah SEMUA migrasi: `hotel` lama dipecah lagi oleh 20261118090000_visa_required_components_v3 menjadi hotel Makkah + Madinah.
+  const types = (v: unknown) => new Set((v as Array<{ type: string }>).map(x => x.type))
+  assert.deepEqual(types(rows.V1), new Set(['hotel_makkah', 'hotel_madinah', 'transport']))
+  assert.deepEqual(rows.V2, []); assert.deepEqual(rows.V3, [{ type: 'flight' }]); assert.deepEqual(types(rows.V4), new Set(['hotel_makkah', 'hotel_madinah']))
 })
 
 for (const [label, rc] of [['string tak dikenal', '["kapal"]'], ['objek bertipe liar', '[{"type":"bus"}]'], ['bukan array', '{"type":"hotel"}']] as const) {
@@ -152,11 +154,12 @@ await t('paket NON-included dengan sisa jumlah kamar → berhasil; kolom lama di
   } finally { await db.$disconnect() }
 })
 
-await t('pelanggan: allowVisaWithoutBundle NOT NULL default false untuk akun lama; booking_packages: CHECK bentuk, FK paket/jadwal Restrict, booking Cascade', async () => {
+await t('pelanggan: kolom pelonggaran ditambahkan lalu dibuang lagi oleh migrasi V3 (akun lama aman); booking_packages: CHECK bentuk, FK paket/jadwal Restrict, booking Cascade', async () => {
   // DB PRA-migrasi: SQL mentah — klien proyek sudah mengenal kolom yang belum ada di sana.
   const r = await scenario(`INSERT INTO users (id, email, "passwordHash", "fullName", role, "isActive", "updatedAt") VALUES (gen_random_uuid(), 'lama@example.test', 'x', 'Lama', 'pilgrim', true, now());`)
   assert.equal(r.code, 0, r.out.slice(-500))
-  assert.deepEqual((await query(r.name, `select "allowVisaWithoutBundle" as a from users`)).map(x => x.a), [false])
+  assert.equal(await colExists(r.name, 'users', 'allowVisaWithoutBundle'), false)
+  assert.equal(Number((await one(r.name, `select count(*)::int as n from users where email = 'lama@example.test'`)).n), 1)
   const fks = await query(r.name, `select conname, confdeltype from pg_constraint where conrelid = 'booking_packages'::regclass and contype = 'f' order by conname`)
   assert.deepEqual(fks.map(f => [f.conname, f.confdeltype]), [['booking_packages_bookingId_fkey', 'c'], ['booking_packages_flightScheduleId_fkey', 'r'], ['booking_packages_packageId_fkey', 'r']])
   const db = new PrismaClient({ datasourceUrl: dbUrl(r.name) })

@@ -8,6 +8,8 @@ import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deletePackage } from '@/lib/admin/productDelete'
 import { cateringSeasonPrices, sellPrice, sellPrices, visaPriceSummary } from '@/lib/pricing/engine/read'
+import { documentRequirementListSchema } from '@/lib/validators/documents'
+import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -48,6 +50,8 @@ const updateSchema = z.object({
   includedCateringOptionId:  z.string().min(1).nullable().optional(),
   includedCateringNumPeople: z.number().int().min(1).nullable().optional(),
   includedCateringNumDays:   z.number().int().min(1).nullable().optional(),
+
+  requirements: documentRequirementListSchema.optional(), // ganti-semua syarat dokumen (lib/documents/requirements.ts)
 })
 
 // Field yang mempengaruhi harga jual paket dasar (docs/arsitektur-paket-umroh.md §5) — perubahan
@@ -87,17 +91,18 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (!pkg) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
     // Kolom `price` sub-modul sudah dihapus (harga terpadu Fase 5): editor membaca `price` bersarang, jadi disematkan lagi dari titik harga.
     const ids = <T,>(xs: Array<T | null | undefined>): T[] => xs.filter((x): x is T => x != null)
-    const [transport, hotel, flight, visa, self] = await Promise.all([
+    const [transport, hotel, flight, visa, self, documentRequirements] = await Promise.all([
       sellPrices('transport', ids([...(pkg.transportTrip?.pricing.map(p => p.id) ?? []), pkg.includedTransportPricingId])),
       sellPrices('hotel', ids([...pkg.hotelOptions.map(o => o.hotelRoomScheduleId), pkg.includedHotelMakkahScheduleId, pkg.includedHotelMadinahScheduleId])),
       sellPrices('flight', ids([...(pkg.flightRoute?.schedules.map(s => s.id) ?? []), pkg.includedFlightScheduleId])),
       visaPriceSummary(ids([...pkg.visaOptions.map(o => o.visaProductId), pkg.includedVisaProductId])),
       sellPrice('package', id),
+      requirementsOf('package', id),
     ])
     const p = (m: Map<string, number>, row: { id: string }) => ({ ...row, price: m.get(row.id) ?? 0 })
     const visaFrom = (v: { id: string }) => ({ ...v, price: visa.get(v.id)?.from ?? 0 })
     return NextResponse.json(ok({
-      ...pkg, price: self,
+      ...pkg, price: self, documentRequirements,
       transportTrip: pkg.transportTrip && { ...pkg.transportTrip, pricing: pkg.transportTrip.pricing.map(x => p(transport, x)) },
       includedTransportPricing: pkg.includedTransportPricing && p(transport, pkg.includedTransportPricing),
       includedHotelMakkahSchedule: pkg.includedHotelMakkahSchedule && p(hotel, pkg.includedHotelMakkahSchedule),
@@ -124,7 +129,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const data: Record<string, unknown> = { ...parsed.data }
+    const { requirements, ...fields } = parsed.data
+    const data: Record<string, unknown> = { ...fields }
     if (parsed.data.description !== undefined) data.description = emptyToNull(parsed.data.description)
 
     // Hotel Makkah — snapshot server-side ke includedHotelMakkahPrice (pola sama
@@ -205,7 +211,17 @@ export async function PUT(req: Request, { params }: Ctx) {
       }
     }
 
-    const pkg = await prisma.package.update({ where: { id }, data })
+    // Produk + syarat dokumen dalam SATU transaksi — syarat tak pernah setengah tersimpan.
+    const result = await prisma.$transaction(async (tx) => {
+      const updated = await tx.package.update({ where: { id }, data })
+      if (requirements) {
+        const written = await writeRequirements(tx, 'package', id, requirements)
+        if (!written.ok) throw new RequirementRejected(written.error, written.field)
+      }
+      return updated
+    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
+    const pkg = result
 
     const priceAffected = PRICE_AFFECTING_FIELDS.some(f => f in parsed.data)
     if (priceAffected) {

@@ -63,6 +63,10 @@ const tq = await prisma.transportQuota.create({ data: { pricingId: pricing.id, t
 const visa = await prisma.visaProduct.create({ data: { name: `${tag} Visa`, visaType: 'Umroh', requiredComponents: [{ type: 'flight' }] } })
 await addCost('visa', visa.id, 'visa', 1_000_000); await repriceOwner('visa', visa.id) // jual 1.200.000
 
+// Paket Umroh bervisa (visa termasuk) tanpa tiket/hotel — cukup untuk menguji anggota paket (docs/rencana-visa-produk.md §3.3).
+const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, visaMode: 'included', includedVisaProductId: visa.id, includedVisaPrice: 2_000_000 } })
+await addCost('package', pkg.id, 'layanan', 500_000); await repriceOwner('package', pkg.id)
+const PK = (n: number) => ({ itemType: 'package' as const, packageId: pkg.id, departureDate: '2090-06-10', numPeople: n, choices: {} })
 const FL = (n: number) => ({ itemType: 'flight' as const, flightScheduleId: flight.id, departureDate: '2090-06-10', numPassengers: n })
 const HT = (rooms: number) => ({ itemType: 'hotel' as const, hotelRoomScheduleId: room.id, checkIn: '2090-06-10', checkOut: '2090-06-13', nights: 3, numRooms: rooms })
 const TR = { itemType: 'transport' as const, transportQuotaId: tq.id, numPassengers: 2 }
@@ -109,6 +113,10 @@ await t('TAMBAH hotel: kuota pending +2 kamar, total & pajak beku dihitung ulang
   const pv = await previewRevision(id, input, staff.id)
   assert.deepEqual([pv.totalBefore, pv.totalAfter, pv.taxAfter, pv.revision, pv.grandAfter], [14_400_000, 21_600_000, 2_376_000, 2, 23_976_000])
   assert.deepEqual(pv.itemTotals, [12_000_000, 7_200_000], 'total per item urut masukan (editor baris)')
+  assert.deepEqual(pv.pilgrimVisaTotals, [1_200_000, 1_200_000], 'visa lama yang dipertahankan dibaca dari pengajuannya')
+  assert.deepEqual((await revisionEditorState(id))!.pilgrims.map(p => p.visaPriceIdr), [1_200_000, 1_200_000], 'harga visa tersimpan untuk editor sebelum pratinjau')
+  const more = await base(id); more.pilgrims.push({ visaProductId: visa.id }, {}); more.pilgrims[0] = { pilgrimId: more.pilgrims[0]!.pilgrimId } // lepas visa jamaah 1, tambah 2 jamaah (satu bervisa)
+  assert.deepEqual((await previewRevision(id, more, staff.id)).pilgrimVisaTotals, [0, 1_200_000, 1_200_000, 0], 'visa baru dari tulisan revisi, urut masukan')
   const bad = await base(id); bad.items.push({ item: { ...HT(1), checkIn: '2091-01-02', checkOut: '2091-01-05' } }) // di luar periode harga, baris ke-2
   const fail = await previewRevision(id, bad, staff.id).then(() => null, (e: unknown) => revisionFailure(e))
   assert.deepEqual([fail?.status, fail?.itemIndex], [422, 1], 'nomor subset item yang ditulis dipetakan ke baris editor')
@@ -185,6 +193,45 @@ await t('JAMAAH (R3): tambah jamaah + visa → baris visa baru; hapus jamaah BER
   await prisma.visaApplication.update({ where: { id: ps[2]!.visaApplication!.id }, data: { status: 'submitted_to_syarikah' } })
   const ch = await base(id); ch.pilgrims = ch.pilgrims.map(p => (p.pilgrimId === ps[2]!.id ? { pilgrimId: p.pilgrimId } : p))
   await assert.rejects(() => reviseBooking(id, ch, staff.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /diproses/.test(e.message))
+  await i4(id)
+})
+
+await t('ANGGOTA PAKET (V4a): terbit → anggota tertaut + visa paket; revisi naik mempertahankan visa lama, turun/hapus melepas anggota + visanya; K4 & jamaah kurang → 422', async () => {
+  const members = async (id: string) => prisma.bookingPilgrim.findMany({ where: { bookingId: id }, orderBy: { id: 'asc' }, select: { id: true, bookingPackageId: true, visaApplication: { select: { id: true, visaProductId: true } } } })
+  const id = await published({ items: [PK(2)], pilgrims: [{}, {}, {}], dueDays: 3 })
+  const m1 = await members(id)
+  assert.equal(m1.filter(p => p.bookingPackageId).length, 2)
+  assert.deepEqual(m1.map(p => !!p.bookingPackageId), m1.map(p => p.visaApplication?.visaProductId === visa.id), 'visa paket = anggota paket')
+  const apps = m1.flatMap(p => (p.visaApplication ? [p.visaApplication.id] : []))
+  assert.equal(await prisma.priceSnapshot.count({ where: { itemType: 'visa', itemId: { in: apps } } }), 0, 'visa paket tanpa baris harga sendiri')
+
+  const up = await base(id); up.items[0] = { ...up.items[0]!, item: PK(3) }
+  await reviseBooking(id, up, staff.id)
+  const m2 = await members(id)
+  assert.equal(m2.filter(p => p.bookingPackageId).length, 3)
+  assert.ok(apps.every(a => m2.some(p => p.visaApplication?.id === a)), 'pengajuan visa paket lama dipertahankan (item diganti, anggota sama)')
+
+  const down = await base(id); down.items[0] = { ...down.items[0]!, item: PK(1) }
+  await reviseBooking(id, down, staff.id)
+  const m3 = await members(id)
+  assert.equal(m3.filter(p => p.bookingPackageId).length, 1)
+  assert.equal(m3.filter(p => p.visaApplication).length, 1, 'yang keluar paket kehilangan visa paketnya')
+
+  const rm = await base(id); rm.items = []
+  rm.pilgrims = rm.pilgrims.slice(0, 1).map(p => ({ pilgrimId: p.pilgrimId, visaProductId: visa.id })) // booking tetap berisi produk: 1 jamaah ber-visa sendiri
+  rm.items.push({ item: FL(1) }) // visa mewajibkan tiket
+  await reviseBooking(id, rm, staff.id)
+  const m4 = await members(id)
+  assert.deepEqual(m4.map(p => p.bookingPackageId), [null])
+
+  const k4 = await createDraft(customer.id); assert.ok(k4.ok)
+  assert.ok((await saveDraft(k4.id, { items: [PK(1), FL(1)], pilgrims: [{ visaProductId: visa.id }], dueDays: 3 })).ok)
+  const r4 = await publishDraft(k4.id, { byUserId: staff.id })
+  assert.ok(!r4.ok && r4.status === 422 && /Jamaah ke-1 anggota .* visanya sudah termasuk paket/.test(r4.message), JSON.stringify(r4))
+  const few = await createDraft(customer.id); assert.ok(few.ok)
+  assert.ok((await saveDraft(few.id, { items: [PK(2)], pilgrims: [{}], dueDays: 3 })).ok)
+  const rf = await publishDraft(few.id, { byUserId: staff.id })
+  assert.ok(!rf.ok && rf.status === 422 && /Jumlah jamaah \(1\) kurang dari jumlah orang di Paket Umroh \(2\)/.test(rf.message), JSON.stringify(rf))
   await i4(id)
 })
 
@@ -314,6 +361,7 @@ await prisma.bookingPilgrim.updateMany({ where: { booking: { userId: customer.id
 await prisma.payment.deleteMany({ where: { booking: { userId: customer.id } } })
 await prisma.refund.deleteMany({ where: { booking: { userId: customer.id } } })
 await prisma.booking.deleteMany({ where: { userId: customer.id } })
+await prisma.package.deleteMany({ where: { name: { startsWith: tag } } })
 await prisma.visaProduct.deleteMany({ where: { name: { startsWith: tag } } })
 await prisma.savedPilgrim.deleteMany({ where: { ownerId: customer.id } })
 await prisma.transportQuota.deleteMany({ where: { pricingId: pricing.id } })

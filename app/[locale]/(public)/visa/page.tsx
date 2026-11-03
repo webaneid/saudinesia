@@ -2,12 +2,14 @@ import { ProductImage } from '@/components/shared/ProductImage'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { prisma } from '@/lib/db'
 import Link from 'next/link'
-import { KeyRound, Clock, FileText, ArrowRight, Globe, ShieldCheck, Info } from 'lucide-react'
+import { KeyRound, Clock, ArrowRight, Globe, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { requirementsOfMany } from '@/lib/documents/requirements'
+import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { visaPriceSummary } from '@/lib/pricing/engine/read'
+import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -65,8 +67,6 @@ export default async function VisaCatalogPage({ params }: Props) {
           <div className="grid md:grid-cols-2 gap-4">
             {items.map(v => {
               const requirements = requirementsByProduct.get(v.id) ?? []
-              const required  = requirements.filter(r => r.required)
-              const optional  = requirements.filter(r => !r.required)
               // "Mulai dari" kalau ada >=2 harga berbeda di antara tier durasi — docs/arsitektur-harga.md §17.5
               const { from: fromPrice, isRange: priceIsRange } = priceSummary.get(v.id) ?? { from: 0, isRange: false }
 
@@ -104,55 +104,25 @@ export default async function VisaCatalogPage({ params }: Props) {
                     <span className="font-semibold text-foreground">{v.processDays} hari kerja</span>
                   </div>
 
-                  {/* Requirements */}
-                  {requirements.length > 0 && (
-                    <div className="space-y-2.5 pt-1 border-t border-border">
-                      <p className="text-xs font-semibold flex items-center gap-1.5 text-foreground">
-                        <FileText className="h-3.5 w-3.5 text-teal-500" />
-                        Persyaratan Dokumen
-                      </p>
-
-                      {required.length > 0 && (
-                        <ul className="space-y-1.5">
-                          {required.map((req, i) => (
-                            <li key={i} className="flex items-start gap-2 text-xs">
-                              <ShieldCheck className="h-3.5 w-3.5 text-teal-500 mt-0.5 shrink-0" />
-                              <span>
-                                <span className="font-medium text-foreground">{req.label}</span>
-                                {req.description && (
-                                  <span className="text-muted-foreground"> — {req.description}</span>
-                                )}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      {optional.length > 0 && (
-                        <div className="space-y-1">
-                          <p className="text-[11px] text-muted-foreground font-medium">Opsional / Kondisional:</p>
-                          <ul className="space-y-1">
-                            {optional.map((req, i) => (
-                              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
-                                <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                                <span>
-                                  <span className="font-medium">{req.label}</span>
-                                  {req.description && <span> — {req.description}</span>}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
-                  )}
+                  <RequiredDocuments requirements={requirements} />
 
                   <div className="pt-2 border-t border-border">
-                    <Button asChild className="w-full" size="sm">
-                      <Link href={`/${locale}/bookings/checkout/visa?productId=${v.id}`}>
-                        Ajukan Sekarang <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                      </Link>
-                    </Button>
+                    {/* Visa plus wajib dibeli bersama produk lain (docs/rencana-visa-produk.md §2.4) — checkout pendek hanya memuat visa, jadi dipesan lewat admin. */}
+                    {(() => {
+                      const model = visaSalesModel(parseRequiredComponents(v.requiredComponents).components)
+                      return model.plus ? (
+                        <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                          <span>Dipesan bersama: <span className="font-medium text-foreground">{model.parts.join(', ')}</span>. Hubungi admin Saudinesia untuk pemesanan.</span>
+                        </p>
+                      ) : (
+                        <Button asChild className="w-full" size="sm">
+                          <Link href={`/${locale}/bookings/checkout/visa?productId=${v.id}`}>
+                            Ajukan Sekarang <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
+                          </Link>
+                        </Button>
+                      )
+                    })()}
                   </div>
                   </div>
                 </div>

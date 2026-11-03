@@ -261,8 +261,8 @@ await t('ISIAN MANUAL: NIK/paspor disegel + diganti samaran; samaran = tetap; ko
 await t('KELENGKAPAN: syarat visa; tertaut → dokumen kartu + perjalanan dihitung; tak tertaut → semua missing', async () => {
   await svc.upload(staff, owner.userId, cardA, { documentTypeId: types.passport!.id, expiresAt: '2030-01-01' }, pdf)
   const m = await bookingChecklists(bk.id, null, [
-    { id: p1, savedPilgrimId: cardA, visaProductId: visa.id, plannedTravelDate: '2026-12-01' },
-    { id: p2, savedPilgrimId: null, visaProductId: visa.id, plannedTravelDate: '2026-12-01' },
+    { id: p1, savedPilgrimId: cardA, plannedTravelDate: '2026-12-01' },
+    { id: p2, savedPilgrimId: null, plannedTravelDate: '2026-12-01' },
   ])
   assert.deepEqual(m.get(p1)!.items.map(i => [i.key, i.state]), [['passport', 'pending'], ['flight_ticket', 'missing']])
   assert.equal(m.get(p1)!.card?.id, cardA)

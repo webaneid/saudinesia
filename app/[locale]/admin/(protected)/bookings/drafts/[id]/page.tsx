@@ -9,24 +9,22 @@ import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { Button } from '@/components/admin/ui/Button'
-import { Badge } from '@/components/admin/ui/Badge'
-import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { formatRupiah } from '@/lib/utils'
 import type { TaxLine } from '@/lib/invoice/tax'
 import type { BookingDraft } from '@/lib/validators/booking'
-import { MODULE_LABEL, type Catalog, type ModuleKey } from './catalog'
-import { ItemRows, newRow, rowFromItem, rowToItem, type ItemRow } from './ItemRows'
+import type { Catalog, ModuleKey } from './catalog'
+import { ItemRows, rowForMissing, rowFromItem, rowToItem, type ItemRow } from './ItemRows'
+import { applyVisaRows, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlots, type VisaSlot } from './visaRows'
 
 // Editor draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): draf tersimpan di database (dapat dilanjutkan). Produk = editor BARIS inline (§10.4, arahan
 // pemilik 2026-11-01); subtotal baris, total, pajak, dan pelanggaran aturan dihitung SERVER otomatis sesaat setelah berhenti mengubah (pratinjau = simulasi terbit yang
 // di-rollback — angka mengikat). Terbitkan = kuota ditahan + harga dibekukan + invoice terbit, lalu ke detail booking untuk mengisi data jamaah.
 
 type Props = { params: Promise<{ locale: string; id: string }> }
-type Violation = { visaName: string; missing: string; severity: 'error' | 'warning'; message: string }
-type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; tax: TaxLine[]; taxAdded: number; grandTotal: number; dueDays: number; warnings: Violation[]; itemTotals: number[] }
-type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; user: { id: string; fullName: string; email: string; allowVisaWithoutBundle: boolean } }
+type Violation = { visaName: string; missing: string; message: string }
+type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; tax: TaxLine[]; taxAdded: number; grandTotal: number; dueDays: number; itemTotals: number[]; pilgrimVisaTotals: number[] }
+type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; user: { id: string; fullName: string; email: string } }
 
-const MISSING_MODULE: Record<string, ModuleKey> = { flight: 'flight', hotel: 'hotel', transport: 'transport' }
 const PREVIEW_DELAY_MS = 800
 
 export default function DraftEditorPage({ params }: Props) {
@@ -34,7 +32,8 @@ export default function DraftEditorPage({ params }: Props) {
   const router = useRouter()
   const [loaded, setLoaded] = useState<Loaded | null>(null)
   const [rows, setRows] = useState<ItemRow[]>([])
-  const [pilgrims, setPilgrims] = useState<BookingDraft['pilgrims']>([{}])
+  // Slot jamaah draf (visa per orang); baris Visa di editor produk adalah kelompok atas slot ini (./visaRows.ts).
+  const [pilgrims, setPilgrims] = useState<VisaSlot[]>([{}])
   const [dueDays, setDueDays] = useState<number | undefined>(undefined)
   const [snapshot, setSnapshot] = useState('')
   const [catalog, setCatalog] = useState<Catalog>({})
@@ -61,7 +60,8 @@ export default function DraftEditorPage({ params }: Props) {
     fetch(`/api/v1/admin/bookings/drafts/${id}`).then(r => r.json()).then((j: { data?: Loaded }) => {
       if (!j.data) { setNotFound(true); return }
       const d = j.data.draft
-      setLoaded(j.data); setRows(d.items.map(it => rowFromItem(it))); setPilgrims(d.pilgrims); setDueDays(d.dueDays)
+      const v = visaRowsFromSlots<VisaSlot>(d.pilgrims)
+      setLoaded(j.data); setRows([...v.rows, ...d.items.map(it => rowFromItem(it))]); setPilgrims(v.slots); setDueDays(d.dueDays)
       setSnapshot(JSON.stringify(d))
       void load('visa')
     }).catch(() => setNotFound(true))
@@ -71,7 +71,7 @@ export default function DraftEditorPage({ params }: Props) {
   const checked = useMemo(() => rows.map(r => rowToItem(r, catalog)), [rows, catalog])
   const incomplete = checked.findIndex(c => 'error' in c)
   const draft: BookingDraft = useMemo(() => ({
-    items: checked.flatMap(c => ('item' in c ? [c.item] : [])), pilgrims, ...(dueDays !== undefined && { dueDays }),
+    items: checked.flatMap(c => ('item' in c ? [c.item] : [])), pilgrims: pilgrims.map(stripRow), ...(dueDays !== undefined && { dueDays }),
   }), [checked, pilgrims, dueDays])
   const draftJson = JSON.stringify(draft)
   const dirty = !!loaded && (draftJson !== snapshot || incomplete >= 0)
@@ -102,10 +102,25 @@ export default function DraftEditorPage({ params }: Props) {
 
   const touched = () => setSaved(false)
   const people = pilgrims.length
+  const withVisa = pilgrims.filter(p => p.row).length
+  // Mengurangi jamaah hanya membuang slot TANPA visa (dari belakang); slot bervisa dikurangi lewat jumlah orang di baris Visa-nya.
   const setPeople = (n: number) => {
-    const count = Math.max(1, Math.min(2000, n))
+    const count = Math.max(1, withVisa, Math.min(2000, n))
     touched()
-    setPilgrims(ps => (count > ps.length ? [...ps, ...Array.from({ length: count - ps.length }, () => ({}))] : ps.slice(0, count)))
+    if (count >= pilgrims.length) { setPilgrims([...pilgrims, ...Array.from({ length: count - pilgrims.length }, () => ({}))]); return }
+    let drop = pilgrims.length - count
+    const next: VisaSlot[] = []
+    for (let i = pilgrims.length - 1; i >= 0; i--) {
+      const p = pilgrims[i]!
+      if (drop > 0 && !p.row) { drop--; continue }
+      next.unshift(p)
+    }
+    setPilgrims(next); setRows(rs => syncVisaCounts(rs, next))
+  }
+  const changeRows = (r: ItemRow[]) => {
+    touched()
+    const next = applyVisaRows(pilgrims, r, () => ({}))
+    setPilgrims(next); setRows(syncVisaCounts(r, next))
   }
   const blockIncomplete = () => {
     if (incomplete < 0) return false
@@ -157,35 +172,33 @@ export default function DraftEditorPage({ params }: Props) {
     } finally { setDeleting(false) }
   }
 
-  const visaOptions = (catalog.visa ?? []).map(v => ({ id: v.id, label: v.name }))
-  // Subtotal per baris dari pratinjau: urutan `itemTotals` = urutan baris LENGKAP (yang ikut dikirim).
+  // Subtotal per baris dari pratinjau: urutan `itemTotals` = urutan baris ITEM lengkap (yang ikut dikirim); baris Visa = Σ visa anggotanya (`pilgrimVisaTotals`).
   const rowTotals: (number | undefined)[] = []
-  { let k = 0; for (const c of checked) { if (!('item' in c)) { rowTotals.push(undefined); continue } rowTotals.push(preview ? preview.itemTotals[k] : problem?.itemTotals?.[k] ?? undefined); k++ } } // gagal satu baris → subtotal baris lain dari pratinjau parsial
+  const itemRowIndex: number[] = [] // nomor item server (`meta.itemIndex`) → nomor baris editor
+  checked.forEach((c, i) => {
+    if ('visa' in c) { rowTotals.push(visaRowTotal(pilgrims, rows[i]!.key, preview?.pilgrimVisaTotals)); return }
+    if (!('item' in c)) { rowTotals.push(undefined); return }
+    const k = itemRowIndex.push(i) - 1
+    rowTotals.push(preview ? preview.itemTotals[k] : problem?.itemTotals?.[k] ?? undefined) // gagal satu baris → subtotal baris lain dari pratinjau parsial
+  })
+  const errorRow = problem?.itemIndex !== undefined ? itemRowIndex[problem.itemIndex] : undefined
 
   const main = (
     <>
       <MetaBox title="Produk" icon={Package} collapsible={false} description="Ubah langsung di baris. Subtotal dan total dihitung server otomatis.">
-        <ItemRows rows={rows} onChange={r => { touched(); setRows(r) }} catalog={catalog} load={load} defaultPeople={people} totals={rowTotals} computing={previewing}
-          rowError={problem?.itemIndex !== undefined ? { index: problem.itemIndex, message: problem.message } : undefined} />
+        <ItemRows rows={rows} onChange={changeRows} catalog={catalog} load={load} defaultPeople={people} defaultVisaPeople={people - withVisa} totals={rowTotals} computing={previewing}
+          rowError={errorRow !== undefined && problem ? { index: errorRow, message: problem.message } : undefined} />
       </MetaBox>
 
-      <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Jumlah orang dan visa per orang. Data jamaah (nama, paspor, …) diisi setelah booking terbit.">
-        <div className="space-y-3">
+      <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Jumlah orang dalam booking ini. Data jamaah (nama, paspor, …) diisi setelah booking terbit.">
+        <div className="space-y-2">
           <label className="flex items-center gap-2 text-sm text-admin-ink">
             Jumlah jamaah
-            <input type="number" min={1} max={2000} className="admin-inp w-24" value={people} onChange={e => setPeople(Number(e.target.value) || 1)} />
+            <input type="number" min={Math.max(1, withVisa)} max={2000} className="admin-inp w-24" value={people} onChange={e => setPeople(Number(e.target.value) || 1)} />
           </label>
-          <ul className="m-0 list-none space-y-2 p-0">
-            {pilgrims.map((p, i) => (
-              <li key={i} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 sm:grid-cols-[5rem_minmax(0,1fr)_5rem]">
-                <span className="col-span-2 text-xs font-semibold text-admin-muted sm:col-span-1">Jamaah {i + 1}</span>
-                <ChoiceSelect ariaLabel={`Visa jamaah ${i + 1}`} size="sm" value={p.visaProductId ?? ''} placeholder="— tanpa visa —" options={visaOptions}
-                  onChange={v => { touched(); setPilgrims(ps => ps.map((x, j) => (j === i ? (v ? { ...x, visaProductId: v } : {}) : x))) }} />
-                <input type="number" min={1} className="admin-inp" aria-label={`Lama tinggal jamaah ${i + 1}`} placeholder="hari" disabled={!p.visaProductId} value={p.selectedDurationDays ?? ''}
-                  onChange={e => { touched(); setPilgrims(ps => ps.map((x, j) => (j === i ? { ...x, selectedDurationDays: Number(e.target.value) > 0 ? Math.trunc(Number(e.target.value)) : undefined } : x))) }} />
-              </li>
-            ))}
-          </ul>
+          <p className="m-0 text-xs text-admin-muted">
+            {withVisa > 0 ? <>{withVisa} dari {people} jamaah memegang visa dari baris Visa di atas.</> : <>Belum ada visa — tambahkan baris Visa di Produk bila booking ini menjual visa.</>}
+          </p>
         </div>
       </MetaBox>
 
@@ -197,7 +210,7 @@ export default function DraftEditorPage({ params }: Props) {
             {problem.violations.length > 0 && (
               <ul className="m-0 list-disc space-y-1 pl-5 text-admin-ink">
                 {problem.violations.map((v, i) => (
-                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => { touched(); setRows(r => [...r, newRow(people, MISSING_MODULE[v.missing])]) }}>tambah baris {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
+                  <li key={i}>{v.message}{(() => { const add = rowForMissing(people, v.missing); return add && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => changeRows([...rows, add.row])}>tambah baris {add.label}</button></> })()}</li>
                 ))}
               </ul>
             )}
@@ -205,12 +218,6 @@ export default function DraftEditorPage({ params }: Props) {
         )}
         {preview ? (
           <div className="space-y-1 text-sm">
-            {preview.warnings.length > 0 && (
-              <p className="m-0 mb-2 rounded-lg bg-admin-warning/10 p-2 text-xs text-admin-ink">Dilonggarkan untuk pelanggan ini: {preview.warnings.map(w => w.message).join('; ')}</p>
-            )}
-            {pilgrims.some(p => p.visaProductId) && (
-              <p className="m-0 flex justify-between text-admin-ink/80"><span>Visa ({pilgrims.filter(p => p.visaProductId).length} jamaah)</span><span className="tabular-nums">{formatRupiah(preview.total - preview.itemTotals.reduce((s, x) => s + x, 0))}</span></p>
-            )}
             <p className="m-0 flex justify-between text-admin-ink/80"><span>Subtotal</span><span className="tabular-nums">{formatRupiah(preview.total)}</span></p>
             {preview.tax.map((t, i) => (
               <p key={i} className="m-0 flex justify-between text-admin-ink/80"><span>{t.name} {t.ratePercent}%{t.mode === 'included' ? ' (termasuk)' : ''}</span><span className="tabular-nums">{formatRupiah(t.amountIdr)}</span></p>
@@ -218,7 +225,7 @@ export default function DraftEditorPage({ params }: Props) {
             <p className="m-0 flex justify-between border-t border-admin-line-strong pt-2 font-bold text-admin-ink"><span>Total tagihan</span><span className="text-base font-extrabold tabular-nums">{formatRupiah(preview.grandTotal)}</span></p>
             <p className="m-0 text-xs text-admin-muted">Nomor invoice dan pajak dibekukan saat diterbitkan.</p>
           </div>
-        ) : !problem && <p className="m-0 text-sm text-admin-muted">{incomplete >= 0 ? 'Lengkapi baris produk untuk menghitung total.' : hasProducts ? 'Menghitung…' : 'Tambahkan produk atau visa jamaah.'}</p>}
+        ) : !problem && <p className="m-0 text-sm text-admin-muted">{incomplete >= 0 ? 'Lengkapi baris produk untuk menghitung total.' : hasProducts ? 'Menghitung…' : 'Tambahkan produk (visa, tiket, hotel, …).'}</p>}
       </MetaBox>
     </>
   )
@@ -226,7 +233,7 @@ export default function DraftEditorPage({ params }: Props) {
   const sidebar = (
     <>
       <PublishBox onSave={() => void save()} saving={saving} dirty={dirty} saved={saved && !dirty} canSave={dirty} saveLabel="Simpan draf"
-        meta={<span>Pemesan: <b>{loaded.user.fullName}</b>{loaded.user.allowVisaWithoutBundle && <> · <Badge tone="warning">aturan visa dilonggarkan</Badge></>}</span>}
+        meta={<span>Pemesan: <b>{loaded.user.fullName}</b></span>}
         options={
           <label className="flex items-center justify-between gap-2 text-sm text-admin-ink">
             Jatuh tempo (hari)

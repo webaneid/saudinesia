@@ -13,7 +13,7 @@ import { ProductInfoTab } from './ProductInfoTab'
 import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import { RulesTab } from './RulesTab'
-import { parseRequiredComponents, type RequiredComponent } from '@/lib/validators/visa'
+import { parseRequiredComponents, visaSalesModel, type RequiredComponent } from '@/lib/validators/visa'
 import type { DeleteResult, InfoForm, ProductDetail } from './types'
 
 type TabKey = 'info' | 'docs' | 'rules' | 'price'
@@ -139,7 +139,7 @@ export default function VisaEditPage({ params }: Props) {
   const tabs: readonly TabItem<TabKey>[] = [
     { id: 'info', label: 'Informasi', icon: Info },
     { id: 'docs', label: 'Persyaratan dokumen', icon: FileText, count: reqs.length },
-    { id: 'rules', label: 'Aturan pemesanan', icon: Link2, count: rules.length || undefined },
+    { id: 'rules', label: 'Model penjualan', icon: Link2 },
     { id: 'price', label: 'Harga dan HPP', icon: Wallet, count: ruleCount || undefined },
   ]
 
@@ -149,7 +149,7 @@ export default function VisaEditPage({ params }: Props) {
         icon={KeyRound}
         title={form.name || 'Produk visa'}
         description={[form.visaType, form.country].filter(Boolean).join(' · ')}
-        actions={<Badge tone={form.isActive ? 'ok' : 'neutral'}>{form.isActive ? 'Aktif' : 'Nonaktif'}</Badge>}
+        actions={<div className="flex gap-2"><Badge tone={visaSalesModel(rules).plus ? 'accent' : 'neutral'}>{visaSalesModel(rules).label}</Badge><Badge tone={form.isActive ? 'ok' : 'neutral'}>{form.isActive ? 'Aktif' : 'Nonaktif'}</Badge></div>}
       />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

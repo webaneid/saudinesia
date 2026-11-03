@@ -95,9 +95,10 @@ export type DraftPreview = {
   /** Yang akan ditagihkan = total + pajak ditambahkan. */
   grandTotal: number
   dueDays: number
-  warnings: RuleViolation[]
   /** Harga jual tiap item, URUT `draft.items` (editor baris menampilkannya sebagai subtotal baris). */
   itemTotals: number[]
+  /** Harga jual visa milik tiap jamaah, URUT `draft.pilgrims` (0 = tanpa visa sendiri) — editor menjumlahkannya per baris Visa (docs/rencana-visa-produk.md §2.2). */
+  pilgrimVisaTotals: number[]
 }
 
 class Rollback extends Error { constructor(public readonly result: DraftPreview) { super('rollback') } }
@@ -125,7 +126,7 @@ export async function previewDraft(id: string, override?: BookingDraft): Promise
 /** Satu simulasi terbit di transaksi yang selalu di-rollback; galat mesin diteruskan apa adanya. */
 async function simulate(id: string, userId: string, draft: BookingDraft, dueDays: number): Promise<DraftPreview> {
   try {
-    const prepared = await prepareBooking(draftInput(draft), userId)
+    const prepared = await prepareBooking(draftInput(draft))
     await prisma.$transaction(async (tx) => {
       const written: ItemMeta[] = []
       await writeBooking(tx, prepared, id, written)
@@ -134,7 +135,11 @@ async function simulate(id: string, userId: string, draft: BookingDraft, dueDays
       const tax = await taxFor(tx, inv.subtotal)
       const sells = await itemSellTotals(tx, id)
       const itemTotals = draft.items.map((_, i) => { const m = written[i]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
-      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings, itemTotals })
+      // Visa ditulis SESUDAH item, satu meta per jamaah bervisa sendiri, urut jamaah (lib/booking/lineItems.ts).
+      const visaMetas = written.slice(draft.items.length)
+      let k = 0
+      const pilgrimVisaTotals = draft.pilgrims.map(p => { if (!p.visaProductId) return 0; const m = visaMetas[k++]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
+      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, itemTotals, pilgrimVisaTotals })
     }, { isolationLevel: 'Serializable' })
   } catch (e) {
     if (e instanceof Rollback) return e.result
@@ -151,7 +156,7 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
   if (draft.items.length === 0 && draft.pilgrims.every(p => !p.visaProductId)) return { ok: false, status: 422, message: 'Tambahkan minimal satu produk' }
   const dueDays = input.dueDays ?? draft.dueDays ?? (await getInvoiceSettings()).defaultDueDays
   try {
-    const prepared = await prepareBooking(draftInput(draft), b.userId)
+    const prepared = await prepareBooking(draftInput(draft))
     return await retrySerializable(() => prisma.$transaction(async (tx) => {
       const row = await lockDraft(tx, id)
       // Status DAN isi dibaca ulang di dalam kunci: terbit ganda / draf yang diubah sesudah dibaca tak boleh terbit dengan isi lama.

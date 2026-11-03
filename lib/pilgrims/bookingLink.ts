@@ -10,7 +10,7 @@ import type { ManifestAddressValue } from '@/lib/manifest/addressValue'
 import { resolveAddressValues } from '@/lib/manifest/address'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikProblem, normalizeNik, normalizePassport, sealNik, sealPassport } from '@/lib/pii'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
-import { requirementsOfMany } from '@/lib/documents/requirements'
+import { pilgrimRequirements } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { lockCardOwner, type Actor, type ServiceError } from './service'
 import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from './reviewState'
@@ -242,15 +242,15 @@ export type ChecklistDocument = {
 }
 
 /**
- * Kelengkapan dokumen jamaah booking (§5.3 butir 5): syarat = syarat produk visanya; berkas = dokumen milik orang di kartu tertaut + dokumen
+ * Kelengkapan dokumen jamaah booking (§5.3 butir 5): syarat = gabungan syarat produk yang memuatnya (`pilgrimRequirements`: Paket → Haji → Visa); berkas = dokumen milik orang di kartu tertaut + dokumen
  * perjalanan booking ini. Jamaah tanpa kartu tertaut: semua syarat `missing`. Tanggal acuan = rencana berangkat visa → tanggal acuan booking → hari ini.
  */
 export async function bookingChecklists(
   bookingId: string,
   bookingDate: CalendarDate | null,
-  pilgrims: readonly { id: string; savedPilgrimId: string | null; visaProductId: string | null; plannedTravelDate: CalendarDate | null }[],
+  pilgrims: readonly { id: string; savedPilgrimId: string | null; plannedTravelDate: CalendarDate | null }[],
 ): Promise<Map<string, { card: { id: string; name: string } | null; items: CompletenessItem[]; ready: boolean; verified: boolean; documents: ChecklistDocument[] }>> {
-  const reqs = await requirementsOfMany([...new Set(pilgrims.flatMap(p => (p.visaProductId ? [p.visaProductId] : [])))].map(productId => ({ productType: 'visa', productId })))
+  const reqs = await pilgrimRequirements(prisma, pilgrims.map(p => p.id))
   const cardIds = [...new Set(pilgrims.flatMap(p => (p.savedPilgrimId ? [p.savedPilgrimId] : [])))]
   const [cards, docs] = cardIds.length
     ? await Promise.all([
@@ -265,7 +265,7 @@ export async function bookingChecklists(
   const nameOf = new Map(cards.map(c => [c.id, c.fullName]))
   const today = todayInApp()
   return new Map(pilgrims.map(p => {
-    const requirements = (p.visaProductId && reqs.get(`visa:${p.visaProductId}`)) || []
+    const requirements = reqs.get(p.id) ?? []
     const typeIds = new Set(requirements.map(r => r.documentTypeId))
     const own = docs.filter(d => d.savedPilgrimId === p.savedPilgrimId)
     const documents = own.map(d => ({ documentTypeId: d.documentTypeId, status: d.status, expiresAt: d.expiresAt ? calendarDateOf(d.expiresAt) : null }))

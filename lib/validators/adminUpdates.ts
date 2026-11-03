@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { UserRole } from '@prisma/client'
 import { emailSchema, passwordSchema } from './auth'
 import { richTextField } from './richText'
+import { documentRequirementListSchema } from './documents'
 
 // Skema UPDATE untuk rute admin yang dulu meneruskan body mentah ke prisma.update (mass assignment).
 // `.strict()` — field di luar daftar DITOLAK (400), bukan diabaikan diam-diam, supaya klien yang salah ketahuan.
@@ -104,6 +105,8 @@ export const hajiProductCreateSchema = z
     includes: z.array(z.string().max(300)).max(100).default([]),
     // `price` SENGAJA tidak ada: harga Haji = cache dari Komponen Biaya (docs/arsitektur-komponen-biaya.md §3.3), bukan masukan admin.
     totalQuota: z.number({ message: 'Kuota harus berupa angka' }).int('Kuota harus bilangan bulat').min(0, 'Kuota total tidak boleh negatif'),
+    // Syarat dokumen (docs/rencana-visa-produk.md §3.4): tidak dikirim = daftar bawaan (paspor, KTP, KK, vaksin), bisa diubah di halaman edit.
+    requirements: documentRequirementListSchema.optional(),
   })
   .strict()
 
@@ -123,6 +126,7 @@ export const hajiProductUpdateSchema = z
     includes: z.array(z.string().max(300)).max(100).optional(),
     totalQuota: z.number({ message: 'Kuota harus berupa angka' }).int('Kuota harus bilangan bulat').min(0, 'Kuota total tidak boleh negatif').optional(),
     isActive: z.boolean().optional(),
+    requirements: documentRequirementListSchema.optional(), // ganti-semua syarat dokumen (lib/documents/requirements.ts)
   })
   .strict()
   .refine((v) => Object.keys(v).length > 0, { message: 'Tidak ada perubahan' })
