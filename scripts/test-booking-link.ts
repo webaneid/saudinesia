@@ -11,11 +11,13 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { __resetForTests } from '@/lib/auth/rateLimit'
 import { createSavedPilgrim, type Actor } from '@/lib/pilgrims/service'
-import { bookingChecklists, linkCard, sealManualPii, sealNewPilgrim, tripScopeOf, unlinkCard } from '@/lib/pilgrims/bookingLink'
+import { bookingChecklists, linkCard, pilgrimBookingState, sealManualPii, sealNewPilgrim, tripScopeOf, unlinkCard } from '@/lib/pilgrims/bookingLink'
 import { createDocumentService, listCardDocuments } from '@/lib/documents/service'
 import type { DocumentStorage } from '@/lib/documents/storage'
 import { writeRequirements } from '@/lib/documents/requirements'
 import { MANIFEST_ROLES, snapshotFromCard } from '@/lib/manifest/roles'
+import { resolveAddressValues } from '@/lib/manifest/address'
+import { validateFieldValues } from '@/lib/manifest/values'
 import { NIK_MASK, openNik, openPassport } from '@/lib/pii'
 import { savedPilgrimInputSchema } from '@/lib/validators/pilgrims'
 import { assertThrowawayDb } from './lib/testDb'
@@ -219,6 +221,16 @@ await t('JAMAAH BARU (checkout/booking admin): NIK/paspor disegel sebelum dituli
   assert.ok(!bad.ok && 'nik' in bad.errors)
 })
 
+await t('JAMAAH MENAMBAH hanya pada booking aktif: batal/selesai → closed; booking akun lain / draf → missing (404 di route)', async () => {
+  assert.equal(await pilgrimBookingState(bk.id, owner.userId), 'open')
+  assert.equal(await pilgrimBookingState(bk.id, other.userId), 'missing')
+  const done = await makeBooking(owner, 1)
+  await prisma.booking.update({ where: { id: done.id }, data: { status: 'cancelled' } })
+  assert.equal(await pilgrimBookingState(done.id, owner.userId), 'closed')
+  const draft = await makeBooking(owner, 1, 'draft')
+  assert.equal(await pilgrimBookingState(draft.id, owner.userId), 'missing')
+})
+
 await t('UNGGAH PERJALANAN pada jamaah yang bukan tautannya / booking draf → 404 (kunci baris jamaah booking)', async () => {
   const lone = await makeCard(owner, staff)
   const r = await svc.upload(staff, owner.userId, lone, { documentTypeId: types.flight_ticket!.id, referenceCode: 'ABC123' }, pdf, { bookingId: bk.id })
@@ -258,10 +270,95 @@ await t('KELENGKAPAN: syarat visa; tertaut → dokumen kartu + perjalanan dihitu
 })
 
 await t('PERAN: snapshotFromCard murni — hanya field berperan; tanggal hanya ke field tanggal; kartu tanpa NIK mengosongkan field NIK', () => {
-  const card = { fullName: 'A', gender: null, birthPlace: null, birthDate: '2000-01-01', nationality: 'MY', hasNik: false, passportLast4: null, passportIssuedAt: null, passportExpiry: null, phone: null, whatsapp: null, email: null, addressText: null }
+  const card = { fullName: 'A', gender: null, birthPlace: null, birthDate: '2000-01-01', nationality: 'MY', hasNik: false, passportLast4: null, passportIssuedAt: null, passportExpiry: null, phone: null, whatsapp: null, email: null, address: null }
   const out = snapshotFromCard([{ fieldKey: 'a', fieldType: 'text', role: 'display_name' }, { fieldKey: 'b', fieldType: 'text', role: 'birth_date' }, { fieldKey: 'c', fieldType: 'select', role: 'nationality' }, { fieldKey: 'd', fieldType: 'text', role: 'nik' }, { fieldKey: 'e', fieldType: 'text', role: null }], card)
   assert.deepEqual(out, { a: 'A', c: 'MY', d: null })
 })
+
+await t('ALAMAT (D1): bentuk + hierarki wilayah diperiksa server; `text` diturunkan dari nama DB (nilai klien dibuang); kosong = null; snapshot kartu ke field alamat', async () => {
+  const w = `T${String(Date.now()).slice(-6)}`
+  await prisma.addressProvince.create({ data: { id: w, name: 'Provinsi Uji' } })
+  await prisma.addressRegency.create({ data: { id: `${w}.01`, provinceId: w, name: 'Kota Uji', type: 'kota' } })
+  await prisma.addressDistrict.create({ data: { id: `${w}.01.01`, regencyId: `${w}.01`, name: 'Kecamatan Uji' } })
+  await prisma.addressVillage.create({ data: { id: `${w}.01.01.2001`, districtId: `${w}.01.01`, name: 'Desa Uji' } })
+  try {
+    const fields = [{ fieldKey: 'alamat', label: 'Alamat', fieldType: 'address' }, { fieldKey: 'nama', label: 'Nama', fieldType: 'text' }]
+    const good = { type: 'domestic', fullAddress: 'Jl. Uji 1', postalCode: '12345', provinceId: w, regencyId: `${w}.01`, districtId: `${w}.01.01`, villageId: `${w}.01.01.2001`, countryCode: null, city: '', stateRegion: '', text: 'PALSU dari klien' }
+    const r = await resolveAddressValues(fields, { alamat: good, nama: 'X' })
+    assert.ok(r.ok, JSON.stringify(r))
+    const v = r.ok ? r.values.alamat as Record<string, unknown> : {}
+    assert.equal(v.text, 'Jl. Uji 1, Desa Uji, Kecamatan Uji, Kota Uji, Provinsi Uji, 12345', 'teks dari nama DB, bukan klien')
+    assert.equal(r.ok && r.values.nama, 'X', 'field lain tak disentuh')
+    const wrong = await resolveAddressValues(fields, { alamat: { ...good, districtId: `${w}.99.99` } })
+    assert.ok(!wrong.ok && /Kecamatan/.test(wrong.errors.alamat ?? ''), 'hierarki salah ditolak')
+    const shape = await resolveAddressValues(fields, { alamat: { type: 'mars', fullAddress: 'x' } })
+    assert.ok(!shape.ok, 'bentuk liar ditolak')
+    const empty = await resolveAddressValues(fields, { alamat: { ...good, fullAddress: '' } })
+    assert.ok(empty.ok && empty.values.alamat === null, 'alamat kosong (bawaan formulir) = null')
+    assert.ok(validateFieldValues([{ fieldKey: 'alamat', label: 'Alamat', fieldType: 'address', required: true, options: null }], { alamat: 'teks bebas' }).ok === false, 'teks bebas tak lagi diterima field alamat')
+    const card = { fullName: 'A', gender: null, birthPlace: null, birthDate: null, nationality: 'ID', hasNik: false, passportLast4: null, passportIssuedAt: null, passportExpiry: null, phone: null, whatsapp: null, email: null,
+      address: { ...good, postalCode: '12345', city: null, stateRegion: null, text: 'Jl. Uji 1, Desa Uji' } }
+    const snap = snapshotFromCard([{ fieldKey: 'a', fieldType: 'address', role: 'address' }, { fieldKey: 't', fieldType: 'textarea', role: 'address' }], card as Parameters<typeof snapshotFromCard>[1])
+    assert.deepEqual(snap.a, card.address); assert.equal(snap.t, 'Jl. Uji 1, Desa Uji')
+  } finally {
+    await prisma.addressVillage.deleteMany({ where: { id: { startsWith: w } } })
+    await prisma.addressDistrict.deleteMany({ where: { id: { startsWith: w } } })
+    await prisma.addressRegency.deleteMany({ where: { id: { startsWith: w } } })
+    await prisma.addressProvince.deleteMany({ where: { id: w } })
+  }
+})
+
+/** Blok `{ … }` / `( … )` seimbang mulai dari indeks pembuka. */
+function balanced(src: string, open: number): string {
+  const pair: Record<string, string> = { '{': '}', '(': ')' }
+  const stack: string[] = []
+  for (let i = open; i < src.length; i++) {
+    const ch = src[i]!
+    if (ch === '{' || ch === '(') stack.push(pair[ch]!)
+    else if ((ch === '}' || ch === ')') && stack.pop() !== ch) return src.slice(open, i + 1)
+    if (stack.length === 0) return src.slice(open, i + 1)
+  }
+  return src.slice(open)
+}
+/** Kunci tingkat atas sebuah blok objek (abaikan isi bersarang). */
+function topKeys(block: string): string[] {
+  let depth = 0
+  const keys: string[] = []
+  const re = /([A-Za-z_]\w*)\s*:/y
+  for (let i = 0; i < block.length; i++) {
+    const ch = block[i]!
+    if (ch === '{' || ch === '(' || ch === '[') { depth++; continue }
+    if (ch === '}' || ch === ')' || ch === ']') { depth--; continue }
+    if (depth === 1) { re.lastIndex = i; const m = re.exec(block); if (m && /[\s,{]/.test(block[i - 1] ?? ' ')) { keys.push(m[1]!); i += m[0].length - 1 } }
+  }
+  return keys
+}
+/** Pembacaan jamaah booking yang membawa SEMUA kolom (termasuk cipher): `pilgrim(s): true`, relasi tanpa `select`, `bookingPilgrim.find*` tanpa `select`. */
+function unsafePilgrimReads(raw: string): string[] {
+  const src = raw.replace(/_count:\s*\{\s*select:\s*\{[^}]*\}\s*\}/g, '') // jumlah relasi, bukan baris
+  const out: string[] = []
+  if (/\b(pilgrims?|bookingPilgrims):\s*true\b/.test(src)) out.push('relasi pilgrim(s)/bookingPilgrims: true')
+  for (const m of src.matchAll(/\b(pilgrims?|bookingPilgrims):\s*\{/g)) {
+    const keys = topKeys(balanced(src, m.index! + m[0].length - 1))
+    // Argumen BACA relasi (bukan filter `where`/tulis bersarang): tanpa `select` = semua kolom skalar ikut.
+    const READ_ARGS = ['orderBy', 'where', 'take', 'skip', 'include', 'distinct', 'cursor', 'select']
+    const isRead = keys.length > 0 && keys.every(k => READ_ARGS.includes(k))
+    if (isRead && (!keys.includes('select') || keys.includes('include'))) out.push(`relasi pilgrim(s) tanpa select (${keys.join(',')})`)
+  }
+  for (const m of src.matchAll(/bookingPilgrim\.(findMany|findFirst|findUnique|findFirstOrThrow|findUniqueOrThrow)\(/g)) {
+    const arg = balanced(src, m.index! + m[0].length - 1)
+    const obj = arg.indexOf('{')
+    if (!(obj >= 0 && topKeys(balanced(arg, obj)).includes('select'))) out.push(`bookingPilgrim.${m[1]} tanpa select`)
+  }
+  // Tulis tunggal mengembalikan SELURUH baris (termasuk cipher) bila tanpa `select`.
+  for (const m of src.matchAll(/bookingPilgrim\.(update|create|upsert|delete)\(/g)) {
+    const arg = balanced(src, m.index! + m[0].length - 1)
+    const obj = arg.indexOf('{')
+    if (!(obj >= 0 && topKeys(balanced(arg, obj)).includes('select'))) out.push(`bookingPilgrim.${m[1]} tanpa select`)
+  }
+  if (/SELECT\s+(\w+\.)?\*[\s\S]{0,300}?booking_pilgrims/i.test(src)) out.push('SELECT * dari booking_pilgrims')
+  return out
+}
 
 await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ lewat select; daftar peran = CHECK migrasi', () => {
   const root = new URL('..', import.meta.url).pathname
@@ -276,7 +373,9 @@ await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ le
   }
   for (const d of ['app', 'lib', 'components']) walk(join(root, d))
   const bad: string[] = []
-  const SEAL_OK = new Set(['lib/pilgrims/bookingLink.ts', 'lib/pilgrims/service.ts', 'lib/account/erasureSweep.ts', 'lib/validators/pilgrims.ts'])
+  // lib/pilgrims/warehouse.ts: gudang identitas staf (Fase 8) — membuka NIK/paspor untuk staf (berjejak) dan mencari lewat indeks; tak menulis segel
+  // booking_pilgrims (dijaga scripts/test-identity-warehouse.ts).
+  const SEAL_OK = new Set(['lib/pilgrims/bookingLink.ts', 'lib/pilgrims/service.ts', 'lib/account/erasureSweep.ts', 'lib/validators/pilgrims.ts', 'lib/pilgrims/warehouse.ts'])
   for (const f of files) {
     const rel = relative(root, f)
     const src = readFileSync(f, 'utf8')
@@ -284,7 +383,7 @@ await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ le
     if (/bookingPilgrim\.(update|updateMany|create|createMany|upsert)\(\{[\s\S]{0,300}?data:\s*\{[^}]*savedPilgrimId:(?!\s*null)/.test(src) && rel !== 'lib/pilgrims/bookingLink.ts') bad.push(`${rel}: menulis savedPilgrimId`)
     if (/bookingPilgrim\.(create|createMany|upsert)\(/.test(src) && rel !== 'lib/booking/lineItems.ts') bad.push(`${rel}: membuat jamaah booking di luar lib/booking/lineItems.ts (penyegel NIK/paspor)`)
     if (rel === 'lib/booking/lineItems.ts' && !/sealNewPilgrim\(/.test(src)) bad.push(`${rel}: jamaah baru tidak lewat sealNewPilgrim`)
-    if ((rel.startsWith('app/') || rel.startsWith('components/')) && /pilgrims:\s*\{\s*(orderBy:[^}]*\},\s*)?include:/.test(src)) bad.push(`${rel}: relasi pilgrims lewat include (membawa kolom tersegel) — pakai BOOKING_PILGRIM_SAFE_SELECT`)
+    for (const problem of unsafePilgrimReads(src)) bad.push(`${rel}: ${problem} — pakai select (BOOKING_PILGRIM_SAFE_SELECT), bukan include/true (SEC-192)`)
     if (/['"]use client['"]/.test(src) && /from ['"]@\/lib\/pilgrims\/bookingLink['"]/.test(src.replace(/import type [^;]+;?/g, ''))) bad.push(`${rel}: komponen klien mengimpor layanan server`)
   }
   assert.deepEqual(bad, [])

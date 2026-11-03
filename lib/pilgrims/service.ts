@@ -43,6 +43,8 @@ export type SavedPilgrimView = {
   email: string | null
   isSelf: boolean
   archived: boolean
+  /** Petugas meminta pemilik memeriksa ulang NIK (Fase 8) — pesan generik, tak menyebut data akun lain; hilang setelah NIK diubah. */
+  needsNikCheck: boolean
   createdAt: string
   updatedAt: string
 }
@@ -67,7 +69,7 @@ export type DeleteResult = { ok: true; result: 'deleted' | 'archived' } | Servic
 const viewSelect = {
   id: true, fullName: true, gender: true, birthPlace: true, birthDate: true, nationality: true, nikHash: true,
   passportLast4: true, passportIssuedAt: true, passportExpiry: true, addressId: true, phone: true, whatsapp: true, email: true,
-  selfOfUserId: true, archivedAt: true, createdAt: true, updatedAt: true,
+  selfOfUserId: true, archivedAt: true, nikCheckRequestedAt: true, createdAt: true, updatedAt: true,
   address: { select: { type: true, fullAddress: true, postalCode: true, provinceId: true, regencyId: true, districtId: true, villageId: true, countryCode: true, city: true, stateRegion: true } },
 } satisfies Prisma.SavedPilgrimSelect
 
@@ -81,7 +83,7 @@ function toView(r: ViewRow): SavedPilgrimView {
     nik: r.nikHash ? NIK_MASK : null,
     passport: r.passportLast4 ? { number: maskPassport(r.passportLast4), issuedAt: cal(r.passportIssuedAt), expiry: cal(r.passportExpiry) } : null,
     addressId: r.addressId, address: r.address, phone: r.phone, whatsapp: r.whatsapp, email: r.email,
-    isSelf: r.selfOfUserId !== null, archived: r.archivedAt !== null,
+    isSelf: r.selfOfUserId !== null, archived: r.archivedAt !== null, needsNikCheck: r.nikCheckRequestedAt !== null,
     createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   }
 }
@@ -114,8 +116,9 @@ export async function lockCardOwner(tx: Tx, actor: Actor, ownerId: string): Prom
   }
 }
 
-/** Kunci per identitas (hash NIK / hash paspor), diurutkan supaya dua transaksi yang mengunci dua identitas yang sama tak saling menunggu. */
-async function lockIdentityKeys(tx: Tx, keys: (string | null | undefined)[]): Promise<void> {
+/** Kunci per identitas (hash NIK / hash paspor), diurutkan supaya dua transaksi yang mengunci dua identitas yang sama tak saling menunggu.
+ *  Yang dikunci selalu KUNCI UTAMA identitas (atau kunci yang akan menjadi kunci utama) — kunci alias (Fase 8) dipetakan dulu ke kunci utamanya. */
+export async function lockIdentityKeys(tx: Tx, keys: (string | null | undefined)[]): Promise<void> {
   for (const k of [...new Set(keys.filter((x): x is string => !!x))].sort()) {
     // $executeRaw: advisory lock transaksi tidak bisa dinyatakan lewat Prisma ORM.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`pilgrim-identity:${k}`}, 0))`
@@ -131,6 +134,17 @@ function isBaby(birthDate: CalendarDate, today: CalendarDate = todayInApp()): bo
 }
 
 type IdentityKey = { kind: 'nik'; hash: string; cipher: string } | { kind: 'passport'; hash: string }
+
+/** Kunci utama identitas (hash NIK, atau hash paspor untuk WNA) — satu-satunya kunci advisory identitas itu. */
+export const primaryKeyOf = (i: { nikHash: string | null; passportKeyHash: string | null }): string | null => i.nikHash ?? i.passportKeyHash
+
+/** Identitas pemilik kunci ini lewat kunci utama ATAU alias gabungan (Fase 8). Dibaca tanpa kunci; pemanggil mengunci `primary` lalu membaca ulang. */
+async function identityByKey(tx: Tx, key: IdentityKey): Promise<{ id: string; primary: string } | null> {
+  const sel = { id: true, nikHash: true, passportKeyHash: true } as const
+  const direct = await tx.pilgrimIdentity.findUnique({ where: key.kind === 'nik' ? { nikHash: key.hash } : { passportKeyHash: key.hash }, select: sel })
+  const found = direct ?? (await tx.pilgrimIdentityAlias.findUnique({ where: { keyHash: key.hash }, select: { identity: { select: sel } } }))?.identity ?? null
+  return found ? { id: found.id, primary: primaryKeyOf(found)! } : null
+}
 
 type Resolved = {
   nik: { hash: string; cipher: string } | null
@@ -189,10 +203,9 @@ const identityKeyOf = (nationality: string, r: Resolved): IdentityKey | null =>
 
 type Canonical = { fullName: string; nameKey: string; gender: Gender | null; birthPlace: string | null; birthDate: Date | null; nationality: string }
 
-/** Cari atau buat identitas untuk kunci ini (pemanggil SUDAH memegang lockIdentityKeys(kunci)). */
+/** Cari (lewat kunci utama atau alias) atau buat identitas untuk kunci ini (pemanggil SUDAH memegang kunci utama hasil `identityByKey`, atau kunci ini). */
 async function findOrCreateIdentity(tx: Tx, key: IdentityKey, canonical: Canonical): Promise<{ id: string; created: boolean }> {
-  const where = key.kind === 'nik' ? { nikHash: key.hash } : { passportKeyHash: key.hash }
-  const found = await tx.pilgrimIdentity.findUnique({ where, select: { id: true } })
+  const found = await identityByKey(tx, key)
   if (found) return { id: found.id, created: false }
   const data = key.kind === 'nik' ? { nikHash: key.hash, nikCipher: key.cipher } : { passportKeyHash: key.hash }
   const created = await tx.pilgrimIdentity.create({ data: { ...data, ...canonical }, select: { id: true } })
@@ -208,13 +221,13 @@ const sameDate = (a: Date | null, b: Date | null) => (a?.getTime() ?? null) === 
 export async function settleIdentity(tx: Tx, identityId: string, actorId: string | null): Promise<'deleted' | 'kept'> {
   const identity = await tx.pilgrimIdentity.findUnique({
     where: { id: identityId },
-    select: { id: true, nameKey: true, birthDate: true, fullName: true, gender: true, birthPlace: true, nationality: true, lastVerifiedAt: true, _count: { select: { bookingPilgrims: true } } },
+    select: { id: true, nameKey: true, birthDate: true, fullName: true, gender: true, birthPlace: true, nationality: true, lastVerifiedAt: true, canonicalPinnedAt: true, _count: { select: { bookingPilgrims: true } } },
   })
   if (!identity) return 'deleted'
   const cards = await tx.savedPilgrim.findMany({
     where: { identityId },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    select: { id: true, matchStatus: true, updatedAt: true, fullName: true, nameKey: true, gender: true, birthPlace: true, birthDate: true, nationality: true },
+    select: { id: true, matchStatus: true, matchConfirmedAt: true, updatedAt: true, fullName: true, nameKey: true, gender: true, birthPlace: true, birthDate: true, nationality: true },
   })
   if (cards.length === 0 && identity._count.bookingPilgrims === 0) {
     await tx.pilgrimIdentity.delete({ where: { id: identityId } }) // jejak ikut terhapus (Cascade): tak ada NIK yatim
@@ -222,7 +235,8 @@ export async function settleIdentity(tx: Tx, identityId: string, actorId: string
   }
   let canon = { nameKey: identity.nameKey, birthDate: identity.birthDate }
   const source = cards[0]
-  if (identity.lastVerifiedAt === null && source) {
+  // Kanonik dari kartu tertua hanya selama belum terverifikasi (F6) dan belum ditetapkan admin (F8).
+  if (identity.lastVerifiedAt === null && identity.canonicalPinnedAt === null && source) {
     const next = { fullName: source.fullName, nameKey: source.nameKey, gender: source.gender, birthPlace: source.birthPlace, birthDate: source.birthDate, nationality: source.nationality }
     const changed = next.fullName !== identity.fullName || next.nameKey !== identity.nameKey || next.gender !== identity.gender
       || next.birthPlace !== identity.birthPlace || !sameDate(next.birthDate, identity.birthDate) || next.nationality !== identity.nationality
@@ -233,12 +247,38 @@ export async function settleIdentity(tx: Tx, identityId: string, actorId: string
     canon = { nameKey: next.nameKey, birthDate: next.birthDate }
   }
   for (const c of cards) {
-    const status = c.nameKey === canon.nameKey && sameDate(c.birthDate, canon.birthDate) ? 'matched' : 'conflict'
+    // Cocok manual petugas (F8) menang sampai kartu itu diubah (write() menggugurkan matchConfirmedAt).
+    const status = c.matchConfirmedAt || (c.nameKey === canon.nameKey && sameDate(c.birthDate, canon.birthDate)) ? 'matched' : 'conflict'
     // updatedAt TIDAK boleh bergeser karena status (SEC-173): ia tampil ke pemilik kartu, dan pergeseran itu membuka bahwa NIK-nya juga
     // ada di akun lain (kartu baru: 'matched'→'conflict' sesudah dibuat; kartu korban: berubah saat akun lain menyimpan NIK yang sama).
     if (status !== c.matchStatus) await tx.savedPilgrim.update({ where: { id: c.id }, data: { matchStatus: status, updatedAt: c.updatedAt } })
   }
   return 'kept'
+}
+
+export type VerifiedCanonical = { fullName?: string; gender?: Gender; birthPlace?: string; birthDate?: CalendarDate; nationality?: string }
+
+/**
+ * Pengajuan jamaah booking TERVERIFIKASI (Fase 6, lib/pilgrims/review.ts) → data kanonik identitas = data yang diverifikasi petugas (atribut yang
+ * tak ada di snapshot tetap), `lastVerifiedAt` diisi (sejak itu kartu tak lagi menggeser kanonik). Pemanggil memegang kunci baris jamaah booking;
+ * di sini kunci identitas diambil SESUDAHNYA dan TIDAK menulis baris kartu (status cocok kartu dihitung ulang saat kartu ditulis berikutnya) —
+ * menulis kartu sambil memegang baris jamaah booking bisa deadlock dengan layanan dokumen (kartu → jamaah booking).
+ */
+export async function applyVerifiedSnapshot(tx: Tx, identityId: string, canonical: VerifiedCanonical, actorId: string, bookingPilgrimId: string): Promise<void> {
+  const keys = await tx.pilgrimIdentity.findUnique({ where: { id: identityId }, select: { nikHash: true, passportKeyHash: true } })
+  if (!keys) return
+  await lockIdentityKeys(tx, [keys.nikHash ?? keys.passportKeyHash])
+  const data: Prisma.PilgrimIdentityUpdateInput = { lastVerifiedAt: new Date() }
+  if (canonical.fullName) Object.assign(data, { fullName: canonical.fullName, nameKey: nameKeyOf(canonical.fullName) })
+  if (canonical.gender) data.gender = canonical.gender
+  if (canonical.birthPlace) data.birthPlace = canonical.birthPlace
+  if (canonical.birthDate) data.birthDate = dbDateOf(canonical.birthDate)
+  if (canonical.nationality) data.nationality = canonical.nationality
+  await tx.pilgrimIdentity.update({ where: { id: identityId }, data, select: { id: true } })
+  // Detail tanpa PII: hanya asal perubahan dan atribut yang dipakai.
+  await tx.pilgrimIdentityEvent.create({
+    data: { identityId, actorId, kind: 'canonical_updated', detail: { source: 'verified_submission', bookingPilgrimId, fields: Object.keys(canonical).sort() } },
+  })
 }
 
 async function warningsFor(nik: Resolved['newNik'], input: SavedPilgrimInput): Promise<PilgrimWarning[]> {
@@ -265,7 +305,7 @@ function uniqueViolation(e: unknown): ServiceError | null {
 }
 
 const existingSelect = {
-  id: true, archivedAt: true, identityId: true, addressId: true, selfOfUserId: true,
+  id: true, archivedAt: true, identityId: true, addressId: true, selfOfUserId: true, nameKey: true, birthDate: true, matchConfirmedAt: true, nikCheckRequestedAt: true,
   nikHash: true, nikCipher: true, nationality: true, passportKeyHash: true, passportCipher: true, passportLast4: true, passportIssuedAt: true, passportExpiry: true,
 } satisfies Prisma.SavedPilgrimSelect
 
@@ -292,18 +332,34 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
       const nationality = input.nationality
       const key = identityKeyOf(nationality, resolved)
 
+      // Fase 8: kartu yang dilepas petugas karena NIK tidak sesuai tak ditautkan ulang otomatis selama kuncinya tak berubah; kartu tanpa kunci
+      // (bayi) yang ditautkan petugas tetap tertaut selama masih tanpa kunci.
+      const sameKeyAsBefore = !!existing && existing.nikHash === (resolved.nik?.hash ?? null) && existing.passportKeyHash === (resolved.passport?.keyHash ?? null)
+      const linkHeld = !!existing?.nikCheckRequestedAt && sameKeyAsBefore
+      const adminLink = !key && !!existing?.identityId && !existing.nikHash && !existing.passportKeyHash ? existing.identityId : null
+      const wantKey = key && !linkHeld ? key : null
+
       const oldIdentity = existing?.identityId
         ? await tx.pilgrimIdentity.findUnique({ where: { id: existing.identityId }, select: { id: true, nikHash: true, passportKeyHash: true } })
         : null
-      const oldKey = oldIdentity ? (oldIdentity.nikHash ?? oldIdentity.passportKeyHash) : null
-      await lockIdentityKeys(tx, [oldKey, key?.hash])
+      const oldKey = oldIdentity ? primaryKeyOf(oldIdentity) : null
+      const target = wantKey ? await identityByKey(tx, wantKey) : null
+      const held = [oldKey, target?.primary ?? wantKey?.hash ?? null]
+      await lockIdentityKeys(tx, held)
+      // Pemetaan kunci → identitas dibaca ulang di dalam kunci: gabung serentak (F8) bisa memindahkannya ke identitas yang kuncinya tak dipegang.
+      if (wantKey) {
+        const again = await identityByKey(tx, wantKey)
+        // Identitas alias yang terhapus di sela itu juga gagal di sini: kunci `wantKey` sendiri tak dipegang (SEC-209).
+        if (!held.includes(again?.primary ?? wantKey.hash)) fail(409, 'Data jamaah ini baru saja diubah — muat ulang lalu coba lagi')
+      }
 
       if (cardId && existing) {
         // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE. Menserialkan dua ubah serentak pada kartu yang sama.
         await tx.$queryRaw`SELECT "id" FROM "saved_pilgrims" WHERE "id" = ${cardId} AND "ownerId" = ${ownerId} FOR UPDATE`
         const now = await tx.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: existingSelect })
         if (!now) fail(404, 'Data jamaah tidak ditemukan')
-        if (now.identityId !== existing.identityId || now.nikHash !== existing.nikHash || now.passportKeyHash !== existing.passportKeyHash || now.nationality !== existing.nationality) {
+        if (now.identityId !== existing.identityId || now.nikHash !== existing.nikHash || now.passportKeyHash !== existing.passportKeyHash || now.nationality !== existing.nationality
+          || !sameDate(now.nikCheckRequestedAt, existing.nikCheckRequestedAt)) {
           fail(409, 'Data jamaah ini baru saja diubah — muat ulang lalu coba lagi')
         }
         if (now.archivedAt) fail(409, 'Data jamaah ini diarsipkan — pulihkan dulu sebelum mengubahnya')
@@ -327,7 +383,10 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
         fullName, nameKey: nameKeyOf(fullName), gender: input.gender ?? null, birthPlace: input.birthPlace ?? null,
         birthDate: dbDateOf(input.birthDate), nationality,
       }
-      const identity = key ? await findOrCreateIdentity(tx, key, canonical) : null
+      const identity = wantKey ? await findOrCreateIdentity(tx, wantKey, canonical) : adminLink ? { id: adminLink, created: false } : null
+      // Cocok manual petugas gugur begitu kunci, nama ternormalisasi, tanggal lahir, atau identitas kartu berubah.
+      const keepConfirm = !!existing?.matchConfirmedAt && sameKeyAsBefore && existing.identityId === (identity?.id ?? null)
+        && existing.nameKey === canonical.nameKey && sameDate(existing.birthDate, canonical.birthDate)
 
       let addressId = existing?.addressId ?? null
       const dropAddress = input.address === null && addressId
@@ -341,6 +400,8 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
         ...canonical,
         identityId: identity?.id ?? null,
         matchStatus: identity ? ('matched' as const) : ('unmatched' as const), // status akhir ditetapkan settleIdentity
+        ...(keepConfirm ? {} : { matchConfirmedAt: null, matchConfirmedById: null }),
+        nikCheckRequestedAt: linkHeld ? existing!.nikCheckRequestedAt : null,
         selfOfUserId,
         nikHash: resolved.nik?.hash ?? null, nikCipher: resolved.nik?.cipher ?? null,
         passportKeyHash: resolved.passport?.keyHash ?? null, passportCipher: resolved.passport?.cipher ?? null, passportLast4: resolved.passport?.last4 ?? null,
@@ -503,6 +564,14 @@ export async function eraseSavedPilgrimsOf(tx: Tx, userId: string): Promise<{ sa
   const identityIds = [...new Set([...cards.map(c => c.identityId), ...viaBookings.map(b => b.identityId)].filter((x): x is string => !!x))]
   const identities = await tx.pilgrimIdentity.findMany({ where: { id: { in: identityIds } }, select: { id: true, nikHash: true, passportKeyHash: true } })
   await lockIdentityKeys(tx, identities.map(i => i.nikHash ?? i.passportKeyHash))
+  // Dibaca ulang di dalam kunci: gabung/tautan petugas (F8) bisa memindahkan kartu akun ini ke identitas lain di sela itu (SEC-208).
+  const moved = (await tx.savedPilgrim.findMany({ where: { ownerId: userId, identityId: { notIn: identityIds } }, select: { identityId: true } }))
+    .flatMap(c => (c.identityId ? [c.identityId] : []))
+  if (moved.length > 0) {
+    const extra = await tx.pilgrimIdentity.findMany({ where: { id: { in: [...new Set(moved)] } }, select: { id: true, nikHash: true, passportKeyHash: true } })
+    await lockIdentityKeys(tx, extra.map(i => i.nikHash ?? i.passportKeyHash))
+    identities.push(...extra)
+  }
 
   const cardIds = cards.map(c => c.id)
   const a = await tx.bookingPilgrim.updateMany({ where: { savedPilgrimId: { in: cardIds } }, data: { savedPilgrimId: null } })

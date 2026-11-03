@@ -9,6 +9,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { checklistState } from '@/lib/documents/checklistLabels'
 
 // Tautan jamaah booking ↔ data jamaah tersimpan pelanggan (docs/arsitektur-jamaah.md §5.3, Fase 7a). Menautkan / memperbarui mengisi field
 // berperan dari kartu (snapshot; kartu diedit kemudian tidak mengubahnya). Checklist dihitung server (evaluateCompleteness); dokumen milik orang
@@ -22,15 +23,6 @@ type Props = {
   customerId: string
   linked: { id: string; name: string } | null
   checklist: ChecklistItem[]
-}
-
-const STATE: Record<string, { label: string; tone: 'ok' | 'warning' | 'danger' | 'neutral' }> = {
-  accepted: { label: 'Diterima', tone: 'ok' },
-  pending: { label: 'Menunggu', tone: 'warning' },
-  missing: { label: 'Belum ada', tone: 'danger' },
-  rejected: { label: 'Ditolak', tone: 'danger' },
-  expired: { label: 'Habis berlaku', tone: 'danger' },
-  too_short: { label: 'Masa berlaku kurang', tone: 'danger' },
 }
 
 export function PilgrimCardPanel({ locale, bookingId, pilgrimId, customerId, linked, checklist }: Props) {
@@ -110,7 +102,7 @@ export function PilgrimCardPanel({ locale, bookingId, pilgrimId, customerId, lin
           {checklist.map(c => (
             <li key={c.key} className="flex items-center justify-between gap-2 text-[12px] text-admin-ink">
               <span>{c.label}{c.required ? '' : ' (opsional)'}</span>
-              <Badge tone={STATE[c.state]?.tone ?? 'neutral'}>{STATE[c.state]?.label ?? c.state}</Badge>
+              <Badge tone={checklistState(c.state).tone}>{checklistState(c.state).label}</Badge>
             </li>
           ))}
         </ul>

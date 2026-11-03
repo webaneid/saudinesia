@@ -125,6 +125,15 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         facts: [['Kode booking', e.code], ['Status visa', e.status]],
         cta: bookingCta,
       }
+    case 'pilgrim_review':
+      return {
+        subject: `Pemeriksaan data jamaah booking ${e.code}: ${e.status}`,
+        preheader: `Status pemeriksaan data jamaah: ${e.status}.`,
+        heading: 'Pemeriksaan data jamaah',
+        paragraphs: [`Halo ${ctx.name}, ada pembaruan pemeriksaan data jamaah pada booking Anda. Buka halaman booking untuk melihat rinciannya dan catatan petugas bila ada.`],
+        facts: [['Kode booking', e.code], ['Status', e.status]],
+        cta: bookingCta,
+      }
     case 'contact_changed':
       return {
         subject: 'Nomor kontak akun Saudinesia Anda diubah',

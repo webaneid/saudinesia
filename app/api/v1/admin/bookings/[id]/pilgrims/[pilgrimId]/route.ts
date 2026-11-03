@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { Prisma } from '@prisma/client'
+import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { requireBookingManage } from '@/lib/booking/policy'
@@ -12,6 +12,8 @@ import { authFailureResponse } from '@/lib/admin/errors'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { passportCountryOf, sealManualPii } from '@/lib/pilgrims/bookingLink'
 import { isSealedRole } from '@/lib/manifest/roles'
+import { resolveAddressValues } from '@/lib/manifest/address'
+import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from '@/lib/pilgrims/reviewState'
 
 class Refused extends Error {}
 
@@ -33,7 +35,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const pilgrim = await prisma.bookingPilgrim.findFirst({
       where: { id: pilgrimId, bookingId: id, booking: { status: { not: 'draft' } } },
       select: {
-        visaApplication: { select: { id: true, visaProductId: true } }, booking: { select: { userId: true, user: { select: { email: true } } } },
+        visaApplication: { select: { id: true, visaProductId: true } }, booking: { select: { userId: true, status: true, user: { select: { email: true } } } },
         savedPilgrim: { select: { nationality: true } },
       },
     })
@@ -47,7 +49,10 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (!checked.ok) return NextResponse.json({ success: false, error: Object.values(checked.errors)[0], meta: { errors: checked.errors } }, { status: 400 })
     if (parsed.data.plannedTravelDate !== undefined && !pilgrim.visaApplication) return NextResponse.json(err('Jamaah ini tidak mengajukan visa'), { status: 400 })
     // NIK / nomor paspor (peran `nik`/`passport_number`) DISEGEL — snapshot hanya menyimpan samaran (docs/arsitektur-jamaah.md §5.3 butir 3).
-    const sealed = await sealManualPii(fields, checked.values, passportCountryOf(fields, checked.values, pilgrim.savedPilgrim?.nationality))
+    // Alamat berjenjang dibekukan dengan `text` dari nama wilayah di DB (D1, docs/arsitektur-jamaah.md §5.5).
+    const addressed = await resolveAddressValues(fields, checked.values)
+    if (!addressed.ok) return NextResponse.json({ success: false, error: Object.values(addressed.errors)[0], meta: { errors: addressed.errors } }, { status: 400 })
+    const sealed = await sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values, pilgrim.savedPilgrim?.nationality))
     if (!sealed.ok) return NextResponse.json({ success: false, error: Object.values(sealed.errors)[0], meta: { errors: sealed.errors } }, { status: 400 })
 
     const values = await prisma.$transaction(async (tx) => {
@@ -55,7 +60,9 @@ export async function PUT(req: Request, { params }: Ctx) {
       // anonimisasi) → jamaah booking (FOR UPDATE: dua admin yang menyimpan field berbeda tak saling menimpa). $queryRaw: ORM tak punya FOR SHARE/UPDATE.
       const owner = await tx.$queryRaw<Array<{ email: string }>>(Prisma.sql`SELECT "email" FROM "users" WHERE "id" = ${pilgrim.booking.userId} FOR SHARE`)
       if (!owner[0] || isDeletedAccount(owner[0].email)) throw new Refused('Akun pelanggan ini sudah dihapus')
-      const locked = await tx.$queryRaw<Array<{ fieldValues: unknown; savedPilgrimId: string | null }>>(Prisma.sql`SELECT "fieldValues", "savedPilgrimId" FROM "booking_pilgrims" WHERE "id" = ${pilgrimId} FOR UPDATE`)
+      const locked = await tx.$queryRaw<Array<{ fieldValues: unknown; savedPilgrimId: string | null; reviewStatus: PilgrimReviewStatus }>>(Prisma.sql`SELECT "fieldValues", "savedPilgrimId", "reviewStatus" FROM "booking_pilgrims" WHERE "id" = ${pilgrimId} FOR UPDATE`)
+      // Diajukan/terverifikasi pada booking aktif (Fase 6): data yang sedang/sudah diperiksa tak berubah diam-diam — kembalikan dulu.
+      if (locked[0] && pilgrim.booking.status === 'active' && isReviewLocked(locked[0].reviewStatus)) throw new Refused(REVIEW_LOCKED_MESSAGE)
       // NIK/paspor jamaah bertaut berasal dari kartu (identitas orang di kartu) — mengetik nilai lain di sini akan mencampur dua orang.
       const current = (locked[0]?.fieldValues ?? {}) as Record<string, unknown>
       const blank = (v: unknown) => (v === '' || v === undefined ? null : v)
@@ -64,7 +71,7 @@ export async function PUT(req: Request, { params }: Ctx) {
         throw new Refused('NIK/paspor jamaah ini berasal dari data jamaah tersimpan — ubah di data tersimpan lalu perbarui dari kartu, atau lepas tautan dulu')
       }
       const merged = { ...current, ...sealed.values }
-      await tx.bookingPilgrim.update({ where: { id: pilgrimId }, data: { fieldValues: merged as Prisma.InputJsonValue, ...sealed.columns } })
+      await tx.bookingPilgrim.update({ where: { id: pilgrimId }, data: { fieldValues: merged as Prisma.InputJsonValue, ...sealed.columns }, select: { id: true } })
       if (parsed.data.plannedTravelDate !== undefined && pilgrim.visaApplication) {
         await tx.visaApplication.update({ where: { id: pilgrim.visaApplication.id }, data: { plannedTravelDate: parsed.data.plannedTravelDate ? dbDateOf(parsed.data.plannedTravelDate) : null } })
       }

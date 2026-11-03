@@ -38,6 +38,8 @@ export const LIMITS = {
   pilgrimWriteUser:   { limit: 60,  windowSec: 3600 }, // simpan/ubah kartu jamaah per akun jamaah — menahan pemindaian NIK massal (respons tetap tanpa orakel, docs/arsitektur-jamaah.md §4.2)
   pilgrimWriteStaff:  { limit: 600, windowSec: 3600 }, // sama, per staf yang mengisi atas nama pelanggan (rombongan besar)
   pilgrimWriteIp:     { limit: 300, windowSec: 3600 }, // tulis kartu jamaah lewat route jamaah per IP — menahan banyak akun dari satu sumber
+  identitySearchStaff: { limit: 600, windowSec: 3600 }, // cari identitas jamaah per staf (cari NIK tepat = pemetaan NIK → orang; staf saja, docs/arsitektur-jamaah.md §4.4)
+  identityRevealStaff: { limit: 60,  windowSec: 3600 }, // buka NIK/paspor utuh per staf — setiap pembukaan juga berjejak (K4)
   pilgrimDocUser:     { limit: 60,  windowSec: 3600 }, // unggah/hapus dokumen jamaah per akun jamaah (tiap unggahan = pemrosesan gambar + objek MinIO)
   pilgrimDocStaff:    { limit: 600, windowSec: 3600 }, // sama, per staf yang mengunggah atas nama pelanggan
   pilgrimDocIp:       { limit: 120, windowSec: 3600 }, // unggah/hapus dokumen lewat route jamaah per IP

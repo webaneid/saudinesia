@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { addDays, daysBetween, todayInApp } from '@/lib/time'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
+import { isEmptyValue } from '@/lib/manifest/values'
 
 // docs/arsitektur-booking.md §6 Step 5 — items[] generik menggantikan field tetap
 // (hotelMakkah/hotelMadinah/transports/muthowif/catering/tourPackages). Satu keranjang campur
@@ -115,7 +116,7 @@ export const createBookingSchema = z.object({
     // Jumlah hari dipilih jamaah untuk visa day-based (mis. varian Non-Hotel) — opsional,
     // hanya relevan kalau VisaProduct terkait punya durationFeeRules. Lihat docs/arsitektur-visa.md §9.
     selectedDurationDays: z.number().int().min(1).optional(),
-  })).min(1, 'Minimal 1 jamaah'),
+  })).min(1, 'Minimal 1 jamaah').max(2000, 'Maksimal 2000 jamaah per booking'),
 
   // totalAmount DIHAPUS dari input (docs/arsitektur-booking.md §6 Step 5, menutup Gap #4 KRITIS
   // docs/arsitektur-umroh.md §7) — dihitung TOTAL server-side di bookings/route.ts dari
@@ -179,10 +180,8 @@ export const createBookingSchema = z.object({
     const requirements = p.visaProductId ? (requirementsByProduct.get(p.visaProductId) ?? []) : coreFields
     for (const req of requirements) {
       if (!req.required) continue
-      const value = p.fieldValues[req.fieldKey]
-      const isEmpty = value === undefined || value === null || value === ''
-        || (typeof value === 'object' && value !== null && 'number' in value && !(value as { number?: string }).number)
-      if (isEmpty) {
+      // Satu aturan "kosong" dengan formulir/admin (lib/manifest/values.ts) — termasuk alamat tanpa baris jalan.
+      if (isEmptyValue(p.fieldValues[req.fieldKey])) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: `${req.label} wajib diisi`,
