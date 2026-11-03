@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError, tagItem } from './errors'
+import { sealNewPilgrim } from '@/lib/pilgrims/bookingLink'
 import { packageLines, type PackageResolved } from './packageItem'
 import { calendarDateOf, dbDateOf } from '@/lib/time'
 import type { BookingItemInput } from '@/lib/validators/booking'
@@ -213,10 +214,10 @@ export async function writeBookingItems(
   const travel = flightDates.length > 0 ? [...flightDates].sort()[0]! : data.plannedTravelDate
   const plannedTravelDate = travel ? dbDateOf(travel) : null
   for (const p of data.pilgrims) {
-    // Revisi: jamaah yang sudah ada hanya mendapat visa baru (data pribadinya tak disentuh).
-    const pilgrim = p.pilgrimId ? { id: p.pilgrimId } : await tx.bookingPilgrim.create({ data: { bookingId, fieldValues: (p.fieldValues ?? {}) as Prisma.InputJsonValue } })
+    const fromPackage = p.visaProductId ? undefined : packageVisaSlots.shift()
+    // Revisi: jamaah yang sudah ada hanya mendapat visa baru (data pribadinya tak disentuh). Jamaah baru: NIK/paspor disegel (docs/arsitektur-jamaah.md §5.3).
+    const pilgrim = p.pilgrimId ? { id: p.pilgrimId } : await createPilgrim(tx, bookingId, p.visaProductId ?? fromPackage ?? null, p.fieldValues ?? {})
     if (!p.visaProductId) {
-      const fromPackage = packageVisaSlots.shift()
       if (fromPackage) {
         const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
         if (!vp) throw new ItemNotBookableError('Produk visa paket tidak tersedia')
@@ -252,6 +253,13 @@ export async function writeBookingItems(
  * Baris satu paket ziarah: harga dasar = titik harga paket (komponen + bagian `included` + penyesuaian), ditambah pilihan pilgrim (mode `user_choice`) yang
  * harganya dibaca dari titik harga sub-modul. Pilihan di luar daftar opsi paket ditolak (dulu diam-diam bernilai 0 padahal kuotanya ikut tertahan).
  */
+/** Jamaah booking baru: NIK/paspor (peran `nik`/`passport_number`) DISEGEL — `fieldValues` hanya menyimpan samaran. Isian tak valid → 422. */
+async function createPilgrim(tx: Prisma.TransactionClient, bookingId: string, visaProductId: string | null, values: Record<string, unknown>) {
+  const sealed = await sealNewPilgrim(tx, visaProductId, values)
+  if (!sealed.ok) throw new ItemNotBookableError(Object.values(sealed.errors)[0] ?? 'Data jamaah tidak valid')
+  return tx.bookingPilgrim.create({ data: { bookingId, fieldValues: sealed.values as Prisma.InputJsonValue, ...sealed.columns }, select: { id: true } })
+}
+
 async function tourPackageLines(
   tx: Prisma.TransactionClient, item: Item<'tourPackage'>, name: string, breakdown: TourPackageBreakdown, transportQuotaId: string | null,
 ): Promise<SnapshotLine[]> {

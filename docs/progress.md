@@ -854,11 +854,12 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 - [x] Fase 0 — dokumen rencana (keputusan K1–K12, C1–C3) — PR #94
 - [x] Fase 1 — fondasi PII `lib/pii/` (NIK & paspor: normalisasi, petunjuk NIK, HMAC indeks, AES-256-GCM berversi kunci + rotasi, samaran), kunci env terpisah + peringatan boot + generator env produksi, ADR-0005, `scripts/test-pii.ts` (+ penjaga sumber) — 2026-11-02
 - [x] Fase 2 — skema identitas + kartu + `PilgrimIdentityEvent` + cek kunci PII di DB (SEC-168), FK `BookingPilgrim.userId`, `lib/pilgrims/service.ts` (dedup tanpa orakel, kunci advisory, bayi/WNA, hapus-aman), rate limit, hapus akun, penjaga klien transitif (SEC-170), `scripts/test-pilgrims.ts` — 2026-11-02
-- [ ] Fase 3 — Jamaah Saya (UI + API, admin atas nama pelanggan)
-- [ ] Fase 4 — dokumen jamaah (katalog jenis, unggah cek isi + WebP, repeater; menutup SEC-164)
-- [ ] Fase 5 — syarat dokumen per produk + kelengkapan + aturan paspor 6 bulan
+- [x] Fase 3 — Jamaah Saya (UI + API, admin atas nama pelanggan) — selesai 2026-11-02 (`docs/arsitektur-jamaah.md` §5.2)
+- [x] Fase 4 — dokumen jamaah (katalog jenis Produk → Jenis Dokumen, unggah cek isi + WebP tanpa EXIF, `DocumentRepeater` jamaah + admin, hapus kartu/akun ikut menghapus berkas; menutup SEC-164, D3/D4/D7) — selesai 2026-11-03 (`docs/arsitektur-jamaah.md` §7.5)
+- [x] Fase 5 — syarat dokumen per produk atas katalog (`DocumentRequirement.documentTypeId`, satu penulis `lib/documents/requirements.ts`, editor `RequirementsEditor` di Visa, visa baru berisi syarat bawaan), evaluator kelengkapan murni `lib/documents/completeness.ts` + aturan paspor 6 bulan (`addMonths`), `VisaProduct.requirements`/`REQUIRED_DOCUMENTS`/`DOC_LABEL` dihapus (D5, D8) — selesai 2026-11-03 (`docs/arsitektur-jamaah.md` §7.7)
+- [x] Fase 7a (ditukar sebelum F6) — tautan kartu jamaah tersimpan → jamaah booking (`lib/pilgrims/bookingLink.ts`, snapshot lewat pengikat peran `lib/manifest/roles.ts`), NIK/paspor jamaah booking tersegel, dokumen per perjalanan (`PilgrimDocument.bookingId`), panel kartu + checklist di booking admin, model `Document` lama + rute/komponennya dihapus (menutup SEC-186) — selesai 2026-11-03 (`docs/arsitektur-jamaah.md` §5.4)
+- [ ] Fase 7b — sisi jamaah (pilih dari Jamaah Saya, unggah per perjalanan) + `fieldType='address'` terstruktur (D1)
 - [ ] Fase 6 — pengajuan & verifikasi admin
-- [ ] Fase 7 — integrasi booking (pilih kartu, snapshot, alamat sungguhan)
 - [ ] Fase 8 — gudang admin (identitas, konflik, gabung, buka NIK berjejak)
 
 ## Booking Engine v2 (admin lebih dulu, invoice, pembayaran bertahap, buku kas) — dirancang 2026-10-30

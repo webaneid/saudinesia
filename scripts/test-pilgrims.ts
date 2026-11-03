@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto'
 import { prisma } from '@/lib/db'
 import { consume, policy, __resetForTests } from '@/lib/auth/rateLimit'
 import { ensurePiiKeysMatch, nikIndex, PiiKeyMismatchError, type Nik } from '@/lib/pii'
-import { countErasableIdentities, createSavedPilgrim, deleteSavedPilgrim, eraseSavedPilgrimsOf, getSavedPilgrim, restoreSavedPilgrim, updateSavedPilgrim, type Actor, type WriteResult } from '@/lib/pilgrims/service'
+import { countErasableIdentities, createSavedPilgrim, deleteSavedPilgrim, eraseSavedPilgrimsOf, getSavedPilgrim, listSavedPilgrims, restoreSavedPilgrim, updateSavedPilgrim, type Actor, type WriteResult } from '@/lib/pilgrims/service'
 import { nameKeyOf } from '@/lib/pilgrims/nameKey'
 import { addDays, todayInApp } from '@/lib/time'
 import { savedPilgrimInputSchema, type SavedPilgrimInput } from '@/lib/validators/pilgrims'
@@ -391,6 +391,49 @@ await t('hapus akun: kartu + alamat hilang, identitas hanya-milik-akun terhapus 
   await prisma.booking.delete({ where: { id: booking.id } })
 })
 
+await t('DAFTAR (Fase 3): hanya kartu pemilik; "Saya sendiri" di atas; cari nama ternormalisasi; "%" bukan wildcard; arsip terpisah; akun lain → null, staf boleh', async () => {
+  __resetForTests()
+  const a = await makeUser(), b = await makeUser(), staff = await makeUser('admin')
+  const self = okCard(await createSavedPilgrim(a, a.userId, base({ fullName: 'Zaki Pemilik', nik: nik(), isSelf: true })))
+  okCard(await createSavedPilgrim(a, a.userId, base({ fullName: 'Hj. Aminah Binti Ali', gender: 'female', nik: nik() })))
+  okCard(await createSavedPilgrim(a, a.userId, base({ fullName: 'Budi Santoso', nik: nik() })))
+  okCard(await createSavedPilgrim(b, b.userId, base({ fullName: 'Aminah Milik B', gender: 'female', nik: nik() })))
+  const page = { page: 1, limit: 20, skip: 0 }
+  const all = (await listSavedPilgrims(a, a.userId, page))!
+  assert.equal(all.meta.total, 3)
+  assert.equal(all.items[0]!.id, self.id, '"Saya sendiri" tidak di urutan pertama')
+  assert.deepEqual(all.items.slice(1).map(c => c.fullName), ['Hj. Aminah Binti Ali', 'Budi Santoso'])
+  for (const c of all.items) { assert.equal('identityId' in c, false); assert.equal('matchStatus' in c, false); assert.ok(c.nik === null || !/\d/.test(c.nik)) }
+  const found = (await listSavedPilgrims(a, a.userId, { ...page, q: 'AMÍNAH' }))!
+  assert.deepEqual(found.items.map(c => c.fullName), ['Hj. Aminah Binti Ali'], 'cari harus tanpa diakritik/huruf besar dan hanya milik akun')
+  assert.equal((await listSavedPilgrims(a, a.userId, { ...page, q: '%' }))!.meta.total, 0, '"%" diperlakukan sebagai wildcard')
+  assert.equal(await listSavedPilgrims(b, a.userId, page), null, 'akun lain bisa membaca daftar')
+  assert.equal((await listSavedPilgrims(staff, a.userId, page))!.meta.total, 3)
+  const paged = (await listSavedPilgrims(a, a.userId, { page: 2, limit: 2, skip: 2 }))!
+  assert.equal(paged.items.length, 1); assert.equal(paged.meta.totalPages, 2)
+  // arsip: kartu yang dirujuk booking diarsipkan dan pindah ke daftar arsip
+  const target = all.items[2]!
+  const booking = await prisma.booking.create({ data: { bookingCode: `BK-${tag}-${++n}`, userId: a.userId, status: 'active', season: 'regular', totalAmount: 0, pilgrims: { create: [{ savedPilgrimId: target.id, fieldValues: {} }] } }, select: { id: true } })
+  const del = await deleteSavedPilgrim(a, a.userId, target.id)
+  assert.deepEqual(del, { ok: true, result: 'archived' })
+  assert.equal((await listSavedPilgrims(a, a.userId, page))!.meta.total, 2)
+  assert.deepEqual((await listSavedPilgrims(a, a.userId, { ...page, archived: true }))!.items.map(c => c.id), [target.id])
+  await prisma.booking.delete({ where: { id: booking.id } })
+})
+
+await t('ALAMAT di DTO (Fase 3): kartu memuat alamatnya sendiri untuk AddressPicker; null mengosongkan', async () => {
+  __resetForTests()
+  const a = await makeUser()
+  const prov = await prisma.addressProvince.findFirst({ select: { id: true } })
+  const address = prov
+    ? { type: 'domestic' as const, fullAddress: 'Jl. Uji 1', provinceId: prov.id }
+    : { type: 'international' as const, fullAddress: '1 Test St', countryCode: 'MY' }
+  const c = okCard(await createSavedPilgrim(a, a.userId, base({ nik: nik(), address })))
+  assert.equal(c.address?.fullAddress, address.fullAddress)
+  const cleared = okCard(await updateSavedPilgrim(a, a.userId, c.id, base({ address: null })))
+  assert.equal(cleared.address, null); assert.equal(cleared.nik !== null, true, 'NIK tetap bila tak dikirim')
+})
+
 // Bersihkan (DB uji): kartu → identitas → pengguna (ownerId Restrict).
 await prisma.booking.deleteMany({ where: { userId: { in: users } } })
 await prisma.savedPilgrim.deleteMany({ where: { ownerId: { in: users } } })
@@ -399,4 +442,4 @@ await prisma.user.deleteMany({ where: { id: { in: users } } })
 await prisma.$disconnect()
 
 if (failed > 0) { console.log(`\n${failed} uji GAGAL`); process.exit(1) }
-console.log('\nSemua uji data jamaah (Fase 2) lulus')
+console.log('\nSemua uji data jamaah (Fase 2–3) lulus')

@@ -1,7 +1,7 @@
 import {
   Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, UserCheck, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale,
+  Users, UserCheck, Settings, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -34,6 +34,7 @@ const PRODUK: NavItem[] = [
   { path: '/admin/products/tourism-sites', icon: MapPin,          label: 'Situs Wisata' },
   { path: '/admin/products/tour-packages', icon: Landmark,        label: 'Paket Ziarah' },
   { path: '/admin/products/seasons',       icon: CalendarDays,    label: 'Musim' },
+  { path: '/admin/products/document-types', icon: FileBadge,      label: 'Jenis Dokumen' },
 ]
 
 const SISTEM: NavItem[] = [
@@ -58,6 +59,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   admin: 'Admin',
   bookings: 'Booking',
   customers: 'Pelanggan',
+  pilgrims: 'Jamaah',
   payments: 'Pembayaran',
   visa: 'Visa',
   quotas: 'Quota',
@@ -78,6 +80,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   'tourism-sites': 'Situs Wisata',
   'tour-packages': 'Paket Ziarah',
   seasons: 'Musim',
+  'document-types': 'Jenis Dokumen',
   system: 'Sistem',
   users: 'Pengguna',
   'deletion-requests': 'Hapus Akun',

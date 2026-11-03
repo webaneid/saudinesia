@@ -8,13 +8,8 @@ import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
 import { canViewCost } from '@/lib/pricing/policy'
-
-const requirementSchema = z.object({
-  docType:     z.string().min(1),
-  label:       z.string().min(1),
-  description: z.string().default(''),
-  required:    z.boolean().default(true),
-})
+import { documentRequirementListSchema } from '@/lib/validators/documents'
+import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-harga.md §17) — produk baru dibuat
 // dengan price:0, baru terisi otomatis setelah admin mengisi komponen HPP di halaman edit.
@@ -23,7 +18,8 @@ const createSchema = z.object({
   country:      z.string().default('Saudi Arabia'),
   visaType:     z.string().min(1),
   description:  richTextField().nullish(), // teks kaya, lihat docs/arsitektur-editor-teks.md
-  requirements: z.array(requirementSchema).default([]),
+  // Syarat dokumen (docs/arsitektur-jamaah.md §7.6): tidak dikirim = daftar bawaan (paspor, KTP, KK, tiket PP), bisa diubah di halaman edit.
+  requirements: documentRequirementListSchema.optional(),
   priceLabel:   z.string().optional(),
   processDays:  z.coerce.number().int().positive().default(14),
   isActive:     z.boolean().default(true),
@@ -58,20 +54,16 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const { name, country, visaType, description, requirements, priceLabel, processDays, isActive } = parsed.data
-    // requirements Json TETAP diisi untuk kompatibilitas mundur (dibaca kode lama yang belum
-    // pindah, docs/arsitektur-dokumen.md §5), tapi DocumentRequirement (di bawah) adalah sumber
-    // kebenaran BARU — pemanggil baru pakai getDocumentRequirements(), bukan field ini.
-    const product = await prisma.visaProduct.create({
-      data: { name, country, visaType, description: emptyToNull(description), requirements, priceLabel: priceLabel ?? 'per orang', processDays, isActive },
-    })
-    if (requirements.length > 0) {
-      await prisma.documentRequirement.createMany({
-        data: requirements.map((r, i) => ({
-          productType: 'visa', productId: product.id,
-          docType: r.docType, label: r.label, description: r.description, required: r.required, order: i,
-        })),
+    const result = await prisma.$transaction(async (tx) => {
+      const product = await tx.visaProduct.create({
+        data: { name, country, visaType, description: emptyToNull(description), priceLabel: priceLabel ?? 'per orang', processDays, isActive },
       })
-    }
+      const written = requirements ? await writeRequirements(tx, 'visa', product.id, requirements) : await writeDefaultRequirements(tx, 'visa', product.id)
+      if (!written.ok) throw new RequirementRejected(written.error, written.field)
+      return product
+    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
+    const product = result
     return NextResponse.json(ok(product), { status: 201 })
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

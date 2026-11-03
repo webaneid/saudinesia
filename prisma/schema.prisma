@@ -53,6 +53,8 @@ model User {
   savedPilgrims             SavedPilgrim[]           @relation("SavedPilgrimOwner")
   selfPilgrim               SavedPilgrim?            @relation("SavedPilgrimSelf")
   createdSavedPilgrims      SavedPilgrim[]           @relation("SavedPilgrimCreatedBy")
+  uploadedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocUploadedBy")
+  reviewedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocReviewedBy")
   bookingPilgrims           BookingPilgrim[]         @relation("BookingPilgrimUser")
 
   @@map("users")
@@ -451,16 +453,15 @@ model HajiProduct {
 // ─── VISA PRODUCT ─────────────────────────────────────────────
 
 model VisaProduct {
-  id           String   @id @default(uuid())
-  name         String
-  country      String   @default("Saudi Arabia")
-  visaType     String // free text — admin defines (e.g. "Umroh", "Visitor", "Bisnis")
-  description  String?
-  requirements Json     @default("[]") // VisaRequirement[] — see lib/types/visa.ts
-  priceLabel   String?
-  processDays  Int      @default(14)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  id          String   @id @default(uuid())
+  name        String
+  country     String   @default("Saudi Arabia")
+  visaType    String // free text — admin defines (e.g. "Umroh", "Visitor", "Bisnis")
+  description String?
+  priceLabel  String?
+  processDays Int      @default(14)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
 
   // Komponen yang WAJIB ada di booking yang sama (docs/arsitektur-booking-engine-v2.md §4.1/§10.2): [{type:'flight'}, {type:'hotel'}, {type:'transport', categories?, tripIds?}].
   // Bentuk dijaga `visaRequiredComponentsSchema` (lib/validators/visa.ts); dievaluasi HANYA oleh lib/booking/rules.ts.
@@ -473,22 +474,23 @@ model VisaProduct {
   @@map("visa_products")
 }
 
-// ─── DOCUMENT REQUIREMENT (universal, docs/arsitektur-dokumen.md §3) ──────────
-// Menggantikan VisaProduct.requirements: Json (dipertahankan sementara, deprecated) sebagai
-// sumber kebenaran syarat dokumen — polimorfik, pola sama ProductCost/PreferredVendor
-// (docs/arsitektur-harga.md §3.3), supaya produk lain (Paket Umroh, Tiket Pesawat, Haji) bisa
-// punya syarat dokumen sendiri, bukan monopoli Visa.
+// ─── DOCUMENT REQUIREMENT (syarat dokumen per produk, docs/arsitektur-jamaah.md §7.2/§7.6) ──────
+// Polimorfik productType+productId (pola ProductCost); jenis dari katalog DocumentType (bukan teks bebas). Ditulis HANYA oleh
+// lib/documents/requirements.ts. Kelengkapan dinilai HANYA oleh lib/documents/completeness.ts.
 model DocumentRequirement {
-  id          String  @id @default(uuid())
-  productType String // 'visa' | 'package' | 'flight' | 'haji' | dst — bebas teks, tidak hardcode daftar
-  productId   String // FK ke produk spesifik, TIDAK di-enforce di DB (pola sama PackageItem/ProductCost)
-  docType     String // key mesin: 'ktp' | 'paspor' | 'kk' | 'foto' | dst — bebas admin isi
-  label       String // nama tampilan: "Paspor Asli (scan semua halaman)"
-  description String  @default("")
-  required    Boolean @default(true)
-  order       Int     @default(0)
+  id             String  @id @default(uuid())
+  productType    String // registry pemilik di lib/documents/requirements.ts ('visa' di F5)
+  productId      String // FK produk spesifik, tidak di-enforce di DB (pola ProductCost); dibersihkan saat produk dihapus
+  documentTypeId String
+  label          String? // pengganti label katalog untuk produk ini (null = label katalog)
+  description    String  @default("") // petunjuk publik
+  required       Boolean @default(true)
+  order          Int     @default(0)
 
-  @@index([productType, productId])
+  documentType DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+
+  @@unique([productType, productId, documentTypeId])
+  @@index([documentTypeId])
   @@map("document_requirements")
 }
 
@@ -510,8 +512,9 @@ model ManifestFieldRequirement {
   // Peran sistem — OPSIONAL. Beberapa fitur (dashboard admin, pencocokan dokumen) tetap butuh
   // tahu field mana yang berperan "nama"/"nomor HP" TANPA hardcode fieldKey (yang bebas admin
   // atur) — lihat docs/arsitektur-manifest.md §4.
-  role String? // 'display_name' | 'whatsapp' | 'phone' | 'email' | 'passport_number' | null
+  role String? // pengikat ke atribut kartu jamaah — daftar tunggal MANIFEST_ROLES di lib/manifest/roles.ts (CHECK di DB); null = field bebas
 
+  @@unique([productType, productId, role], map: "manifest_field_requirements_role_key")
   @@index([productType, productId])
   @@map("manifest_field_requirements")
 }
@@ -792,6 +795,7 @@ model Booking {
   confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
 
   pilgrims       BookingPilgrim[]
+  tripDocuments  PilgrimDocument[]
   hotels         BookingHotel[]
   transports     BookingTransport[]
   flights        BookingFlight[]
@@ -848,15 +852,24 @@ model BookingPilgrim {
   savedPilgrimId String?
   identityId     String?
 
+  // NIK & nomor paspor snapshot — DISEGEL lewat lib/pii (docs/arsitektur-jamaah.md §5.3 butir 3); fieldValues hanya menyimpan samarannya.
+  // Disalin dari kartu saat ditautkan (ciphertext + indeks baris yang sama) atau disegel dari isian admin. Dikosongkan saat akun dihapus.
+  nikHash         String?
+  nikCipher       String?
+  passportCountry String?
+  passportKeyHash String?
+  passportCipher  String?
+  passportLast4   String?
+
   booking         Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   user            User?            @relation("BookingPilgrimUser", fields: [userId], references: [id], onDelete: SetNull)
   savedPilgrim    SavedPilgrim?    @relation(fields: [savedPilgrimId], references: [id], onDelete: SetNull)
   identity        PilgrimIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
   visaApplication VisaApplication?
-  documents       Document[]
 
   @@index([bookingId])
   @@index([userId])
+  @@unique([bookingId, savedPilgrimId]) // satu kartu paling banyak satu jamaah per booking (NULL tak bentrok)
   @@index([savedPilgrimId])
   @@index([identityId])
   @@map("booking_pilgrims")
@@ -935,12 +948,13 @@ model SavedPilgrim {
   createdAt        DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt        DateTime           @updatedAt @db.Timestamptz(3)
 
-  owner           User             @relation("SavedPilgrimOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  selfOf          User?            @relation("SavedPilgrimSelf", fields: [selfOfUserId], references: [id], onDelete: SetNull)
-  identity        PilgrimIdentity? @relation(fields: [identityId], references: [id], onDelete: SetNull)
-  address         Address?         @relation(fields: [addressId], references: [id], onDelete: SetNull)
-  createdBy       User?            @relation("SavedPilgrimCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  owner           User              @relation("SavedPilgrimOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  selfOf          User?             @relation("SavedPilgrimSelf", fields: [selfOfUserId], references: [id], onDelete: SetNull)
+  identity        PilgrimIdentity?  @relation(fields: [identityId], references: [id], onDelete: SetNull)
+  address         Address?          @relation(fields: [addressId], references: [id], onDelete: SetNull)
+  createdBy       User?             @relation("SavedPilgrimCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
   bookingPilgrims BookingPilgrim[]
+  documents       PilgrimDocument[]
 
   @@unique([ownerId, nikHash])
   @@unique([ownerId, passportKeyHash])
@@ -966,6 +980,88 @@ model PilgrimIdentityEvent {
   @@index([identityId, createdAt])
   @@index([actorId])
   @@map("pilgrim_identity_events")
+}
+
+// ─── DOKUMEN JAMAAH (docs/arsitektur-jamaah.md §7, Fase 4) ───────────────────────────────────────────────────────────────────────────
+// Katalog jenis dokumen: bawaan (`isSystem`, diisi migrasi — hanya bisa dinonaktifkan) + buatan admin. Label = teks PUBLIK (tanpa istilah internal, K7).
+model DocumentType {
+  id                String   @id @default(uuid())
+  key               String   @unique // mesin: passport | ktp | kk | vaccine | flight_ticket | hotel_reservation | transport_reservation | other | buatan admin
+  label             String
+  reusable          Boolean // true = milik orang (dipakai ulang lintas booking); false = per perjalanan (diunggah per booking mulai Fase 7)
+  icon              String // nama ikon Lucide dari daftar putih lib/documents/icons.ts
+  hasExpiry         Boolean  @default(false)
+  minValidityMonths Int? // paspor: 6 (aturan dipakai Fase 5)
+  referenceLabel    String? // label publik kode referensi, mis. "Kode Booking (PNR)"
+  referencePattern  String? // bentuk kode referensi (regex, dicek server); keabsahan diputuskan admin (K6)
+  allowMultiple     Boolean  @default(false) // false = unggah baru MENGGANTI berkas jenis ini (K12)
+  isSystem          Boolean  @default(false)
+  isActive          Boolean  @default(true)
+  order             Int      @default(0)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  requirements DocumentRequirement[]
+  documents    PilgrimDocument[]
+
+  @@index([isActive, order])
+  @@map("document_types")
+}
+
+// Satu tabel berkas untuk semua jenis, selalu per jamaah (kartu). Ditulis HANYA oleh lib/documents/service.ts. Kunci objek MinIO, bukan URL.
+// Tautan ke booking (dokumen per perjalanan + dokumen yang dipakai di booking) menyusul di Fase 7.
+model PilgrimDocument {
+  id             String                @id @default(uuid())
+  savedPilgrimId String
+  // Dokumen PER PERJALANAN (jenis `reusable = false`: tiket, reservasi) menempel ke booking; null = dokumen milik orang (paspor, KTP…) — Fase 7a.
+  bookingId      String?
+  documentTypeId String
+  label          String // label katalog saat diunggah, atau label bebas untuk jenis `other`
+  referenceCode  String?
+  objectKey      String                @unique
+  mimeType       String // image/webp (hasil konversi) | application/pdf
+  sizeBytes      Int
+  sha256         String
+  issuedAt       DateTime?             @db.Date
+  expiresAt      DateTime?             @db.Date
+  status         DocumentReviewStatus  @default(pending)
+  rejectReason   DocumentRejectReason?
+  reviewNote     String? // catatan staf untuk pengguna (Fase 6) — dibersihkan saat hapus akun
+  reviewedById   String?
+  reviewedAt     DateTime?             @db.Timestamptz(3)
+  uploadedById   String
+  createdAt      DateTime              @default(now()) @db.Timestamptz(3)
+
+  savedPilgrim SavedPilgrim @relation(fields: [savedPilgrimId], references: [id], onDelete: Restrict)
+  booking      Booking?     @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  documentType DocumentType @relation(fields: [documentTypeId], references: [id], onDelete: Restrict)
+  reviewedBy   User?        @relation("PilgrimDocReviewedBy", fields: [reviewedById], references: [id], onDelete: SetNull)
+  uploadedBy   User         @relation("PilgrimDocUploadedBy", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([savedPilgrimId, documentTypeId])
+  @@index([bookingId, savedPilgrimId])
+  @@index([documentTypeId])
+  @@index([status, createdAt])
+  @@index([reviewedById])
+  @@index([uploadedById])
+  @@map("pilgrim_documents")
+}
+
+enum DocumentReviewStatus {
+  pending
+  accepted
+  rejected
+
+  @@map("document_review_status")
+}
+
+enum DocumentRejectReason {
+  not_matching
+  expired
+  unreadable
+  other
+
+  @@map("document_reject_reason")
 }
 
 // Nilai cek kunci PII (SEC-168): HMAC kunci indeks dan kanari per versi kunci enkripsi, ditulis pada pemakaian pertama. Kunci yang tertukar
@@ -1014,20 +1110,6 @@ enum VisaStatus {
   @@map("visa_status")
 }
 
-model Document {
-  id               String   @id @default(uuid())
-  bookingPilgrimId String
-  docType          String
-  fileName         String
-  filePath         String
-  fileSizeBytes    Int?
-  uploadedAt       DateTime @default(now())
-
-  pilgrim BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
-
-  @@index([bookingPilgrimId])
-  @@map("documents")
-}
 
 // ─── BOOKING COMPONENTS ───────────────────────────────────────
 
