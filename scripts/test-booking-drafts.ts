@@ -131,6 +131,14 @@ await t('PRATINJAU isi belum disimpan (editor baris): override dipakai, total pe
   assert.deepEqual([readDraft(after.draft), after.updatedAt.getTime()], [readDraft(before.draft), before.updatedAt.getTime()])
   assert.deepEqual(await residue(did), { flights: 0, pilgrims: 0, snapshots: 0 })
 })
+await t('PRATINJAU: harga visa per jamaah urut slot (baris Visa editor) — tanpa visa = 0, durasi berbeda tetap per jamaah', async () => {
+  const did = await newDraft()
+  const r = await previewDraft(did, { ...DRAFT, pilgrims: [{ visaProductId: visa.id }, {}, { visaProductId: visa.id, selectedDurationDays: 30 }] })
+  assert.ok(r.ok, JSON.stringify(r))
+  if (!r.ok) return
+  assert.deepEqual(r.preview.pilgrimVisaTotals, [1_200_000, 0, 1_200_000])
+  assert.equal(r.preview.total, r.preview.itemTotals.reduce((x, y) => x + y, 0) + r.preview.pilgrimVisaTotals.reduce((x, y) => x + y, 0), 'Σ item + Σ visa = total')
+})
 await t('PRATINJAU: aturan visa tak terpenuhi → 422 + pelanggaran; kursi kurang → 409; draf tanpa produk → 422; tanggal di luar periode → 422; galat item membawa nomor barisnya + subtotal baris lain', async () => {
   const noFlight = await newDraft({ items: [], pilgrims: [{ visaProductId: visa.id }] })
   const v = await previewDraft(noFlight)

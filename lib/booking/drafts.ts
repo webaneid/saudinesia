@@ -98,6 +98,8 @@ export type DraftPreview = {
   warnings: RuleViolation[]
   /** Harga jual tiap item, URUT `draft.items` (editor baris menampilkannya sebagai subtotal baris). */
   itemTotals: number[]
+  /** Harga jual visa milik tiap jamaah, URUT `draft.pilgrims` (0 = tanpa visa sendiri) — editor menjumlahkannya per baris Visa (docs/rencana-visa-produk.md §2.2). */
+  pilgrimVisaTotals: number[]
 }
 
 class Rollback extends Error { constructor(public readonly result: DraftPreview) { super('rollback') } }
@@ -134,7 +136,11 @@ async function simulate(id: string, userId: string, draft: BookingDraft, dueDays
       const tax = await taxFor(tx, inv.subtotal)
       const sells = await itemSellTotals(tx, id)
       const itemTotals = draft.items.map((_, i) => { const m = written[i]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
-      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings, itemTotals })
+      // Visa ditulis SESUDAH item, satu meta per jamaah bervisa sendiri, urut jamaah (lib/booking/lineItems.ts).
+      const visaMetas = written.slice(draft.items.length)
+      let k = 0
+      const pilgrimVisaTotals = draft.pilgrims.map(p => { if (!p.visaProductId) return 0; const m = visaMetas[k++]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
+      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, warnings: prepared.warnings, itemTotals, pilgrimVisaTotals })
     }, { isolationLevel: 'Serializable' })
   } catch (e) {
     if (e instanceof Rollback) return e.result

@@ -865,7 +865,7 @@ Satu fase satu waktu; tiap fase: typecheck, build produksi terisolasi, uji nyata
 ### Visa sebagai produk utama (koreksi pemilik 2026-11-03)
 Rencana: `docs/rencana-visa-produk.md` (disetujui 2026-11-03). Keputusan §4 (pelonggaran per pelanggan; bukti booking otomatis terpenuhi) menunggu pemilik.
 - [x] V1 — editor produk visa: pilihan "Model penjualan" (Visa only / Visa plus + komponen wajib), turunan `requiredComponents` lewat `visaSalesModel` (`lib/validators/visa.ts`); lencana di header editor dan kolom daftar produk (2026-11-03)
-- [ ] V2 — form booking: Visa sebagai baris produk (`ItemRows`), kelompok ↔ slot jamaah, kotak Jamaah tanpa pemilih visa
+- [x] V2 — form booking (draf + revisi): Visa sebagai baris produk (`ItemRows`; produk + lama tinggal + jumlah orang), kelompok ↔ slot jamaah (`drafts/[id]/visaRows.ts`), kotak Jamaah tanpa pemilih visa, subtotal baris dari server (`pilgrimVisaTotals`, `visaPriceIdr`) (2026-11-04)
 - [ ] V3 — bukti booking otomatis terpenuhi bila komponen dibeli dari kita
 - [ ] V4 — dokumentasi arsitektur + drift lama
 
