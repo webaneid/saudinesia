@@ -9,23 +9,24 @@ import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { Button } from '@/components/admin/ui/Button'
 import { Badge } from '@/components/admin/ui/Badge'
-import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { formatRupiah } from '@/lib/utils'
 import type { BookingRevisionInput } from '@/lib/validators/booking'
 import type { RevisionEditorState } from '@/lib/booking/revise'
 import { MODULE_LABEL, type Catalog, type ModuleKey } from '../../drafts/[id]/catalog'
 import { ItemRows, newRow, rowFromItem, rowToItem, type ItemRow } from '../../drafts/[id]/ItemRows'
+import { applyVisaRows, lockedMembers, syncVisaCounts, visaRowTotal, visaRowsFromSlots } from '../../drafts/[id]/visaRows'
 
 // Editor REVISI booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, R1): isi booking sekarang dimuat, beberapa perubahan sekaligus → pratinjau (mesin yang sama,
 // di-rollback) → Simpan revisi = SATU revisi invoice + SATU catatan riwayat. Jamaah tampil sebagai "Jamaah ke-N" (data pribadi tetap di form data jamaah).
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 type Violation = { missing: string; message: string }
-type Pilgrim = BookingRevisionInput['pilgrims'][number] & { position?: number; locked?: boolean; lockReason?: string | null; visaFromPackage?: boolean }
+/** Slot jamaah revisi; `row` = baris Visa pemiliknya (../../drafts/[id]/visaRows.ts), `visaPriceIdr` = harga visa tersimpan (subtotal sebelum pratinjau). */
+type Pilgrim = BookingRevisionInput['pilgrims'][number] & { position?: number; locked?: boolean; lockReason?: string | null; visaFromPackage?: boolean; row?: string; visaPriceIdr?: number }
 type Change = { kind: string; label: string; detail?: string }
 type Preview = {
   lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>
-  totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; warnings: Violation[]; notices: string[]; itemTotals: number[]
+  totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; warnings: Violation[]; notices: string[]; itemTotals: number[]; pilgrimVisaTotals: number[]
 }
 
 const MISSING_MODULE: Record<string, ModuleKey> = { flight: 'flight', hotel: 'hotel', transport: 'transport' }
@@ -71,10 +72,12 @@ export default function BookingRevisionPage({ params }: Props) {
       const rs = s.items.map(i => rowFromItem(i.item, { ref: i.ref, label: i.label, customSellIdr: i.customSellIdr }))
       const ps: Pilgrim[] = s.pilgrims.map(p => ({
         pilgrimId: p.pilgrimId, visaProductId: p.visaFromPackage ? undefined : p.visaProductId ?? undefined, selectedDurationDays: p.visaFromPackage ? undefined : p.selectedDurationDays ?? undefined,
-        position: p.position, locked: p.locked, lockReason: p.lockReason, visaFromPackage: p.visaFromPackage,
+        position: p.position, locked: p.locked, lockReason: p.lockReason, visaFromPackage: p.visaFromPackage, visaPriceIdr: p.visaPriceIdr,
       }))
-      setState(s); setRows(rs); setPilgrims(ps); setInvoiceDate(s.invoiceDate); setDueDate(s.dueDate)
-      setBaseline(fingerprint(rs, ps, s.invoiceDate, s.dueDate))
+      const v = visaRowsFromSlots(ps)
+      const all = [...v.rows, ...rs]
+      setState(s); setRows(all); setPilgrims(v.slots); setInvoiceDate(s.invoiceDate); setDueDate(s.dueDate)
+      setBaseline(fingerprint(all, v.slots, s.invoiceDate, s.dueDate))
       void load('visa')
     }).catch(() => setNotFound(true))
   }, [id, load])
@@ -86,7 +89,7 @@ export default function BookingRevisionPage({ params }: Props) {
     if (!state || incomplete >= 0) return null
     return {
       expectedRevision: state.revision, invoiceDate, dueDate, reason: reason.trim() || undefined,
-      items: rows.map((r, i) => { const c = checked[i]!; return { ...(r.ref && { ref: r.ref }), item: 'item' in c ? c.item : (undefined as never), ...(r.customSellIdr != null && { customSellIdr: r.customSellIdr, priceNote: r.priceNote }) } }),
+      items: rows.flatMap((r, i) => { const c = checked[i]!; return 'item' in c ? [{ ...(r.ref && { ref: r.ref }), item: c.item, ...(r.customSellIdr != null && { customSellIdr: r.customSellIdr, priceNote: r.priceNote }) }] : [] }), // baris Visa → `pilgrims`
       pilgrims: pilgrims.map(({ pilgrimId, visaProductId, selectedDurationDays }) => ({ ...(pilgrimId && { pilgrimId }), ...(visaProductId && { visaProductId, ...(selectedDurationDays && { selectedDurationDays }) }) })),
     }
   }, [state, incomplete, invoiceDate, dueDate, reason, rows, checked, pilgrims])
@@ -129,36 +132,42 @@ export default function BookingRevisionPage({ params }: Props) {
     } catch { setError({ message: 'Tidak dapat menghubungi server.', violations: [] }) } finally { setSaving(false) }
   }
 
-  const visaOptions = (catalog.visa ?? []).map(v => ({ id: v.id, label: v.name }))
-  const setPilgrim = (i: number, patch: Partial<Pilgrim>) => setPilgrims(xs => xs.map((x, j) => (j === i ? { ...x, ...patch } : x)))
+  const changeRows = (r: ItemRow[]) => { const next = applyVisaRows(pilgrims, r, () => ({})); setPilgrims(next); setRows(syncVisaCounts(r, next)) }
+  const removePilgrim = (i: number) => { const next = pilgrims.filter((_, j) => j !== i); setPilgrims(next); setRows(rs => syncVisaCounts(rs, next)) }
+  const visaName = (id?: string) => catalog.visa?.find(v => v.id === id)?.name ?? 'Visa'
+  const visaLocks = Object.fromEntries(rows.filter(r => r.module === 'visa').map(r => [r.key, lockedMembers(pilgrims, r.key)]))
+  const freeSlots = pilgrims.filter(p => !p.row && !p.visaProductId && !p.visaFromPackage && !p.locked).length
+  // Subtotal per baris: item = urutan item yang dikirim; baris Visa = Σ visa anggotanya (pratinjau server bila ada perubahan, harga tersimpan bila belum).
+  const itemRowIndex: number[] = []
+  const rowTotals = checked.map((c, i) => {
+    if ('visa' in c) return dirty ? visaRowTotal(pilgrims, rows[i]!.key, preview?.pilgrimVisaTotals) : visaRowTotal(pilgrims, rows[i]!.key, pilgrims.map(p => p.visaPriceIdr ?? 0))
+    if (!('item' in c)) return undefined
+    const k = itemRowIndex.push(i) - 1
+    return dirty ? (preview?.itemTotals[k] ?? error?.itemTotals?.[k] ?? undefined) : state.items[k]?.priceIdr
+  })
+  const errorRow = error?.itemIndex !== undefined ? itemRowIndex[error.itemIndex] : undefined
 
   const main = (
     <>
       <MetaBox title="Produk" icon={Package} collapsible={false}
         description="Ubah langsung di baris. Mengubah/menghapus produk melepas kuotanya; produk baru ditahan (pending) saat revisi disimpan.">
-        <ItemRows rows={rows} onChange={setRows} catalog={catalog} load={load} defaultPeople={pilgrims.length} totals={dirty ? (preview?.itemTotals ?? error?.itemTotals?.map(t => t ?? undefined)) : state?.items.map(i => i.priceIdr)} computing={previewing} customPrice
-          rowError={error?.itemIndex !== undefined ? { index: error.itemIndex, message: error.message } : undefined} />
+        <ItemRows rows={rows} onChange={changeRows} catalog={catalog} load={load} defaultPeople={pilgrims.length} defaultVisaPeople={freeSlots} visaLocks={visaLocks} totals={rowTotals} computing={previewing} customPrice
+          rowError={errorRow !== undefined && error ? { index: errorRow, message: error.message } : undefined} />
       </MetaBox>
 
-      <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Tambah jamaah kapan saja. Hapus atau ganti visa hanya bila visanya belum diproses dan belum ada dokumen.">
+      <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Tambah jamaah kapan saja. Visa diatur di baris Visa (Produk); jamaah yang visanya sudah diproses atau memakai data tersimpan tidak bisa dihapus.">
         <ul className="m-0 list-none space-y-2 p-0">
           {pilgrims.map((p, i) => {
             const name = p.pilgrimId ? `Jamaah ke-${p.position}` : 'Jamaah baru'
-            const visaLocked = !!p.locked || !!p.visaFromPackage
+            const visa = p.visaFromPackage ? 'Visa dari paket' : p.visaProductId ? `${visaName(p.visaProductId)}${p.selectedDurationDays ? ` · ${p.selectedDurationDays} hari` : ''}` : 'Tanpa visa'
             return (
-              <li key={p.pilgrimId ?? `baru-${i}`} className="grid grid-cols-[minmax(0,1fr)_5rem_2rem] items-center gap-x-2 gap-y-1">
-                <span className="col-span-3 text-xs font-semibold text-admin-muted">{name}</span>
-                {p.visaFromPackage
-                  ? <span className="text-xs text-admin-muted">Visa dari paket</span>
-                  : <ChoiceSelect ariaLabel={`Visa ${name}`} size="sm" value={p.visaProductId ?? ''} placeholder="— tanpa visa —" options={visaOptions} disabled={visaLocked}
-                      onChange={v => setPilgrim(i, v ? { visaProductId: v } : { visaProductId: undefined, selectedDurationDays: undefined })} />}
-                <input type="number" min={1} className="admin-inp" aria-label={`Lama tinggal ${name}`} placeholder="hari" disabled={visaLocked || !p.visaProductId} value={p.selectedDurationDays ?? ''}
-                  onChange={e => setPilgrim(i, { selectedDurationDays: Number(e.target.value) > 0 ? Math.trunc(Number(e.target.value)) : undefined })} />
+              <li key={p.pilgrimId ?? `baru-${i}`} className="grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-x-2 gap-y-0.5">
+                <span className="min-w-0"><span className="block text-xs font-semibold text-admin-ink">{name}</span><span className="block text-xs text-admin-muted">{visa}</span></span>
                 <button type="button" aria-label={`Hapus ${name}`} title={p.lockReason ?? undefined} disabled={!!p.locked || pilgrims.length <= 1}
-                  onClick={() => setPilgrims(xs => xs.filter((_, j) => j !== i))} className="rounded p-1 text-admin-muted hover:text-admin-danger disabled:opacity-40">
+                  onClick={() => removePilgrim(i)} className="rounded p-1 text-admin-muted hover:text-admin-danger disabled:opacity-40">
                   <Trash2 className="size-4" />
                 </button>
-                {p.locked && <span className="col-span-3 text-[11px] text-admin-muted">{p.lockReason} — urus lewat modul Visa.</span>}
+                {p.locked && <span className="col-span-2 text-[11px] text-admin-muted">{p.lockReason} — urus lewat modul Visa.</span>}
               </li>
             )
           })}
@@ -174,7 +183,7 @@ export default function BookingRevisionPage({ params }: Props) {
             {error.violations.length > 0 && (
               <ul className="m-0 list-disc space-y-1 pl-5 text-admin-ink">
                 {error.violations.map((v, i) => (
-                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => setRows(r => [...r, newRow(pilgrims.length, MISSING_MODULE[v.missing])])}>tambah baris {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
+                  <li key={i}>{v.message}{MISSING_MODULE[v.missing] && <> — <button type="button" className="font-semibold text-admin-accent-strong underline" onClick={() => changeRows([...rows, newRow(pilgrims.length, MISSING_MODULE[v.missing])])}>tambah baris {MODULE_LABEL[MISSING_MODULE[v.missing]!].toLowerCase()}</button></>}</li>
                 ))}
               </ul>
             )}

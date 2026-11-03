@@ -1,6 +1,6 @@
 # Rencana — Visa sebagai produk utama di booking
 
-> Status: **DISETUJUI (2026-11-03); V1 SELESAI 2026-11-03** (keputusan §4 masih menunggu pemilik). Koreksi pemilik: *"KITA JUALAN VISA"* — visa adalah produk,
+> Status: **DISETUJUI (2026-11-03); V1 SELESAI 2026-11-03; V2 SELESAI 2026-11-04** (keputusan §4 masih menunggu pemilik). Koreksi pemilik: *"KITA JUALAN VISA"* — visa adalah produk,
 > sejajar tiket/hotel/transport, bukan tambahan per jamaah. Dasar: audit kode 2026-11-03 (fakta di §1). Bila disetujui, isi
 > dokumen ini dipindah ke `docs/arsitektur-booking-engine-v2.md` (bagian baru) dan `docs/arsitektur-visa.md` (§ diperbarui).
 
@@ -65,7 +65,7 @@ di kotak Jamaah seolah tambahan) dan **editor produk visa** (jenis visa tidak ta
 | Fase | Isi | Selesai bila |
 |---|---|---|
 | V1 ✔ | Editor produk visa: pilihan "Model penjualan" (only/plus + komponen), lencana di daftar — **selesai 2026-11-03** | uji `parseRequiredComponents` tetap; browser: simpan only/plus, muat ulang konsisten |
-| V2 | Form booking (draf + revisi): baris Visa di `ItemRows`, kelompok ↔ slot jamaah, kotak Jamaah tanpa pemilih visa, pratinjau per baris | uji pemetaan baris ↔ slot (campur dua produk/tier, kurangi/tambah orang, visa paket tak tersentuh); booking draf → terbit → invoice identik dengan alur lama; browser |
+| V2 ✔ | Form booking (draf + revisi): baris Visa di `ItemRows`, kelompok ↔ slot jamaah, kotak Jamaah tanpa pemilih visa, pratinjau per baris — **selesai 2026-11-04** | uji pemetaan baris ↔ slot (campur dua produk/tier, kurangi/tambah orang, visa paket tak tersentuh); booking draf → terbit → invoice identik dengan alur lama; browser |
 | V3 | Bukti booking otomatis terpenuhi bila komponen dibeli dari kita | uji tabel `evaluateCompleteness` (dibeli / tidak / lewat paket); halaman jamaah & panel pemeriksaan |
 | V4 | Dokumentasi: `arsitektur-booking-engine-v2.md`, `arsitektur-visa.md` (sekaligus membereskan drift §5) | — |
 

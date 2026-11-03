@@ -109,6 +109,10 @@ await t('TAMBAH hotel: kuota pending +2 kamar, total & pajak beku dihitung ulang
   const pv = await previewRevision(id, input, staff.id)
   assert.deepEqual([pv.totalBefore, pv.totalAfter, pv.taxAfter, pv.revision, pv.grandAfter], [14_400_000, 21_600_000, 2_376_000, 2, 23_976_000])
   assert.deepEqual(pv.itemTotals, [12_000_000, 7_200_000], 'total per item urut masukan (editor baris)')
+  assert.deepEqual(pv.pilgrimVisaTotals, [1_200_000, 1_200_000], 'visa lama yang dipertahankan dibaca dari pengajuannya')
+  assert.deepEqual((await revisionEditorState(id))!.pilgrims.map(p => p.visaPriceIdr), [1_200_000, 1_200_000], 'harga visa tersimpan untuk editor sebelum pratinjau')
+  const more = await base(id); more.pilgrims.push({ visaProductId: visa.id }, {}); more.pilgrims[0] = { pilgrimId: more.pilgrims[0]!.pilgrimId } // lepas visa jamaah 1, tambah 2 jamaah (satu bervisa)
+  assert.deepEqual((await previewRevision(id, more, staff.id)).pilgrimVisaTotals, [0, 1_200_000, 1_200_000, 0], 'visa baru dari tulisan revisi, urut masukan')
   const bad = await base(id); bad.items.push({ item: { ...HT(1), checkIn: '2091-01-02', checkOut: '2091-01-05' } }) // di luar periode harga, baris ke-2
   const fail = await previewRevision(id, bad, staff.id).then(() => null, (e: unknown) => revisionFailure(e))
   assert.deepEqual([fail?.status, fail?.itemIndex], [422, 1], 'nomor subset item yang ditulis dipetakan ke baris editor')

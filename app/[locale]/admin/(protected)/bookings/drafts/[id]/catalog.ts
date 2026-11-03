@@ -7,7 +7,7 @@ import { formatRupiah } from '@/lib/utils'
 export type ModuleKey = 'visa' | 'flight' | 'hotel' | 'transport' | 'muthowif' | 'catering' | 'tourPackage' | 'package'
 export type DraftItem = BookingDraft['items'][number]
 
-export type VisaOpt = { id: string; name: string; visaType: string; tiers: Array<{ minDays: number; maxDays: number; fee: number }> }
+export type VisaOpt = { id: string; name: string; visaType: string; requiredComponents: unknown; tiers: Array<{ minDays: number; maxDays: number; fee: number }> }
 export type FlightOpt = { id: string; label: string; from: string; to: string; seatsLeft: number; price: number }
 export type HotelOpt = HotelScheduleOpt // satu jadwal kamar (hotel × tipe kamar × periode), harga jual — lib/booking/hotelPick.ts
 export type TransportOpt = { id: string; pricingId: string; tripId: string; tripName: string; category: string | null; vehicle: string; capacity: number; date: string; seatsLeft: number; price: number }
