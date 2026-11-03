@@ -12,5 +12,6 @@ regexes = [
   '''tautan/gambar/H1/kunci''',
   # Positif palsu `generic-api-key` di scripts/test-pii.ts: kunci PII rusak buatan (blok 16 hex berulang) untuk menguji bahwa
   # piiKeysProblem MENOLAK kunci berentropi rendah (SEC-166) — bukan kunci sungguhan.
-  '''0123456789abcdef'\.repeat\(4\)''',
+  # Allowlist dicocokkan ke nilai yang tertangkap (regexTarget bawaan = secret), jadi hanya string persis ini.
+  '''^0123456789abcdef$''',
 ]
