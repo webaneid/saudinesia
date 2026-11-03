@@ -1,5 +1,6 @@
 import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { formatAddressLine } from '@/lib/address/format'
@@ -99,9 +100,10 @@ async function run(actor: Actor, fn: (tx: Tx) => Promise<LinkResult>): Promise<L
   const limited = await rateLimited(actor)
   if (limited) return limited
   try {
-    return await prisma.$transaction(fn)
+    return await retryConflict(() => prisma.$transaction(fn)) // deadlock dengan gabung identitas (F8, SEC-205) → ulang
   } catch (e) {
     if (e instanceof Abort) return e.result
+    if (isRetryableConflict(e)) return { ok: false, status: 409, error: 'Data jamaah sedang diubah bersamaan — coba lagi' }
     // Balapan dua jamaah menautkan kartu yang sama (indeks unik bookingId+savedPilgrimId) → sama dengan cek kembar.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { ok: false, status: 409, error: 'Data jamaah ini sudah dipakai jamaah lain di booking yang sama', field: 'cardId' }
     throw e

@@ -101,6 +101,11 @@ export function SavedPilgrimEditor({ locale, card, initialWarnings = [], initial
         </ul>
       )}
 
+      {card?.needsNikCheck && (
+        <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          Mohon periksa kembali NIK jamaah ini dan sesuaikan dengan KTP/KK, lalu simpan.
+        </p>
+      )}
       {archived ? (
         <div className="space-y-3 rounded-xl border bg-card p-6">
           <p className="text-sm">Data jamaah ini diarsipkan karena pernah dipakai booking. Pulihkan dulu untuk mengubahnya.</p>

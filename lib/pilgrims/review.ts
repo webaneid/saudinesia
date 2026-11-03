@@ -1,5 +1,6 @@
 import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { completeness } from '@/lib/manifest/values'
@@ -137,9 +138,10 @@ async function run(actor: Actor, fn: (tx: Tx) => Promise<Done>): Promise<ReviewR
   if (limited) return limited
   let done: Done
   try {
-    done = await prisma.$transaction(fn)
+    done = await retryConflict(() => prisma.$transaction(fn)) // deadlock dengan gabung identitas (F8, SEC-205) → ulang
   } catch (e) {
     if (e instanceof Abort) return e.result
+    if (isRetryableConflict(e)) return { ok: false, status: 409, error: 'Data jamaah sedang diubah bersamaan — coba lagi' }
     // Dokumen yang hendak ditautkan dihapus di sela pembacaan dan penulisan tautan (FK) — muat ulang dan coba lagi.
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') return { ok: false, status: 409, error: 'Dokumen jamaah baru saja berubah — muat ulang lalu coba lagi' }
     throw e
@@ -240,26 +242,32 @@ export async function reopenForChangedRequirements(tx: Tx, bookingPilgrimId: str
 
 // ── Bacaan ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-export type ReviewEventView = { id: string; from: PilgrimReviewStatus | null; to: PilgrimReviewStatus; note: string | null; byStaff: boolean; actorName: string | null; at: string }
+export type ReviewEventView = {
+  id: string; from: PilgrimReviewStatus | null; to: PilgrimReviewStatus; note: string | null; byStaff: boolean; actorName: string | null; at: string
+  /** Kejadian ini dilakukan petugas yang sedang melihat (hanya `forStaff`) — dasar pengingat pemisahan tugas. */
+  byViewer: boolean
+}
 
 /**
  * Riwayat pengajuan per jamaah booking (terbaru dulu). `forStaff=false` (halaman pemesan): nama petugas tidak dikirim; catatan tetap (ditujukan
- * ke pemesan). Pemanggil sudah memastikan jamaah-jamaah ini milik booking yang boleh dilihat.
+ * ke pemesan). Pemanggil sudah memastikan jamaah-jamaah ini milik booking yang boleh dilihat. `viewerId` (staf) menandai kejadian miliknya
+ * (`byViewer`) untuk pengingat pemisahan tugas — hanya mengingatkan, tidak memblokir (keputusan pemilik 2026-11-03).
  */
-export async function reviewHistoryOf(bookingPilgrimIds: readonly string[], forStaff: boolean): Promise<Map<string, ReviewEventView[]>> {
+export async function reviewHistoryOf(bookingPilgrimIds: readonly string[], forStaff: boolean, viewerId?: string): Promise<Map<string, ReviewEventView[]>> {
   const out = new Map<string, ReviewEventView[]>(bookingPilgrimIds.map(id => [id, []]))
   if (bookingPilgrimIds.length === 0) return out
   const rows = await prisma.pilgrimReviewEvent.findMany({
     where: { bookingPilgrimId: { in: [...bookingPilgrimIds] } },
     orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     take: 50 * bookingPilgrimIds.length,
-    select: { id: true, bookingPilgrimId: true, fromStatus: true, toStatus: true, note: true, createdAt: true, actor: { select: { role: true, fullName: true } } },
+    select: { id: true, bookingPilgrimId: true, fromStatus: true, toStatus: true, note: true, createdAt: true, actorId: true, actor: { select: { role: true, fullName: true } } },
   })
   for (const r of rows) {
     const staff = !!r.actor && ADMIN_ROLES.includes(r.actor.role)
     out.get(r.bookingPilgrimId)?.push({
       id: r.id, from: r.fromStatus, to: r.toStatus, note: r.note, byStaff: staff,
       actorName: forStaff ? (r.actor?.fullName ?? null) : null, at: r.createdAt.toISOString(),
+      byViewer: forStaff && staff && !!viewerId && r.actorId === viewerId,
     })
   }
   return out

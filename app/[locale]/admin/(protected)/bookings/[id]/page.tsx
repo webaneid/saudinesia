@@ -55,7 +55,7 @@ export default async function AdminBookingDetail({ params }: Props) {
     id: p.id, savedPilgrimId: p.savedPilgrimId, visaProductId: p.visaApplication?.visaProductId ?? null,
     plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
   })))
-  const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), true)
+  const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), true, session.userId)
   const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const p of booking.pilgrims) {
     if (p.visaApplication?.visaProductId) {

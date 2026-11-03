@@ -4,6 +4,8 @@
 > registrasi dan profil akun "TIDAK disentuh", adalah **keadaan SAAT ITU** dan sudah digantikan: OTP dihapus; `User` kini punya `phone` dan `whatsapp` (digit E.164, tidak unik; verifikasi WhatsApp lewat pesan masuk —
 > `whatsappVerifiedAt`/`verifiedWhatsapp`); form daftar, halaman "Lengkapi Data", dan Profil memakai `ContactPicker` (`showEmail={false}`) + `contactFromStored`/`e164FromCountry`. `BookingPilgrim` (data kontak per jamaah)
 > tetap terpisah dari kontak akun.
+>
+> **Pembaruan 2026-11-03 (D6, `docs/arsitektur-jamaah.md`):** tiga kolom kontak `BookingPilgrim` (`phoneCountryCode`/`whatsapp`/`whatsappCountryCode`) yang dibahas di bawah **sudah di-drop** (manifest Visa memakai `fieldValues`, `docs/arsitektur-manifest.md`), dan wizard `bookings/new/pilgrims` + `payment/page.tsx` sudah dihapus (checkout pendek per produk). Kontak per jamaah kini ada di kartu jamaah tersimpan (`SavedPilgrim.phone/whatsapp/email`, formulir `SavedPilgrimFields` yang memakai `ContactPicker`). Bagian tentang `BookingPilgrim` di bawah = riwayat.
 
 > **Status: SELESAI & TERVERIFIKASI (2026-07-23).** Komponen universal ke-5 (sejajar harga, dokumen, manifest, alamat) — satu blok "Data Kontak" reusable (kode negara autocomplete + Nomor HP + Nomor WhatsApp dengan checkbox "Sama dengan nomor HP" + Email), diwire ke wizard booking (`BookingPilgrim`). Mengikuti pola persis yang sama dengan `docs/arsitektur-alamat.md` (komponen dulu, baru diwire ke entity nyata). Lihat §10 untuk bukti verifikasi dan 2 bug nyata yang ditemukan+ditutup saat verifikasi (bukan cuma "kelihatan benar").
 

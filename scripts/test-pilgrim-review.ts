@@ -172,6 +172,12 @@ await t('DIBUKA ULANG: ganti paspor sesudah terverifikasi → submitted (verifie
   assert.ok((await linkCard(staff, done.id, done.pilgrim, card)).ok)
   await upload('flight_ticket', done.id)
   assert.ok((await submitPilgrim(staff, done.id, done.pilgrim)).ok)
+  // Pemisahan tugas = pengingat saja (keputusan pemilik 2026-11-03): pengajuan petugas ini sendiri ditandai `byViewer` untuk petugas itu saja,
+  // tidak untuk petugas lain dan tidak pernah di halaman pemesan; verifikasi oleh petugas yang sama tetap boleh (di bawah).
+  const mine = (await reviewHistoryOf([done.pilgrim], true, staff.userId)).get(done.pilgrim)!
+  assert.deepEqual([mine[0]?.to, mine[0]?.byViewer], ['submitted', true])
+  assert.equal((await reviewHistoryOf([done.pilgrim], true, owner.userId)).get(done.pilgrim)![0]?.byViewer, false, 'petugas lain tak ditandai')
+  assert.equal((await reviewHistoryOf([done.pilgrim], false, staff.userId)).get(done.pilgrim)![0]?.byViewer, false, 'halaman pemesan tak pernah')
   for (const d of await prisma.pilgrimDocument.findMany({ where: { savedPilgrimId: card }, select: { id: true } })) await prisma.pilgrimDocument.update({ where: { id: d.id }, data: { status: 'accepted' } })
   assert.ok((await decidePilgrim(staff, done.id, done.pilgrim, { decision: 'verified' })).ok)
   await prisma.booking.update({ where: { id: done.id }, data: { status: 'completed' } })
