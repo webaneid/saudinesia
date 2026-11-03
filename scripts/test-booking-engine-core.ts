@@ -21,7 +21,7 @@ import { cancelBooking } from '@/lib/booking/cancel'
 import { ItemNotBookableError } from '@/lib/booking/errors'
 import { reserveFlightQuota } from '@/lib/quota'
 import { quotaAdapters } from '@/lib/quota/adapters'
-import { visaRequiredComponentsSchema, parseRequiredComponents } from '@/lib/validators/visa'
+import { visaRequiredComponentsSchema, parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
 import { createBookingSchema, type CreateBookingInput } from '@/lib/validators/booking'
 import { customerPolicySchema } from '@/lib/validators/customers'
 import { setCustomerBookingPolicy } from '@/lib/customers/bookingPolicy'
@@ -75,6 +75,15 @@ await t('aturan visa: data tersimpan tak sah (string lama, tipe liar, duplikat) 
   }
   assert.equal(visaRequiredComponentsSchema.safeParse([{ type: 'flight' }, { type: 'transport', categories: ['airport'] }]).success, true)
 })
+await t('model penjualan visa: turunan aturan — kosong = Visa only, urutan label tetap tiket → hotel → transport', () => {
+  assert.deepEqual(visaSalesModel([]), { plus: false, label: 'Visa only' })
+  assert.deepEqual(visaSalesModel([{ type: 'hotel' }, { type: 'flight' }]), { plus: true, label: 'Visa plus tiket + hotel' })
+  assert.deepEqual(visaSalesModel([{ type: 'transport', categories: ['airport'] }]), { plus: true, label: 'Visa plus transport' })
+  assert.equal(visaSalesModel([{ type: 'transport' }, { type: 'hotel' }, { type: 'flight' }]).label, 'Visa plus tiket + hotel + transport')
+  // Data tersimpan tak sah dibaca sebagai "tanpa aturan" + invalid — pemanggil (rules.ts) yang menolak, label tidak boleh menyamarkannya jadi aman.
+  assert.equal(parseRequiredComponents('flight').invalid, true)
+})
+
 await t('validator: item tiket & paket ketat (kunci pilihan liar ditolak, penumpang/orang ≥ 1); kebijakan pelanggan hanya satu kolom', () => {
   const base = { departureDate: '2090-06-01', returnDate: '2090-06-10', season: 'regular', bookingType: 'individual', totalPilgrims: 1, pilgrims: [{ fieldValues: {} }] }
   const item = (i: unknown) => createBookingSchema.innerType().safeParse({ ...base, items: [i] }).success
