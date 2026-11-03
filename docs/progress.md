@@ -867,7 +867,9 @@ Rencana: `docs/rencana-visa-produk.md` (disetujui 2026-11-03, V3–V5 direvisi +
 - [x] V1 — editor produk visa: pilihan "Model penjualan" (Visa only / Visa plus + komponen wajib), turunan `requiredComponents` lewat `visaSalesModel` (`lib/validators/visa.ts`); lencana di header editor dan kolom daftar produk (2026-11-03)
 - [x] V2 — form booking (draf + revisi): Visa sebagai baris produk (`ItemRows`; produk + lama tinggal + jumlah orang), kelompok ↔ slot jamaah (`drafts/[id]/visaRows.ts`), kotak Jamaah tanpa pemilih visa, subtotal baris dari server (`pilgrimVisaTotals`, `visaPriceIdr`) (2026-11-04)
 - [x] V3 — daftar centang "Wajib dibeli bersama visa ini" (Tiket · Hotel Makkah · Hotel Madinah · Transportasi · Muthowif · Wisata · Katering; satu daftar `REQUIRED_COMPONENT_TYPES`), setiap pelanggaran menolak (422) untuk semua pelanggan, `User.allowVisaWithoutBundle` + route/komponen/penulisnya dihapus (migrasi kontraksi fail-closed, `hotel` lama → Makkah + Madinah), tombol "tambah baris …" per komponen kurang di form booking, katalog publik & checkout jamaah tak menawarkan visa plus (2026-11-04)
-- [ ] V4 — syarat dokumen Paket Umroh + Haji (rancangan rinci + persetujuan dulu)
+- [x] V4a — jamaah booking ditautkan ke Paket Umroh/Haji tempat ia menjadi anggota (`BookingPilgrim.bookingPackageId`/`bookingHajiId`, SET NULL; aturan tunggal `lib/booking/members.ts`, pembagian visa paket identik dengan sebelumnya — uji pembanding); jamaah kurang dari jumlah orang paket/haji → 422; anggota paket bervisa yang dipilihkan visa sendiri → 422 (K4); revisi mempertahankan anggota lama; migrasi isi booking lama fail-closed (2026-11-04)
+- [ ] V4b — syarat dokumen di produk Paket Umroh & Haji (registry, API, editor, katalog publik)
+- [ ] V4c — penilaian syarat gabungan per jamaah + "Diminta oleh"
 - [ ] V5 — dokumentasi arsitektur + drift lama (§6 rencana)
 
 ## Booking Engine v2 (admin lebih dulu, invoice, pembayaran bertahap, buku kas) — dirancang 2026-10-30

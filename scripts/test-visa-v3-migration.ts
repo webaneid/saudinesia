@@ -1,6 +1,6 @@
 // Uji migrasi Visa V3 (prisma/migrations/20261118090000_visa_required_components_v3, docs/rencana-visa-produk.md §2.5): jenis aturan `hotel` lama → `hotel_makkah` +
 // `hotel_madinah`; aturan tak dikenal → BERHENTI; pelonggaran per pelanggan masih aktif → BERHENTI; kolom `users.allowVisaWithoutBundle` dibuang; atomik; dan
-// DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU kini di berkas ini).
+// DB hasil SEMUA migrasi = schema.prisma.
 //
 // PENGAMAN: membuat/menghapus database sementara `<db>_tmp_*` di server yang sama — menolak jalan kecuali DATABASE_URL adalah DB uji.
 import assert from 'node:assert/strict'
@@ -130,7 +130,7 @@ await t('FAIL-CLOSED + ATOMIK: masih ada pelanggan berpelonggaran aktif → BERH
   assert.deepEqual((await rules(r.name)).VH, [{ type: 'hotel' }])
 })
 
-await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma (uji drift TERBARU berada di berkas ini)', async () => {
+await t('tanpa drift: DB hasil SEMUA migrasi = schema.prisma (uji drift terbaru kini di scripts/test-booking-members-migration.ts)', async () => {
   const r = await scenario('')
   assert.equal(r.code, 0, r.out.slice(-500))
   const d = diff(r.name)

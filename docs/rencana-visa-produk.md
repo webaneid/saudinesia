@@ -111,7 +111,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 
 ### 3.3 Tautan jamaah ↔ item (skema)
 - `BookingPilgrim.bookingPackageId String?` → `booking_packages` (`onDelete: SetNull`) dan `BookingPilgrim.bookingHajiId String?` → `booking_haji` (`SetNull`), berindeks. Satu jamaah paling banyak satu paket dan satu haji per booking.
-- Penulis tunggal: `lib/booking/lineItems.ts` (saat terbit/revisi) — tak ada route yang menulis kolom ini.
+- Aturan tunggal: `lib/booking/members.ts` (`assignMembers`, murni). Penulis kolom: `lib/booking/lineItems.ts` (pesan baru/terbit) dan `lib/booking/revise.ts` (`syncMembers`, sesudah item revisi ditulis — `writeBookingItems(..., { assignMembers: false })`) — tak ada route yang menulis kolom ini (dijaga penemu sumber di `scripts/test-booking-members.ts`).
 - Aturan pembagian (otomatis, K2): anggota paket = jamaah urut yang belum punya paket, **mendahulukan jamaah tanpa visa sendiri** — persis aturan pembagian visa paket hari ini, jadi pembagian visa tidak berubah. Visa paket lalu diberikan ke anggota paket itu (bukan lagi "siapa pun tanpa visa"). Haji: urut, jamaah yang belum ber-haji.
 - Σ orang paket ≤ jumlah jamaah dan Σ orang haji ≤ jumlah jamaah — bila tidak, **422** "Jumlah jamaah kurang dari jumlah orang di paket/haji" (sekarang kekurangan jamaah diam-diam membuat sebagian visa paket tak terbagi).
 - Revisi (`lib/booking/revise.ts`): paket/haji dihapus → tautan lepas (SetNull + ditulis ulang); ditambah/jumlah naik → anggota baru ditautkan; anggota baru yang sudah **terverifikasi** dibuka ulang (`reopenForChangedRequirements`, sama seperti visa ditambah hari ini).
@@ -141,7 +141,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 ### 3.7 Fase V4 (satu PR per fase)
 | Fase | Isi |
 |---|---|
-| V4a | Tautan jamaah ↔ paket/haji (§3.3): skema + migrasi + `lineItems`/`revise` + 422 jumlah — perilaku visa tidak berubah (dibuktikan uji pembanding) |
+| V4a | Tautan jamaah ↔ paket/haji (§3.3): skema + migrasi + `lineItems`/`revise` + 422 jumlah — perilaku visa tidak berubah (dibuktikan uji pembanding) — ✔ 2026-11-04: migrasi `20261119090000_booking_pilgrim_members`, `lib/booking/members.ts`, uji `test-booking-members.ts` (pembanding > 500 kasus) + `test-booking-members-migration.ts` |
 | V4b | Syarat di produk Paket & Haji (§3.4): registry, API, editor, katalog publik |
 | V4c | Penilaian gabungan (§3.5): `pilgrimRequirements`, semua pembaca, buka ulang, UI "Diminta oleh" |
 
@@ -160,7 +160,7 @@ Penggabungan per **jenis dokumen** (satu baris per jenis): wajib bila SALAH SATU
 | V1 | Editor produk visa: pilihan "Model penjualan" (only/plus) | ✔ 2026-11-03 (#106) |
 | V2 | Form booking (draf + revisi): baris Visa di `ItemRows`, kelompok ↔ slot jamaah | ✔ 2026-11-04 (#107) |
 | V3 | Daftar centang "Wajib dibeli bersama visa ini" (7 jenis, §2.1–2.2) + hapus pelonggaran per pelanggan (§2.3) + UI (§2.4) + migrasi (§2.5) | ✔ 2026-11-04 — migrasi `20261118090000_visa_required_components_v3`, uji `test-visa-v3-migration.ts` |
-| V4 | Syarat dokumen Paket Umroh + Haji (§3) — dipecah V4a/V4b/V4c (§3.7) | rancangan rinci + K1–K4 dijawab 2026-11-04 |
+| V4 | Syarat dokumen Paket Umroh + Haji (§3) — dipecah V4a/V4b/V4c (§3.7) | V4a ✔ 2026-11-04; V4b, V4c belum |
 | V5 | Dokumentasi: `arsitektur-booking-engine-v2.md`, `arsitektur-visa.md`, CLAUDE.md (pelonggaran dihapus, drift §6) | — |
 
 ## 5. Keputusan pemilik (tercatat)
