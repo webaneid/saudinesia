@@ -27,6 +27,10 @@ let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
   try { await fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
 }
+// Dua uji antrean kode booking sengaja memakai dua koneksi: uji memegang kunci di satu koneksi sambil memeriksa dari koneksi lain. Dilewati pada connection_limit=1 (scripts/test-booking-one-connection.ts, SEC-212).
+const twoConnections = new URL(process.env.DATABASE_URL ?? '').searchParams.get('connection_limit') === '1'
+  ? async (name: string, _fn: () => Promise<void>) => { console.log(`SKIP ${name}`) }
+  : t
 const root = new URL('..', import.meta.url).pathname
 const read = (f: string) => readFileSync(join(root, f), 'utf8')
 const tag = `dr${Date.now()}`
@@ -282,7 +286,7 @@ await t('KODE BOOKING jalur penuh `POST /bookings`: 20 pesanan serentak → semu
   const big = await prisma.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-06-30'), totalSeats: 100 } })
   await addCost('flight', big.id, 'tiket', 5_000_000); await repriceOwner('flight', big.id)
   const top = await topUrut()
-  const prepared = await prepareBooking({ items: [{ itemType: 'flight', flightScheduleId: big.id, departureDate: '2090-06-10', numPassengers: 1 }], pilgrims: [{}], departureDate: '2090-06-10', totalPilgrims: 1 }, customer.id)
+  const prepared = await prepareBooking({ items: [{ itemType: 'flight', flightScheduleId: big.id, departureDate: '2090-06-10', numPassengers: 1 }], pilgrims: [{}], departureDate: '2090-06-10', totalPilgrims: 1 })
   const made = await Promise.all(Array.from({ length: 20 }, () => retrySerializable(() => withBookingCode(async (tx, bookingCode) => {
     const bk = await tx.booking.create({ data: { bookingCode, userId: customer.id, status: 'active', departureDate: new Date('2090-06-10'), returnDate: new Date('2090-06-20'), season: 'regular', totalAmount: 0 } })
     await writeBooking(tx, prepared, bk.id)
@@ -304,7 +308,7 @@ await t('KODE BOOKING tak melompat: pembuat yang gagal rollback → kode yang sa
   assert.ok(next.ok, JSON.stringify(next)); if (!next.ok) return
   assert.equal(Number(next.bookingCode.split('-')[2]), top + 1)
 })
-await t('KODE BOOKING antrean: penunggu tak memegang koneksi selama menunggu (LOCK TABLE tak tertahan di DB); pemegang tetap bisa memakai koneksi lain; batas tunggu → galat terarah tanpa tulisan', async () => {
+await twoConnections('KODE BOOKING antrean: penunggu tak memegang koneksi selama menunggu (LOCK TABLE tak tertahan di DB); pemegang tetap bisa memakai koneksi lain; batas tunggu → galat terarah tanpa tulisan', async () => {
   const top = await topUrut()
   let release = () => {}
   const held = new Promise<void>(r => { release = r })
@@ -321,7 +325,7 @@ await t('KODE BOOKING antrean: penunggu tak memegang koneksi selama menunggu (LO
   assert.equal(isBookingCodeBusy(await late), true, 'antrean melebihi batas tunggu')
   assert.equal(await topUrut(), top)
 })
-await t('KODE BOOKING kunci DB dipegang proses lain: `lock_timeout` → galat terarah (409, bukan 500) tanpa tertahan selamanya; setelah lepas, pembuat berikutnya jalan', async () => {
+await twoConnections('KODE BOOKING kunci DB dipegang proses lain: `lock_timeout` → galat terarah (409, bukan 500) tanpa tertahan selamanya; setelah lepas, pembuat berikutnya jalan', async () => {
   const top = await topUrut()
   let release = () => {}
   const held = new Promise<void>(r => { release = r })

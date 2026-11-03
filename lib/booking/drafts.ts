@@ -136,7 +136,7 @@ async function simulate(id: string, userId: string, draft: BookingDraft, dueDays
       const written: ItemMeta[] = []
       await writeBooking(tx, prepared, id, written)
       const full = await tx.booking.findUniqueOrThrow({ where: { id }, include: invoiceBookingInclude })
-      const inv = await buildInvoiceData(full)
+      const inv = await buildInvoiceData(full, tx)
       const tax = await taxFor(tx, inv.subtotal)
       const sells = await itemSellTotals(tx, id)
       const itemTotals = draft.items.map((_, i) => { const m = written[i]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
@@ -182,7 +182,7 @@ export async function publishDraft(id: string, input: { dueDays?: number; expect
         where: { id },
         data: {
           status: 'active', draft: Prisma.DbNull,
-          season: dated.departureDate ? await detectSeason(dated.departureDate) : 'regular',
+          season: dated.departureDate ? await detectSeason(dated.departureDate, tx) : 'regular',
         },
         select: { id: true, bookingCode: true },
       })

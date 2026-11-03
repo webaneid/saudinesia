@@ -398,7 +398,7 @@ export async function previewRevision(bookingId: string, input: BookingRevisionI
       const grandBefore = billOf(before).grandTotal
       const r = await apply(tx, bookingId, input, byUserId, prepared, planned, { requireReason: false, allowNoChange: opts.allowNoChange })
       const after = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, include: invoiceBookingInclude })
-      const inv = await buildInvoiceData(after)
+      const inv = await buildInvoiceData(after, tx)
       throw new Rollback({ ...r, lines: inv.lineItems, grandBefore, grandAfter: billOf(after).grandTotal })
     }, { isolationLevel: 'Serializable' })
   } catch (e) {

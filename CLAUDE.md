@@ -277,6 +277,7 @@ Satu kit untuk SEMUA daftar (admin, jamaah, publik) di `components/shared/data-t
 - Every migration named descriptively: `bun prisma migrate dev --name add_passport_expiry`
 - Never use `prisma db push` in production — migrations only
 - Quota writes always inside `prisma.$transaction([...])` to prevent race conditions
+- Inside a `$transaction`/`withBookingCode` callback, never touch the global `prisma` client, directly or through any helper (SEC-212): it waits for a second pool connection while holding the first, and reads outside the Serializable snapshot. A helper used both inside and outside a transaction takes `db = prisma` and is called with `tx`. Guarded by `scripts/test-tx-no-global.ts` (TypeScript call graph from every transaction callback in `app/` and `lib/`) and `scripts/test-booking-one-connection.ts`
 - `$queryRaw` only when Prisma ORM genuinely cannot express the query; add a comment explaining why
 
 ---

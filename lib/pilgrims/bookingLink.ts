@@ -165,7 +165,7 @@ type FieldLite = { fieldKey: string; label: string; role: string | null }
  * Field berperan `nik`/`passport_number` dari isian admin (sudah lolos `validateFieldValues`): nilai = samaran saat ini → tidak diubah; kosong →
  * segel dihapus; selain itu dinormalisasi lalu DISEGEL, dan `values` diganti samarannya. Negara paspor = kebangsaan kartu tertaut, bawaan `ID`.
  */
-export async function sealManualPii(fields: readonly FieldLite[], values: Record<string, unknown>, passportCountry: string): Promise<ManualPii> {
+export async function sealManualPii(fields: readonly FieldLite[], values: Record<string, unknown>, passportCountry: string, db: Pick<typeof prisma, 'piiKeyCheck'> = prisma): Promise<ManualPii> {
   const out = { ...values }
   const columns: SealedColumns = {}
   const errors: Record<string, string> = {}
@@ -184,7 +184,7 @@ export async function sealManualPii(fields: readonly FieldLite[], values: Record
       const nik = normalizeNik(raw)
       const problem = nik ? null : nikProblem(raw.replace(/[\s.\-]/g, ''))
       if (problem || !nik) { errors[f.fieldKey] = problem ?? `${f.label} tidak valid`; continue }
-      await ensurePiiKeysMatch()
+      await ensurePiiKeysMatch(db)
       const s = sealNik(nik)
       Object.assign(columns, { nikHash: s.hash, nikCipher: s.cipher })
       out[f.fieldKey] = NIK_MASK
@@ -192,7 +192,7 @@ export async function sealManualPii(fields: readonly FieldLite[], values: Record
       if (/^•+[A-Z0-9]{4}$/.test(raw)) { delete out[f.fieldKey]; continue }
       const number = normalizePassport(raw)
       if (!number) { errors[f.fieldKey] = `${f.label}: 5–20 huruf/angka`; continue }
-      await ensurePiiKeysMatch()
+      await ensurePiiKeysMatch(db)
       const s = sealPassport(passportCountry, number)
       Object.assign(columns, { passportCountry, passportKeyHash: s.keyHash, passportCipher: s.cipher, passportLast4: s.last4 })
       out[f.fieldKey] = maskPassport(s.last4)
@@ -214,7 +214,7 @@ export async function sealNewPilgrim(tx: Tx, visaProductId: string | null, value
   const fields = await manifestFieldsOf(tx, visaProductId)
   const addressed = await resolveAddressValues(fields, values, tx) // alamat dibekukan dengan `text` dari DB (D1)
   if (!addressed.ok) return addressed
-  return sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values))
+  return sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values), tx)
 }
 
 /**
