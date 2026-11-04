@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { Plus, Trash2, UserRound, ArrowRight, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -49,6 +49,12 @@ export function VisaCheckoutForm({ products, preselectedProductId }: { products:
     const j = await r.json()
     setFieldsByProduct(prev => ({ ...prev, [productId]: j.data ?? [] }))
   }
+
+  // Datang dari katalog: produk sudah terpilih tanpa klik, kolomnya tetap harus dimuat.
+  useEffect(() => {
+    if (preselectedProductId) void loadFieldsFor(preselectedProductId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cukup sekali per produk bawaan; loadFieldsFor sendiri melewati produk yang sudah dimuat
+  }, [preselectedProductId])
 
   async function selectProduct(idx: number, productId: string) {
     setPilgrims(prev => prev.map((p, i) => i === idx ? { ...p, visaProductId: productId } : p))

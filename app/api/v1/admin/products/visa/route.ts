@@ -10,6 +10,7 @@ import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
 import { canViewCost } from '@/lib/pricing/policy'
 import { documentRequirementListSchema } from '@/lib/validators/documents'
 import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
+import { writeDefaultManifestFields } from '@/lib/manifest/fields'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-harga.md §17) — produk baru dibuat
 // dengan price:0, baru terisi otomatis setelah admin mengisi komponen HPP di halaman edit.
@@ -60,6 +61,7 @@ export async function POST(req: Request) {
       })
       const written = requirements ? await writeRequirements(tx, 'visa', product.id, requirements) : await writeDefaultRequirements(tx, 'visa', product.id)
       if (!written.ok) throw new RequirementRejected(written.error, written.field)
+      await writeDefaultManifestFields(tx, 'visa', product.id) // tanpa ini form data jamaah produk baru kosong, termasuk nama
       return product
     }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
     if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })

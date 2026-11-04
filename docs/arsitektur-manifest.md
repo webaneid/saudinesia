@@ -128,7 +128,7 @@ Komponen `<ManifestRepeater productType productId onChange>` — pola:
 
 ## 7. Yang TIDAK Termasuk Rencana Ini
 
-- UI admin builder untuk mengelola `ManifestFieldRequirement` per produk — menyusul di fase implementasi (`docs/arsitektur-booking.md` §6 Step 5), bukan didesain detail di sini.
+- UI admin builder untuk mengelola `ManifestFieldRequirement` per produk — **sudah ada untuk Visa sejak 2026-11-04, lihat §9**.
 - Validasi lintas-field kompleks (mis. "kalau nationality≠Indonesian, passportNumber wajib") — field ini sengaja flat (label/tipe/wajib per field independen), validasi kondisional semacam itu didesain kalau memang dibutuhkan nyata nanti, bukan sekarang.
 
 ---
@@ -151,11 +151,44 @@ Komponen `<ManifestRepeater productType productId onChange>` — pola:
 
 **Verifikasi end-to-end via curl + query DB langsung** (server dev nyata): (1) `GET /api/v1/manifest/requirements` mengembalikan 9 field lengkap dengan `role`/`options`; (2) booking dibuat dengan `fieldValues` berisi `phone`/`whatsapp` beda kode negara (ID vs SA) → dikonfirmasi tersimpan PERSIS di `BookingPilgrim.fieldValues` sebagai objek bersarang; (3) halaman detail admin & daftar visa admin merender nama jamaah dengan benar via `getFieldByRole(..., 'display_name')`; (4) `PUT` endpoint passport mengonfirmasi MERGE (field lama tetap utuh, field baru ditambahkan) bukan menimpa; (5) endpoint dokumen jamaah dan ZIP download tetap berfungsi normal tanpa field baku. Data test dibersihkan. `bun run build` 0 error di setiap fase (1 bug tipe ditemukan & ditutup saat build: `typeof booking.pilgrims` gagal narrowing null-check di 2 halaman server component — diperbaiki jadi `NonNullable<typeof booking>['pilgrims'][number]`).
 
-**Belum dikerjakan** (sesuai §7 + scope putaran ini): UI admin builder untuk `ManifestFieldRequirement` (admin belum bisa ubah field lewat UI, cuma lewat seed/script — sama seperti `DocumentRequirement` di `docs/arsitektur-dokumen.md`), field manifest untuk produk selain Visa, validasi lintas-field kompleks.
+**Belum dikerjakan** (sesuai §7 + scope putaran ini; builder admin menyusul 2026-11-04, §9): field manifest untuk produk selain Visa, validasi lintas-field kompleks.
 
 ---
 
-## 9. Referensi Silang
+## 9. Pengatur Kolom Data Jamaah di Admin (SELESAI & TERVERIFIKASI 2026-11-04, Visa)
+
+**Pemicu:** uji input produk lewat admin (pemilik: "kamu saya tugaskan mencoba mesin kita") — produk visa baru punya 0 field manifest (form jamaah kosong, termasuk nama), dan kolom teks khusus produk (Nomor HP Host, Short Address) tidak bisa diinput sama sekali.
+
+**Drift yang ditemukan saat recheck:** §3/§4 menyebut 5 peran, kode punya 13 (`MANIFEST_ROLES`, `lib/manifest/roles.ts`, CHECK DB + unik per produk); "fallback ke field pertama" di §4 tidak ada di kode (`getFieldByRole` → `null`); §5 gabungan field antar produk tidak dibangun (field jamaah = visa-nya atau `core`).
+
+**As-built (satu fase, tanpa migrasi skema):**
+1. **Definisi murni** `lib/manifest/fieldDefs.ts`: katalog `fieldType`, daftar kolom standar per peran (bentuk tetap), pembuat kunci dari label. Aman di klien.
+2. **Validator** `lib/validators/manifest.ts`: `.strict()`, tipe sesuai peran, peran unik, Nama Lengkap wajib ada dan wajib diisi, kolom bebas tak boleh berlabel NIK/KTP/paspor (nilainya akan tersimpan tanpa segel), `select` berpilihan.
+3. **Penulis tunggal** `lib/manifest/fields.ts` (`writeManifestFields` ganti-semua, kunci baris produk; `writeDefaultManifestFields` untuk produk baru). Kunci yang ada tak pernah berubah (nilai `fieldValues` lama diikat kunci); kunci baru dibuat server. Produk yang sudah dipesan: tipe/peran kolom lama terkunci, kunci baru bersufiks acak supaya tak menempel ke nilai lama.
+4. **Route** `admin/products/visa` (POST isi bawaan) dan `[id]` (GET + PUT `manifestFields`, satu transaksi dengan produk).
+5. **UI** tab "Data jamaah" di editor visa: `components/admin/manifest/ManifestFieldsEditor.tsx`.
+6. **Uji** `scripts/test-manifest-fields.ts` (DB sungguhan, kasus penolakan, penjaga penulis tunggal).
+
+**Aturan yang berlaku:**
+- Hanya `lib/manifest/fields.ts` yang menulis `manifest_field_requirements` (penghapus produk boleh `deleteMany`; dijaga `scripts/test-manifest-fields.ts`).
+- Kolom standar = satu daftar `STANDARD_FIELDS` per peran. Tipenya tetap karena pengikat kartu dan penyegelan NIK/paspor bergantung padanya; kolom standar yang dikirim tanpa kunci memakai kunci standarnya dan kena kunci tipe yang sama.
+- Kolom bebas = tanpa peran; labelnya tidak boleh meminta NIK/KTP/paspor (`looksLikeSealedData`), karena nilainya tersimpan polos di `fieldValues`.
+- Produk baru selalu mendapat 9 kolom bawaan (`writeDefaultManifestFields`). Produk lama berkolom 0: tombol "Pakai kolom standar" di tab "Data jamaah".
+- Produk sudah dipesan (`visaApplication` ada): tipe dan peran kolom lama terkunci, label/wajib/urutan boleh berubah, kolom bebas baru mendapat sufiks acak supaya tidak menempel ke nilai kolom lama yang pernah dihapus.
+
+**Bukti verifikasi:** operasi lewat UI admin sungguhan pada produk Visa Umroh Istidhofah (kolom `Nomor HP Host` dan `Short Address / Unwan Wathoni` tersimpan, tetap ada setelah muat ulang, tampil wajib di form checkout jamaah); penolakan API diuji pada server berjalan (tanpa sesi → 403, daftar kosong, tanpa nama, peran asing, bidang asing, label NIK, kunci basi, `__proto__` → 400, produk tak ada → 404, data tetap 11 kolom); produk baru lewat API mendapat 9 kolom bawaan; `scripts/test-manifest-fields.ts` 9 uji di DB sekali pakai; `bun run build` hijau.
+
+**Gap yang diketahui:**
+- Mengubah pilihan `select` pada produk yang sudah dipesan bisa membuat jawaban lama tidak ada di daftar pilihan.
+- Kolom wajib baru tidak membuka ulang jamaah yang sudah diajukan/terverifikasi (sama dengan keputusan syarat dokumen).
+- `POST /bookings` tidak memanggil `validateFieldValues`: kolom wajib di checkout jamaah ditegakkan di klien, dan di server baru pada gerbang pengajuan (`completeness`, `lib/pilgrims/review.ts`). Pre-existing, belum disentuh.
+- Bug lama diperbaiki sekalian: checkout visa dari katalog tertahan di "Memuat formulir" karena kolom produk bawaan tidak pernah dimuat (`components/booking/VisaCheckoutForm.tsx`).
+
+**Di luar lingkup:** produk selain Visa, field `core`, gabungan field antar produk, membuka ulang pemeriksaan jamaah saat kolom berubah (sama dengan keputusan syarat dokumen, `docs/rencana-visa-produk.md` §3.5).
+
+---
+
+## 10. Referensi Silang
 
 - Prasyarat/pasangan: `docs/arsitektur-booking.md` §1.6 (Manifest tak terbatas, keputusan induk), `docs/arsitektur-dokumen.md` (syarat file per orang), `docs/arsitektur-alamat.md` (komponen `fieldType='address'`, data wilayah resmi Kemendagri)
 - Pola desain polimorfik: `ProductCost`/`DocumentRequirement` — pola generik `productType`+`productId` yang sama dipakai konsisten lintas 3 dokumen ini
