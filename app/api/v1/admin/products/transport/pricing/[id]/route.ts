@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
+import { deleteTransportPricing } from '@/lib/admin/productDelete'
 import { z } from 'zod'
 
 const updateSchema = z.object({
@@ -55,9 +56,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    await prisma.transportPricing.delete({ where: { id } })
-    await prisma.pricePoint.deleteMany({ where: { ownerType: 'transport', ownerId: id } }) // titik harga ikut (tanpa FK)
-    return NextResponse.json(ok(null))
+    return NextResponse.json(ok(await deleteTransportPricing(id)))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })

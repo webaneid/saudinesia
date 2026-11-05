@@ -298,7 +298,7 @@ await t('penjaga sumber: HANYA lib/pricing/engine yang menulis price_points dan 
   const deleters = files.filter(f => /pricePoint\.deleteMany/.test(readFileSync(f, 'utf8'))).sort()
   assert.deepEqual(deleters.filter(f => !f.startsWith('lib/pricing/engine/')), [
     'app/api/v1/admin/products/catering/[id]/route.ts', 'app/api/v1/admin/products/flight/schedules/[id]/route.ts', 'app/api/v1/admin/products/hotels/[id]/services/[serviceId]/route.ts',
-    'app/api/v1/admin/products/transport/pricing/[id]/route.ts', 'lib/admin/productDelete.ts', 'lib/haji/delete.ts',
+    'lib/admin/productDelete.ts', 'lib/haji/delete.ts',
   ])
 })
 

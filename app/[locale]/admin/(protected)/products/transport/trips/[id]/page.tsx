@@ -9,6 +9,7 @@ import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
+import { TransportQuotaPanel } from './TransportQuotaPanel'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -86,9 +87,21 @@ function PricingRow({ pricing, onChanged }: {
     onChanged()
   }
 
+  async function setActive(isActive: boolean) {
+    setSaveError(null)
+    const j = await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }),
+    }).then(r => r.json()).catch(() => null)
+    if (!j?.success) { setSaveError(j?.error ?? 'Gagal mengubah status kendaraan'); return }
+    onChanged()
+  }
+
   async function handleDelete() {
-    setDeleting(true)
-    await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}`, { method: 'DELETE' })
+    setDeleting(true); setSaveError(null)
+    const j = await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}`, { method: 'DELETE' }).then(r => r.json()).catch(() => null)
+    setDeleting(false)
+    if (!j?.success) { setSaveError(j?.error ?? 'Gagal menghapus kendaraan'); return }
+    if (j.data?.message) setSaveError(j.data.message)
     onChanged()
   }
 
@@ -98,6 +111,11 @@ function PricingRow({ pricing, onChanged }: {
         <div>
           <p className="text-[13px] font-semibold text-admin-ink capitalize">{pricing.vehicle.name}</p>
           <p className="text-[11px] text-admin-muted">{pricing.vehicle.capacity} kursi · {pricing.vehicle.vehicleType}</p>
+          {!pricing.isActive && (
+            <p className="text-[11px] text-admin-danger">Nonaktif, tidak tampil di booking.{' '}
+              <button type="button" onClick={() => void setActive(true)} className="font-medium underline">Aktifkan</button>
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <div className="text-right">
@@ -162,6 +180,7 @@ export default function TripEditPage({ params }: Props) {
   const [saved,  setSaved]  = useState(false)
   const [addVehicleId,  setAddVehicleId]  = useState('')
   const [addingPricing, setAddingPricing] = useState(false)
+  const [deleteNotice, setDeleteNotice] = useState<string | null>(null)
 
   async function load(tripId: string) {
     const r = await fetch(`/api/v1/admin/products/transport/trips/${tripId}`)
@@ -222,8 +241,12 @@ export default function TripEditPage({ params }: Props) {
 
   async function handleDeleteTrip() {
     if (!(await ask({ title: `Hapus trip "${trip?.name}"?`, body: 'Semua harga kendaraan yang terkait juga akan dihapus. Trip yang sudah dipakai booking dinonaktifkan, bukan dihapus.' }))) return
-    await fetch(`/api/v1/admin/products/transport/trips/${id}`, { method: 'DELETE' })
-    router.push(`/${locale}/admin/products/transport`)
+    setDeleteNotice(null)
+    const j = await fetch(`/api/v1/admin/products/transport/trips/${id}`, { method: 'DELETE' }).then(r => r.json()).catch(() => null)
+    if (!j?.success) { setDeleteNotice(j?.error ?? 'Gagal menghapus trip'); return }
+    if (j.data?.deleted) { router.push(`/${locale}/admin/products/transport`); return }
+    setDeleteNotice(j.data?.message ?? 'Trip dinonaktifkan')
+    void load(id)
   }
 
   // Vehicles not yet added to this trip
@@ -331,10 +354,13 @@ export default function TripEditPage({ params }: Props) {
         </div>
       </div>
 
+      <TransportQuotaPanel tripId={trip.id} pricing={trip.pricing} />
+
       {/* Danger zone */}
       <div className="admin-form-panel border-admin-danger/20 space-y-3">
         <p className="text-sm font-semibold text-admin-danger">Zona Berbahaya</p>
-        <p className="text-[12px] text-admin-muted">Hapus trip dan semua pricing yang terkait secara permanen.</p>
+        <p className="text-[12px] text-admin-muted">Hapus trip beserta harga dan kuota tanggalnya. Bila sudah dipakai booking atau paket, trip dinonaktifkan, bukan dihapus.</p>
+        {deleteNotice && <p role="status" className="text-[12px] text-admin-danger">{deleteNotice}</p>}
         <button onClick={handleDeleteTrip}
           className="px-4 py-2 rounded-xl border border-admin-danger/30 text-[13px] font-medium text-admin-danger hover:bg-admin-danger/10 transition-colors">
           Hapus Trip

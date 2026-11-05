@@ -1,3 +1,4 @@
+import { deleteTransportTrip } from '@/lib/admin/productDelete'
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
@@ -64,8 +65,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
   try {
     await requireManager()
     const { id } = await params
-    await prisma.transportTrip.delete({ where: { id } })
-    return NextResponse.json(ok(null))
+    return NextResponse.json(ok(await deleteTransportTrip(id)))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
