@@ -287,7 +287,7 @@ await t('route POST /bookings memanggil onboardingRefusal (gerbang langkah awal,
   const guard = post.indexOf('onboardingRefusal(')
   assert.ok(guard > 0, 'penjaga hilang dari POST /bookings')
   assert.ok(guard < post.indexOf('request.json()'), 'penjaga harus sebelum membaca body')
-  assert.ok(guard < post.indexOf('prisma.$transaction'), 'penjaga harus sebelum transaksi/efek samping')
+  assert.ok(guard < post.indexOf('withBookingCode(async'), 'penjaga harus sebelum transaksi/efek samping')
   assert.match(post, /if \(refusal\) return refusal/)
   assert.match(readFileSync(new URL('../lib/auth/contact.ts', import.meta.url), 'utf8'), /status: 422/, 'gerbang menjawab 422')
 })
