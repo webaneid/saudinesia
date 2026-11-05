@@ -11,22 +11,23 @@ export function roundToNearest(value: number, increment: number): number {
   return Math.round(value / increment) * increment
 }
 
-export function getLatestRate(fromCurrency: string, toCurrency: string) {
-  return prisma.exchangeRate.findFirst({
+// `db` di fungsi-fungsi berikut = klien transaksi bila dipanggil di dalam transaksi (SEC-212): jangan mengambil koneksi pool kedua.
+export function getLatestRate(fromCurrency: string, toCurrency: string, db: Pick<typeof prisma, 'exchangeRate'> = prisma) {
+  return db.exchangeRate.findFirst({
     where: { fromCurrency, toCurrency },
     orderBy: { fetchedAt: 'desc' },
   })
 }
 
 /** Aturan margin untuk satu tipe produk: override tipe itu, kalau tidak ada → baris global. */
-export function getMarginRule(productType: string) {
-  return prisma.pricingRule.findFirst({ where: { productType } })
-    .then(override => override ?? prisma.pricingRule.findFirst({ where: { productType: GLOBAL_RULE_KEY } }))
+export function getMarginRule(productType: string, db: Pick<typeof prisma, 'pricingRule'> = prisma) {
+  return db.pricingRule.findFirst({ where: { productType } })
+    .then(override => override ?? db.pricingRule.findFirst({ where: { productType: GLOBAL_RULE_KEY } }))
 }
 
 /** Aturan margin yang SIAP PAKAI (angka biasa, nilai bawaan terisi) — pemakai rumus harga cukup memanggil ini. */
-export async function resolveMarginRule(productType: string): Promise<{ defaultMarginPercent: number; roundingIncrement: number }> {
-  const rule = await getMarginRule(productType)
+export async function resolveMarginRule(productType: string, db: Pick<typeof prisma, 'pricingRule'> = prisma): Promise<{ defaultMarginPercent: number; roundingIncrement: number }> {
+  const rule = await getMarginRule(productType, db)
   return {
     defaultMarginPercent: rule ? Number(rule.defaultMarginPercent) : DEFAULT_MARGIN_PERCENT,
     roundingIncrement: rule ? rule.roundingIncrement : DEFAULT_ROUNDING_INCREMENT,

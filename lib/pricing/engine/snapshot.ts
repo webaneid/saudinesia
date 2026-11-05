@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError } from '@/lib/booking/errors'
-import { computeCostComponents } from '../costComponents'
+import { computeCostComponents, type CostComponentsDb } from '../costComponents'
 import type { PriceOwnerType, PriceUnit } from './types'
 
 // SNAPSHOT HARGA (docs/arsitektur-harga-terpadu.md §17, invarian I4): harga dibekukan saat dipesan. Modul ini adalah SATU-SATUNYA pembaca titik harga untuk jalur pesan
@@ -111,10 +111,10 @@ export type CompositePart = { lineKey: string; description: string; qty: number;
  * `multiplier` = jumlah satuan yang dibeli (Haji dan Paket Umroh: orang; paket ziarah: 1 — harga per paket).
  * Titik harga tak ada → `ItemNotBookableError`. Jual titik 0 diizinkan (paket yang seluruhnya pilihan pilgrim); pemanggil menolak item bertotal 0.
  */
-export async function compositeLines(db: Db, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat: "Harga {what} belum ditetapkan" */ what: string; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
+export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat: "Harga {what} belum ditetapkan" */ what: string; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
   const point = await readPoint(db, o.ownerType, o.ownerId, '')
   if (!point) throw new ItemNotBookableError(`Harga ${o.what} belum ditetapkan`)
-  const { components } = await computeCostComponents(o.ownerType, o.ownerId)
+  const { components } = await computeCostComponents(o.ownerType, o.ownerId, db)
 
   const lines: SnapshotLine[] = components.map(c => ({
     lineKey: `komponen:${c.costId}`, description: c.costComponent, qty: o.multiplier, unit: 'package',

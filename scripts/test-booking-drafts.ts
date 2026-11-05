@@ -4,6 +4,7 @@
 //
 // PENGAMAN: menulis data sementara → menolak jalan kecuali nama database memuat "test", "ci" atau "tmp".
 import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { prisma } from '@/lib/db'
@@ -14,6 +15,10 @@ import { bookingDraftSchema, type BookingDraft } from '@/lib/validators/booking'
 import { completeness, validateFieldValues, type FieldDef } from '@/lib/manifest/values'
 import { calendarDateOf, todayInApp, addDays } from '@/lib/time'
 import { createCostActual, CostActualError } from '@/lib/costs/actuals'
+import { isBookingCodeBusy, withBookingCode } from '@/lib/utils/bookingCode'
+import { prepareBooking, writeBooking } from '@/lib/booking/create'
+import { retrySerializable } from '@/lib/booking/serializable'
+import { issueInvoice } from '@/lib/invoice/issue'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -22,6 +27,10 @@ let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
   try { await fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
 }
+// Dua uji antrean kode booking sengaja memakai dua koneksi: uji memegang kunci di satu koneksi sambil memeriksa dari koneksi lain. Dilewati pada connection_limit=1 (scripts/test-booking-one-connection.ts, SEC-212).
+const twoConnections = new URL(process.env.DATABASE_URL ?? '').searchParams.get('connection_limit') === '1'
+  ? async (name: string, _fn: () => Promise<void>) => { console.log(`SKIP ${name}`) }
+  : t
 const root = new URL('..', import.meta.url).pathname
 const read = (f: string) => readFileSync(join(root, f), 'utf8')
 const tag = `dr${Date.now()}`
@@ -83,6 +92,12 @@ const residue = async (bookingId: string) => ({
   snapshots: await prisma.priceSnapshot.count({ where: { bookingId } }),
 })
 const drafts: string[] = []
+const urutOf = (codes: string[]) => codes.map(c => Number(c.split('-')[2])).sort((x, y) => x - y)
+const range = (from: number, count: number) => Array.from({ length: count }, (_, i) => from + i)
+const topUrut = async () => {
+  const rows = await prisma.booking.findMany({ where: { bookingCode: { startsWith: 'SND-' } }, select: { bookingCode: true } })
+  return Math.max(0, ...rows.map(r => Number(r.bookingCode.split('-')[2])))
+}
 async function newDraft(d: BookingDraft = DRAFT) {
   const r = await createDraft(customer.id); assert.ok(r.ok); drafts.push(r.id)
   assert.ok((await saveDraft(r.id, d)).ok)
@@ -244,7 +259,7 @@ await t('pengeluaran vendor TIDAK bisa dicatat pada draf (draf dapat dihapus sun
   assert.equal(await prisma.costActual.count({ where: { bookingId: did } }), 0)
 })
 
-await t('KODE BOOKING: setelah draf di TENGAH dihapus, booking baru tetap dapat dibuat (urut tertinggi + 1, bukan jumlah + 1); 6 pembuatan SERENTAK → 6 kode berbeda', async () => {
+await t('KODE BOOKING: setelah draf di TENGAH dihapus, booking baru tetap dapat dibuat (urut tertinggi + 1, bukan jumlah + 1); 20 pembuatan SERENTAK → 20 kode berbeda dan berurutan', async () => {
   const a = await newDraft(); const b = await newDraft(); const c = await newDraft()
   const codes = await prisma.booking.findMany({ where: { id: { in: [a, b, c] } }, select: { bookingCode: true } })
   assert.ok((await deleteDraft(b)).ok)
@@ -253,9 +268,84 @@ await t('KODE BOOKING: setelah draf di TENGAH dihapus, booking baru tetap dapat 
   drafts.push(d.id)
   const top = Math.max(...codes.map(x => Number(x.bookingCode.split('-')[2])))
   assert.equal(Number(d.bookingCode.split('-')[2]), top + 1)
-  const many = await Promise.all(Array.from({ length: 6 }, () => createDraft(customer.id)))
+  const many = await Promise.all(Array.from({ length: 20 }, () => createDraft(customer.id)))
   assert.ok(many.every(r => r.ok), JSON.stringify(many))
-  assert.equal(new Set(many.map(r => r.ok && r.bookingCode)).size, 6)
+  assert.deepEqual(urutOf(many.map(r => (r.ok ? r.bookingCode : ''))), range(Number(d.bookingCode.split('-')[2]) + 1, 20), 'tanpa lompat dan tanpa kembar')
+})
+// Jalur `POST /bookings`: Serializable TANPA retrySerializable di sini — kunci yang mengambil snapshot lebih dulu (advisory lock) gagal 40001 pada uji ini.
+await t('KODE BOOKING Serializable: 20 pembuat serentak tanpa ulang → semua berhasil, berurutan (snapshot diambil SESUDAH kunci)', async () => {
+  const top = await topUrut()
+  const codes = await Promise.all(Array.from({ length: 20 }, () => withBookingCode(async (tx, bookingCode) => {
+    await tx.booking.create({ data: { bookingCode, userId: customer.id, status: 'draft', season: 'regular', totalAmount: 0, draft: {} } })
+    return bookingCode
+  }, { isolationLevel: 'Serializable' })))
+  assert.deepEqual(urutOf(codes), range(top + 1, 20))
+})
+// Bentuk transaksi yang SAMA dengan `POST /bookings`: pembacaan, kuota, snapshot, dan nomor invoice semuanya di balik kunci yang sama.
+await t('KODE BOOKING jalur penuh `POST /bookings`: 20 pesanan serentak → semua terbit, kode dan nomor invoice unik, kursi tertahan pas', async () => {
+  const big = await prisma.flightSchedule.create({ data: { routeId: route.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-06-30'), totalSeats: 100 } })
+  await addCost('flight', big.id, 'tiket', 5_000_000); await repriceOwner('flight', big.id)
+  const top = await topUrut()
+  const prepared = await prepareBooking({ items: [{ itemType: 'flight', flightScheduleId: big.id, departureDate: '2090-06-10', numPassengers: 1 }], pilgrims: [{}], departureDate: '2090-06-10', totalPilgrims: 1 })
+  const made = await Promise.all(Array.from({ length: 20 }, () => retrySerializable(() => withBookingCode(async (tx, bookingCode) => {
+    const bk = await tx.booking.create({ data: { bookingCode, userId: customer.id, status: 'active', departureDate: new Date('2090-06-10'), returnDate: new Date('2090-06-20'), season: 'regular', totalAmount: 0 } })
+    await writeBooking(tx, prepared, bk.id)
+    await issueInvoice(tx, bk.id, { dueDays: 3, byUserId: null })
+    return bk
+  }, { isolationLevel: 'Serializable' }))))
+  assert.deepEqual(urutOf(made.map(b => b.bookingCode)), range(top + 1, 20))
+  const invoices = await prisma.invoice.findMany({ where: { bookingId: { in: made.map(b => b.id) } }, select: { number: true } })
+  assert.equal(new Set(invoices.map(i => i.number)).size, 20)
+  assert.equal((await prisma.flightSchedule.findUniqueOrThrow({ where: { id: big.id }, select: { pendingSeats: true } })).pendingSeats, 20)
+})
+await t('KODE BOOKING tak melompat: pembuat yang gagal rollback → kode yang sama dipakai pembuat berikutnya; kunci ikut lepas', async () => {
+  const top = await topUrut()
+  await assert.rejects(() => withBookingCode(async (tx, bookingCode) => {
+    await tx.booking.create({ data: { bookingCode, userId: customer.id, status: 'draft', season: 'regular', totalAmount: 0, draft: {} } })
+    throw new Error('gagal-uji')
+  }), /gagal-uji/)
+  const next = await createDraft(customer.id)
+  assert.ok(next.ok, JSON.stringify(next)); if (!next.ok) return
+  assert.equal(Number(next.bookingCode.split('-')[2]), top + 1)
+})
+await twoConnections('KODE BOOKING antrean: penunggu tak memegang koneksi selama menunggu (LOCK TABLE tak tertahan di DB); pemegang tetap bisa memakai koneksi lain; batas tunggu → galat terarah tanpa tulisan', async () => {
+  const top = await topUrut()
+  let release = () => {}
+  const held = new Promise<void>(r => { release = r })
+  const holder = withBookingCode(async () => { await held })
+  await new Promise(r => setTimeout(r, 200)) // pemegang sudah masuk
+  const queued = Array.from({ length: 30 }, () => withBookingCode(async () => prisma.$queryRaw<unknown[]>`SELECT 1`)) // kueri global di dalam `run`: akan kehabisan pool bila penunggu memegang koneksi
+  const late = withBookingCode(async () => 'tidak-boleh-sampai', { lockWaitMs: 300 }).then(() => null, (e: unknown) => e)
+  await new Promise(r => setTimeout(r, 500))
+  const blocked = await prisma.$queryRaw<Array<{ n: bigint }>>`SELECT count(*) AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE 'LOCK TABLE%'`
+  assert.equal(Number(blocked[0]?.n), 0, 'penunggu tak menahan koneksi')
+  release()
+  await holder
+  await Promise.all(queued)
+  assert.equal(isBookingCodeBusy(await late), true, 'antrean melebihi batas tunggu')
+  assert.equal(await topUrut(), top)
+})
+await twoConnections('KODE BOOKING kunci DB dipegang proses lain: `lock_timeout` → galat terarah (409, bukan 500) tanpa tertahan selamanya; setelah lepas, pembuat berikutnya jalan', async () => {
+  const top = await topUrut()
+  let release = () => {}
+  const held = new Promise<void>(r => { release = r })
+  const other = prisma.$transaction(async (tx) => { await tx.$executeRaw`LOCK TABLE "booking_code_lock" IN EXCLUSIVE MODE`; await held }) // pemegang di luar antrean = proses lain
+  await new Promise(r => setTimeout(r, 200))
+  const late = await withBookingCode(async () => 'tidak-boleh-sampai', { lockWaitMs: 300 }).then(() => null, (e: unknown) => e)
+  assert.equal(isBookingCodeBusy(late), true, String(late))
+  release()
+  await other
+  const next = await createDraft(customer.id)
+  assert.ok(next.ok, JSON.stringify(next)); if (!next.ok) return
+  assert.equal(Number(next.bookingCode.split('-')[2]), top + 1)
+})
+await t('PENJAGA kode booking: satu penulis (`withBookingCode`), `POST /bookings` Serializable lewat kunci yang sama, LOCK TABLE sebelum pembacaan apa pun; tak ada kode lain di app/lib yang membuat baris booking', () => {
+  const src = read('lib/utils/bookingCode.ts')
+  assert.ok(src.indexOf('LOCK TABLE') > 0 && src.indexOf('LOCK TABLE') < src.indexOf('SELECT max('), 'kunci sebelum baca')
+  assert.doesNotMatch(src.replace(/^\s*\/\/.*$/gm, ''), /pg_advisory/, 'advisory lock mengambil snapshot lebih dulu di Serializable')
+  assert.match(read('app/api/v1/bookings/route.ts'), /retrySerializable\(\(\) => withBookingCode\(/)
+  const creators = execFileSync('grep', ['-rlE', 'booking\\.create\\(', 'app', 'lib'], { cwd: root, encoding: 'utf8' }).trim().split('\n').sort()
+  assert.deepEqual(creators, ['app/api/v1/bookings/route.ts', 'lib/booking/drafts.ts'])
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
