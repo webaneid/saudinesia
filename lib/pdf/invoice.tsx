@@ -3,7 +3,7 @@ import path from 'path'
 import { Document, Page, View, Text, Image, StyleSheet, renderToBuffer } from '@react-pdf/renderer'
 import type { InvoiceData } from '@/lib/pdf/invoiceData'
 
-// Satu fungsi render generik atas bentuk seragam dari buildInvoiceData() (lib/pdf/invoiceData.ts). Kop, pajak, rekening, dan S&K berasal dari invoice BEKU
+// Satu fungsi render generik atas bentuk seragam dari buildInvoiceData() (lib/pdf/invoiceData.ts). Kop, pajak, rekening, dan S&K berasal dari invoice BEKU (rekening kosong pada tagihan yang masih bisa dibayar: lib/invoice/banks.ts)
 // (docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a). Logo: logo Pengaturan Invoice (lib/pdf/logo.ts, dikirim pemanggil), selain itu public/logo.png, selain itu teks saja.
 const LOGO_PATH = path.join(process.cwd(), 'public', 'logo.png')
 

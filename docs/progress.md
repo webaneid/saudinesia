@@ -907,4 +907,12 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 
 - [x] Panel "Kuota Tanggal" di editor trip, penulis tunggal `lib/transport/quotas.ts`, hapus-aman harga kendaraan dan trip. Menutup penghalang simulasi booking produk Transport.
 - [ ] Isi data sungguhan: harga jual transport (1 dari 20 harga aktif yang berharga) dan harga Paket Ziarah (pratinjau masih 422 "belum ditetapkan"). Ini entri data lewat UI, bukan perubahan kode.
-- [ ] Simulasi penuh di browser: draf, terbit, bayar, konfirmasi, batal.
+- [x] Simulasi penuh di browser: draf, terbit, bayar, konfirmasi, batal (2026-11-06). Menemukan jalur bayar jamaah putus dan booking lunas tak bisa dibatalkan.
+
+## Jalur bayar jamaah (temuan simulasi, 2026-11-06)
+
+- [x] Unggah bukti di halaman booking, diperiksa dari isi berkas (SEC-216); admin bisa membuka bukti; penolakan bermuatan pesan yang benar di kedua sisi; kotak invoice segar sesudah konfirmasi.
+- [x] Semua produk yang ditagih tampil di halaman jamaah dan admin, dijaga `scripts/test-payment-path.ts`.
+- [x] Peringatan rekening kosong di editor draf dan kotak invoice; invoice bersnapshot kosong memakai rekening aktif.
+- [ ] Isi rekening bank sungguhan di Pengaturan Invoice (entri data pemilik).
+- [ ] Batal booking lunas, tombol batal jamaah dan admin, serta pemrosesan refund: belum ada, butuh keputusan aturan refund.

@@ -51,6 +51,20 @@ export async function readUpload(req: Request): Promise<{ fields: DocumentUpload
   return { fields: parsed.data, file: Buffer.from(await file.arrayBuffer()) }
 }
 
+/** Baca unggahan yang HANYA berisi satu `file` tanpa kolom lain (bukti transfer). Batas ukuran sama dengan `readUpload`, dicek sebelum badan dibaca. */
+export async function readSingleFile(req: Request): Promise<Buffer | NextResponse> {
+  const len = Number(req.headers.get('content-length') ?? NaN)
+  if (!Number.isFinite(len)) return NextResponse.json(err('Panjang permintaan wajib diketahui'), { status: 411 })
+  if (len > MAX_BODY_BYTES) return NextResponse.json(err('Ukuran berkas maksimal 5 MB.'), { status: 413 })
+  let form: FormData
+  try { form = await req.formData() } catch { return NextResponse.json(err('Form tidak valid'), { status: 400 }) }
+  const entries = [...form.entries()]
+  const only = entries[0]
+  if (entries.length !== 1 || !only || only[0] !== 'file' || !(only[1] instanceof File)) return NextResponse.json(err('Pilih satu berkas'), { status: 400 })
+  if (only[1].size > MAX_UPLOAD_BYTES) return NextResponse.json(err('Ukuran berkas maksimal 5 MB.'), { status: 413 })
+  return Buffer.from(await only[1].arrayBuffer())
+}
+
 export const createdResponse = <T>(document: T) => NextResponse.json(ok(document), { status: 201 })
 
 /** Batas unggah/hapus per IP untuk route jamaah (di atas batas per akun di layanan). */

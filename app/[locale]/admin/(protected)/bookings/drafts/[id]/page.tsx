@@ -23,7 +23,7 @@ import { applyVisaRows, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlot
 type Props = { params: Promise<{ locale: string; id: string }> }
 type Violation = { visaName: string; missing: string; message: string }
 type Preview = { lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>; total: number; tax: TaxLine[]; taxAdded: number; grandTotal: number; dueDays: number; itemTotals: number[]; pilgrimVisaTotals: number[] }
-type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; user: { id: string; fullName: string; email: string } }
+type Loaded = { id: string; bookingCode: string; updatedAt: string; draft: BookingDraft; defaultDueDays: number; activeBankCount: number; user: { id: string; fullName: string; email: string } }
 
 const PREVIEW_DELAY_MS = 800
 
@@ -244,6 +244,7 @@ export default function DraftEditorPage({ params }: Props) {
         hint="Draf belum menahan kuota dan belum terlihat pelanggan. Terbitkan untuk menahan kuota dan membekukan harga." />
       <div className="kartu space-y-2 p-4">
         <Button className="w-full" onClick={publish} loading={publishing} disabled={!hasProducts}><Send className="size-4" /> Terbitkan booking</Button>
+        {loaded.activeBankCount === 0 && <p role="alert" className="m-0 text-[12px] font-medium text-admin-warning">Belum ada rekening aktif di Pengaturan Invoice. Tambahkan dulu, karena pelanggan tidak tahu ke mana harus membayar.</p>}
         <p className="m-0 text-[11px] text-admin-muted">Pelanggan menerima tautan invoice (email/WhatsApp terverifikasi). Data jamaah diisi di halaman berikutnya.</p>
       </div>
       <DeleteBox confirmText={<>Hapus draf <b>{loaded.bookingCode}</b>? Draf belum punya kuota atau pembayaran — penghapusan permanen.</>} onDelete={remove} deleting={deleting} label="Hapus draf" />

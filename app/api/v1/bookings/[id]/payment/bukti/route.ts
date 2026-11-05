@@ -1,15 +1,22 @@
+import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { onboardingRefusal } from '@/lib/auth/contact'
+import { consume, policy } from '@/lib/auth/rateLimit'
+import { DocumentFileRejected, prepareDocumentFile } from '@/lib/documents/file'
+import { docIpLimited, readSingleFile } from '@/lib/documents/http'
+import { buildObjectKey, deleteObject, uploadBuffer } from '@/lib/storage/minio'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSession()
     const refusal = await onboardingRefusal(session.userId, session.role)
     if (refusal) return refusal
+    const limited = await docIpLimited(request)
+    if (limited) return limited
     const { id } = await params
 
     const booking = await prisma.booking.findFirst({
@@ -26,32 +33,28 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return NextResponse.json(err('Bukti pembayaran sebelumnya masih menunggu verifikasi'), { status: 422 })
     }
 
-    const formData = await request.formData()
-    const file = formData.get('file') as File | null
-    if (!file) return NextResponse.json(err('File tidak ditemukan'), { status: 400 })
-
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf']
-    if (!allowedTypes.includes(file.type)) {
-      return NextResponse.json(err('Format file tidak didukung. Gunakan JPG, PNG, atau PDF.'), { status: 400 })
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      return NextResponse.json(err('Ukuran file maksimal 5 MB.'), { status: 400 })
+    // Per akun, di atas batas per IP: unggahan gambar memicu pemrosesan sharp dan penulisan ke MinIO.
+    const perAccount = await consume(policy('pilgrimDocUser', session.userId))
+    if (!perAccount.allowed) {
+      const res = NextResponse.json(err('Terlalu banyak unggahan. Coba lagi nanti.'), { status: 429 })
+      res.headers.set('Retry-After', String(perAccount.retryAfterSec))
+      return res
     }
 
-    let filePath = `payments/${id}/${Date.now()}-${file.name}`
-    let uploaded = false
+    const raw = await readSingleFile(request)
+    if (raw instanceof NextResponse) return raw
 
-    // In production: upload to MinIO
-    // In dev: skip MinIO, just record the filename
-    if (process.env.NODE_ENV === 'production') {
-      const { uploadBuffer, buildObjectKey, BUCKET } = await import('@/lib/storage/minio')
-      const buffer = Buffer.from(await file.arrayBuffer())
-      filePath = buildObjectKey('payments', id, 'bukti', file.name)
-      await uploadBuffer(filePath, buffer, file.type)
-      uploaded = true
-    } else {
-      console.log(`[DEV] Bukti transfer: ${file.name} (${(file.size / 1024).toFixed(1)} KB) — skip MinIO`)
+    // Jenis ditentukan dari ISI berkas, bukan MIME/nama dari klien; gambar dienkode ulang (EXIF/GPS dibuang). Nama asli tidak dipakai di kunci objek.
+    let prepared: Awaited<ReturnType<typeof prepareDocumentFile>>
+    try {
+      prepared = await prepareDocumentFile(raw)
+    } catch (e) {
+      if (e instanceof DocumentFileRejected) return NextResponse.json(err(e.message), { status: 400 })
+      throw e
     }
+
+    const filePath = buildObjectKey('payments', id, 'bukti', `${randomUUID().slice(0, 8)}.${prepared.ext}`)
+    await uploadBuffer(filePath, prepared.body, prepared.mimeType)
 
     // Kunci baris booking: dua unggahan serentak tak boleh sama-sama lolos pemeriksaan "tak ada bukti menunggu" di atas.
     const created = await prisma.$transaction(async (tx) => {
@@ -70,13 +73,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         },
       })
       return true
-    }).catch(async (e: unknown) => { await discardUpload(uploaded, filePath); throw e })
+    }).catch(async (e: unknown) => { await discardUpload(filePath); throw e })
     if (!created) {
-      await discardUpload(uploaded, filePath) // ditolak di dalam kunci: jangan tinggalkan berkas yatim di MinIO (SEC-122)
+      await discardUpload(filePath) // ditolak di dalam kunci: jangan tinggalkan berkas yatim di MinIO (SEC-122)
       return NextResponse.json(err('Booking tidak dapat menerima bukti pembayaran saat ini'), { status: 422 })
     }
 
-    return NextResponse.json(ok({ filePath }))
+    return NextResponse.json(ok({ uploaded: true })) // kunci objek internal tidak dikirim ke klien
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return NextResponse.json(err('Unauthorized'), { status: 401 })
@@ -86,8 +89,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   }
 }
 
-async function discardUpload(uploaded: boolean, objectKey: string): Promise<void> {
-  if (!uploaded) return
-  const { deleteObject } = await import('@/lib/storage/minio')
+async function discardUpload(objectKey: string): Promise<void> {
   await deleteObject(objectKey).catch((e: unknown) => console.error('[bookings/id/payment/bukti] gagal membuang berkas yatim', e instanceof Error ? e.message : String(e)))
 }

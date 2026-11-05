@@ -7,6 +7,7 @@ import { formatAddressLine } from '@/lib/address/format'
 import { billOf } from '@/lib/invoice/bill'
 import { frozenTaxRules, type BankSnapshot, type CompanySnapshot } from '@/lib/invoice/issue'
 import { computeTax } from '@/lib/invoice/tax'
+import { payableBanks } from '@/lib/invoice/banks'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { plainText } from '@/lib/rich-text/doc'
 import { getPaymentConfig } from '@/lib/constants/payment'
@@ -87,7 +88,7 @@ const ITEM_ORDER = ['package', 'flight', 'hotel', 'transport', 'muthowif', 'cate
 const ITEMIZED = new Set(['package'])
 
 /** `db` = klien transaksi bila dipanggil di dalam transaksi (pratinjau draf/revisi, SEC-212): jangan mengambil koneksi pool kedua. */
-export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.TransactionClient, 'manifestFieldRequirement'> = prisma): Promise<InvoiceData> {
+export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.TransactionClient, 'manifestFieldRequirement' | 'bankAccount'> = prisma): Promise<InvoiceData> {
   // Satu baris invoice per ITEM (paket berbaris-banyak — komponen, hotel, penyesuaian — tampil sebagai satu baris bagi pilgrim).
   const groups = new Map<string, { type: string; itemId: string; label: string; detail: string; qty: number; amountCents: number }>()
   for (const l of booking.priceSnapshots) {
@@ -145,7 +146,8 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
     dueDate:       inv ? formatCalendarDate(inv.dueDate, DATE_SHORT_MONTH_2D) : null,
     revision:      inv?.revision ?? 1,
     company:       inv ? (inv.companySnapshot as CompanySnapshot) : { name: fallback.businessName, taxId: null, address: fallback.businessAddress || null, phone: fallback.businessWa || null, email: null, website: null },
-    banks:         inv ? (inv.bankSnapshot as BankSnapshot[]) : fallback.banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null })),
+    // Cadangan rekening aktif hanya selama tagihan masih bisa dibayar; dokumen booking lunas/batal/hangus tetap apa adanya.
+    banks:         inv ? (booking.status === 'active' && !booking.confirmedAt ? await payableBanks(inv.bankSnapshot as BankSnapshot[], db) : inv.bankSnapshot as BankSnapshot[]) : fallback.banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null })),
     taxLines:      inv ? (inv.taxLines as TaxLine[]) : [],
     taxAdded:      bill.taxAdded,
     paid:          bill.paid,

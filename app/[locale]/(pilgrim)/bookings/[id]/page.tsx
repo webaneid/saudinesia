@@ -1,14 +1,18 @@
 import React from 'react'
+import { BookingServiceCard, type ServiceRow } from './BookingServiceCard'
+import { PaymentProofUpload } from './PaymentProofUpload'
 import { safeLocale } from '@/lib/utils/locale'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import type { LucideIcon } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
+import { payableBanks } from '@/lib/invoice/banks'
 import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
 import type { BankSnapshot } from '@/lib/invoice/issue'
-import { CheckCircle, Clock, UserRound, UploadCloud, ArrowLeft, Building2, FileDown, Package, Plane } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, Landmark, Package, Plane, Stamp, UserRound, UtensilsCrossed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
@@ -36,6 +40,7 @@ export default async function BookingDetailPage({ params }: Props) {
       transports: { include: { transportQuota: { include: { pricing: { include: { trip: true, vehicle: true } } } } } },
       muthowif:   { include: { muthowif: true } },
       catering:   { include: { cateringOption: true } },
+      haji:       { include: { hajiProduct: { select: { name: true } } } },
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
       flights:    { include: { flightSchedule: { include: { route: true } } } },
       packages:   { include: { package: { select: { name: true } } } },
@@ -50,9 +55,9 @@ export default async function BookingDetailPage({ params }: Props) {
   // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.
   const sells = await itemSellTotals(prisma, booking.id)
   const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
-  // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF); setelan env lama hanya cadangan untuk booking tanpa invoice.
+  // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF; lib/invoice/banks.ts); setelan env lama hanya cadangan untuk booking tanpa invoice.
   const payTo = booking.invoice
-    ? (booking.invoice.bankSnapshot as BankSnapshot[])
+    ? await payableBanks(booking.invoice.bankSnapshot as BankSnapshot[])
     : banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null }))
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
@@ -79,6 +84,23 @@ export default async function BookingDetailPage({ params }: Props) {
     const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
     return typeof name === 'string' && name ? name : 'Jamaah'
   }
+
+  const day = (d: Date) => formatCalendarDate(d, DATE_NUMERIC)
+  const serviceCards: { icon: LucideIcon; title: string; rows: ServiceRow[] }[] = [
+    { icon: Package, title: 'Paket Umroh', rows: booking.packages.map(bp => ({ id: bp.id, name: bp.package.name, detail: `${day(bp.departureDate)} – ${day(bp.returnDate)} · ${bp.numPeople} orang`, price: sellOf('package', bp.id) })) },
+    { icon: Landmark, title: 'Haji', rows: booking.haji.map(bh => ({ id: bh.id, name: bh.hajiProduct.name, detail: `${bh.numPersons} orang`, price: sellOf('haji', bh.id) })) },
+    { icon: Plane, title: 'Tiket Pesawat', rows: booking.flights.map(bf => ({ id: bf.id, name: `${bf.flightSchedule.route.origin} → ${bf.flightSchedule.route.destination}`, detail: `${day(bf.departureDate)} · ${bf.numPassengers} penumpang`, price: sellOf('flight', bf.id) })) },
+    { icon: Building2, title: 'Hotel', rows: booking.hotels.map(h => ({ id: h.id, name: h.hotelRoomSchedule.period.hotel.name, detail: `${h.hotelRoomSchedule.period.hotel.city} · ${h.nights} malam · ${h.numRooms} kamar ${h.hotelRoomSchedule.roomType.name}`, price: sellOf('hotel', h.id) })) },
+    { icon: Bus, title: 'Transport', rows: booking.transports.map(bt => ({ id: bt.id, name: bt.transportQuota.pricing.trip.name, detail: `${day(bt.travelDate)} · ${bt.transportQuota.pricing.vehicle.name} · ${bt.numPassengers} penumpang`, price: sellOf('transport', bt.id) })) },
+    { icon: UserRound, title: 'Muthowif', rows: booking.muthowif.map(bm => ({ id: bm.id, name: bm.muthowif?.name ?? 'Layanan Muthowif', detail: `${day(bm.startDate)} – ${day(bm.endDate)} · ${bm.numDays} hari · ${bm.numPeople} orang`, price: sellOf('muthowif', bm.id) })) },
+    { icon: UtensilsCrossed, title: 'Katering', rows: booking.catering.map(bc => ({ id: bc.id, name: bc.cateringOption.name, detail: `${day(bc.startDate)} – ${day(bc.endDate)} · ${bc.numDays} hari · ${bc.numPeople} orang`, price: sellOf('catering', bc.id) })) },
+    { icon: Building2, title: 'Paket Ziarah', rows: booking.tourPackages.map(tp => ({ id: tp.id, name: tp.tourPackage.name, detail: `${day(tp.tourDate)} · ${tp.numPeople} orang${tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}`, price: sellOf('tourPackage', tp.id) })) },
+    { icon: Stamp, title: 'Visa', rows: booking.pilgrims.flatMap(p => p.visaApplication ? [{ id: p.visaApplication.id, name: p.visaApplication.visaProduct?.name ?? 'Visa', detail: displayName(p), price: sellOf('visa', p.visaApplication.id) }] : []) },
+  ]
+  // Diskon/biaya tambahan di total pesanan tidak menempel pada satu layanan: tampil terpisah supaya rincian di atas tetap menjumlah ke tagihan.
+  const shownCents = serviceCards.reduce((sum, c) => sum + c.rows.reduce((n, r) => n + Math.round(r.price * 100), 0), 0)
+  const adjustment = (Math.round(bill.subtotal * 100) - shownCents) / 100
+  const proofRejected = booking.payments[0]?.status === 'rejected'
 
   const statusCfg = BOOKING_STATUS[st]
   const deadline = booking.paymentDeadline
@@ -122,10 +144,11 @@ export default async function BookingDetailPage({ params }: Props) {
           )}
           <div className="rounded-lg bg-white/70 p-4 space-y-2 text-sm">
             <p className="font-semibold">Transfer ke rekening:</p>
+            {payTo.length === 0 && <p className="text-amber-800">Nomor rekening belum tersedia. Mohon hubungi tim Saudinesia sebelum melakukan transfer.</p>}
             <div className="grid grid-cols-2 gap-1">
               {payTo.map((b) => (
                 <React.Fragment key={`${b.bankName}-${b.accountNumber}`}>
-                  <span className="text-muted-foreground">Bank {b.bankName}</span>
+                  <span className="text-muted-foreground">{b.bankName}</span>
                   <span className="font-mono font-bold">{b.accountNumber} <span className="font-sans font-normal text-muted-foreground">a.n. {b.accountHolder}</span></span>
                 </React.Fragment>
               ))}
@@ -134,13 +157,12 @@ export default async function BookingDetailPage({ params }: Props) {
           <div className="text-center">
             <p className="text-2xl font-bold text-amber-900">{formatRupiah(bill.grandTotal)}</p>
           </div>
-          {st === 'awaiting_payment' && (
-            <Button asChild className="w-full">
-              <Link href={`/${locale}/bookings/${id}/upload-bukti`}>
-                <UploadCloud className="mr-2 h-4 w-4" /> Upload Bukti Transfer
-              </Link>
-            </Button>
+          {st === 'awaiting_payment' && proofRejected && (
+            <p role="alert" className="flex items-center gap-2 text-sm font-medium text-destructive">
+              <AlertCircle className="h-4 w-4 shrink-0" /> Bukti transfer sebelumnya ditolak. Periksa kembali lalu unggah bukti yang benar.
+            </p>
           )}
+          {st === 'awaiting_payment' && <PaymentProofUpload bookingId={booking.id} />}
           {st === 'payment_review' && (
             <div className="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle className="h-4 w-4" /> Bukti transfer sudah diupload, menunggu konfirmasi.
@@ -160,66 +182,8 @@ export default async function BookingDetailPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Services */}
-      {booking.hotels.length > 0 && (
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <h3 className="font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" /> Hotel</h3>
-          {booking.hotels.map(h => (
-            <div key={h.id} className="flex justify-between text-sm">
-              <div>
-                <p className="font-medium">{h.hotelRoomSchedule.period.hotel.name}</p>
-                <p className="text-muted-foreground capitalize">{h.hotelRoomSchedule.period.hotel.city} · {h.nights} malam · {h.numRooms} kamar {h.hotelRoomSchedule.roomType.name}</p>
-              </div>
-              <p className="font-semibold">{formatRupiah(sellOf('hotel', h.id))}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {booking.packages.length > 0 && (
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <h3 className="font-semibold flex items-center gap-2"><Package className="h-4 w-4 text-primary" /> Paket Umroh</h3>
-          {booking.packages.map(bp => (
-            <div key={bp.id} className="flex justify-between text-sm">
-              <div>
-                <p className="font-medium">{bp.package.name}</p>
-                <p className="text-muted-foreground">{formatCalendarDate(bp.departureDate, DATE_NUMERIC)} – {formatCalendarDate(bp.returnDate, DATE_NUMERIC)} · {bp.numPeople} orang</p>
-              </div>
-              <p className="font-semibold">{formatRupiah(sellOf('package', bp.id))}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {booking.flights.length > 0 && (
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <h3 className="font-semibold flex items-center gap-2"><Plane className="h-4 w-4 text-primary" /> Tiket Pesawat</h3>
-          {booking.flights.map(bf => (
-            <div key={bf.id} className="flex justify-between text-sm">
-              <div>
-                <p className="font-medium">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</p>
-                <p className="text-muted-foreground">{formatCalendarDate(bf.departureDate, DATE_NUMERIC)} · {bf.numPassengers} penumpang</p>
-              </div>
-              <p className="font-semibold">{formatRupiah(sellOf('flight', bf.id))}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {booking.tourPackages.length > 0 && (
-        <div className="rounded-xl border bg-card p-5 space-y-3">
-          <h3 className="font-semibold flex items-center gap-2"><Building2 className="h-4 w-4 text-primary" /> Paket Ziarah</h3>
-          {booking.tourPackages.map(tp => (
-            <div key={tp.id} className="flex justify-between text-sm">
-              <div>
-                <p className="font-medium">{tp.tourPackage.name}</p>
-                <p className="text-muted-foreground">{formatCalendarDate(tp.tourDate, DATE_NUMERIC)} · {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}</p>
-              </div>
-              <p className="font-semibold">{formatRupiah(sellOf('tourPackage', tp.id))}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Services: semua yang ditagih tampil di sini (dijaga scripts/test-payment-path.ts) */}
+      {serviceCards.map(c => <BookingServiceCard key={c.title} icon={c.icon} title={c.title} rows={c.rows} />)}
 
       {/* Pilgrims + document upload per jamaah */}
       <div className="space-y-4">
@@ -257,12 +221,20 @@ export default async function BookingDetailPage({ params }: Props) {
       </div>
 
       {/* Total */}
-      <div className="rounded-xl border bg-card p-5 flex justify-between items-center">
+      <div className="rounded-xl border bg-card p-5 space-y-3">
+        {adjustment !== 0 && (
+          <div className="flex justify-between text-sm">
+            <p className="text-muted-foreground">Penyesuaian harga</p>
+            <p className="font-semibold">{adjustment < 0 ? `-${formatRupiah(-adjustment)}` : formatRupiah(adjustment)}</p>
+          </div>
+        )}
+        <div className="flex justify-between items-center">
         <div>
           <p className="font-semibold">Total Tagihan</p>
           {booking.invoice && <p className="text-xs text-muted-foreground">Invoice {booking.invoice.number}{bill.taxAdded > 0 ? ` · termasuk pajak ${formatRupiah(bill.taxAdded)}` : ''}</p>}
         </div>
         <p className="text-2xl font-bold text-primary">{formatRupiah(bill.grandTotal)}</p>
+        </div>
       </div>
     </div>
   )

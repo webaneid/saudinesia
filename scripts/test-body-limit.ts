@@ -26,7 +26,7 @@ const upload = new RegExp(pattern)
 const API = 'app/api'
 const routes = (readdirSync(API, { recursive: true }) as string[]).filter(f => f.endsWith('route.ts')).map(f => join(API, f)).sort()
 // Pembaca multipart di lib — route yang memakainya adalah route unggah.
-const LIB_READERS: Record<string, RegExp> = { 'lib/documents/http.ts': /\breadUpload\(/, 'lib/media/handlers.ts': /\blistPOST\b/ }
+const LIB_READERS: Record<string, RegExp> = { 'lib/documents/http.ts': /\b(readUpload|readSingleFile)\(/, 'lib/media/handlers.ts': /\blistPOST\b/ }
 const isUploadRoute = (src: string) => /\.formData\(\)/.test(src) || Object.values(LIB_READERS).some(re => re.test(src))
 // app/api/v1/a/[id]/b/route.ts → /api/v1/a/cm9abc_1-x/b (segmen dinamis diisi bentuk id sungguhan: cuid/uuid/enum).
 const urlOf = (f: string) => '/' + relative('app', f).split(sep).slice(0, -1).map(s => (s.startsWith('[') ? 'cm9abc_1-x' : s)).join('/')

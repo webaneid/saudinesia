@@ -663,3 +663,16 @@ Step 8 — Build + dokumentasi [x] SELESAI 2026-07-25
 ### D. Yang DIKONFIRMASI benar (tidak berubah)
 Registry kuota lengkap 7 tipe; reserve→persist→confirm→release konsisten untuk Hotel/Transport/Muthowif/Paket Ziarah/Haji; `cancelBooking()` satu fungsi untuk self-cancel dan cron; harga Hotel(per malam)/Transport/Muthowif/Paket Ziarah/Haji/Visa dihitung server dari referensi; manifest `fieldValues` + `visaProductId` opsional; invoice PDF dari 7 tipe; `Serializable` dipakai; kontak wajib sebelum booking; rate limit pembuatan booking.
 
+## Jalur bayar transfer manual (as-built 2026-11-06)
+
+| Langkah | Tempat | Catatan |
+|---------|--------|---------|
+| Jamaah melihat tagihan dan rekening | `app/[locale]/(pilgrim)/bookings/[id]/page.tsx` | Rekening dari `payableBanks` (`lib/invoice/banks.ts`): snapshot invoice, atau rekening aktif bila snapshot kosong |
+| Jamaah mengunggah bukti | `PaymentProofUpload` → `POST /api/v1/bookings/[id]/payment/bukti` | Isi berkas diperiksa `prepareDocumentFile`; satu bukti `pending` pada satu waktu; `Payment.amount` = 0 sampai diverifikasi |
+| Admin membuka bukti | `GET /api/v1/admin/payments/[id]/bukti` | Dialihkan ke URL presigned 15 menit; kunci objek dibaca dari baris pembayaran |
+| Admin mengonfirmasi atau menolak | `PaymentActions` → `POST /api/v1/admin/payments/[id]/confirm` | `lib/payments/process.ts`; ditolak → jamaah melihat pesan dan bisa mengunggah lagi |
+
+Setiap jenis item di `lib/booking/lineItems.ts` wajib punya kartu di halaman jamaah dan admin (dijaga `scripts/test-payment-path.ts`). Jenis item baru tanpa kartu membuat tes merah.
+
+**Gap aktif:** booking yang sudah dikonfirmasi tidak bisa dibatalkan, jamaah hanya bisa membatalkan lewat API (tanpa tombol), admin tak punya jalur batal, dan refund tak punya layar pemrosesan.
+

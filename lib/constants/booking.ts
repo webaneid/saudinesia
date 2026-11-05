@@ -5,7 +5,7 @@
 export const BOOKING_STATUS = {
   draft:            { label: 'Draf',                    badge: 'secondary'   },
   awaiting_payment: { label: 'Menunggu Pembayaran',     badge: 'warning'     },
-  payment_review:   { label: 'Pembayaran Diverifikasi', badge: 'secondary'   },
+  payment_review:   { label: 'Menunggu Verifikasi', badge: 'secondary'   },
   confirmed:        { label: 'Dikonfirmasi',            badge: 'success'     },
   in_progress:      { label: 'Dalam Perjalanan',        badge: 'default'     },
   completed:        { label: 'Selesai',                 badge: 'success'     },

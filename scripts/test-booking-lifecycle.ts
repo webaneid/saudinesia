@@ -244,7 +244,7 @@ await t('PENJAGA: draf tak pernah sampai ke jamaah (daftar, detail, API, invoice
   const bukti = read('app/api/v1/bookings/[id]/payment/bukti/route.ts')
   assert.match(bukti, /FOR UPDATE/); assert.match(bukti, /fresh\.status !== 'active' \|\| fresh\.confirmedAt !== null/)
   assert.match(bukti, /userId: session\.userId, status: \{ not: 'draft' \}/, 'bukti: draf = 404')
-  assert.ok((bukti.match(/discardUpload\(uploaded, filePath\)/g) ?? []).length >= 2, 'bukti: berkas dibuang bila ditolak di dalam kunci atau transaksi gagal (SEC-122)')
+  assert.ok((bukti.match(/discardUpload\(filePath\)/g) ?? []).length >= 2, 'bukti: berkas dibuang bila ditolak di dalam kunci atau transaksi gagal (SEC-122)')
 })
 await t('PENJAGA: cron memakai zona aplikasi + dimuat SETELAH zona dimuat; tak ada lagi pembatalan otomatis 24 jam; hangus lewat cancelBooking(…, expired); proses pembayaran memeriksa active+belum dikonfirmasi', () => {
   const job = read('lib/cron/bookingLifecycleJob.ts')

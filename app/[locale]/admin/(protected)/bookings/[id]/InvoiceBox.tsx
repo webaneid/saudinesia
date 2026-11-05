@@ -9,12 +9,14 @@ type Props = {
   bookingId: string
   invoice: { number: string; invoiceDate: Date; dueDate: Date; revision: number; taxLines: TaxLine[] } | null
   bill: Bill
+  /** Tidak ada rekening beku maupun rekening aktif: pelanggan tidak punya tujuan bayar. */
+  noBank?: boolean
 }
 
 const pct = (n: number) => `${Number(n.toFixed(3))}%`
 
 // Kotak Invoice di detail booking (docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a): nomor, tanggal, jatuh tempo, rincian tagihan dari SATU pembaca (`billOf`).
-export function InvoiceBox({ bookingId, invoice, bill }: Props) {
+export function InvoiceBox({ bookingId, invoice, bill, noBank }: Props) {
   const row = (label: string, value: string, strong = false, key?: string | number) => (
     <div key={key} className={`flex items-baseline justify-between gap-3 text-[13px] ${strong ? 'font-bold text-admin-ink' : 'text-admin-ink/80'}`}>
       <span>{label}</span><span className="tabular-nums">{value}</span>
@@ -45,6 +47,7 @@ export function InvoiceBox({ bookingId, invoice, bill }: Props) {
         {row('Terbayar', formatRupiah(bill.paid))}
         {row(bill.balance < 0 ? 'Kelebihan bayar' : 'Sisa', formatRupiah(Math.abs(bill.balance)), true)}
       </div>
+      {noBank && <p role="alert" className="m-0 text-[12px] font-medium text-admin-warning">Belum ada rekening aktif, jadi pelanggan tidak tahu ke mana harus membayar. Tambahkan di Pengaturan Invoice.</p>}
       {invoice && <InvoiceLinkActions bookingId={bookingId} />}
     </div>
   )
