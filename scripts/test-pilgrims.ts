@@ -64,6 +64,27 @@ const shape = (r: WriteResult) => {
   return { ...r, card: { ...rest, editedAfterCreate: Date.parse(updatedAt) - Date.parse(createdAt) } }
 }
 
+await t('cek kunci PII di dalam transaksi (SEC-212): nilai cek ikut rollback dan hasilnya TIDAK diingat, jadi kunci berikutnya tetap menulis nilai ceknya sendiri', async () => {
+  const good = { i: env.PII_INDEX_KEY, e: env.PII_ENCRYPTION_KEY }
+  const saved = await prisma.piiKeyCheck.findMany()
+  await prisma.piiKeyCheck.deleteMany({})
+  env.PII_INDEX_KEY = hex(); env.PII_ENCRYPTION_KEY = hex() // objek kunci baru = belum pernah terverifikasi di proses ini
+  try {
+    const rollback = new Error('rollback')
+    await assert.rejects(prisma.$transaction(async tx => { await ensurePiiKeysMatch(tx); assert.equal(await tx.piiKeyCheck.count(), 2); throw rollback }), e => e === rollback)
+    assert.equal(await prisma.piiKeyCheck.count(), 0, 'nilai cek ikut rollback')
+    await ensurePiiKeysMatch()
+    assert.equal(await prisma.piiKeyCheck.count(), 2, 'pemakaian berikutnya menulis ulang (hasil rollback tak diingat)')
+    // Nilai cek sudah ada → hasil di dalam transaksi boleh diingat: tak ada lagi yang bergantung pada transaksi itu.
+    env.PII_INDEX_KEY = env.PII_INDEX_KEY.toUpperCase() // isi sama, objek kunci baru
+    await prisma.$transaction(tx => ensurePiiKeysMatch(tx))
+  } finally {
+    env.PII_INDEX_KEY = good.i; env.PII_ENCRYPTION_KEY = good.e
+    await prisma.piiKeyCheck.deleteMany({})
+    await prisma.piiKeyCheck.createMany({ data: saved })
+  }
+})
+
 await t('cek kunci PII (SEC-168): pemakaian pertama menulis nilai cek; kunci indeks/enkripsi lain → ditolak; kunci benar → lolos lagi', async () => {
   await ensurePiiKeysMatch()
   const rows = await prisma.piiKeyCheck.findMany({ orderBy: { id: 'asc' } })

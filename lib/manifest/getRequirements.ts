@@ -2,8 +2,8 @@ import { prisma } from '@/lib/db'
 import type { ManifestFieldRequirement } from '@prisma/client'
 
 // docs/arsitektur-manifest.md §4 — sumber kebenaran field manifest per produk.
-export async function getManifestFieldRequirements(productType: string, productId: string) {
-  return prisma.manifestFieldRequirement.findMany({
+export async function getManifestFieldRequirements(productType: string, productId: string, db: Pick<typeof prisma, 'manifestFieldRequirement'> = prisma) {
+  return db.manifestFieldRequirement.findMany({
     where: { productType, productId },
     orderBy: { order: 'asc' },
   })

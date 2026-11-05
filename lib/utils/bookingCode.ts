@@ -17,7 +17,7 @@ type Options = { isolationLevel?: Prisma.TransactionIsolationLevel; lockWaitMs?:
 
 export class BookingCodeBusyError extends Error {}
 
-// Antrean dalam proses DI DEPAN kunci DB: penunggu kunci memegang satu koneksi selama menunggu, dan pemegang kunci masih memerlukan koneksi lain (ada kueri `prisma.` global di jalur harga).
+// Antrean dalam proses DI DEPAN kunci DB: penunggu kunci memegang satu koneksi selama menunggu.
 // Tanpa antrean, ledakan pesanan menghabiskan pool sehingga pemegang kunci — dan seluruh situs — ikut tertahan. Aplikasi berjalan satu replika; antrean ini hanya soal koneksi, kebenaran kode tetap dijaga kunci DB.
 let queueTail: Promise<unknown> = Promise.resolve()
 

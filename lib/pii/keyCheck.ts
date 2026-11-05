@@ -24,7 +24,7 @@ export async function ensurePiiKeysMatch(db: Db = prisma): Promise<void> {
   if (verified.has(keys)) return
   const encId = `enc:${keys.encryption.version}`
   // Tulis bila belum ada (skipDuplicates = ON CONFLICT DO NOTHING: dua proses serentak tak saling menimpa), lalu SELALU bandingkan dengan yang tersimpan.
-  await db.piiKeyCheck.createMany({
+  const { count } = await db.piiKeyCheck.createMany({
     data: [{ id: 'index', value: piiIndex('key-check', CANARY) }, { id: encId, value: encryptPii('key-check', CANARY) }],
     skipDuplicates: true,
   })
@@ -43,5 +43,7 @@ export async function ensurePiiKeysMatch(db: Db = prisma): Promise<void> {
     }
     if (opened !== CANARY) throw new PiiKeyMismatchError(`kunci enkripsi versi ${v}`)
   }
-  verified.add(keys)
+  // `db` bisa klien transaksi (pembuatan jamaah booking, SEC-212). Nilai cek yang baru ditulis di sana ikut hilang bila transaksi di-rollback (pratinjau draf), jadi jangan diingat:
+  // proses yang mengingatnya akan menyegel PII tanpa nilai cek, dan env dengan kunci lain kelak diterima. Hasil diingat hanya bila tak ada yang ditulis, atau tulisan itu sudah commit.
+  if (count === 0 || db === prisma) verified.add(keys)
 }
