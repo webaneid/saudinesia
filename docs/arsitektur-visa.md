@@ -27,7 +27,7 @@
 | `VisaApplication` (`visa_applications`) | `bookingPilgrimId` (unik — satu visa per jamaah booking), `visaProductId?` (FK `SET NULL`), `visaType` (salinan tampilan), `status VisaStatus`, `submittedAt`, `issuedAt`, `rejectionReason`, `isForceMajeure`, `notes`, `selectedDurationDays?`, `plannedTravelDate? @db.Date` | Ditulis HANYA `lib/booking/lineItems.ts` (pesan) dan `lib/booking/revise.ts` (revisi); status lewat route status (§4). |
 | `VisaStatus` | `pending_documents → documents_complete → submitted_to_syarikah → in_review → issued \| rejected`; `rejected → pending_documents` | Transisi = `VISA_STATUS_TRANSITIONS` (`lib/validators/visaStatus.ts`), dipakai klien (`VisaActions.tsx`) DAN server. |
 | `DocumentRequirement` (`productType='visa'`) | `documentTypeId`, `label?`, `description`, `required`, `order` | Syarat dokumen produk (katalog `DocumentType`), penulis tunggal `lib/documents/requirements.ts`. |
-| `ManifestFieldRequirement` (`productType='visa'`) | field data jamaah per produk | Lihat `docs/arsitektur-manifest.md`; jamaah tanpa visa memakai field "core". |
+| `ManifestFieldRequirement` (`productType='visa'`) | field data jamaah per produk | Dikelola di tab "Data jamaah" editor visa, ditulis hanya oleh `lib/manifest/fields.ts`; `POST` produk mengisi 9 kolom bawaan, `GET`/`PUT` `[id]` membawa `manifestFields` (`docs/arsitektur-manifest.md` §9). Jamaah tanpa visa memakai field "core". |
 | `ProductCost` / `PreferredVendor` (`productType='visa'`) | komponen `individu` dan `biaya_non_hotel` (BRN), `costTiers` per rentang hari | Masukan HPP; harga jual hidup di `price_points` (§3). |
 | `ProductImage` (`ownerType='visa'`) | satu foto unggulan | `lib/media/owners.ts` mode `featured`. |
 

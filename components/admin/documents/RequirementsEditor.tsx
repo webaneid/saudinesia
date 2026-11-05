@@ -6,6 +6,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
 import { FormField } from '@/components/admin/ui/FormField'
+import { IconButton } from '@/components/admin/ui/IconButton'
 import { Switch } from '@/components/admin/ui/Switch'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { documentIcon } from '@/lib/documents/icons'
@@ -124,16 +125,5 @@ export function RequirementsEditor({ rows, onChange, productNoun = 'produk ini' 
         })}
       </div>
     </div>
-  )
-}
-
-function IconButton({ label, danger, disabled, onClick, children }: { label: string; danger?: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }) {
-  return (
-    <button
-      type="button" title={label} aria-label={label} disabled={disabled} onClick={onClick}
-      className={`grid size-8 place-items-center rounded-lg transition-colors disabled:opacity-30 ${danger ? 'text-admin-muted hover:bg-admin-danger/10 hover:text-admin-danger' : 'text-admin-muted hover:bg-admin-spot hover:text-admin-ink'}`}
-    >
-      {children}
-    </button>
   )
 }
