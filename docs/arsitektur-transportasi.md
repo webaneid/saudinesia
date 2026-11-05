@@ -115,9 +115,11 @@ Skema **cocok 100% dengan rencana v3** — tidak ada gap antara `docs/decisions.
 | GET, PUT | `/api/v1/admin/products/transport/vehicles/[id]` | `requireManager()` | `.../vehicles/[id]/route.ts` — **tidak ada DELETE**, disengaja: kendaraan dipakai `TransportPricing`, nonaktifkan via `isActive` bukan hapus |
 | GET, POST, DELETE | `/api/v1/admin/products/transport/vehicles/[id]/images` | `requireManager()` | Galeri foto via MinIO, key `transport/{vehicleId}/images/{filename}` |
 | GET, POST | `/api/v1/admin/products/transport/trips` | `requireManager()` | `.../trips/route.ts` |
-| GET, PUT, DELETE | `/api/v1/admin/products/transport/trips/[id]` | `requireManager()` | Delete cascade ke `TransportPricing` |
+| GET, PUT, DELETE | `/api/v1/admin/products/transport/trips/[id]` | `requireManager()` | Hapus-aman `deleteTransportTrip` (§10): tanpa rujukan semuanya hilang, ada rujukan → nonaktif |
 | GET, POST | `/api/v1/admin/products/transport/pricing` | `requireManager()` | Cek duplikat `(tripId, vehicleId)` sebelum insert → 409 jika sudah ada |
 | PUT, DELETE | `/api/v1/admin/products/transport/pricing/[id]` | `requireManager()` | **Tidak ada GET single** — tidak masalah karena trip edit page load via `/trips/[id]` yang sudah include pricing |
+| GET, POST | `/api/v1/admin/products/transport/quotas` | `requireManager()` | Daftar kuota satu trip (berpaginasi, hari ini ke depan) dan buka rentang tanggal (§10) |
+| PUT, DELETE | `/api/v1/admin/products/transport/quotas/[id]` | `requireManager()` | Ubah kursi dan hapus kuota yang belum pernah dipesan (§10) |
 | GET | `/api/v1/catalog/transport` | publik | Query `TransportQuota` → `include pricing → include trip, vehicle`; filter `category` opsional + `travelDate`; hitung harga via `detectSeason()` lalu akses dinamis `pricing[\`charter${suffix}\`]` / `pricing[\`perSeat${suffix}\`]`; grouping `byTrip` disiapkan di response |
 
 Booking creation (`app/api/v1/bookings/route.ts`):
@@ -166,6 +168,7 @@ Berbeda dengan Visa, modul Transport v3 **hampir tidak ada gap struktural** — 
 | 3 | Tidak ada `DELETE` untuk vehicle dan tidak ada `GET` single untuk pricing | `.../vehicles/[id]/route.ts`, `.../pricing/[id]/route.ts` | Disengaja/tidak masalah — vehicle dinonaktifkan bukan dihapus (masih dipakai pricing), pricing tunggal tidak dibutuhkan karena selalu diambil bersama trip |
 | ~~4~~ | ~~🔴 KRITIS — `unitPrice`/`totalPrice` booking transport dipercaya MENTAH dari body request client~~ | — | **DITUTUP 2026-07-19** — bagian dari upgrade §9. `unitPrice`/`totalPrice`/`isCharter` dihapus total dari `transportSelectionSchema` (`lib/validators/booking.ts`); `app/api/v1/bookings/route.ts` sekarang fetch `TransportQuota.pricing.price` server-side di dalam `$transaction()`. Diverifikasi lewat script test langsung: client kirim `unitPrice:1` (field yang sudah tidak ada di schema, sekadar dibuktikan diabaikan), harga tersimpan tetap `TransportPricing.price` asli. Lihat `docs/decisions.md` 2026-07-19 "Modul Transportasi: Upgrade §9 Selesai & Terverifikasi". |
 | ~~5~~ | ~~Semua route admin Transport pakai `catch{...403}` polos~~ | — | **DITUTUP 2026-07-19** — semua route (`vehicles`, `vehicles/[id]`, `trips`, `trips/[id]`, `pricing`, `pricing/[id]`, `pricing/[id]/cost` baru, `simulate` baru) sekarang `catch (e)` dengan `console.error` + pembedaan 403 (Unauthorized/Forbidden) vs 500 (error lain), pola sama Visa/Flight/Hotel. |
+| ~~6~~ | ~~`TransportQuota` hanya ditulis seed, tanggalnya sudah lewat, sehingga transport tidak punya pilihan saat booking~~ | — | **DITUTUP 2026-11-06** — panel "Kuota Tanggal" di editor trip, lihat §10 |
 
 Item #1 masih terbuka (di luar scope upgrade §9 — user tidak memintanya diperbaiki di sini). Item #4 dan #5 tertutup sebagai efek samping struktural dari upgrade §9, sama pola dengan Hotel §10/§11.
 
@@ -355,3 +358,23 @@ Total ~11 file unik kena dampak (irisan cukup besar antar 3 daftar di atas). Ska
 7. **Fase 6** ✓ — `bun run build` 0 error. Verifikasi browser end-to-end: admin cost editor (quick-add vendor "Syarikah Al-Rajhi Transport", kategori `transport`, harga IDR 5.000.000 → HPP Rp 5.000.000 tanpa konversi kurs karena IDR, Harga Jual Rp 6.000.000 margin 20% dibulatkan) → `TransportPricing.price` ter-update di DB → katalog publik `/transport` langsung menampilkan Rp 6.000.000. Script test Gap #4 (`verify_gap4_tmp.ts`, dijalankan lalu dihapus): simulasi client kirim `unitPrice:1` pada quota dengan `TransportPricing.price` asli Rp 4.500.000 — harga yang dipakai server tetap Rp 4.500.000, membuktikan server sepenuhnya mengabaikan harga client.
 
 Deviasi Fase Eksekusi SOP diterapkan (sama seperti Hotel §10): Fase 0-5 dieksekusi sebagai satu rangkaian berkelanjutan tanpa `bun run build` hijau di tiap fase individual, karena refactor pada modul existing dengan konsumen berantai (schema → API → UI admin → UI publik → wizard → booking creation) membuat stub/redo paksa per-fase tidak realistis. Verifikasi end-to-end menyeluruh dilakukan di Fase 6, konsisten dengan tujuan asli SOP (verifikasi sebelum lanjut, bukan menumpuk perubahan tak-terverifikasi).
+
+---
+
+## §10. Kuota tanggal lewat admin — SELESAI & TERVERIFIKASI (2026-11-06, as-built)
+
+**Gap yang ditutup:** `TransportQuota` hanya pernah ditulis `prisma/seed.ts`, dan semua tanggalnya sudah lewat. Tanpa kuota tanggal ke depan, form booking admin dan checkout jamaah tak punya pilihan transport, jadi produk ini tidak bisa dijual.
+
+**Penulis tunggal `lib/transport/quotas.ts`** (penahanan kursi saat booking tetap di `lib/quota` lewat adapter):
+- `openQuotas`: buka rentang tanggal untuk satu kendaraan. Tanggal yang sudah ada dilewati, bukan ditimpa, karena kursinya mungkin sudah diatur atau terpakai. Tanggal lampau, akhir sebelum mulai, dan rentang di atas 366 hari ditolak 422.
+- `updateQuotaSeats`: kunci baris (`FOR UPDATE`); kursi di bawah `pendingSeats + bookedSeats` ditolak 409.
+- `deleteQuota`: hanya bila tak pernah dirujuk `BookingTransport`/`BookingTourPackage`, selain itu 409. FK paket ziarah `SET NULL` tidak menolak hapus, jadi rujukannya dihitung eksplisit.
+- `listQuotas`: berpaginasi, hari ini ke depan, urut tanggal lalu `id`.
+
+**Validator** `lib/validators/transportQuota.ts` (`.strict()`, kursi 1 sampai 10.000). Kursi boleh melebihi kapasitas satu kendaraan karena operator bisa menyediakan beberapa unit di tanggal yang sama.
+
+**UI** `trips/[id]/TransportQuotaPanel.tsx` di editor trip: pilih kendaraan (kursi terisi dari kapasitas), rentang tanggal, tabel per trip dengan filter kendaraan, ubah kursi di baris, hapus lewat `useConfirm`. Kendaraan belum berharga tetap bisa dibuka tanggalnya, dengan peringatan bahwa booking ditolak sampai harganya diisi. `/admin/quotas` tetap hanya menampilkan.
+
+**Hapus-aman** (`lib/admin/productDelete.ts`): `deleteTransportPricing` dan `deleteTransportTrip`. Kuota yang belum terpakai ikut terhapus; bila ada booking atau paket yang merujuk, dinonaktifkan dengan pesan. Sebelumnya FK kuota membuat hapus gagal 500 sementara halaman tetap berpindah seolah berhasil. Harga kendaraan nonaktif kini bisa diaktifkan kembali dari baris harganya.
+
+**Bukti:** `scripts/test-transport-quotas.ts` (DB sekali pakai). Curl: tanpa login dan jamaah ditolak, tanggal lampau 422, field asing dan kursi 0 ditolak 400, ulang buka `{created:0, skipped:3}`. Browser: buka rentang, kursi 0 menampilkan galat server, ubah kursi, hapus, tampilan 375 px; tanggal yang dibuka muncul di katalog booking admin dan pratinjau draf menghitung Rp 500.000 dari harga jual.

@@ -902,3 +902,9 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 11 — Front-end pelanggan memakai engine
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
+
+## Kuota tanggal Transport lewat admin (`docs/arsitektur-transportasi.md` §10, 2026-11-06)
+
+- [x] Panel "Kuota Tanggal" di editor trip, penulis tunggal `lib/transport/quotas.ts`, hapus-aman harga kendaraan dan trip. Menutup penghalang simulasi booking produk Transport.
+- [ ] Isi data sungguhan: harga jual transport (1 dari 20 harga aktif yang berharga) dan harga Paket Ziarah (pratinjau masih 422 "belum ditetapkan"). Ini entri data lewat UI, bukan perubahan kode.
+- [ ] Simulasi penuh di browser: draf, terbit, bayar, konfirmasi, batal.

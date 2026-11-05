@@ -17,7 +17,7 @@ import { deleteRequirementsOf } from '@/lib/documents/requirements'
 
 type Tx = Prisma.TransactionClient
 /** Nama tabel yang boleh dikunci — literal union (bukan masukan), karena identifier tak bisa di-bind. */
-type LockTable = 'muthowif' | 'tourism_sites' | 'hotels' | 'packages' | 'tour_packages' | 'visa_products'
+type LockTable = 'muthowif' | 'tourism_sites' | 'hotels' | 'packages' | 'tour_packages' | 'visa_products' | 'transport_pricing' | 'transport_trips'
 
 const notFound = () => Object.assign(new Error('not found'), { code: 'P2025' })
 const referenced = () => Object.assign(new Error('referenced'), { code: 'P2003' })
@@ -48,7 +48,8 @@ type Spec = {
   drop: (tx: Tx) => Promise<void>
   deactivate: () => Promise<unknown>
   usedBy: (n: number) => string
-  mediaType: MediaProductType
+  /** Kosong = produk ini tak punya foto. */
+  mediaType?: MediaProductType
 }
 
 function run(s: Spec): Promise<DeleteOutcome> {
@@ -63,10 +64,50 @@ function run(s: Spec): Promise<DeleteOutcome> {
         if ((await s.count(tx)) > 0) throw referenced() // rujukan masuk di antara pemeriksaan dan hapus → jalur nonaktif
         await s.drop(tx)
       })
-      await purgeProductMedia(s.mediaType, s.id)
+      if (s.mediaType) await purgeProductMedia(s.mediaType, s.id)
     },
     deactivate: s.deactivate,
     usedBy: s.usedBy,
+  })
+}
+
+// Kuota tanggal yang belum pernah dipesan ikut terhapus; yang pernah dipesan menjadi riwayat. Rujukan `includedTransportPricing`/`transportTrip` paket dan
+// `transportQuotaId` paket ziarah ber-FK SET NULL, jadi hanya penghitungan ini yang melindunginya.
+const countPricingRefs = async (db: Tx | typeof prisma, pricing: Prisma.TransportPricingWhereInput): Promise<number> =>
+  await db.bookingTransport.count({ where: { transportQuota: { pricing } } })
+  + await db.bookingTourPackage.count({ where: { transportQuota: { pricing } } })
+  + await db.package.count({ where: { includedTransportPricing: pricing } })
+  + await db.tourPackage.count({ where: { includedTransportPricing: pricing } })
+
+const dropPricing = async (tx: Tx, ids: string[]): Promise<void> => {
+  await tx.transportQuota.deleteMany({ where: { pricingId: { in: ids } } })
+  await tx.transportPricing.deleteMany({ where: { id: { in: ids } } })
+  await dropPolymorphic(tx, 'transport', ids)
+}
+
+export function deleteTransportPricing(id: string): Promise<DeleteOutcome> {
+  return run({
+    table: 'transport_pricing', id,
+    count: db => countPricingRefs(db, { id }),
+    drop: tx => dropPricing(tx, [id]),
+    deactivate: () => prisma.transportPricing.update({ where: { id }, data: { isActive: false } }),
+    usedBy: n => `Kendaraan ini dirujuk ${n} booking atau paket`,
+  })
+}
+
+export function deleteTransportTrip(id: string): Promise<DeleteOutcome> {
+  return run({
+    table: 'transport_trips', id,
+    count: async db => await countPricingRefs(db, { tripId: id })
+      + await db.package.count({ where: { transportTripId: id } })
+      + await db.tourPackage.count({ where: { transportTripId: id } }),
+    drop: async tx => {
+      const rows = await tx.transportPricing.findMany({ where: { tripId: id }, select: { id: true } })
+      await dropPricing(tx, rows.map(r => r.id))
+      await tx.transportTrip.delete({ where: { id } })
+    },
+    deactivate: () => prisma.transportTrip.update({ where: { id }, data: { isActive: false } }),
+    usedBy: n => `Trip ini dirujuk ${n} booking atau paket`,
   })
 }
 
