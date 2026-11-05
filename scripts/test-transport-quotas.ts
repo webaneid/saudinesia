@@ -149,6 +149,25 @@ await t('ROUTE: semua metode memeriksa peran manager; penulis kuota hanya lib/tr
   assert.deepEqual(writers, ['lib/admin/productDelete.ts', 'lib/transport/quotas.ts'])
 })
 
+// Pembersihan penuh: test-seed-guard (berjalan sesudah uji ini di `bun run test`) menolak DB yang masih berisi jamaah atau booking.
+await t('PEMBERSIHAN: tak ada data uji tersisa', async () => {
+  const bookings = { booking: { userId: customer.id } }
+  await prisma.bookingTransport.deleteMany({ where: bookings })
+  await prisma.bookingTourPackage.deleteMany({ where: bookings })
+  await prisma.booking.deleteMany({ where: { userId: customer.id } })
+  await prisma.tourPackage.deleteMany({ where: { name: { startsWith: tag } } })
+  await prisma.package.deleteMany({ where: { name: { startsWith: tag } } })
+  const pricingRows = await prisma.transportPricing.findMany({ where: { vehicleId: vehicle.id }, select: { id: true } })
+  await prisma.pricePoint.deleteMany({ where: { ownerType: 'transport', ownerId: { in: pricingRows.map(p => p.id) } } })
+  await prisma.transportQuota.deleteMany({ where: { pricing: { vehicleId: vehicle.id } } })
+  await prisma.transportPricing.deleteMany({ where: { vehicleId: vehicle.id } })
+  await prisma.transportTrip.deleteMany({ where: { name: { startsWith: tag } } })
+  await prisma.transportVehicle.delete({ where: { id: vehicle.id } })
+  await prisma.user.delete({ where: { id: customer.id } })
+  assert.equal(await prisma.user.count({ where: { email: { startsWith: tag } } }), 0)
+  assert.equal(await prisma.transportTrip.count({ where: { name: { startsWith: tag } } }), 0)
+})
+
 await prisma.$disconnect()
 if (failed) { console.log(`\n${failed} GAGAL`); process.exit(1) }
 console.log('\nSEMUA LULUS')
