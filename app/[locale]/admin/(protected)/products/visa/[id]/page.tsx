@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, FileText, Info, KeyRound, Link2, Loader2, Save, Wallet } from 'lucide-react'
+import { Check, FileText, Info, KeyRound, Link2, ListChecks, Loader2, Save, Wallet } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
@@ -12,15 +12,17 @@ import { CostTiersTab } from './CostTiersTab'
 import { ProductInfoTab } from './ProductInfoTab'
 import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
+import { ManifestFieldsEditor } from '@/components/admin/manifest/ManifestFieldsEditor'
+import { bodyFromManifestRows, rowFromField, type ManifestRow } from '@/components/admin/manifest/manifestRows'
 import { RulesTab } from './RulesTab'
 import { parseRequiredComponents, visaSalesModel, type RequiredComponent } from '@/lib/validators/visa'
 import type { DeleteResult, InfoForm, ProductDetail } from './types'
 
-type TabKey = 'info' | 'docs' | 'rules' | 'price'
+type TabKey = 'info' | 'docs' | 'fields' | 'rules' | 'price'
 type Props = { params: Promise<{ locale: string; id: string }> }
 
 // Snapshot memakai BADAN API syarat (bukan baris mentah) — label yang diketik sama dengan katalog tidak dihitung perubahan.
-const snapshotOf = (form: InfoForm, reqs: RequirementRow[], rules: RequiredComponent[]) => JSON.stringify({ form, reqs: bodyFromRows(reqs), rules })
+const snapshotOf = (form: InfoForm, reqs: RequirementRow[], rules: RequiredComponent[], fields: ManifestRow[]) => JSON.stringify({ form, reqs: bodyFromRows(reqs), rules, fields: bodyFromManifestRows(fields) })
 
 export default function VisaEditPage({ params }: Props) {
   const { locale, id } = use(params)
@@ -31,6 +33,8 @@ export default function VisaEditPage({ params }: Props) {
   const [reqs, setReqs] = useState<RequirementRow[]>([])
   const [baseReqs, setBaseReqs] = useState<RequirementRow[]>([]) // baris tersimpan, untuk Batalkan
   const [rules, setRules] = useState<RequiredComponent[]>([])
+  const [fieldRows, setFieldRows] = useState<ManifestRow[]>([])
+  const [baseFieldRows, setBaseFieldRows] = useState<ManifestRow[]>([]) // baris tersimpan, untuk Batalkan
   const [snapshot, setSnapshot] = useState('')
   const [tab, setTab] = useState<TabKey>('info')
   const [saving, setSaving] = useState(false)
@@ -58,7 +62,10 @@ export default function VisaEditPage({ params }: Props) {
       setReqs(nextReqs)
       setBaseReqs(nextReqs)
       setRules(nextRules)
-      setSnapshot(snapshotOf(nextForm, nextReqs, nextRules))
+      const nextFields = v.manifestFields.map(rowFromField)
+      setFieldRows(nextFields)
+      setBaseFieldRows(nextFields)
+      setSnapshot(snapshotOf(nextForm, nextReqs, nextRules, nextFields))
     })
   }, [refreshProduct])
 
@@ -73,7 +80,8 @@ export default function VisaEditPage({ params }: Props) {
     return <div className="flex items-center gap-2 p-6 text-sm text-admin-muted"><Loader2 className="size-4 animate-spin" /> Memuat…</div>
   }
 
-  const dirty = snapshotOf(form, reqs, rules) !== snapshot
+  const dirty = snapshotOf(form, reqs, rules, fieldRows) !== snapshot
+  const fieldsChanged = JSON.stringify(bodyFromManifestRows(fieldRows)) !== JSON.stringify(bodyFromManifestRows(baseFieldRows))
   const canSave = !!form.name.trim() && !!form.visaType.trim() && Number(form.processDays) > 0
   const requiredCount = reqs.filter(r => r.required).length
   const price = Number(product.price)
@@ -82,12 +90,14 @@ export default function VisaEditPage({ params }: Props) {
   const patchForm = (patch: Partial<InfoForm>) => { setForm(f => (f ? { ...f, ...patch } : f)); setJustSaved(false) }
   const setRequirements = (next: RequirementRow[]) => { setReqs(next); setJustSaved(false) }
   const setRuleList = (next: RequiredComponent[]) => { setRules(next); setJustSaved(false) }
+  const setFieldList = (next: ManifestRow[]) => { setFieldRows(next); setJustSaved(false) }
 
   function discard() {
     const saved = JSON.parse(snapshot) as { form: InfoForm; rules: RequiredComponent[] }
     setForm(saved.form)
     setReqs(baseReqs)
     setRules(saved.rules)
+    setFieldRows(baseFieldRows)
     setError(null)
   }
 
@@ -102,6 +112,8 @@ export default function VisaEditPage({ params }: Props) {
       body: JSON.stringify({
         name: form.name.trim(), country: form.country.trim(), visaType: form.visaType.trim(),
         description: form.description, processDays: Number(form.processDays), isActive: form.isActive, requirements, requiredComponents: rules,
+        // Hanya bila berubah: produk lama tanpa kolom tetap bisa disimpan bagian lainnya (daftar kosong ditolak server).
+        ...(fieldsChanged && { manifestFields: bodyFromManifestRows(fieldRows) }),
       }),
     })
     if (!res.ok) {
@@ -113,8 +125,12 @@ export default function VisaEditPage({ params }: Props) {
     const kept = reqs.filter(r => r.documentTypeId)
     setReqs(kept)
     setBaseReqs(kept)
-    setSnapshot(snapshotOf(form, kept, rules))
-    await refreshProduct()
+    // Kolom dimuat ulang dari server: kolom baru baru punya kuncinya sesudah tersimpan (menyimpan lagi tanpa kunci akan membuatnya ulang).
+    const fresh = await refreshProduct()
+    const savedFields = fresh ? fresh.manifestFields.map(rowFromField) : fieldRows
+    setFieldRows(savedFields)
+    setBaseFieldRows(savedFields)
+    setSnapshot(snapshotOf(form, kept, rules, savedFields))
     setSaving(false)
     setJustSaved(true)
   }
@@ -128,7 +144,7 @@ export default function VisaEditPage({ params }: Props) {
       if (j.data.deleted) { router.push(`/${locale}/admin/products/visa`); return null }
       // Status di formulir DAN baseline ikut nonaktif, ketikan lain yang belum disimpan tetap terhitung "belum disimpan".
       setForm(f => (f ? { ...f, isActive: false } : f))
-      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, baseReqs, saved.rules) })
+      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, baseReqs, saved.rules, baseFieldRows) })
       await refreshProduct()
       return { notice: j.data.message ?? 'Dipakai sehingga dinonaktifkan.' }
     } catch {
@@ -139,6 +155,7 @@ export default function VisaEditPage({ params }: Props) {
   const tabs: readonly TabItem<TabKey>[] = [
     { id: 'info', label: 'Informasi', icon: Info },
     { id: 'docs', label: 'Persyaratan dokumen', icon: FileText, count: reqs.length },
+    { id: 'fields', label: 'Data jamaah', icon: ListChecks, count: fieldRows.length },
     { id: 'rules', label: 'Model penjualan', icon: Link2 },
     { id: 'price', label: 'Harga dan HPP', icon: Wallet, count: ruleCount || undefined },
   ]
@@ -167,6 +184,9 @@ export default function VisaEditPage({ params }: Props) {
       </div>
       <div id={tabPanelId('docs')} role="tabpanel" aria-labelledby={tabId('docs')} hidden={tab !== 'docs'}>
         <RequirementsEditor rows={reqs} onChange={setRequirements} productNoun="visa ini" />
+      </div>
+      <div id={tabPanelId('fields')} role="tabpanel" aria-labelledby={tabId('fields')} hidden={tab !== 'fields'}>
+        <ManifestFieldsEditor rows={fieldRows} onChange={setFieldList} used={product.manifestFieldsUsed} productNoun="visa ini" />
       </div>
       <div id={tabPanelId('rules')} role="tabpanel" aria-labelledby={tabId('rules')} hidden={tab !== 'rules'}>
         <RulesTab rules={rules} onChange={setRuleList} />
