@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { requireSession } from '@/lib/auth/session'
 import { createBookingSchema } from '@/lib/validators/booking'
-import { withBookingCode } from '@/lib/utils/bookingCode'
+import { isBookingCodeBusy, withBookingCode } from '@/lib/utils/bookingCode'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { ok, err } from '@/lib/validators'
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     // Resolusi + aturan visa di luar transaksi, lalu kuota + item + snapshot di dalam — mesin yang SAMA dengan penerbitan draf admin (lib/booking/create.ts).
     const prepared = await prepareBooking({ items: data.items, pilgrims: data.pilgrims, departureDate: data.departureDate, totalPilgrims: data.totalPilgrims })
-    const booking = await withBookingCode(bookingCode => retrySerializable(() => prisma.$transaction(async (tx) => {
+    const booking = await retrySerializable(() => withBookingCode(async (tx, bookingCode) => {
       const bk = await tx.booking.create({
         data: {
           bookingCode,
@@ -78,7 +78,7 @@ export async function POST(request: Request) {
       await writeBooking(tx, prepared, bk.id)
       await issueInvoice(tx, bk.id, { dueDays: defaultDueDays, byUserId: null })
       return tx.booking.findUniqueOrThrow({ where: { id: bk.id }, select: { id: true, bookingCode: true } })
-    }, { isolationLevel: 'Serializable' })))
+    }, { isolationLevel: 'Serializable' }))
 
     // Konfirmasi pesanan = notifikasi invoice terbit berisi tautan invoice publik (Fase 6c, menggantikan `booking_submitted` supaya tak dobel).
     // Best-effort setelah transaksi commit; tidak pernah melempar dan tidak memblokir respons.
@@ -102,6 +102,7 @@ export async function POST(request: Request) {
     // Id produk/jadwal yang tidak ada → masukan salah, bukan galat server (SEC-130); bentrok serialisasi yang tersisa setelah diulang → coba lagi (SEC-83/113).
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') return NextResponse.json(err('Produk yang dipilih tidak ditemukan lagi'), { status: 422 })
     if (isSerializationConflict(error)) return NextResponse.json(err('Kuota sedang diperebutkan — coba lagi'), { status: 409 })
+    if (isBookingCodeBusy(error)) return NextResponse.json(err('Pemesanan sedang ramai — coba lagi'), { status: 409 })
     console.error('[bookings/POST]', error instanceof Error ? error.name : error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }

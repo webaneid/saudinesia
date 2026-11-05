@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { bookingDraftSchema, type BookingDraft } from '@/lib/validators/booking'
-import { withBookingCode } from '@/lib/utils/bookingCode'
+import { isBookingCodeBusy, withBookingCode } from '@/lib/utils/bookingCode'
 import { detectSeason } from '@/lib/utils/season'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { InvoiceError, issueInvoice, taxFor } from '@/lib/invoice/issue'
@@ -43,11 +43,16 @@ export async function createDraft(customerId: string): Promise<{ ok: true; id: s
   if (!customer || customer.role !== 'pilgrim') return { ok: false, status: 404, message: 'Pelanggan tidak ditemukan' }
   if (isDeletedAccount(customer.email)) return { ok: false, status: 409, message: 'Akun pelanggan ini sudah dihapus' }
   if (!customer.isActive) return { ok: false, status: 409, message: 'Akun pelanggan ini nonaktif' }
-  const b = await withBookingCode(bookingCode => prisma.booking.create({
-    data: { bookingCode, userId: customerId, status: 'draft', season: 'regular', totalAmount: 0, draft: EMPTY as Prisma.InputJsonValue },
-    select: { id: true, bookingCode: true },
-  }))
-  return { ok: true, ...b }
+  try {
+    const b = await withBookingCode((tx, bookingCode) => tx.booking.create({
+      data: { bookingCode, userId: customerId, status: 'draft', season: 'regular', totalAmount: 0, draft: EMPTY as Prisma.InputJsonValue },
+      select: { id: true, bookingCode: true },
+    }))
+    return { ok: true, ...b }
+  } catch (e) {
+    if (isBookingCodeBusy(e)) return { ok: false, status: 409, message: 'Pembuatan booking sedang ramai — coba lagi' }
+    throw e
+  }
 }
 
 async function lockDraft(tx: Tx, id: string): Promise<{ status: string; draft: unknown; userId: string; updatedAt: Date } | null> {

@@ -373,7 +373,7 @@ await t('PENJAGA: aturan visa hanya di rules.ts (validator tak lagi membaca requ
   assert.ok(!read('lib/validators/booking.ts').includes('requiredComponents'), 'superRefine lama dihapus')
   const route = read('app/api/v1/bookings/route.ts')
   const engine = read('lib/booking/create.ts')
-  assert.ok(route.indexOf('prepareBooking(') < route.indexOf('prisma.$transaction'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
+  assert.ok(route.indexOf('prepareBooking(') < route.indexOf('withBookingCode(async'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
   assert.match(engine, /if \(violations\.length > 0\) throw new RuleViolationError\(violations\)/)
   assert.match(route, /status: 422/); assert.match(route, /meta: \{ violations: error\.violations \}/)
   assert.match(engine, /case 'flight':\s*\n\s*await reserveFlightQuota\(tx, item\.flightScheduleId, item\.numPassengers\)/)
