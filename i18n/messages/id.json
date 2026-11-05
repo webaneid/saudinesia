@@ -32,7 +32,7 @@
     "summary": "Ringkasan",
     "status": {
       "awaiting_payment": "Menunggu Pembayaran",
-      "payment_review": "Pembayaran Diverifikasi",
+      "payment_review": "Menunggu Verifikasi",
       "confirmed": "Dikonfirmasi",
       "active": "Dalam Perjalanan",
       "completed": "Selesai",

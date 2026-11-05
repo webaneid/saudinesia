@@ -1,50 +1,53 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { CheckCircle, XCircle, ExternalLink } from 'lucide-react'
 
 interface PaymentActionsProps {
-  bookingId: string
-  paymentId: string
-  buktiPath: string | null
+  /** Pembayaran yang menunggu verifikasi; null = tak ada. Komponen tetap terpasang supaya pesan hasil tampil sesudah halaman disegarkan. */
+  payment: { id: string; hasProof: boolean } | null
   /** Total TAGIHAN (subtotal + pajak ditambahkan, lib/invoice/bill.ts) — bawaan jumlah yang dikonfirmasi. */
   billTotal: number
 }
 
-export function PaymentActions({ bookingId: _, paymentId, buktiPath, billTotal }: PaymentActionsProps) {
+export function PaymentActions({ payment, billTotal }: PaymentActionsProps) {
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
-  const [done,    setDone]    = useState(false)
+  const [done,    setDone]    = useState<'confirm' | 'reject' | null>(null)
   const [error,   setError]   = useState('')
   const [amount,  setAmount]  = useState(String(billTotal))
   const [notes,   setNotes]   = useState('')
   const over = Number(amount) > billTotal
   const under = Number(amount) < billTotal
 
-  async function act(action: 'confirm' | 'reject') {
+  async function act(id: string, action: 'confirm' | 'reject') {
     setLoading(true); setError('')
-    const res  = await fetch(`/api/v1/admin/payments/${paymentId}/confirm`, {
+    const res  = await fetch(`/api/v1/admin/payments/${id}/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(action === 'confirm' ? { action, amount: Number(amount), ...(notes.trim() ? { notes: notes.trim() } : {}) } : { action }),
-    })
-    const json = await res.json()
-    if (!json.success) { setError(json.error ?? 'Gagal'); setLoading(false); return }
-    setDone(true)
+    }).catch(() => null)
+    const json = res ? await res.json().catch(() => null) as { success?: boolean; error?: string } | null : null
+    setLoading(false)
+    if (!json?.success) { setError(json?.error ?? 'Gagal memproses pembayaran'); return }
+    setDone(action)
+    router.refresh()
   }
 
-  if (done) {
-    return (
-      <div className="admin-card bg-admin-ok/10 border-admin-ok/20 p-4 text-sm text-admin-ok font-medium">
-        Pembayaran berhasil dikonfirmasi.
-      </div>
-    )
+  if (done === 'confirm') {
+    return <div role="status" className="admin-card bg-admin-ok/10 border-admin-ok/20 p-4 text-sm text-admin-ok font-medium">Pembayaran berhasil dikonfirmasi.</div>
   }
+  if (done === 'reject') {
+    return <div role="status" className="admin-card bg-admin-danger/10 border-admin-danger/20 p-4 text-sm text-admin-danger font-medium">Pembayaran ditolak. Pelanggan dapat mengunggah bukti baru.</div>
+  }
+  if (!payment) return null
 
   return (
     <div className="admin-form-panel">
       <p className="text-sm font-semibold text-admin-ink">Verifikasi Pembayaran</p>
-      {buktiPath && (
-        <a href={`/api/v1/admin/bukti/${encodeURIComponent(buktiPath)}`} target="_blank"
+      {payment.hasProof && (
+        <a href={`/api/v1/admin/payments/${payment.id}/bukti`} target="_blank" rel="noopener noreferrer"
           className="inline-flex items-center gap-1.5 text-[12px] text-admin-accent-strong hover:text-admin-accent-strong font-medium">
           <ExternalLink className="h-3.5 w-3.5" /> Lihat Bukti Transfer
         </a>
@@ -62,11 +65,11 @@ export function PaymentActions({ bookingId: _, paymentId, buktiPath, billTotal }
       </div>
       {error && <p className="text-[12px] text-admin-danger">{error}</p>}
       <div className="flex gap-2">
-        <button onClick={() => act('confirm')} disabled={loading}
+        <button onClick={() => act(payment.id, 'confirm')} disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-admin-ok hover:bg-admin-ok text-sm text-white font-medium disabled:opacity-50 transition-colors">
           <CheckCircle className="h-4 w-4" /> Konfirmasi
         </button>
-        <button onClick={() => act('reject')} disabled={loading}
+        <button onClick={() => act(payment.id, 'reject')} disabled={loading}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-admin-danger hover:bg-admin-danger/90 text-sm text-white font-medium disabled:opacity-50 transition-colors">
           <XCircle className="h-4 w-4" /> Tolak
         </button>

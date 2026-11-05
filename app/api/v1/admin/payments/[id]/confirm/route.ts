@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/auth/session'
+import { authFailureResponse } from '@/lib/admin/errors'
 import { ok, err } from '@/lib/validators'
 import { notify } from '@/lib/notifications/notify'
 import { z } from 'zod'
@@ -27,8 +28,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return NextResponse.json(ok({ action }))
   } catch (e) {
     if (e instanceof PaymentAmountError) return NextResponse.json(err(e.message), { status: 400 })
-    if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/payments/confirm]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return authFailureResponse(e, 'admin/payments/confirm')
   }
 }

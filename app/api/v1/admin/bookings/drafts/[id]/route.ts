@@ -21,7 +21,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     })
     if (!b || b.status !== 'draft') return NextResponse.json(err('Draf tidak ditemukan'), { status: 404 })
     const { defaultDueDays } = await getInvoiceSettings()
-    return NextResponse.json(ok({ ...b, draft: readDraft(b.draft), defaultDueDays }))
+    const activeBankCount = await prisma.bankAccount.count({ where: { isActive: true } }) // peringatan di editor: invoice tanpa rekening tidak bisa dibayar
+    return NextResponse.json(ok({ ...b, draft: readDraft(b.draft), defaultDueDays, activeBankCount }))
   } catch (e) {
     return authFailureResponse(e, 'admin/bookings/drafts/[id]/GET')
   }

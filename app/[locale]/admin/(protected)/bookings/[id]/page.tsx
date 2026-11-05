@@ -8,6 +8,8 @@ import { PaymentActions } from './PaymentActions'
 import { InvoiceBox } from './InvoiceBox'
 import { RevisionHistory } from './RevisionHistory'
 import { billOf } from '@/lib/invoice/bill'
+import { payableBanks } from '@/lib/invoice/banks'
+import type { BankSnapshot } from '@/lib/invoice/issue'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { VisaActions } from './VisaActions'
 import { PilgrimDataForm } from './PilgrimDataForm'
@@ -39,6 +41,7 @@ export default async function AdminBookingDetail({ params }: Props) {
       transports: { include: { transportQuota: { include: { pricing: { include: { trip: true, vehicle: true } } } } } },
       muthowif:   { include: { muthowif: true } },
       catering:   { include: { cateringOption: true } },
+      haji:       { include: { hajiProduct: { select: { name: true } } } },
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
       flights:    { include: { flightSchedule: { include: { route: true } } } },
       packages:   { include: { package: { select: { name: true } } } },
@@ -74,8 +77,9 @@ export default async function AdminBookingDetail({ params }: Props) {
 
   const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
   const cfg     = BOOKING_STATUS[st]
-  const payment = booking.payments[0]
+  const pendingPayment = st === 'payment_review' ? booking.payments.find(p => p.status === 'pending') : undefined
   const bill    = billOf(booking)
+  const noBank  = booking.status === 'active' && !booking.confirmedAt && !!booking.invoice && (await payableBanks(booking.invoice.bankSnapshot as BankSnapshot[])).length === 0
   const revRows = await prisma.bookingRevision.findMany({ where: { bookingId: id }, orderBy: [{ revision: 'desc' }, { id: 'desc' }], take: 100 }) // riwayat satu booking: 100 terbaru
   const revStaff = new Map((await prisma.user.findMany({ where: { id: { in: [...new Set(revRows.map(r => r.byUserId))] } }, select: { id: true, fullName: true }, take: 100 })).map(u => [u.id, u.fullName]))
   const revisions = revRows.map(r => ({ ...r, totalBefore: Number(r.totalBefore), totalAfter: Number(r.totalAfter), taxBefore: Number(r.taxBefore), taxAfter: Number(r.taxAfter), byName: revStaff.get(r.byUserId) ?? null }))
@@ -126,9 +130,7 @@ export default async function AdminBookingDetail({ params }: Props) {
       </div>
 
       {/* Payment confirmation */}
-      {(st === 'payment_review' || st === 'awaiting_payment') && payment && (
-        <PaymentActions bookingId={id} paymentId={payment.id} buktiPath={payment.buktiTransferPath} billTotal={bill.grandTotal} />
-      )}
+      <PaymentActions payment={pendingPayment ? { id: pendingPayment.id, hasProof: !!pendingPayment.buktiTransferPath } : null} billTotal={bill.grandTotal} />
 
       {/* Services summary */}
       <div className="grid md:grid-cols-2 gap-4">
@@ -151,7 +153,7 @@ export default async function AdminBookingDetail({ params }: Props) {
           </p>
         </div>
 
-        <InvoiceBox bookingId={booking.id} bill={bill} invoice={booking.invoice && { ...booking.invoice, taxLines: booking.invoice.taxLines as TaxLine[] }} />
+        <InvoiceBox bookingId={booking.id} bill={bill} noBank={noBank} invoice={booking.invoice && { ...booking.invoice, taxLines: booking.invoice.taxLines as TaxLine[] }} />
 
         {booking.hotels.length > 0 && (
           <div className="admin-card p-4 space-y-2">
@@ -206,6 +208,51 @@ export default async function AdminBookingDetail({ params }: Props) {
                 <span className="text-admin-muted ml-2 text-[12px]">
                   {tp.numPeople} orang{tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}
                 </span>
+              </p>
+            ))}
+          </div>
+        )}
+
+        {booking.transports.length > 0 && (
+          <div className="admin-card p-4 space-y-2">
+            <p className="admin-section">Transport</p>
+            {booking.transports.map(bt => (
+              <div key={bt.id} className="space-y-0.5">
+                <p className="text-[13px] text-admin-ink/80">
+                  <span className="font-medium text-admin-ink">{bt.transportQuota.pricing.trip.name}</span>
+                  {' — '}
+                  <span>{formatCalendarDate(bt.travelDate, DATE_NUMERIC)}</span>
+                  <span className="text-admin-muted ml-2 text-[12px]">{bt.transportQuota.pricing.vehicle.name} · {bt.numPassengers} penumpang</span>
+                </p>
+                {(bt.pickupDetail || bt.dropoffDetail) && (
+                  <p className="text-[12px] text-admin-muted">{bt.pickupDetail ?? '-'} → {bt.dropoffDetail ?? '-'}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {booking.catering.length > 0 && (
+          <div className="admin-card p-4 space-y-2">
+            <p className="admin-section">Katering</p>
+            {booking.catering.map(bc => (
+              <p key={bc.id} className="text-[13px] text-admin-ink/80">
+                <span className="font-medium text-admin-ink">{bc.cateringOption.name}</span>
+                {' — '}
+                <span>{formatCalendarDate(bc.startDate, DATE_NUMERIC)} – {formatCalendarDate(bc.endDate, DATE_NUMERIC)}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">{bc.numDays} hari × {bc.numPeople} orang</span>
+              </p>
+            ))}
+          </div>
+        )}
+
+        {booking.haji.length > 0 && (
+          <div className="admin-card p-4 space-y-2">
+            <p className="admin-section">Haji</p>
+            {booking.haji.map(bh => (
+              <p key={bh.id} className="text-[13px] text-admin-ink/80">
+                <span className="font-medium text-admin-ink">{bh.hajiProduct.name}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">{bh.numPersons} orang</span>
               </p>
             ))}
           </div>
