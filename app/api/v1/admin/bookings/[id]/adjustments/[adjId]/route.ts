@@ -13,7 +13,7 @@ export async function PATCH(req: Request, { params }: Ctx) {
     const session = await requireBookingAdjust()
     const { id, adjId } = await params
     const parsed = adjustmentReasonSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const result = await updateAdjustmentReason({ bookingId: id, adjustmentId: adjId, reason: parsed.data.reason, byUserId: session.userId })
     return NextResponse.json(ok(result)) // siapa/kapan tersimpan di baris (SEC-101); isi catatan tak pernah dilog (bisa memuat nama)
   } catch (e) {

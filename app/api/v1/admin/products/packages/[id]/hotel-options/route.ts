@@ -25,7 +25,7 @@ export async function POST(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: packageId } = await params
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const existing = await prisma.packageHotelOption.findUnique({
       where: { packageId_slot_hotelRoomScheduleId: { packageId, slot: parsed.data.slot, hotelRoomScheduleId: parsed.data.hotelRoomScheduleId } },
@@ -48,7 +48,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: packageId } = await params
     const parsed = removeSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     await prisma.packageHotelOption.delete({
       where: { packageId_slot_hotelRoomScheduleId: { packageId, slot: parsed.data.slot, hotelRoomScheduleId: parsed.data.hotelRoomScheduleId } },

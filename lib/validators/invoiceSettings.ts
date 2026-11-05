@@ -9,8 +9,10 @@ const noControl = (v: string) => !/[\u0000-\u001f\u007f]/.test(v)
 const text = (max: number) => z.string().trim().max(max, `Maksimal ${max} karakter`).refine(noControl, 'Karakter kontrol/baris baru tidak diperbolehkan')
 const req = (max: number, message: string) => z.string().trim().min(1, message).max(max, `Maksimal ${max} karakter`).refine(noControl, 'Karakter kontrol/baris baru tidak diperbolehkan')
 const optionalText = (max: number) => text(max).nullish().transform(v => (v ? v : null))
-const percent = (label: string) => z.number({ invalid_type_error: `${label} harus angka` }).min(0, `${label} minimal 0`).max(100, `${label} maksimal 100`)
-const int = (label: string, min: number, max: number) => z.number({ invalid_type_error: `${label} harus angka` }).int(`${label} harus bilangan bulat`).min(min, `${label} minimal ${min}`).max(max, `${label} maksimal ${max}`)
+// Pesan tipe salah saja (setara `invalid_type_error` Zod 3): kunci yang hilang tetap memakai pesan bawaan.
+const typeError = (message: string) => ({ error: (iss: { input?: unknown }) => (iss.input === undefined ? undefined : message) })
+const percent = (label: string) => z.number(typeError(`${label} harus angka`)).min(0, `${label} minimal 0`).max(100, `${label} maksimal 100`)
+const int = (label: string, min: number, max: number) => z.number(typeError(`${label} harus angka`)).int(`${label} harus bilangan bulat`).min(min, `${label} minimal ${min}`).max(max, `${label} maksimal ${max}`)
 
 export const invoiceSettingsSchema = z.object({
   numberPrefix: z.string().trim().regex(NUMBER_PREFIX_RE, 'Awalan maksimal 12 karakter: huruf, angka, titik, garis bawah, garis miring, tanda hubung'),
@@ -89,8 +91,8 @@ export type QrisAccountInput = z.infer<typeof qrisAccountSchema>
 
 const taxFields = {
   name: req(60, 'Nama pajak wajib diisi'),
-  ratePercent: z.number({ invalid_type_error: 'Tarif harus angka' }).min(0, 'Tarif minimal 0').max(100, 'Tarif maksimal 100').refine(v => Number.isFinite(v) && Math.round(v * 1000) / 1000 === v, 'Tarif maksimal 3 angka desimal'),
-  basisPercent: z.number({ invalid_type_error: 'Dasar pengenaan harus angka' }).gt(0, 'Dasar pengenaan lebih dari 0').max(100, 'Dasar pengenaan maksimal 100').refine(v => Math.round(v * 1000) / 1000 === v, 'Dasar maksimal 3 angka desimal'),
+  ratePercent: z.number(typeError('Tarif harus angka')).min(0, 'Tarif minimal 0').max(100, 'Tarif maksimal 100').refine(v => Number.isFinite(v) && Math.round(v * 1000) / 1000 === v, 'Tarif maksimal 3 angka desimal'),
+  basisPercent: z.number(typeError('Dasar pengenaan harus angka')).gt(0, 'Dasar pengenaan lebih dari 0').max(100, 'Dasar pengenaan maksimal 100').refine(v => Math.round(v * 1000) / 1000 === v, 'Dasar maksimal 3 angka desimal'),
   mode: z.enum(['added', 'included']),
 }
 export const taxRuleSchema = z.object({ ...taxFields, isActive: z.boolean().default(true), sortOrder: sortOrder.default(0) }).strict()

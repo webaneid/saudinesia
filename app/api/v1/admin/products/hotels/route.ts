@@ -13,7 +13,7 @@ const createSchema = z.object({
   stars:            z.coerce.number().int().min(1).max(5).optional(),
   distanceToHaramM: z.coerce.number().int().min(0).optional(),
   description:      richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
-  facilities:       z.array(z.string()).default([]),
+  facilities:       z.array(z.string()).max(100).default([]),
 })
 
 export async function GET(req: Request) {
@@ -42,7 +42,7 @@ export async function POST(req: Request) {
   try {
     await requireManager()
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const hotel = await prisma.hotel.create({
       data: { ...parsed.data, description: emptyToNull(parsed.data.description) },

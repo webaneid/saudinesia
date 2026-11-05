@@ -15,7 +15,7 @@ const updateSchema = z.object({
   stars:            z.coerce.number().int().min(1).max(5).optional(),
   distanceToHaramM: z.coerce.number().int().min(0).optional(),
   description:      richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
-  facilities:       z.array(z.string()).optional(),
+  facilities:       z.array(z.string()).max(100).optional(),
   isActive:         z.boolean().optional(),
   address:          addressWithMapSchema.optional(), // docs/arsitektur-alamat.md §9 + lokasi Google Maps (docs/arsitektur-hotel.md §12.5)
 }).strict()
@@ -48,7 +48,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { address, description, ...rest } = parsed.data
 
     const data: Record<string, unknown> = { ...rest }

@@ -21,7 +21,7 @@ export async function POST(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: packageId } = await params
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const existing = await prisma.packageCateringOption.findUnique({
       where: { packageId_cateringOptionId: { packageId, cateringOptionId: parsed.data.cateringOptionId } },
@@ -44,7 +44,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: packageId } = await params
     const parsed = removeSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     await prisma.packageCateringOption.delete({
       where: { packageId_cateringOptionId: { packageId, cateringOptionId: parsed.data.cateringOptionId } },

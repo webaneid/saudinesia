@@ -21,7 +21,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: tourPackageId, hotelId } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     await prisma.tourPackageHotel.update({ where: { id: hotelId }, data: parsed.data })
     await repriceOwner('tour_package', tourPackageId)

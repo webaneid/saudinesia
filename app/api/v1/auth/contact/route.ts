@@ -14,7 +14,7 @@ export async function PUT(request: Request) {
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
 
     const parsed = contactSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
 
     // Akun buatan admin lahir tanpa persetujuan Kebijakan Privasi: pemilik harus memberikannya sendiri di langkah ini (dicek SEBELUM menyimpan apa pun).
     const { privacyConsent } = parsed.data

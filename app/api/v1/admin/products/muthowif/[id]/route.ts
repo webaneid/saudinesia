@@ -10,7 +10,7 @@ import { deleteMuthowif } from '@/lib/admin/productDelete'
 const updateSchema = z.object({
   name:          z.string().min(1).optional(),
   bio:           richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
-  languages:     z.array(z.string()).optional(),
+  languages:     z.array(z.string()).max(50).optional(),
   dailyCapacity: z.coerce.number().int().positive().optional(),
   isActive:      z.boolean().optional(),
 })
@@ -39,7 +39,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     await requireManager()
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { bio, ...fields } = parsed.data
     const m = await prisma.muthowif.update({
       where: { id },

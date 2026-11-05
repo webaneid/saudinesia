@@ -24,7 +24,7 @@ export async function POST(req: Request, { params }: Ctx) {
     const session = await requireCostRecord()
     const { id } = await params
     const parsed = costActualCreateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const created = await createCostActual({ bookingId: id, ...parsed.data, byUserId: session.userId })
     return NextResponse.json(ok(created), { status: 201 })
   } catch (e) {

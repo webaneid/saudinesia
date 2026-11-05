@@ -13,7 +13,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     const session = await requireCostRecord()
     const { id, actualId } = await params
     const parsed = costActualUpdateSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     await updateCostActual(id, actualId, { ...parsed.data, byUserId: session.userId })
     return NextResponse.json(ok({ id: actualId }))
   } catch (e) {
@@ -28,7 +28,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
     const session = await requireCostRecord()
     const { id, actualId } = await params
     const parsed = costActualVoidSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Alasan pembatalan wajib diisi'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Alasan pembatalan wajib diisi'), { status: 400 })
     await voidCostActual(id, actualId, { reason: parsed.data.reason, byUserId: session.userId })
     return NextResponse.json(ok({ id: actualId, voided: true }))
   } catch (e) {

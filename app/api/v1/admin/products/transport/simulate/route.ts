@@ -16,7 +16,7 @@ export async function GET(req: Request) {
     await requireSuperAdmin()
     const { searchParams } = new URL(req.url)
     const parsed = querySchema.safeParse(Object.fromEntries(searchParams))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Parameter tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Parameter tidak valid'), { status: 400 })
     const { hargaKendaraan, currency } = parsed.data
 
     const result = await simulateSellPrice('transport', [{ currency, cost: hargaKendaraan }])

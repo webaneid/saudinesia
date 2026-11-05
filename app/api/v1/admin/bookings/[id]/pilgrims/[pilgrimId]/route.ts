@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { ok, err } from '@/lib/validators'
+import { ok, err, boundedKeys } from '@/lib/validators'
 import { requireBookingManage } from '@/lib/booking/policy'
 import { getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
@@ -19,7 +19,7 @@ class Refused extends Error {}
 
 type Ctx = { params: Promise<{ id: string; pilgrimId: string }> }
 const schema = z.object({
-  fieldValues: z.record(z.string().max(64), z.unknown()).refine(v => Object.keys(v).length <= 50, 'Terlalu banyak field'),
+  fieldValues: boundedKeys(50, 'Terlalu banyak field', z.record(z.string().max(64), z.unknown())),
   plannedTravelDate: z.string().date().nullable().optional(),
 }).strict()
 

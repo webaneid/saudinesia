@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   try {
     await requireManager()
     const parsed = createSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { gmapsUrl, ...rest } = parsed.data
     const site = await prisma.tourismSite.create({ data: { ...rest, description: emptyToNull(rest.description), gmapsUrl: gmapsUrl || null } })
     return NextResponse.json(ok(site), { status: 201 })

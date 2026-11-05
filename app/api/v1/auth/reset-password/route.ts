@@ -13,7 +13,7 @@ export async function POST(request: Request) {
       if (!h.allowed) return tooManyRequests(h.retryAfterSec)
     }
     const parsed = resetPasswordSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Input tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
 
     const result = await resetPassword(parsed.data.token, parsed.data.newPassword)
     if (!result.ok) return NextResponse.json(err('Tautan tidak valid atau sudah kedaluwarsa. Minta tautan baru.'), { status: 401 })

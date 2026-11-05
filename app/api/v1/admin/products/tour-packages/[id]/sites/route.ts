@@ -19,7 +19,7 @@ export async function POST(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: tourPackageId } = await params
     const parsed = addSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const existing = await prisma.tourPackageSite.findUnique({
       where: { tourPackageId_tourismSiteId: { tourPackageId, tourismSiteId: parsed.data.tourismSiteId } },
@@ -45,7 +45,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
     await requireManager()
     const { id: tourPackageId } = await params
     const parsed = removeSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     await prisma.tourPackageSite.delete({
       where: { tourPackageId_tourismSiteId: { tourPackageId, tourismSiteId: parsed.data.tourismSiteId } },

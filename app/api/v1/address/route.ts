@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     const limit = await consume(policy('addressCreateUser', session.userId))
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
     const parsed = addressSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const prepared = await prepareAddressData(parsed.data)
     if (!prepared.ok) return NextResponse.json(err(prepared.message), { status: 400 })

@@ -19,3 +19,13 @@ export function ok<T>(data: T, meta?: Record<string, unknown>): ApiResponse<T> {
 export function err(message: string): ApiResponse {
   return { success: false, error: message }
 }
+
+/**
+ * Record yang kunci/isinya bisa gagal: hitung kunci DULU, baru parse (SEC-211). Zod menghasilkan satu issue per kunci yang gagal
+ * dan tidak punya `.max()` untuk record — tanpa ini satu body besar = ratusan ribu issue. Bukan objek → diteruskan ke `record` (pesan tipe bawaan).
+ */
+export function boundedKeys<T extends z.ZodType>(max: number, message: string, record: T) {
+  return z.unknown().superRefine((v, ctx) => {
+    if (typeof v === 'object' && v !== null && Object.keys(v).length > max) ctx.addIssue({ code: 'custom', message })
+  }).pipe(record)
+}

@@ -20,7 +20,7 @@ export async function PUT(req: Request) {
   let session
   try { session = await requireSuperAdmin() } catch (e) { return authFailureResponse(e, 'admin/system/invoice-settings/PUT') }
   const parsed = invoiceSettingsSchema.safeParse(await req.json().catch(() => null))
-  if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+  if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
   try { return NextResponse.json(ok(await updateInvoiceSettings(parsed.data, session.userId))) } catch (e) {
     if (e instanceof SettingsError) return NextResponse.json(err(e.message), { status: e.status })
     console.error('[admin/system/invoice-settings/PUT]', e instanceof Error ? e.name : e)

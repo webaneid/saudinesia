@@ -25,7 +25,7 @@ const tierRowSchema = z.object({
 const putSchema = z.object({
   visa: z.object({ vendorId: z.string().min(1), currency: z.string().min(1) }),
   brn: z.object({ vendorId: z.string().min(1), currency: z.string().min(1) }).nullable(),
-  rows: z.array(tierRowSchema).min(1),
+  rows: z.array(tierRowSchema).min(1).max(100),
 })
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -72,7 +72,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     await requireSuperAdmin()
     const { id } = await params
     const parsed = putSchema.safeParse(await req.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const { visa, brn, rows } = parsed.data
     await assertVendorUsable(visa.vendorId)
     if (brn) await assertVendorUsable(brn.vendorId)

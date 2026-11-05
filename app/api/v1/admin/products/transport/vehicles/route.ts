@@ -36,7 +36,7 @@ export async function POST(req: Request) {
     await requireManager()
     const body = await req.json().catch(() => null)
     const parsed = createSchema.safeParse(body)
-    if (!parsed.success) return NextResponse.json(err(parsed.error.errors[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const v = await prisma.transportVehicle.create({ data: parsed.data })
     return NextResponse.json(ok(v), { status: 201 })
   } catch (e) {

@@ -56,7 +56,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
       await authorize()
       const { id } = await params
       const parsed = costComponentCreateSchema.safeParse(await req.json().catch(() => null))
-      if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? 'Data tidak valid')
+      if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Data tidak valid')
       const { costComponent, vendorId, currency, cost } = parsed.data
 
       // Induk dan vendor diperiksa SEBELUM menulis: tanpa ini komponen yatim tertulis lalu refresh gagal 500 (G2/G3).
@@ -79,7 +79,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
       await authorize()
       const { id, costId } = await params
       const parsed = costComponentUpdateSchema.safeParse(await req.json().catch(() => null))
-      if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? 'Data tidak valid')
+      if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Data tidak valid')
       const { cost, ...rest } = parsed.data
       if (rest.vendorId) await assertVendorUsable(rest.vendorId)
 
@@ -116,7 +116,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
     try {
       await authorize()
       const parsed = costComponentSimulateSchema.safeParse(Object.fromEntries(new URL(req.url).searchParams))
-      if (!parsed.success) return badRequest(parsed.error.errors[0]?.message ?? 'Parameter tidak valid')
+      if (!parsed.success) return badRequest(parsed.error.issues[0]?.message ?? 'Parameter tidak valid')
       const result = await simulateSellPrice(owner.productType, [{ currency: parsed.data.currency, cost: parsed.data.cost }])
       return NextResponse.json(ok(result))
     } catch (e) {
