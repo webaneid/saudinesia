@@ -21,15 +21,18 @@ export type ComponentBreakdown = {
   rateId?: string
 }
 
+/** Koneksi baca — `prisma` atau klien transaksi (jalur pesan membekukan hasilnya ke snapshot di dalam transaksi, SEC-212). */
+export type CostComponentsDb = Pick<typeof prisma, 'productCost' | 'pricingRule' | 'exchangeRate'>
+
 export type CostComponentsResult = { components: ComponentBreakdown[]; totalSellPrice: number }
 
 /**
  * HPP (kurs) → margin tipe produk → pembulatan, PER KOMPONEN, lalu dijumlah. Komponen tanpa tier yang cocok atau tanpa kurs dilewati
  * (bukan error total) — perilaku sama dengan implementasi lama.
  */
-export async function computeCostComponents(productType: string, productId: string): Promise<CostComponentsResult> {
-  const costs = await prisma.productCost.findMany({ where: { productType, productId, isActive: true } })
-  const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(productType)
+export async function computeCostComponents(productType: string, productId: string, db: CostComponentsDb = prisma): Promise<CostComponentsResult> {
+  const costs = await db.productCost.findMany({ where: { productType, productId, isActive: true } })
+  const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(productType, db)
 
   const components: ComponentBreakdown[] = []
   for (const c of costs) {
@@ -42,7 +45,7 @@ export async function computeCostComponents(productType: string, productId: stri
     if (c.currency === 'IDR') {
       hppRupiah = tier.cost
     } else {
-      const rate = await getLatestRate(c.currency, 'IDR')
+      const rate = await getLatestRate(c.currency, 'IDR', db)
       if (!rate) continue // kurs tidak ditemukan — skip komponen ini, bukan error total
       hppRupiah = tier.cost * Number(rate.sellRate)
       rateId = rate.id

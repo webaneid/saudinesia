@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { prisma } from '@/lib/db'
 import { displayStatus, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 import { DATE_SHORT_MONTH_2D, formatCalendarDate, formatInstant } from '@/lib/time'
@@ -85,7 +86,8 @@ const ITEM_ORDER = ['package', 'flight', 'hotel', 'transport', 'muthowif', 'cate
 // Item yang diurai SATU BARIS PER KOMPONEN di invoice (keputusan pemilik P2, docs/arsitektur-booking-engine-v2.md §10.2): "Visa × 2", "Hotel Makkah × 2", …
 const ITEMIZED = new Set(['package'])
 
-export async function buildInvoiceData(booking: InvoiceBooking): Promise<InvoiceData> {
+/** `db` = klien transaksi bila dipanggil di dalam transaksi (pratinjau draf/revisi, SEC-212): jangan mengambil koneksi pool kedua. */
+export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.TransactionClient, 'manifestFieldRequirement'> = prisma): Promise<InvoiceData> {
   // Satu baris invoice per ITEM (paket berbaris-banyak — komponen, hotel, penyesuaian — tampil sebagai satu baris bagi pilgrim).
   const groups = new Map<string, { type: string; itemId: string; label: string; detail: string; qty: number; amountCents: number }>()
   for (const l of booking.priceSnapshots) {
@@ -108,7 +110,7 @@ export async function buildInvoiceData(booking: InvoiceBooking): Promise<Invoice
     if (g.type === 'visa') {
       const p = pilgrimByVisa.get(g.itemId)
       const productId = p?.visaApplication?.visaProductId
-      if (productId && !fieldsByProduct.has(productId)) fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId))
+      if (productId && !fieldsByProduct.has(productId)) fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId, db))
       const fields = productId ? fieldsByProduct.get(productId)! : []
       const rawName = p ? getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name') : null
       label = `${g.label} — ${typeof rawName === 'string' && rawName ? rawName : 'Jamaah'}`
