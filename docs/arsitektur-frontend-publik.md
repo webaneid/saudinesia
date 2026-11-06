@@ -1,6 +1,6 @@
 # Arsitektur — Front-end Publik (mulai dari Homepage)
 
-> **Status: RENCANA DISETUJUI PEMILIK (2026-11-06). F1 selesai (2026-11-06); F2 dan F3 belum.**
+> **Status: RENCANA DISETUJUI PEMILIK (2026-11-06). F1 dan F2 selesai (2026-11-06); F3 belum.**
 > Urutan pekerjaan menurut pemilik: front-end publik dulu, mulai dari homepage; UI admin terakhir. Istilah "jamaah" tetap dipakai untuk sementara (keputusan pemilik 2026-11-06).
 
 ---
@@ -24,7 +24,7 @@ Dicek langsung: `app/[locale]/(public)/page.tsx`, `(public)/layout.tsx`, `compon
 | A9 | Semua teks ditulis langsung dalam bahasa Indonesia, padahal rute `/en` ada. Berkas pesan belum punya bagian homepage. | `page.tsx`, `Header.tsx`, `i18n/messages/*` | F1, F2 |
 | A10 | Ejaan campur: "Umrah" di homepage, "Umroh" di produk dan percakapan pemilik. | `page.tsx:59-61`, `app/layout.tsx:13` | F2 |
 | A11 | Tidak ada metadata khusus homepage (judul bawaan "Saudinesia", tanpa Open Graph). | `page.tsx` | F3 |
-| A12 | Error hydration React sekali muncul di homepage saat dibuka di dev server pada ukuran HP. Penyebab belum ditelusuri, bisa jadi hanya gejala dev. Wajib dicek ulang pada F2, termasuk di artefak produksi. | `page.tsx` (`LandingPage`) | F2 |
+| A12 | Error hydration React sekali muncul di homepage saat dibuka di dev server pada ukuran HP. Penyebab belum ditelusuri, bisa jadi hanya gejala dev. **Tidak muncul lagi setelah F2** (dev, dan artefak produksi `bun server.js` pada desktop + 375 px). Penyebab asli tidak terbukti: pesannya membandingkan markup lama, dan halaman itu sudah ditulis ulang. | `page.tsx` (`LandingPage`) | F2 |
 
 ### 1.2 Syarat pemilik: "kalau semua alur booking sudah aman" — BELUM terpenuhi seluruhnya
 
@@ -76,6 +76,8 @@ Semua bagian Server Component, data dari katalog aktif. Bagian tanpa data disemb
 Kerangka (sudah dibangun F1): satu daftar menu `components/shared/publicNav.ts`, dipakai header, menu HP `PublicMobileNav` (panel lewat portal karena header memakai `backdrop-filter`), dan `PublicFooter`. Menu lengkap baru tampil di lebar ≥ 1280 px (`xl`), karena pada 1024 px delapan menu + tombol akun meluap dengan font brand. Warna untuk area publik/jamaah = token Tailwind `brand` (`brand-dark`, `brand-gold`, …), bukan `admin-*`.
 
 Komponen bagian homepage di `app/[locale]/(public)/_home/`, satu berkas per bagian. Pengambilan data terpusat di `lib/catalog/home.ts`, supaya `page.tsx` hanya menyusun.
+
+Catatan as-built F2: bagian Visa memberi tombol ajukan hanya bila `canBuyDirectly` (tanpa produk wajib lain dan sudah berharga), selain itu tombol detail ke katalog. Harga belum ada (`null`) disembunyikan. Kalimat ketersediaan di bawah Cara kerja (`home.steps.availability`) dihapus setelah checkout produk lain ada. Teks dari data produk (nama, `priceLabel`) tidak diterjemahkan di `/en`, karena belum ada kolom terjemahannya.
 
 ---
 

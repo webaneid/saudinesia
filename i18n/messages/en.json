@@ -77,5 +77,89 @@
     "info": "Information",
     "privacy": "Privacy Policy",
     "rights": "All rights reserved."
+  },
+  "home": {
+    "hero": {
+      "title": "Umrah and Hajj, handled by one team",
+      "subtitle": "Visas, hotels, transport, muthowif, and complete packages for Indonesian pilgrims. One accountable operator, one invoice for your order.",
+      "primaryCta": "View Umrah Packages",
+      "secondaryCta": "View Visa Services"
+    },
+    "services": {
+      "title": "Choose what you need",
+      "description": "Take a complete package, or pick only the services you need.",
+      "items": {
+        "packages": "Complete Umrah in one package",
+        "haji": "Hajj programs",
+        "visa": "Visa processing per pilgrim",
+        "flight": "Flight routes and schedules",
+        "hotels": "Hotels in Makkah and Madinah",
+        "transport": "Intercity and transfers",
+        "muthowif": "Worship guides",
+        "tours": "Visits to historic sites"
+      }
+    },
+    "packages": {
+      "title": "Umrah Packages",
+      "description": "Hotels, transport, and other services arranged into one package.",
+      "seeAll": "View all packages",
+      "featured": "Top pick",
+      "priceFrom": "Starting from",
+      "perPerson": "per person",
+      "addOns": "Excludes the optional components you choose"
+    },
+    "visa": {
+      "title": "Visa Services",
+      "description": "Visas are ordered per pilgrim, and our team reviews each pilgrim's documents.",
+      "seeAll": "View all visas",
+      "priceFrom": "From",
+      "perPerson": "per person",
+      "processDays": "Estimated processing {days} working days",
+      "apply": "Apply for Visa",
+      "details": "View details"
+    },
+    "hotels": {
+      "title": "Hotels in Makkah and Madinah",
+      "description": "Star rating, distance to the Haram, and the lowest price for the current period.",
+      "seeAll": "View all hotels",
+      "makkah": "Makkah",
+      "madinah": "Madinah",
+      "stars": "{count} stars",
+      "distance": "{distance} from the Haram",
+      "priceFrom": "From",
+      "perNight": "per room per night"
+    },
+    "muthowif": {
+      "title": "Muthowif guidance",
+      "description": "You order the service, and we assign the muthowif for your journey.",
+      "priceFrom": "From",
+      "perDay": "per day",
+      "details": "View muthowif service"
+    },
+    "steps": {
+      "title": "How it works",
+      "choose": {
+        "title": "Choose a service",
+        "description": "Pick the product and dates you need."
+      },
+      "data": {
+        "title": "Enter pilgrim details",
+        "description": "Complete the details and documents for each pilgrim."
+      },
+      "pay": {
+        "title": "Pay and upload proof",
+        "description": "Transfer according to the invoice, then upload your proof of payment."
+      },
+      "verify": {
+        "title": "Our team verifies",
+        "description": "Our staff review your payment and documents."
+      },
+      "availability": "Visa and Transport can currently be booked online by yourself. Online booking for other services is being prepared."
+    },
+    "cta": {
+      "title": "Start by creating an account",
+      "description": "Your pilgrim details and orders are kept in one place.",
+      "button": "Create Account"
+    }
   }
 }

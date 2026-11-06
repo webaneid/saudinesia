@@ -920,5 +920,5 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 ## Front-end publik (`docs/arsitektur-frontend-publik.md`, 2026-11-06)
 
 - [x] F1 Kerangka: warna hijau-emas dan Plus Jakarta Sans di seluruh situs, menu HP, footer, tombol Dashboard benar untuk manager, pesan `nav`/`footer` id + en.
-- [ ] F2 Homepage baru
+- [x] F2 Homepage baru: 8 bagian di `(public)/_home/`, data di `lib/catalog/home.ts`, pesan `home` id + en, muthowif tanpa daftar nama, tombol beli hanya untuk visa yang bisa di-checkout. Error hydration lama (A12) tak muncul lagi di dev maupun artefak produksi.
 - [ ] F3 SEO + penjaga `scripts/test-public-home.ts`
