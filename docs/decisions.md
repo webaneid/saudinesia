@@ -3341,3 +3341,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** syarat pemilik "hanya data dan klaim yang benar" (K3) dan temuan §1.2 `docs/arsitektur-frontend-publik.md`. Visa berharga 0 atau visa plus akan gagal di checkout bila diberi tombol.
 **Alternatives considered:** mengikuti gaya halaman katalog yang menampilkan harga 0 dan tombol ke `/register` (menjanjikan pembelian yang buntu).
 **Security check F2:** 0 Critical/High/Medium/Low. Tanpa route, skema, atau dependensi baru; `lib/catalog/home.ts` hanya membaca baris aktif, memakai `select` sempit dan pembaca harga jual, tanpa kolom modal. `bun audit --audit-level=critical` lolos.
+
+## 2026-11-06 — `<html lang>` dibaca di layout akar, alamat situs satu sumber
+**Decision:** layout akar membaca locale lewat `getLocale()`; `lib/seo/site.ts` menjadi satu sumber alamat situs dan `hreflang` untuk metadata, robots, dan sitemap. Halaman 404 ikut diterjemahkan karena `lang` kini mengikuti URL.
+**Rationale:** perubahan terkecil; halaman di bawah `[locale]` memang sudah dinamis. Locale divalidasi `i18n/request.ts`, jadi header palsu tidak bisa masuk ke atribut `lang`.
+**Alternatives considered:** memindahkan `<html>` ke `app/[locale]/layout.tsx` (layout akar hanya meneruskan, `not-found` harus menulis `<html>` sendiri; lebih banyak perubahan tanpa manfaat di sini); gambar Open Graph buatan `next/og` (belum ada aset yang berhak dipakai, dan artefak `bun server.js` perlu diuji tersendiri).
+**Security check F3:** 0 Critical/High/Medium/Low. Tanpa route, skema, atau dependensi baru; invoice publik tetap `noindex` dan `no-referrer`, tanpa canonical; `/_not-found` kini dinamis tanpa membutuhkan database. `bun audit --audit-level=critical` lolos.

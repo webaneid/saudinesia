@@ -921,4 +921,4 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 
 - [x] F1 Kerangka: warna hijau-emas dan Plus Jakarta Sans di seluruh situs, menu HP, footer, tombol Dashboard benar untuk manager, pesan `nav`/`footer` id + en.
 - [x] F2 Homepage baru: 8 bagian di `(public)/_home/`, data di `lib/catalog/home.ts`, pesan `home` id + en, muthowif tanpa daftar nama, tombol beli hanya untuk visa yang bisa di-checkout. Error hydration lama (A12) tak muncul lagi di dev maupun artefak produksi.
-- [ ] F3 SEO + penjaga `scripts/test-public-home.ts`
+- [x] F3 SEO + penjaga: judul, deskripsi, Open Graph, canonical + `hreflang` homepage (`lib/seo/site.ts`), `<html lang>` dan halaman 404 mengikuti locale, robots/sitemap satu sumber alamat, `scripts/test-public-home.ts` — selesai 2026-11-06 (artefak produksi; 3 mutasi membuat penjaga merah). Gambar Open Graph menunggu foto/logo pemilik

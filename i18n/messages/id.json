@@ -1,5 +1,7 @@
 {
   "common": {
+    "notFound": "Halaman tidak ditemukan.",
+    "backHome": "Kembali ke Beranda",
     "loading": "Memuat...",
     "error": "Terjadi kesalahan",
     "submit": "Kirim",
@@ -79,6 +81,10 @@
     "rights": "Hak cipta dilindungi."
   },
   "home": {
+    "meta": {
+      "title": "Saudinesia: Umroh dan Haji, diurus satu tim",
+      "description": "Visa, hotel, transportasi, muthowif, dan paket Umroh untuk jamaah Indonesia. Satu operator yang bertanggung jawab, satu invoice untuk pesanan Anda."
+    },
     "hero": {
       "title": "Umroh dan haji, diurus satu tim",
       "subtitle": "Visa, hotel, transportasi, muthowif, dan paket lengkap untuk jamaah Indonesia. Satu operator yang bertanggung jawab, satu invoice untuk pesanan Anda.",

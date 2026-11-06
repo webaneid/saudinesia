@@ -1,0 +1,177 @@
+// Penjaga homepage publik (docs/arsitektur-frontend-publik.md F3). Bukan daftar berkas yang dihafal: tes menemukan sendiri setiap berkas homepage dan rute yang ada.
+// Merah bila: palet warna mentah/token admin/inline style, harga modal terbaca, tautan menuju rute yang tak ada, pesan id/en tak sama, atau metadata/`<html lang>` hilang.
+//
+// Tak membutuhkan database. Bagian pertama menguji pemeriksanya sendiri dengan contoh yang HARUS ditolak.
+import assert from 'node:assert/strict'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { join } from 'node:path'
+import { PUBLIC_NAV } from '../components/shared/publicNav'
+
+let failed = 0
+function t(name: string, fn: () => void) {
+  try { fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 14).join('\n     ')}`) }
+}
+const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
+const read = (f: string) => readFileSync(join(root, f), 'utf8')
+const HOME_DIR = 'app/[locale]/(public)/_home'
+const HOME_SOURCES = [
+  'app/[locale]/(public)/page.tsx',
+  'lib/catalog/home.ts',
+  ...readdirSync(join(root, HOME_DIR)).filter(f => f.endsWith('.tsx')).map(f => `${HOME_DIR}/${f}`),
+]
+
+// ── Pemeriksa ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+const PALETTE = 'slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose'
+const RAW_COLOR = new RegExp(`\\b[a-z-]*(?:${PALETTE})-(?:50|[1-9]00|950)\\b|#[0-9a-fA-F]{3,8}\\b|\\b(?:bg|text|border|ring|fill)-admin-|style=\\{`)
+function styleProblems(src: string): string[] { return src.match(new RegExp(RAW_COLOR, 'g')) ?? [] }
+
+// Kolom modal/margin price_points dan price_snapshots, serta pembaca khusus admin (engine/read.ts).
+const COST = /\b(?:costIdr|autoSellIdr|manualSellIdr|marginPctUsed|roundingUsed|manualNote|unitCostIdr|totalCostIdr|recommendedTotalIdr|productCost|pricePoint|priceSnapshot|getPricePoints?|hpp)\b/i
+function costProblems(src: string): string[] { return src.match(new RegExp(COST, 'gi')) ?? [] }
+
+/** Tiap rute `app/[locale]/**` sebagai segmen tanpa grup rute: `(public)/hotels/[id]/page.tsx` → ["hotels", "[id]"]. */
+function discoverRoutes(): string[][] {
+  const out: string[][] = []
+  const walk = (dir: string, segs: string[]) => {
+    for (const f of readdirSync(join(root, dir))) {
+      const p = join(dir, f)
+      if (statSync(join(root, p)).isDirectory()) {
+        if (f.startsWith('_')) continue
+        walk(p, /^\(.*\)$/.test(f) ? segs : [...segs, f])
+      } else if (f === 'page.tsx') out.push(segs)
+    }
+  }
+  walk('app/[locale]', [])
+  return out
+}
+
+/** `/${locale}/hotels/${h.id}?x=1` → ["hotels", "*"]; `*` hanya cocok dengan segmen dinamis, atau segmen apa pun bila itu `${path}` dari menu (diuji terpisah). */
+function linkSegments(tpl: string): string[] {
+  return tpl.replace(/^\/\$\{locale\}\/?/, '').split(/[?#]/)[0]!.split('/').filter(Boolean).map(s => (s.includes('${') ? '*' : s))
+}
+function routeExists(segs: string[], routes: string[][]): boolean {
+  return routes.some(r => r.length === segs.length && r.every((seg, i) => {
+    const dynamic = seg.startsWith('[')
+    return segs[i] === '*' ? dynamic : dynamic || seg === segs[i]
+  }))
+}
+
+/** Tiap tautan: templat `/${locale}/…` di mana pun, dan `href` selain templat/variabel (teks tetap atau alamat luar). */
+function homeLinks(src: string): { internal: string[]; bad: string[] } {
+  const internal = [...src.matchAll(/`(\/\$\{locale\}[^`]*)`/g)].map(m => m[1]!)
+  const bad = [...src.matchAll(/href=(?:"([^"]*)"|\{\s*(['"][^'"]*['"])\s*\})|`(https?:\/\/[^`]*)`/g)].map(m => m[1] ?? m[2] ?? m[3]!)
+  return { internal, bad }
+}
+
+function keyPaths(o: unknown, prefix = ''): string[] {
+  if (o === null || typeof o !== 'object' || Array.isArray(o)) return [prefix]
+  return Object.entries(o as Record<string, unknown>).flatMap(([k, v]) => keyPaths(v, prefix ? `${prefix}.${k}` : k))
+}
+
+// ── Pemeriksa harus menolak contoh buruk ────────────────────────────────────────────────────────────────────────────────────────────────
+
+t('pemeriksa warna menolak palet mentah, hex, token admin, inline style', () => {
+  for (const bad of ['className="text-blue-600"', 'fill-amber-400', 'hover:bg-green-50', 'bg-[#04543e]', 'text-admin-muted', 'style={{ color: "x" }}']) {
+    assert.ok(styleProblems(bad).length > 0, bad)
+  }
+  for (const ok of ['text-brand', 'fill-brand-gold', 'bg-brand-light', 'border-primary', 'text-muted-foreground']) assert.deepEqual(styleProblems(ok), [], ok)
+})
+
+t('pemeriksa modal menolak kolom modal dan pembaca admin', () => {
+  for (const bad of ['p.costIdr', 'select: { unitCostIdr: true }', 'getPricePoints(ids)', 'prisma.pricePoint.findMany', 'hpp']) assert.ok(costProblems(bad).length > 0, bad)
+  for (const ok of ['sellPrices', 'visaPriceSummary', 'priceLabel', 'pricePerDay']) assert.deepEqual(costProblems(ok), [], ok)
+})
+
+t('pemeriksa rute menolak tautan yang tak ada', () => {
+  const routes = [['hotels'], ['hotels', '[id]'], ['bookings', 'checkout', 'visa'], []]
+  assert.ok(routeExists(linkSegments('/${locale}'), routes))
+  assert.ok(routeExists(linkSegments('/${locale}/hotels/${h.id}'), routes))
+  assert.ok(routeExists(linkSegments('/${locale}/bookings/checkout/visa?productId=${v.id}'), routes))
+  assert.ok(!routeExists(linkSegments('/${locale}/hotel'), routes))
+  assert.ok(!routeExists(linkSegments('/${locale}/hotels/${h.id}/kamar'), routes))
+  assert.ok(!routeExists(linkSegments('/${locale}/${path}'), [['hotels']]), 'segmen variabel tak boleh cocok dengan rute tetap')
+  assert.deepEqual(homeLinks('href="/id/visa"').bad, ['/id/visa'])
+  assert.deepEqual(homeLinks("href={'/id/visa'}").bad, ["'/id/visa'"])
+  assert.equal(homeLinks('const u = `https://contoh.test/a`').bad.length, 1)
+})
+
+// ── Homepage ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+t('penemu berkas menemukan bagian homepage', () => {
+  assert.ok(HOME_SOURCES.length >= 10, `hanya ${HOME_SOURCES.length} berkas`)
+  assert.ok(discoverRoutes().length > 10)
+})
+
+t('homepage tanpa palet mentah, token admin, inline style', () => {
+  const problems = HOME_SOURCES.flatMap(f => styleProblems(read(f)).map(m => `${f}: ${m}`))
+  assert.deepEqual(problems, [])
+})
+
+t('homepage tidak menyentuh modal; harga hanya lewat engine/read.ts', () => {
+  const problems = HOME_SOURCES.flatMap(f => costProblems(read(f)).map(m => `${f}: ${m}`))
+  assert.deepEqual(problems, [])
+  const data = read('lib/catalog/home.ts')
+  assert.match(data, /from '@\/lib\/pricing\/engine\/read'/)
+  const imported = data.match(/import \{([^}]*)\} from '@\/lib\/pricing\/engine\/read'/)?.[1]?.split(',').map(s => s.trim()).filter(Boolean) ?? []
+  assert.deepEqual(imported.filter(n => !['getMuthowifServicePrice', 'sellPrices', 'visaPriceSummary'].includes(n)), [])
+  assert.doesNotMatch(data, /from '@\/lib\/pricing\/(?!engine\/read')/)
+})
+
+t('tiap tautan homepage menuju rute yang ada', () => {
+  const routes = discoverRoutes()
+  const missing: string[] = []
+  const bad: string[] = []
+  for (const f of HOME_SOURCES) {
+    const links = homeLinks(read(f))
+    bad.push(...links.bad.map(b => `${f}: ${b}`))
+    for (const tpl of links.internal) {
+      if (tpl === '/${locale}/${path}') continue // dari PUBLIC_NAV, diuji di bawah
+      if (!routeExists(linkSegments(tpl), routes)) missing.push(`${f}: ${tpl}`)
+    }
+  }
+  for (const { path } of PUBLIC_NAV) if (!routeExists([path], routes)) missing.push(`PUBLIC_NAV: ${path}`)
+  assert.deepEqual(missing, [])
+  assert.deepEqual(bad, [], 'tautan homepage harus memakai locale; alamat luar belum ada')
+})
+
+t('tombol ajukan visa hanya untuk yang bisa dibeli langsung', () => {
+  const src = read(`${HOME_DIR}/HomeVisa.tsx`)
+  assert.match(src, /canBuyDirectly/)
+  assert.ok(src.indexOf('canBuyDirectly') < src.indexOf('bookings/checkout/visa'), 'checkout harus berada di dalam syarat canBuyDirectly')
+})
+
+t('pesan home id dan en memiliki kunci yang sama', () => {
+  const id = keyPaths(JSON.parse(read('i18n/messages/id.json')).home)
+  const en = keyPaths(JSON.parse(read('i18n/messages/en.json')).home)
+  assert.deepEqual([...id].sort(), [...en].sort())
+  assert.ok(id.includes('meta.title') && id.includes('meta.description'))
+})
+
+t('homepage punya metadata, Open Graph, dan hreflang dari satu sumber', () => {
+  const page = read('app/[locale]/(public)/page.tsx')
+  for (const part of ['generateMetadata', 'openGraph', 'alternates', 'localizedAlternates']) assert.ok(page.includes(part), part)
+  assert.match(read('app/layout.tsx'), /metadataBase: new URL\(siteOrigin\(\)\)/)
+})
+
+t('<html lang> mengikuti locale, bukan teks tetap', () => {
+  const layout = read('app/layout.tsx')
+  assert.match(layout, /<html lang=\{locale\}/)
+  assert.match(layout, /await getLocale\(\)/)
+  const notFound = read('app/not-found.tsx')
+  assert.match(notFound, /getTranslations/, '404 harus mengikuti bahasa yang sama dengan lang')
+  assert.doesNotMatch(notFound, /href="\/id"/)
+})
+
+t('robots dan sitemap memakai satu sumber alamat dan locale', () => {
+  for (const f of ['app/robots.ts', 'app/sitemap.ts']) {
+    const src = read(f)
+    assert.match(src, /siteOrigin\(\)/, f)
+    assert.doesNotMatch(src, /NEXT_PUBLIC_APP_URL/, f)
+  }
+  assert.doesNotMatch(read('app/sitemap.ts'), /\['id', 'en'\]/)
+  assert.ok(existsSync(join(root, 'lib/seo/site.ts')))
+})
+
+if (failed) { console.log(`\n${failed} gagal`); process.exit(1) }
+console.log('\nSemua lolos')

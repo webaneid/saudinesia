@@ -1,8 +1,17 @@
+import type { Metadata } from 'next'
 import { NextIntlClientProvider, hasLocale } from 'next-intl'
+import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { routing } from '@/i18n/routing'
 import { AppTimezoneProvider } from '@/components/shared/AppTimezoneProvider'
 import { getAppTimezone } from '@/lib/time'
+
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params
+  if (!hasLocale(routing.locales, locale)) return {}
+  const t = await getTranslations({ locale, namespace: 'home.meta' })
+  return { description: t('description') }
+}
 
 export default async function LocaleLayout({
   children,

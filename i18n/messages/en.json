@@ -1,5 +1,7 @@
 {
   "common": {
+    "notFound": "Page not found.",
+    "backHome": "Back to Home",
     "loading": "Loading...",
     "error": "An error occurred",
     "submit": "Submit",
@@ -79,6 +81,10 @@
     "rights": "All rights reserved."
   },
   "home": {
+    "meta": {
+      "title": "Saudinesia: Umrah and Hajj, handled by one team",
+      "description": "Visas, hotels, transport, muthowif, and Umrah packages for Indonesian pilgrims. One accountable operator, one invoice for your order."
+    },
     "hero": {
       "title": "Umrah and Hajj, handled by one team",
       "subtitle": "Visas, hotels, transport, muthowif, and complete packages for Indonesian pilgrims. One accountable operator, one invoice for your order.",
