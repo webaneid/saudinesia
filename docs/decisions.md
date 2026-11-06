@@ -3335,3 +3335,9 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** satu identitas di seluruh situs lewat satu perubahan token, disetujui pemilik lewat rencana `docs/arsitektur-frontend-publik.md`. Font brand lebih lebar, delapan menu meluap pada 1024 px.
 **Alternatives considered:** override warna hanya di layout publik (area login dan jamaah tetap biru, dua identitas); membiarkan menu di `lg` dengan teks diperkecil (terbaca buruk).
 **Security check F1:** 0 Critical/High/Medium/Low. Tanpa route, skema, atau dependensi baru; pengalihan Dashboard memakai `ADMIN_ROLES`, akses sungguhan tetap dijaga halaman admin. `bun audit --audit-level=critical` lolos.
+
+## 2026-11-06 — Homepage hanya menjanjikan yang benar-benar bisa dilakukan
+**Decision:** homepage baru (F2) menampilkan tombol beli hanya pada visa tanpa produk wajib lain yang sudah berharga; paket dan hotel hanya menuju katalog; bagian Cara kerja memuat kalimat bahwa baru Visa dan Transport yang bisa dipesan sendiri secara online (dihapus setelah checkout produk lain ada). Harga yang belum ada disembunyikan, bukan "Rp 0". Harga hotel diberi label "per kamar per malam" karena memang harga kamar.
+**Rationale:** syarat pemilik "hanya data dan klaim yang benar" (K3) dan temuan §1.2 `docs/arsitektur-frontend-publik.md`. Visa berharga 0 atau visa plus akan gagal di checkout bila diberi tombol.
+**Alternatives considered:** mengikuti gaya halaman katalog yang menampilkan harga 0 dan tombol ke `/register` (menjanjikan pembelian yang buntu).
+**Security check F2:** 0 Critical/High/Medium/Low. Tanpa route, skema, atau dependensi baru; `lib/catalog/home.ts` hanya membaca baris aktif, memakai `select` sempit dan pembaca harga jual, tanpa kolom modal. `bun audit --audit-level=critical` lolos.

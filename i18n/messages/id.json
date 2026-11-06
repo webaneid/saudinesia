@@ -77,5 +77,89 @@
     "info": "Informasi",
     "privacy": "Kebijakan Privasi",
     "rights": "Hak cipta dilindungi."
+  },
+  "home": {
+    "hero": {
+      "title": "Umroh dan haji, diurus satu tim",
+      "subtitle": "Visa, hotel, transportasi, muthowif, dan paket lengkap untuk jamaah Indonesia. Satu operator yang bertanggung jawab, satu invoice untuk pesanan Anda.",
+      "primaryCta": "Lihat Paket Umroh",
+      "secondaryCta": "Lihat Layanan Visa"
+    },
+    "services": {
+      "title": "Pilih kebutuhan Anda",
+      "description": "Ambil paket lengkap, atau pilih layanan yang Anda perlukan saja.",
+      "items": {
+        "packages": "Umroh lengkap dalam satu paket",
+        "haji": "Program haji",
+        "visa": "Pengurusan visa per jamaah",
+        "flight": "Rute dan jadwal penerbangan",
+        "hotels": "Hotel di Makkah dan Madinah",
+        "transport": "Antar kota dan antar jemput",
+        "muthowif": "Pembimbing ibadah",
+        "tours": "Ziarah ke situs bersejarah"
+      }
+    },
+    "packages": {
+      "title": "Paket Umroh",
+      "description": "Hotel, transportasi, dan layanan lain yang sudah disusun dalam satu paket.",
+      "seeAll": "Lihat semua paket",
+      "featured": "Pilihan utama",
+      "priceFrom": "Harga mulai",
+      "perPerson": "per orang",
+      "addOns": "Belum termasuk komponen tambahan yang Anda pilih"
+    },
+    "visa": {
+      "title": "Layanan Visa",
+      "description": "Visa dipesan per jamaah, dan dokumen setiap jamaah diperiksa oleh tim kami.",
+      "seeAll": "Lihat semua visa",
+      "priceFrom": "Mulai dari",
+      "perPerson": "per orang",
+      "processDays": "Estimasi proses {days} hari kerja",
+      "apply": "Ajukan Visa",
+      "details": "Lihat detail"
+    },
+    "hotels": {
+      "title": "Hotel di Makkah dan Madinah",
+      "description": "Bintang, jarak ke Haram, dan harga termurah untuk periode yang sedang berjalan.",
+      "seeAll": "Lihat semua hotel",
+      "makkah": "Makkah",
+      "madinah": "Madinah",
+      "stars": "Bintang {count}",
+      "distance": "{distance} dari Haram",
+      "priceFrom": "Mulai",
+      "perNight": "per kamar per malam"
+    },
+    "muthowif": {
+      "title": "Pendamping muthowif",
+      "description": "Anda memesan layanannya, dan kami yang menugaskan muthowif untuk perjalanan Anda.",
+      "priceFrom": "Mulai",
+      "perDay": "per hari",
+      "details": "Lihat layanan muthowif"
+    },
+    "steps": {
+      "title": "Cara kerja",
+      "choose": {
+        "title": "Pilih layanan",
+        "description": "Pilih produk dan tanggal yang Anda butuhkan."
+      },
+      "data": {
+        "title": "Isi data jamaah",
+        "description": "Lengkapi data dan dokumen setiap jamaah."
+      },
+      "pay": {
+        "title": "Bayar dan unggah bukti",
+        "description": "Transfer sesuai invoice, lalu unggah bukti pembayaran."
+      },
+      "verify": {
+        "title": "Tim kami memverifikasi",
+        "description": "Pembayaran dan dokumen diperiksa oleh petugas kami."
+      },
+      "availability": "Saat ini Visa dan Transport bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan."
+    },
+    "cta": {
+      "title": "Mulai dengan membuat akun",
+      "description": "Data jamaah dan pesanan Anda tersimpan di satu tempat.",
+      "button": "Daftar Akun"
+    }
   }
 }
