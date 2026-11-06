@@ -916,3 +916,9 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] Peringatan rekening kosong di editor draf dan kotak invoice; invoice bersnapshot kosong memakai rekening aktif.
 - [ ] Isi rekening bank sungguhan di Pengaturan Invoice (entri data pemilik).
 - [ ] Batal booking lunas, tombol batal jamaah dan admin, serta pemrosesan refund: belum ada, butuh keputusan aturan refund.
+
+## Front-end publik (`docs/arsitektur-frontend-publik.md`, 2026-11-06)
+
+- [x] F1 Kerangka: warna hijau-emas dan Plus Jakarta Sans di seluruh situs, menu HP, footer, tombol Dashboard benar untuk manager, pesan `nav`/`footer` id + en.
+- [ ] F2 Homepage baru
+- [ ] F3 SEO + penjaga `scripts/test-public-home.ts`
