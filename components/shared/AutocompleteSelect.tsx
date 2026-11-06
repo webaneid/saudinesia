@@ -145,7 +145,6 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
 
   const listId = `${uid}-list`
   const showClear = clearable && selected && !disabled && !loading
-  const inAdmin = open && !!triggerRef.current?.closest('.admin-canvas')
 
   return (
     <div ref={rootRef} className={cn('relative', className)}>
@@ -182,7 +181,6 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
           style={place ? { top: place.top, bottom: place.bottom, left: place.left, minWidth: place.minWidth } : { visibility: 'hidden' }}
           className={cn(
             'fixed z-50 w-max max-w-[min(26rem,calc(100vw-1rem))] overflow-hidden rounded-xl border border-input bg-background text-foreground shadow-xl',
-            inAdmin && 'brand-scope',
           )}
         >
           {hasSearch && (

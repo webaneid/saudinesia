@@ -52,13 +52,30 @@
   "nav": {
     "home": "Beranda",
     "hotels": "Hotel",
-    "transport": "Transportasi",
+    "transport": "Transport",
     "muthowif": "Muthowif",
     "catering": "Katering",
-    "tours": "Wisata",
+    "tours": "Ziarah",
     "dashboard": "Dashboard",
     "bookings": "Booking Saya",
     "admin": "Admin",
-    "superadmin": "Super Admin"
+    "superadmin": "Super Admin",
+    "packages": "Paket",
+    "haji": "Haji",
+    "visa": "Visa",
+    "flight": "Pesawat",
+    "login": "Masuk",
+    "register": "Daftar",
+    "openMenu": "Buka menu",
+    "closeMenu": "Tutup menu",
+    "mainMenu": "Menu utama"
+  },
+  "footer": {
+    "tagline": "Layanan umroh dan haji untuk jamaah Indonesia.",
+    "services": "Layanan",
+    "account": "Akun",
+    "info": "Informasi",
+    "privacy": "Kebijakan Privasi",
+    "rights": "Hak cipta dilindungi."
   }
 }

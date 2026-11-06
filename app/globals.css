@@ -8,7 +8,7 @@
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
     --card-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
+    --primary: 164 91% 17%; /* #04543e = --brand-primary */
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -20,11 +20,11 @@
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
+    --ring: 164 91% 17%;
     --radius: 0.5rem;
 
     /*
-     * Admin UI Kit (docs/admin-ui-kit.md) — palet brand hijau + emas, mengikuti admin smart-ai.
+     * Palet brand hijau + emas untuk seluruh situs (admin, publik, jamaah — docs/arsitektur-frontend-publik.md K1). Rincian admin: docs/admin-ui-kit.md.
      * SATU-SATUNYA tempat warna brand didefinisikan; nilai berupa channel RGB ("R G B") supaya
      * modifier opacity Tailwind (bg-admin-danger/10) jalan. Ganti brand = ubah blok --brand-* saja.
      *   primary (hijau)  → aksi utama, menu aktif, ikon sorotan   (admin-accent / -strong)
@@ -51,15 +51,6 @@
     --admin-danger: 180 35 24;         /* #b42318 */
     --admin-warning: 196 106 18;       /* #c46a12 */
     --admin-ok: 47 133 90;             /* #2f855a */
-  }
-
-  /* Komponen bersama (AddressPicker, ContactPicker, AutocompleteSelect) memakai token shadcn `primary`/`ring`
-     (biru). Di dalam area admin diarahkan ke hijau brand (#04543e); pilgrim & publik tetap biru. `brand-scope` = hanya variabel itu, untuk
-     elemen yang dipasang lewat portal di luar `.admin-canvas` (daftar AutocompleteSelect). */
-  .admin-canvas,
-  .brand-scope {
-    --primary: 164 91% 17%;
-    --ring: 164 91% 17%;
   }
 
   * {

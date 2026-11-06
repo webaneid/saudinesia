@@ -10,7 +10,7 @@ const config: Config = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
+        sans: ['var(--font-jakarta)', 'ui-sans-serif', 'system-ui'],
         jakarta: ['var(--font-jakarta)', 'ui-sans-serif', 'system-ui'],
       },
       colors: {
@@ -42,6 +42,14 @@ const config: Config = {
         card: {
           DEFAULT: 'hsl(var(--card))',
           foreground: 'hsl(var(--card-foreground))',
+        },
+        // Warna brand untuk area publik/jamaah (area itu tak memakai token admin-*). Nilai di globals.css.
+        brand: {
+          DEFAULT: 'rgb(var(--brand-primary) / <alpha-value>)',
+          dark:    'rgb(var(--brand-primary-dark) / <alpha-value>)',
+          medium:  'rgb(var(--brand-primary-medium) / <alpha-value>)',
+          gold:    'rgb(var(--brand-accent) / <alpha-value>)',
+          light:   'rgb(var(--brand-light) / <alpha-value>)',
         },
         // Admin UI Kit (docs/admin-ui-kit.md) — nilai di globals.css, satu-satunya tempat warna brand
         admin: {

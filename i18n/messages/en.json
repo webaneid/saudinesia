@@ -55,10 +55,27 @@
     "transport": "Transport",
     "muthowif": "Muthowif",
     "catering": "Catering",
-    "tours": "Tours",
+    "tours": "Ziyarah",
     "dashboard": "Dashboard",
     "bookings": "My Bookings",
     "admin": "Admin",
-    "superadmin": "Super Admin"
+    "superadmin": "Super Admin",
+    "packages": "Packages",
+    "haji": "Hajj",
+    "visa": "Visa",
+    "flight": "Flights",
+    "login": "Sign in",
+    "register": "Sign up",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "mainMenu": "Main menu"
+  },
+  "footer": {
+    "tagline": "Umrah and Hajj services for Indonesian pilgrims.",
+    "services": "Services",
+    "account": "Account",
+    "info": "Information",
+    "privacy": "Privacy Policy",
+    "rights": "All rights reserved."
   }
 }
