@@ -1,6 +1,6 @@
 # Arsitektur — Front-end Publik (mulai dari Homepage)
 
-> **Status: RENCANA DISETUJUI PEMILIK (2026-11-06). F1 dan F2 selesai (2026-11-06); F3 belum.**
+> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06).**
 > Urutan pekerjaan menurut pemilik: front-end publik dulu, mulai dari homepage; UI admin terakhir. Istilah "jamaah" tetap dipakai untuk sementara (keputusan pemilik 2026-11-06).
 
 ---
@@ -78,6 +78,8 @@ Kerangka (sudah dibangun F1): satu daftar menu `components/shared/publicNav.ts`,
 Komponen bagian homepage di `app/[locale]/(public)/_home/`, satu berkas per bagian. Pengambilan data terpusat di `lib/catalog/home.ts`, supaya `page.tsx` hanya menyusun.
 
 Catatan as-built F2: bagian Visa memberi tombol ajukan hanya bila `canBuyDirectly` (tanpa produk wajib lain dan sudah berharga), selain itu tombol detail ke katalog. Harga belum ada (`null`) disembunyikan. Kalimat ketersediaan di bawah Cara kerja (`home.steps.availability`) dihapus setelah checkout produk lain ada. Teks dari data produk (nama, `priceLabel`) tidak diterjemahkan di `/en`, karena belum ada kolom terjemahannya.
+
+Catatan as-built F3: alamat situs dan tautan antarbahasa ada di `lib/seo/site.ts`, juga dipakai robots dan sitemap. `NEXT_PUBLIC_APP_URL` kosong atau salah jatuh ke `https://saudinesia.com`, bukan meruntuhkan layout akar. Homepage belum punya gambar Open Graph sampai ada foto atau logo yang berhak dipakai (§5). `<html lang>` dibaca lewat `getLocale()` di layout akar, sehingga halaman 404 ikut bahasa URL dan teksnya diterjemahkan. Halaman katalog lain belum punya metadata sendiri: judulnya tetap "Saudinesia".
 
 ---
 
