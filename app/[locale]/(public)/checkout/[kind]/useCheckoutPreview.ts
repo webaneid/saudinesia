@@ -6,7 +6,7 @@ import type { CheckoutInput } from '@/lib/validators/checkout'
 // Pratinjau harga dari server (POST /api/v1/bookings/preview) — mesin pesan yang sama dengan saat memesan, di transaksi yang di-rollback.
 // Dipanggil ulang (jeda 400 ms) setiap isian berubah; permintaan lama dibatalkan. Klien TIDAK menghitung harga sendiri.
 
-export type PreviewLine = { label: string; description: string; qty: number; unitPrice: number; amount: number }
+export type PreviewLine = { label: string; description: string; qty: number; unitPrice: number; amount: number; group?: { label: string; unit: string } }
 export type PreviewData = { lines: PreviewLine[]; total: number; tax: Array<{ name: string; ratePercent: number; mode: string; amountIdr: number }>; taxAdded: number; grandTotal: number; dueDays: number }
 export type PreviewState =
   | { status: 'idle' }

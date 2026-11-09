@@ -3,14 +3,19 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FolderOpen, Link2, Plus, RefreshCw, Send, Unlink } from 'lucide-react'
+import { FolderOpen, Link2, Plus, RefreshCw, Send, Unlink, UserCheck } from 'lucide-react'
 import type { PilgrimReviewStatus } from '@prisma/client'
+import type { PilgrimWarning } from '@/lib/pilgrims/service'
 import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
 import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { checklistState, type ChecklistTone } from '@/lib/documents/checklistLabels'
 import { isReviewLocked, REVIEW_LABEL, REVIEW_TONE } from '@/lib/pilgrims/reviewState'
+import { contactFromStored } from '@/components/shared/ContactPicker'
+import { EMPTY_PILGRIM_FORM, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
+import { WARNING_TEXT } from '@/components/shared/pilgrims/warningText'
+import { InlinePilgrimForm } from './InlinePilgrimForm'
 
 // Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot — mengedit kartu
 // kemudian tidak mengubah booking sampai "Perbarui"), checklist kelengkapan (dihitung server), dan dokumen per perjalanan. Paspor/KTP diunggah di kartu.
@@ -24,6 +29,8 @@ type Props = {
   checklist: TripChecklistItem[]
   /** Pemeriksaan petugas (Fase 6): `ready` = dokumen wajib siap (server); `note` = catatan perbaikan terakhir. */
   review: { status: PilgrimReviewStatus; open: boolean; ready: boolean; note: string | null }
+  /** Pemesan sebagai jamaah: kartu "Saya sendiri" (bila ada), sudah dipakai di booking ini, dan data akun untuk mengisi kartu baru. */
+  self: { cardId: string | null; usedHere: boolean; fullName: string; email: string; phone: string | null; whatsapp: string | null }
 }
 
 const VARIANT: Record<ChecklistTone, 'success' | 'warning' | 'destructive' | 'muted'> = { ok: 'success', warning: 'warning', danger: 'destructive', neutral: 'muted' }
@@ -34,7 +41,7 @@ const REVIEW_HINT: Record<PilgrimReviewStatus, string> = {
   verified: 'Data jamaah ini sudah diverifikasi petugas.',
 }
 
-export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checklist, review }: Props) {
+export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checklist, review, self }: Props) {
   const router = useRouter()
   const [options, setOptions] = useState<AutocompleteOption[]>([])
   const [q, setQ] = useState('')
@@ -43,6 +50,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
   const [busy, setBusy] = useState(false)
   const [confirming, setConfirming] = useState<'refresh' | 'unlink' | null>(null)
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null)
+  const [creating, setCreating] = useState<'new' | 'self' | null>(null)
   const base = `/api/v1/bookings/${bookingId}/pilgrims/${pilgrimId}`
 
   useEffect(() => {
@@ -58,19 +66,35 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
     return () => ctrl.abort()
   }, [q, linked])
 
-  async function call(method: 'PUT' | 'DELETE' | 'POST', body: object | undefined, done: string, path = 'card') {
+  /** Mengembalikan pesan galat (null = berhasil). */
+  async function call(method: 'PUT' | 'DELETE' | 'POST', body: object | undefined, done: string, path = 'card'): Promise<string | null> {
     setBusy(true); setNotice(null); setConfirming(null)
     try {
       const res = await fetch(`${base}/${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       const json = await res.json().catch(() => null)
-      if (!res.ok) { setNotice({ text: json?.error ?? 'Gagal menyimpan.', error: true }); return }
+      if (!res.ok) { const text = json?.error ?? 'Gagal menyimpan.'; setNotice({ text, error: true }); return text }
       setNotice({ text: done, error: false })
       setCardId('')
+      setCreating(null)
       router.refresh()
+      return null
     } catch {
       setNotice({ text: 'Tidak dapat menghubungi server.', error: true })
+      return 'Tidak dapat menghubungi server.'
     } finally { setBusy(false) }
   }
+
+  // Kartu baru dari formulir sebaris → langsung dipakai untuk jamaah ini.
+  const linkNew = (id: string, warnings: PilgrimWarning[]) =>
+    call('PUT', { cardId: id }, ['Data jamaah tersimpan dan terpasang. Unggah paspor/KTP lewat tautan Jamaah Saya di atas.', ...warnings.map(w => WARNING_TEXT[w])].join(' '))
+  // "Jadikan saya jamaah": kartu "Saya sendiri" yang sudah ada langsung dipakai; belum ada → formulir terisi dari data akun.
+  function pickSelf() {
+    if (self.cardId) { void call('PUT', { cardId: self.cardId }, 'Anda terdaftar sebagai jamaah ini.'); return }
+    setNotice(null); setCreating('self')
+  }
+  const selfForm = (): SavedPilgrimFormValue => ({
+    ...EMPTY_PILGRIM_FORM, fullName: self.fullName, email: self.email, isSelf: true, contact: contactFromStored(self.phone ?? '', self.whatsapp ?? ''),
+  })
 
   const locked = isReviewLocked(review.status)
   return (
@@ -116,14 +140,26 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
             </div>
           )}
         </div>
+      ) : creating ? (
+        <InlinePilgrimForm
+          idPrefix={`sp-${pilgrimId}`}
+          title={creating === 'self' ? 'Data Anda sebagai jamaah' : 'Tambah jamaah baru'}
+          initial={creating === 'self' ? selfForm() : EMPTY_PILGRIM_FORM}
+          showSelf={creating === 'new' && !self.cardId}
+          onCancel={() => setCreating(null)}
+          onSaved={linkNew}
+        />
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-sm text-muted-foreground">Pilih data jamaah ini dari Jamaah Saya — data dan dokumennya terisi otomatis.</p>
           <div className="flex flex-wrap items-center gap-2">
             <AutocompleteSelect options={options} value={cardId} onChange={v => setCardId(v ?? '')} onSearch={setQ} loading={loading}
-              placeholder="Pilih dari Jamaah Saya…" ariaLabel="Jamaah Saya" className="min-w-64" />
+              placeholder="Pilih dari Jamaah Saya…" ariaLabel="Jamaah Saya" className="min-w-0 flex-1 sm:min-w-64 sm:flex-none" />
             <Button size="sm" onClick={() => call('PUT', { cardId }, 'Data jamaah terisi dari Jamaah Saya.')} disabled={busy || !cardId}><Link2 className="h-4 w-4" /> Pakai</Button>
-            <Link href={`/${locale}/jamaah/new`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"><Plus className="h-4 w-4" /> Tambah jamaah</Link>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {!self.usedHere && <Button size="sm" variant="outline" onClick={pickSelf} disabled={busy}><UserCheck className="h-4 w-4" /> Jadikan saya jamaah</Button>}
+            <Button size="sm" variant="outline" onClick={() => { setNotice(null); setCreating('new') }} disabled={busy}><Plus className="h-4 w-4" /> Tambah jamaah baru</Button>
           </div>
         </div>
       )}

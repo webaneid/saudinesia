@@ -901,6 +901,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 9 — iPaymu · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
 - [ ] Fase 11 — Front-end pelanggan memakai engine
   - [x] 11a — checkout pelanggan Paket Umroh, Visa, Transport, Haji (Haji tanpa visa umroh, H1 = b): satu halaman `/{locale}/checkout/[jenis]?id=`, pratinjau server (`lib/booking/simulate.ts`, dipakai bersama draf admin), pesan = `lib/checkout/place.ts` (invoice langsung terbit, data jamaah sesudahnya), alamat kembali aman sesudah login/daftar/Google/lengkapi-data (`lib/auth/nextPath.ts`), pita "Pesanan diterbitkan"; form lama Visa/Transport dihapus — selesai 2026-11-10 (§10.5)
+  - [x] 11a+ — rincian pesanan ringkas "pakai rumus" (baris identik digabung: "Visa Umroh Longstay · 3 jamaah × Rp 6.250.000 = Rp 18.750.000", satu helper `lib/booking/orderSummary.ts` dipakai detail booking jamaah, detail admin, dan ringkasan checkout; satu kartu "Rincian Pesanan" + total menggantikan kartu per layanan), jamaah booking bernomor dan berurutan tetap (`orderBy id`), "Tambah jamaah baru" dan "Jadikan saya jamaah" sebaris di booking (kartu lewat API Jamaah Saya, lalu ditautkan), pita "Pesanan diterbitkan" hanya menampilkan langkah yang masih relevan — selesai 2026-11-10
   - [ ] 11b — Hotel, Muthowif, Katering, Paket Ziarah, Tiket pesawat di halaman checkout yang sama
   - [ ] 11c — keranjang campur (Visa plus dari front-end)
   - [ ] SEC-221 — batas penahanan kuota tanpa bayar per akun (menunggu angka dari pemilik)

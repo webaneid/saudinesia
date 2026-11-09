@@ -2,6 +2,7 @@
 
 import { AlertCircle, ArrowRight, FileText, Loader2, UsersRound, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
+import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
 import type { PreviewState } from './useCheckoutPreview'
 
 type Props = {
@@ -32,16 +33,26 @@ export function CheckoutSummary({ preview, missing, submitting, submitError, onS
       ) : (
         <div className="space-y-4">
           <ul className="divide-y text-sm">
-            {preview.data.lines.map((l, i) => (
-              <li key={i} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
-                <div className="min-w-0">
-                  <p className="font-medium text-foreground">{l.label}</p>
-                  {l.description && <p className="text-xs text-muted-foreground">{l.description}</p>}
-                  {l.qty > 1 && <p className="text-xs text-muted-foreground">{l.qty} × {formatRupiah(l.unitPrice)}</p>}
-                </div>
-                <span className="shrink-0 font-semibold tabular-nums">{formatRupiah(l.amount)}</span>
-              </li>
-            ))}
+            {/* Baris per jamaah yang identik (visa) digabung: "Visa … · 3 jamaah × Rp …"; baris lain tetap satu per item. */}
+            {collapseRows(preview.data.lines.map((l, i) => ({
+              group: l.group ? 'per-jamaah' : `baris-${i}`, name: l.group?.label ?? l.label, detail: l.description,
+              unit: l.group?.unit ?? '', amount: l.amount, line: l,
+            }))).map(r => {
+              const formula = formulaOf(r, formatRupiah)
+              const line = r.first.line
+              return (
+                <li key={r.key} className="flex items-start justify-between gap-3 py-2.5 first:pt-0">
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{r.name}</p>
+                    {r.detail && <p className="text-xs text-muted-foreground">{r.detail}</p>}
+                    {formula
+                      ? <p className="text-xs text-muted-foreground tabular-nums">{formula}</p>
+                      : line.qty > 1 && <p className="text-xs text-muted-foreground tabular-nums">{line.qty} × {formatRupiah(line.unitPrice)}</p>}
+                  </div>
+                  <span className="shrink-0 font-semibold tabular-nums">{formatRupiah(r.amount)}</span>
+                </li>
+              )
+            })}
           </ul>
           <dl className="space-y-1.5 border-t pt-3 text-sm">
             <div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="tabular-nums">{formatRupiah(preview.data.total)}</dd></div>
