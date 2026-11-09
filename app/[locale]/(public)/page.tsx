@@ -1,10 +1,9 @@
 import type { Metadata } from 'next'
 import { hasLocale } from 'next-intl'
-import { getTranslations } from 'next-intl/server'
 import { routing } from '@/i18n/routing'
 import { getHomeData } from '@/lib/catalog/home'
 import { localizedAlternates, ogAlternateLocales, ogLocale } from '@/lib/seo/site'
-import { getPageContent } from '@/lib/public-content/content'
+import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { PageHero } from '@/components/shared/public/PageHero'
 import { PageCta } from '@/components/shared/public/PageCta'
 import { HomeServices } from './_home/HomeServices'
@@ -17,7 +16,7 @@ import { HomeSteps } from './_home/HomeSteps'
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params
   if (!hasLocale(routing.locales, locale)) return {}
-  const t = await getTranslations({ locale, namespace: 'home.meta' })
+  const t = await getPageText(locale, 'home', 'meta')
   const title = t('title')
   const description = t('description')
   return {

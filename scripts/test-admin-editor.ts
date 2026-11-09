@@ -12,13 +12,15 @@ const ADMIN = 'app/[locale]/admin/(protected)/'
 // Halaman edit bespoke yang memakai EditorShell langsung (halaman dengan banyak kotak komponen yang tersimpan sendiri-sendiri).
 const SHELL_PAGES = ['products/packages/[id]', 'products/hotels/[id]', 'products/tour-packages/[id]', 'bookings/[id]/edit']
 // Halaman edit berbasis EditPage (yang sendirinya EditorShell) + useEditEntity: formulir tunggal + Foto + Hapus.
-const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/transport/vehicles/[id]', 'products/haji/[id]']
+const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/transport/vehicles/[id]', 'products/haji/[id]', 'system/site-content/[page]/SiteContentEditor.tsx']
+/** Entri berakhiran .tsx = berkas editor di folder halaman (page.tsx hanya penjaga peran server); selain itu `<entri>/page.tsx`. */
+const fileOf = (e: string) => ADMIN + (e.endsWith('.tsx') ? e : e + '/page.tsx')
 // EditPage tanpa foto (entitas tak bergambar — dokumen jamaah menyusul Fase 4 jamaah sebagai kotak sendiri).
 const EDITPAGE_NO_MEDIA_PAGES = ['customers/[id]/pilgrims/[cardId]']
 
 await t('halaman bespoke memakai EditorShell + PublishBox + MetaBox + useUnsavedGuard + useDirtyForm/baseline', () => {
   for (const e of SHELL_PAGES) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     for (const c of ['EditorShell', 'PublishBox', 'MetaBox']) assert.match(src, new RegExp(`<${c}\\b`), `${e}: tidak memakai <${c}>`)
     assert.match(src, /useUnsavedGuard\(/, `${e}: tidak memasang penjaga perubahan belum disimpan`)
     assert.ok(/useDirtyForm\(/.test(src) || /baseline/.test(src), `${e}: tidak melacak perubahan belum disimpan`)
@@ -27,7 +29,7 @@ await t('halaman bespoke memakai EditorShell + PublishBox + MetaBox + useUnsaved
 
 await t('halaman EditPage: useEditEntity + useDirtyForm; formulir diisi SEKALI (muat-ulang tak menimpa ketikan); media lewat prop media', () => {
   for (const e of EDITPAGE_PAGES) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.match(src, /<EditPage\b/, `${e}: tidak memakai EditPage`)
     assert.match(src, /useEditEntity</, `${e}: tidak memakai useEditEntity`)
     assert.match(src, /useDirtyForm\(/, `${e}: tidak melacak perubahan belum disimpan`)
@@ -36,7 +38,7 @@ await t('halaman EditPage: useEditEntity + useDirtyForm; formulir diisi SEKALI (
     assert.match(src, /media=\{<MediaField\b/, `${e}: foto harus lewat prop media (kolom kanan)`)
   }
   for (const e of EDITPAGE_NO_MEDIA_PAGES) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.match(src, /<EditPage\b/, `${e}: tidak memakai EditPage`)
     assert.match(src, /useEditEntity</, `${e}: tidak memakai useEditEntity`)
     assert.match(src, /useDirtyForm\(/, `${e}: tidak melacak perubahan belum disimpan`)
@@ -53,7 +55,7 @@ await t('EditPage = EditorShell + PublishBox + DeleteBox; tidak ada panel terseb
 
 await t('halaman edit tidak kembali ke panel tersebar (kartu komponen manual)', () => {
   for (const e of [...SHELL_PAGES, ...EDITPAGE_PAGES, ...EDITPAGE_NO_MEDIA_PAGES]) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.doesNotMatch(src, /className="admin-card p-4 space-y-3"/, `${e}: kartu komponen manual — pakai MetaBox`)
     assert.doesNotMatch(src, /<ArrowLeft\b/, `${e}: tombol kembali ad-hoc — EditorShell menyediakannya`)
   }
@@ -61,13 +63,13 @@ await t('halaman edit tidak kembali ke panel tersebar (kartu komponen manual)', 
 
 await t('halaman bespoke: simpan memeriksa respons dan galat tampil; muat-ulang kotak komponen tak menimpa isian info', () => {
   for (const e of SHELL_PAGES) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.match(src, /if \(!res\.ok\)/, `${e}: respons simpan tidak diperiksa`)
     assert.match(src, /setError\(/, `${e}: galat simpan tidak ditampilkan`)
   }
   assert.match(read(ADMIN + 'products/packages/[id]/page.tsx'), /if \(!okSaved\) return/, 'Paket Umroh: baseline maju walau simpan gagal')
   for (const e of ['products/packages/[id]', 'products/tour-packages/[id]']) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.match(src, /loadPackage\(p\.id, true\)/, `${e}: muat awal harus mereset info`)
     assert.match(src, /resetInfo/, `${e}: loadPackage harus menjaga isian lewat resetInfo`)
   }
@@ -83,12 +85,12 @@ await t('Visa: Foto Unggulan di kolom kanan (sidebar), bukan di atas formulir', 
 
 await t('hapus di halaman edit: semua entitas produk punya kotak Hapus (EditPage.remove / DeleteBox) dan memakai satu pemeriksa respons', () => {
   for (const e of ['products/muthowif/[id]', 'products/tourism-sites/[id]']) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.match(src, /remove=\{\{/, `${e}: tidak punya remove`); assert.match(src, /e\.remove\(\)/, `${e}: tidak memakai useEditEntity.remove`)
     assert.match(src, /patchClean\(\{ isActive: false \}\)/, `${e}: nonaktif karena dirujuk harus menggeser baseline`)
   }
   for (const e of ['products/packages/[id]', 'products/tour-packages/[id]', 'products/hotels/[id]']) {
-    const src = read(ADMIN + e + '/page.tsx')
+    const src = read(fileOf(e))
     assert.match(src, /<DeleteBox\b/, `${e}: tidak punya <DeleteBox>`); assert.match(src, /useDeleteEntity\(/, `${e}: tidak memakai useDeleteEntity`)
     assert.match(src, /=== 'deactivated'/, `${e}: hasil nonaktif tidak ditangani`)
   }

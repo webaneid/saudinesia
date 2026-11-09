@@ -1,12 +1,12 @@
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
+import { getPageText } from '@/lib/public-content/content'
 import { ArrowRight, UserRound } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 
 // Tanpa daftar nama: jamaah memesan layanannya, Saudinesia yang menugaskan orangnya (docs/arsitektur-muthowif.md §9).
 export async function HomeMuthowif({ locale, pricePerDay }: { locale: string; pricePerDay: number | null }) {
   if (pricePerDay === null) return null
-  const t = await getTranslations({ locale, namespace: 'home.muthowif' })
+  const t = await getPageText(locale, 'home', 'muthowif')
   return (
     <section className="flex flex-col gap-5 rounded-3xl bg-brand-light p-6 md:flex-row md:items-center md:justify-between md:p-10">
       <div className="flex items-start gap-4">

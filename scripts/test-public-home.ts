@@ -174,14 +174,14 @@ t('tiap tujuan tautan daftar putih menuju rute yang ada', () => {
 })
 
 t('beranda dan katalog memakai hero dan CTA bersama, bukan buatan sendiri', () => {
-  const content = read('lib/public-content/content.ts')
+  const content = read('lib/public-content/pages.ts')
   for (const f of ['app/[locale]/(public)/page.tsx', ...CATALOG_SOURCES]) {
     const src = read(f)
     for (const part of ['<PageHero', '<PageCta', 'getPageContent(locale,']) assert.ok(src.includes(part), `${f}: ${part}`)
   }
   for (const c of REDESIGNED_CATALOGS) {
     const src = read(`app/[locale]/(public)/${c}/page.tsx`)
-    assert.ok(new RegExp(`\\b${c}: \\{`).test(content), `${c}: belum terdaftar di lib/public-content/content.ts`)
+    assert.ok(new RegExp(`\\b${c}: \\{`).test(content), `${c}: belum terdaftar di lib/public-content/pages.ts`)
     for (const part of ['generateMetadata', 'openGraph', `localizedAlternates(locale, '${c}')`]) assert.ok(src.includes(part), `${c}: ${part}`)
     if (content.includes("'#catalog'")) assert.ok(src.includes('id={CATALOG_ANCHOR}'), `${c}: tujuan #catalog tanpa elemen tujuan`)
   }

@@ -19,6 +19,7 @@ export const MEDIA_OWNERS = {
   visa:         { mode: 'featured', max: 1,  label: 'Produk Visa',    exists: (id) => has(prisma.visaProduct.findUnique({ where: { id }, select: { id: true } })) },
   muthowif:     { mode: 'featured', max: 1,  label: 'Muthowif',       exists: (id) => has(prisma.muthowif.findUnique({ where: { id }, select: { id: true } })) },
   invoice_settings: { mode: 'featured', max: 1, label: 'Logo perusahaan', idLiteral: 'global', superadminOnly: true, exists: (id) => has(prisma.invoiceSettings.findUnique({ where: { id }, select: { id: true } })) },
+  public_page:  { mode: 'featured', max: 1,  label: 'Foto hero halaman', superadminOnly: true, exists: (id) => has(prisma.publicPageContent.findUnique({ where: { id }, select: { id: true } })) },
   tourism_site: { mode: 'featured', max: 1,  label: 'Situs Wisata',   exists: (id) => has(prisma.tourismSite.findUnique({ where: { id }, select: { id: true } })) },
 } as const satisfies Record<string, Owner>
 
