@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
+import { getPageText } from '@/lib/public-content/content'
 import { Check } from 'lucide-react'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { formatRupiah } from '@/lib/utils'
@@ -8,7 +8,7 @@ import { HomeSectionHeader } from './HomeSectionHeader'
 
 export async function HomePackages({ locale, packages }: { locale: string; packages: HomePackage[] }) {
   if (packages.length === 0) return null
-  const t = await getTranslations({ locale, namespace: 'home.packages' })
+  const t = await getPageText(locale, 'home', 'packages')
   const href = `/${locale}/packages`
   return (
     <section className="space-y-6">

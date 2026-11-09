@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
+import { getPageText } from '@/lib/public-content/content'
 import { ArrowRight, Clock } from 'lucide-react'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { formatRupiah } from '@/lib/utils'
@@ -9,7 +9,7 @@ import { HomeSectionHeader } from './HomeSectionHeader'
 // Satu-satunya bagian dengan tombol beli langsung, dan hanya untuk visa yang benar-benar bisa lewat checkout pendek (§1.2 rencana).
 export async function HomeVisa({ locale, visas }: { locale: string; visas: HomeVisaItem[] }) {
   if (visas.length === 0) return null
-  const t = await getTranslations({ locale, namespace: 'home.visa' })
+  const t = await getPageText(locale, 'home', 'visa')
   const catalog = `/${locale}/visa`
   return (
     <section className="space-y-6">

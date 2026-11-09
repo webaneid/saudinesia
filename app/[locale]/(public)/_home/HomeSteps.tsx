@@ -1,11 +1,11 @@
-import { getTranslations } from 'next-intl/server'
+import { getPageText } from '@/lib/public-content/content'
 import { HomeSectionHeader } from './HomeSectionHeader'
 
 const STEPS = ['choose', 'data', 'pay', 'verify'] as const
 
 // Sesuai alur nyata. Catatan bawah wajib ada selama checkout pelanggan baru Visa dan Transport (§1.2 rencana): hapus setelah produk lain bisa dipesan sendiri.
 export async function HomeSteps({ locale }: { locale: string }) {
-  const t = await getTranslations({ locale, namespace: 'home.steps' })
+  const t = await getPageText(locale, 'home', 'steps')
   return (
     <section className="space-y-6">
       <HomeSectionHeader title={t('title')} />

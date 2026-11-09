@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { getTranslations } from 'next-intl/server'
+import { getPageText } from '@/lib/public-content/content'
 import { MapPin, Star } from 'lucide-react'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { formatDistance, formatRupiah } from '@/lib/utils'
@@ -12,7 +12,7 @@ export async function HomeHotels({ locale, hotels }: { locale: string; hotels: H
     { key: 'madinah', items: hotels.madinah },
   ] as const
   if (cities.every(c => c.items.length === 0)) return null
-  const t = await getTranslations({ locale, namespace: 'home.hotels' })
+  const t = await getPageText(locale, 'home', 'hotels')
   return (
     <section className="space-y-6">
       <HomeSectionHeader title={t('title')} description={t('description')} link={{ href: `/${locale}/hotels`, label: t('seeAll') }} />

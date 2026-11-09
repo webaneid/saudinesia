@@ -1,6 +1,6 @@
 # Arsitektur — Front-end Publik (mulai dari Homepage)
 
-> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06). Tahap 2 (§6) diarahkan pemilik 2026-11-09: F4 selesai 2026-11-09, F5–F6 menyusul.**
+> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06). Tahap 2 (§6) diarahkan pemilik 2026-11-09: F4 dan F5 selesai 2026-11-09, F6 menyusul.**
 > Urutan pekerjaan menurut pemilik: front-end publik dulu, mulai dari homepage; UI admin terakhir. Istilah "jamaah" tetap dipakai untuk sementara (keputusan pemilik 2026-11-06).
 
 ---
@@ -144,4 +144,32 @@ Tidak menghalangi F1–F3; bagian terkait disembunyikan sampai datanya ada.
 - Katalog Paket: hero (fakta jumlah paket, harga mulai, satu invoice; disembunyikan bila tak ada paket), daftar `#catalog` dengan kartu token brand dan ikon `Check`, harga belum ada disembunyikan (bukan "Rp 0"), CTA, metadata + hreflang. Urutan diberi tie-breaker `id`.
 - **Deviasi dari H3:** foto latar hero belum dibuat di F4. Ditambahkan di F5 bersama unggahannya, supaya kode gambar tidak masuk tanpa pernah dipakai.
 - Penjaga `scripts/test-public-home.ts`: komponen bersama dan katalog dirombak ikut diperiksa (palet, modal, tautan); tiap tujuan daftar putih harus rute yang ada; beranda dan katalog wajib `PageHero` + `PageCta` + `getPageContent`; katalog wajib metadata + `localizedAlternates(locale, '<path>')` + elemen `#catalog`; selain komponen bersama tidak boleh merakit `panel-brand`. Katalog yang dirombak di F6 ditambahkan ke `REDESIGNED_CATALOGS`.
+
+
+### 6.5 Rancangan rinci F5 — Konten Situs (ditulis 2026-11-09, sebelum eksekusi)
+
+Recheck: foto produk lewat registry `lib/media/owners.ts` (pemilik berlabel `superadminOnly` sudah didukung); jejak perubahan setelan memakai tabel append-only `settings_audit` (`lib/invoice/audit.ts`); grup menu Sistem hanya untuk superadmin (`lib/admin/navigation.ts`); halaman edit admin = `EditPage` + `useEditEntity` + `useDirtyForm`.
+
+| # | Keputusan |
+|---|---|
+| C1 | **Semua teks halaman bisa diedit, bukan hanya hero dan CTA.** Yang bisa diedit = setiap kunci daun di namespace pesan halaman itu (`home`, `catalog.packages`), dalam id dan en. Kunci berformat ICU (berisi `{`, mis. jumlah, harga, bintang) TIDAK bisa diedit, karena nilainya diisi data dan salah ketik akan merusak halaman. Daftar kolom diturunkan otomatis dari berkas pesan, jadi teks baru di halaman langsung muncul di editor tanpa daftar yang dihafal. |
+| C2 | Satu tabel `public_page_contents`: satu baris per halaman (`pageKey` unik), kolom `content` JSON berbentuk `{ text: { id: {kunci: teks}, en: {...} }, links: { "hero.primary": tujuan \| null } }`, `updatedAt` (`timestamptz`). Teks kosong/tidak ada = pakai teks bawaan; tautan `null` = tombol disembunyikan, tidak ada = tujuan bawaan. Tujuan tombol tidak tergantung bahasa. Tanpa kolom pengguna (pengubah dicatat di jejak). |
+| C3 | Ditulis HANYA oleh `lib/public-content/service.ts`: validasi Zod `.strict()` (kunci harus kolom yang bisa diedit, teks polos dipangkas maks 400 karakter tanpa karakter kontrol selain baris baru, tujuan dari `LINK_TARGETS`), kunci baris + `expectedUpdatedAt` (409 bila basi), jejak `settings_audit` (`entity = 'public_page'`, hanya kolom yang berubah) di transaksi yang sama. "Kembalikan ke bawaan" = mengosongkan isi (jejak tercatat), bukan menghapus baris. |
+| C4 | Dibaca HANYA lewat `getPageContent`/`getPageText` (`lib/public-content/content.ts`, `cache()` per permintaan): suntingan menimpa pesan, pesan jadi cadangan. Bagian beranda berhenti memanggil `getTranslations` untuk namespace halamannya (dijaga penjaga). Halaman publik sudah dinamis, jadi suntingan langsung tampil tanpa revalidasi. |
+| C5 | Foto latar hero: pemilik media `public_page` (mode `featured`, `superadminOnly`), id = id baris halaman. Hero dengan foto memakai lapisan hijau gelap di atas foto (gaya foto + overlay); tanpa foto tetap permukaan hijau + pola. |
+| C6 | Admin: **Sistem → Konten Situs** (superadmin, sejalan grup Sistem): daftar halaman (`/admin/system/site-content`) dan editor per halaman (`/[page]`) memakai `EditPage`: kolom kiri dikelompokkan per bagian (Hero, Layanan, …, CTA) dengan tab bahasa, teks bawaan jadi placeholder; kanan: Simpan, Foto hero, Tujuan tombol, Kembalikan ke bawaan, Lihat halaman. API: `GET /api/v1/admin/site-content`, `GET`/`PUT /api/v1/admin/site-content/[page]` (`requireSuperAdmin` di awal handler). |
+| C7 | Halaman tidak bisa dibuat/dihapus dari admin (daftar halaman ada di kode, mengikuti rute yang ada); "hapus" = kembalikan ke bawaan. Ini memenuhi aturan CRUD: isi bisa dilihat, diubah, dan dikosongkan. |
+| C8 | Teks dari admin tampil sebagai teks React biasa (di-escape), tidak pernah HTML. Isi tidak memuat data pribadi; tabel tidak perlu ditangani `lib/account/deletion.ts` (pengubah hanya di `settings_audit`, yang sudah ditangani). |
+
+Uji: `scripts/test-site-content.ts` (murni: kolom ICU tak bisa diedit, kunci asing/terlalu panjang/tujuan di luar daftar putih ditolak, penggabungan bawaan + suntingan, tombol tersembunyi) + perluasan `scripts/test-public-home.ts` (bagian beranda tak membaca namespace halaman langsung) + uji nyata API (400/403/409) + browser.
+
+### 6.6 As-built F5 (2026-11-09)
+
+Sesuai §6.5, dengan catatan:
+- Registry halaman dan turunan kolom ada di `lib/public-content/pages.ts` (murni, tanpa DB/next-intl); `content.ts` hanya pembaca (`getPageText(locale, page, bagian?)`, `getPageContent`); `service.ts` penulis tunggal + `parseStoredContent` (isi tersimpan yang asing/rusak dibuang, tidak merusak halaman).
+- Kunci kolom dibatasi bentuk camelCase bersegmen (`^[a-z][A-Za-z0-9]*(\.[a-z][A-Za-z0-9]*)*$`); kunci berkas pesan baru wajib mengikuti bentuk ini.
+- Editor (`system/site-content/[page]/SiteContentEditor.tsx`): tab bahasa, kolom per bagian dengan teks bawaan sebagai placeholder, bagian SEO paling bawah dengan label jelas, kotak Tombol (bawaan / sembunyikan / tujuan daftar putih), Foto Hero, Lihat halaman, Kembalikan ke bawaan (konfirmasi). Terdaftar di `scripts/test-admin-editor.ts` (entri berkas `.tsx` di folder halaman).
+- `PageHero` dengan foto: `<img>` penuh + gradasi `brand-dark`; tanpa foto tetap pola.
+- Uji: `scripts/test-site-content.ts` (masuk `bun run test`), `test-public-home` membaca registry dari `pages.ts`, `test-media` memetakan `public_page` ke editor.
+- Katalog lain (F6) cukup: entri di `PUBLIC_PAGES` + pesan `catalog.<halaman>` id/en + `PageHero`/`PageCta` + `getPageText`; editornya otomatis ikut.
 

@@ -1880,6 +1880,18 @@ enum TaxMode {
   @@map("tax_mode")
 }
 
+/// Isi halaman publik yang diedit admin (docs/arsitektur-frontend-publik.md §6.5): satu baris per halaman, `content` = { text: { locale: { kunci: teks } }, links: { slot: tujuan | null } }.
+/// Kosong = teks bawaan berkas pesan. Ditulis HANYA oleh lib/public-content/service.ts; pengubah dicatat di settings_audit (entity 'public_page'). Foto hero = ProductImage pemilik 'public_page'.
+model PublicPageContent {
+  id        String   @id @default(uuid())
+  pageKey   String   @unique @db.VarChar(40)
+  content   Json     @default("{}")
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@map("public_page_contents")
+}
+
 model InvoiceSettings {
   id String @id // selalu 'global'
 
@@ -2043,7 +2055,7 @@ model SettingsAudit {
   id       String   @id @default(uuid())
   at       DateTime @default(now()) @db.Timestamptz(3)
   staffId  String
-  entity   String   @db.VarChar(40) // invoice_settings | bank_account | qris_account | tax_rule
+  entity   String   @db.VarChar(40) // invoice_settings | bank_account | qris_account | tax_rule | public_page
   entityId String   @db.VarChar(64)
   action   String   @db.VarChar(16) // create | update | delete | toggle
   summary  Json

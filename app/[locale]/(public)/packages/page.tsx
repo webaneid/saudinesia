@@ -1,14 +1,13 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { hasLocale } from 'next-intl'
-import { getTranslations } from 'next-intl/server'
 import { ArrowRight, Check, Package, ReceiptText, Tag } from 'lucide-react'
 import { routing } from '@/i18n/routing'
 import { prisma } from '@/lib/db'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { withSellPrice } from '@/lib/pricing/engine/read'
 import { requirementsOfMany } from '@/lib/documents/requirements'
-import { getPageContent } from '@/lib/public-content/content'
+import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { CATALOG_ANCHOR } from '@/lib/public-content/links'
 import { localizedAlternates, ogAlternateLocales, ogLocale } from '@/lib/seo/site'
 import { formatRupiah } from '@/lib/utils'
@@ -23,7 +22,7 @@ type Props = { params: Promise<{ locale: string }> }
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { locale } = await params
   if (!hasLocale(routing.locales, locale)) return {}
-  const t = await getTranslations({ locale, namespace: 'catalog.packages.meta' })
+  const t = await getPageText(locale, 'packages', 'meta')
   const title = t('title')
   const description = t('description')
   return {
@@ -52,7 +51,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
       orderBy: [{ isFeatured: 'desc' }, { createdAt: 'desc' }, { id: 'asc' }],
     }).then(rows => withSellPrice('package', rows)),
     getPageContent(locale, 'packages'),
-    getTranslations({ locale, namespace: 'catalog.packages' }),
+    getPageText(locale, 'packages'),
   ])
   const ids = packages.map(p => p.id)
   const [covers, reqs] = await Promise.all([

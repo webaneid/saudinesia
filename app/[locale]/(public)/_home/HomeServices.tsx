@@ -1,10 +1,11 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
+import { getPageText } from '@/lib/public-content/content'
 import { PUBLIC_NAV } from '@/components/shared/publicNav'
 import { HomeSectionHeader } from './HomeSectionHeader'
 
 export async function HomeServices({ locale }: { locale: string }) {
-  const t = await getTranslations({ locale, namespace: 'home.services' })
+  const t = await getPageText(locale, 'home', 'services')
   const nav = await getTranslations({ locale, namespace: 'nav' })
   return (
     <section className="space-y-6">
