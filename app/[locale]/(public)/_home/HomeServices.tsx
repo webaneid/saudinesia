@@ -1,17 +1,22 @@
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { getPageText } from '@/lib/public-content/content'
+import { availableCatalogs } from '@/lib/catalog/availability'
 import { PUBLIC_NAV } from '@/components/shared/publicNav'
 import { HomeSectionHeader } from './HomeSectionHeader'
 
 export async function HomeServices({ locale }: { locale: string }) {
+  const available = await availableCatalogs()
+  // Hanya layanan yang punya produk aktif (§7); tak ada satu pun = bagian ini tidak tampil.
+  const items = PUBLIC_NAV.filter(n => available.has(n.key))
+  if (items.length === 0) return null
   const t = await getPageText(locale, 'home', 'services')
   const nav = await getTranslations({ locale, namespace: 'nav' })
   return (
     <section className="space-y-6">
       <HomeSectionHeader title={t('title')} description={t('description')} />
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        {PUBLIC_NAV.map(({ key, path, icon: Icon }) => (
+        {items.map(({ key, path, icon: Icon }) => (
           <Link
             key={key}
             href={`/${locale}/${path}`}

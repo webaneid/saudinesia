@@ -160,7 +160,9 @@
         "title": "Tim kami memverifikasi",
         "description": "Pembayaran dan dokumen diperiksa oleh petugas kami."
       },
-      "availability": "Saat ini Visa dan Transport bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan."
+      "availability": "Saat ini Visa dan Transport bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan.",
+      "availabilityVisa": "Saat ini Visa bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan.",
+      "availabilityTransport": "Saat ini Transport bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan."
     },
     "cta": {
       "title": "Mulai dengan membuat akun",
@@ -200,6 +202,333 @@
       },
       "cta": {
         "title": "Siap merencanakan Umroh?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "visa": {
+      "meta": {
+        "title": "Layanan Visa",
+        "description": "Pengurusan visa Arab Saudi dari Saudinesia: jenis visa, estimasi proses, syarat dokumen, dan harga jual yang berlaku."
+      },
+      "hero": {
+        "eyebrow": "Layanan Visa",
+        "title": "Visa Anda diurus tim kami",
+        "subtitle": "Pilih jenis visa, unggah dokumen yang diminta, dan kami yang memproses pengajuannya. Syarat dan estimasi waktu tertulis di setiap jenis visa.",
+        "primaryCta": "Lihat Jenis Visa",
+        "secondaryCta": "Lihat Paket Umroh"
+      },
+      "facts": {
+        "count": "{count, plural, other {# jenis visa}}",
+        "priceFrom": "Mulai {price}",
+        "process": "Proses mulai {days} hari kerja"
+      },
+      "list": {
+        "title": "Pilih jenis visa",
+        "description": "Harga per orang. Beberapa jenis visa wajib dipesan bersama layanan lain, keterangannya ada di kartu.",
+        "empty": "Informasi layanan visa akan segera tersedia."
+      },
+      "card": {
+        "priceFrom": "Mulai dari",
+        "perPerson": "per orang",
+        "process": "Estimasi proses {days} hari kerja",
+        "apply": "Ajukan Sekarang",
+        "bundled": "Dipesan bersama: {parts}. Hubungi admin Saudinesia untuk pemesanan."
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "haji": {
+      "meta": {
+        "title": "Paket Haji",
+        "description": "Paket Haji dari Saudinesia: jenis paket, tahun keberangkatan, isi paket, sisa kursi, dan harga jual yang berlaku."
+      },
+      "hero": {
+        "eyebrow": "Paket Haji",
+        "title": "Paket Haji dengan kursi yang jelas",
+        "subtitle": "Setiap paket mencantumkan tahun, isi paket, sisa kursi, dan syarat dokumen. Pendaftaran dan pengurusan dilakukan tim kami.",
+        "primaryCta": "Lihat Paket Haji",
+        "secondaryCta": "Lihat Paket Umroh"
+      },
+      "facts": {
+        "count": "{count, plural, other {# paket haji}}",
+        "priceFrom": "Mulai {price}",
+        "seats": "{count, plural, other {# kursi tersedia}}"
+      },
+      "list": {
+        "title": "Pilih paket haji",
+        "description": "Paket dikelompokkan menurut jenis haji. Harga per orang.",
+        "empty": "Paket haji akan segera tersedia."
+      },
+      "card": {
+        "types": {
+          "furoda": "Haji Furoda",
+          "khusus": "Haji Khusus",
+          "reguler": "Haji Reguler",
+          "plus": "Haji Plus"
+        },
+        "groupCount": "{count, plural, other {# paket}}",
+        "year": "Tahun {year}",
+        "days": "{days} hari",
+        "more": "+{count} lainnya",
+        "priceFrom": "Mulai dari",
+        "perPerson": "per orang",
+        "unpriced": "Harga belum ditetapkan",
+        "seats": "{count, plural, other {# kursi tersedia}}",
+        "register": "Daftar"
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "hotels": {
+      "meta": {
+        "title": "Hotel Makkah dan Madinah",
+        "description": "Hotel dekat Haram di Makkah dan Madinah dari Saudinesia: bintang, jarak, tipe kamar, dan harga jual periode berjalan."
+      },
+      "hero": {
+        "eyebrow": "Hotel",
+        "title": "Hotel dekat Haram di Makkah dan Madinah",
+        "subtitle": "Bandingkan bintang, jarak ke Haram, dan harga kamar untuk periode yang sedang berjalan.",
+        "primaryCta": "Lihat Hotel",
+        "secondaryCta": "Lihat Paket Umroh"
+      },
+      "facts": {
+        "count": "{count, plural, other {# hotel}}",
+        "priceFrom": "Mulai {price} per malam",
+        "nearest": "Terdekat {distance} dari Haram"
+      },
+      "list": {
+        "title": "Pilih hotel",
+        "description": "Harga termurah per kamar per malam untuk periode yang sedang berjalan.",
+        "empty": "Hotel akan segera tersedia.",
+        "emptyFiltered": "Tidak ada hotel yang sesuai filter."
+      },
+      "filters": {
+        "city": "Kota",
+        "stars": "Bintang",
+        "all": "Semua"
+      },
+      "card": {
+        "cities": {
+          "makkah": "Makkah",
+          "madinah": "Madinah"
+        },
+        "stars": "Bintang {count}",
+        "distance": "{distance} dari Haram",
+        "priceFrom": "Mulai dari",
+        "perNight": "per kamar per malam",
+        "roomTypes": "{count, plural, other {# tipe kamar tersedia}}",
+        "details": "Lihat hotel"
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "transport": {
+      "meta": {
+        "title": "Layanan Transportasi",
+        "description": "Transportasi di Arab Saudi dari Saudinesia: jemput bandara, antar kota, dan city tour, dengan harga per rute dan kendaraan."
+      },
+      "hero": {
+        "eyebrow": "Transportasi",
+        "title": "Kendaraan dari titik jemput sampai tujuan",
+        "subtitle": "Cari rute yang Anda butuhkan, lalu pilih kendaraannya. Harga tertulis per rute dan kendaraan.",
+        "primaryCta": "Cari Rute",
+        "secondaryCta": "Lihat Ziarah"
+      },
+      "facts": {
+        "routes": "{count, plural, other {# rute}}",
+        "vehicles": "{count, plural, other {# jenis kendaraan}}",
+        "priceFrom": "Mulai {price}"
+      },
+      "list": {
+        "title": "Cari rute",
+        "description": "Jemput bandara, antar kota, hingga city tour ziarah.",
+        "empty": "Jadwal transport akan segera tersedia."
+      },
+      "search": {
+        "where": "Mau ke mana?",
+        "from": "Dari",
+        "to": "Ke",
+        "anyOrigin": "Semua titik jemput",
+        "anyDestination": "Semua tujuan",
+        "swap": "Tukar titik jemput dan tujuan",
+        "category": "Kategori",
+        "all": "Semua",
+        "empty": "Tidak ada rute yang cocok dengan pilihan Anda.",
+        "reset": "Atur ulang pencarian",
+        "order": "Pesan sekarang",
+        "capacity": "{count} orang",
+        "categories": {
+          "airport": "Jemput Bandara",
+          "intercity": "Antar Kota",
+          "cityTour": "City Tour",
+          "shuttle": "Shuttle",
+          "other": "Lainnya"
+        }
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "muthowif": {
+      "meta": {
+        "title": "Layanan Muthowif",
+        "description": "Pendamping ibadah (muthowif) dari Saudinesia. Anda memesan layanannya, dan kami yang menugaskan muthowif untuk perjalanan Anda."
+      },
+      "hero": {
+        "eyebrow": "Muthowif",
+        "title": "Pendamping ibadah selama di Tanah Suci",
+        "subtitle": "Anda memesan layanan muthowif, dan Saudinesia yang menentukan siapa yang bertugas untuk perjalanan Anda.",
+        "primaryCta": "Lihat Pembimbing",
+        "secondaryCta": "Lihat Paket Umroh"
+      },
+      "facts": {
+        "count": "{count, plural, other {# pembimbing aktif}}",
+        "priceFrom": "Mulai {price} per hari"
+      },
+      "list": {
+        "title": "Pembimbing kami",
+        "description": "Profil pembimbing yang aktif. Penugasan ditentukan tim Saudinesia sesuai jadwal perjalanan Anda.",
+        "empty": "Profil pembimbing akan segera tersedia."
+      },
+      "card": {
+        "details": "Lihat profil"
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "tours": {
+      "meta": {
+        "title": "Paket Ziarah",
+        "description": "Paket ziarah situs bersejarah Islam dari Saudinesia: daftar situs, rute, dan harga jual paket."
+      },
+      "hero": {
+        "eyebrow": "Ziarah",
+        "title": "Ziarah ke situs bersejarah Islam",
+        "subtitle": "Setiap paket mencantumkan situs yang dikunjungi beserta petanya. Kendaraan dan hotel bisa dipilih sesuai kebutuhan.",
+        "primaryCta": "Lihat Paket Ziarah",
+        "secondaryCta": "Lihat Transportasi"
+      },
+      "facts": {
+        "count": "{count, plural, other {# paket ziarah}}",
+        "sites": "{count, plural, other {# situs}}",
+        "priceFrom": "Mulai {price}"
+      },
+      "list": {
+        "title": "Pilih paket ziarah",
+        "description": "Harga paket dasar. Kendaraan atau hotel yang Anda pilih sendiri dihitung saat pemesanan.",
+        "empty": "Paket ziarah akan segera tersedia."
+      },
+      "card": {
+        "cities": {
+          "makkah": "Makkah",
+          "madinah": "Madinah",
+          "jeddah": "Jeddah"
+        },
+        "sites": "Situs yang dikunjungi",
+        "map": "Peta",
+        "priceFrom": "Mulai dari",
+        "addOnsTransport": "+ kendaraan sesuai pilihan",
+        "addOnsHotel": "+ hotel sesuai pilihan",
+        "addOnsBoth": "+ kendaraan dan hotel sesuai pilihan",
+        "order": "Tambah ke paket"
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "flight": {
+      "meta": {
+        "title": "Tiket Pesawat",
+        "description": "Jadwal penerbangan untuk keberangkatan Umroh dan Haji dari Saudinesia, dengan harga per orang untuk periode keberangkatan yang tertera."
+      },
+      "hero": {
+        "eyebrow": "Tiket Pesawat",
+        "title": "Jadwal penerbangan Umroh dan Haji",
+        "subtitle": "Harga per orang, berlaku untuk periode keberangkatan yang tertera di setiap jadwal.",
+        "primaryCta": "Lihat Jadwal",
+        "secondaryCta": "Lihat Paket Umroh"
+      },
+      "facts": {
+        "count": "{count, plural, other {# jadwal}}"
+      },
+      "list": {
+        "title": "Jadwal penerbangan",
+        "description": "Cari menurut kota asal atau tujuan.",
+        "empty": "Jadwal penerbangan akan segera tersedia.",
+        "emptyFiltered": "Tidak ada jadwal yang cocok dengan pencarian.",
+        "search": "Cari kota asal / tujuan…"
+      },
+      "table": {
+        "route": "Rute",
+        "airline": "Maskapai",
+        "period": "Periode keberangkatan",
+        "price": "Harga per orang"
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    },
+    "catering": {
+      "meta": {
+        "title": "Paket Katering",
+        "description": "Paket katering selama perjalanan Umroh dan Haji dari Saudinesia: gaya menu, jumlah makan, dan harga per orang per hari."
+      },
+      "hero": {
+        "eyebrow": "Katering",
+        "title": "Makan selama perjalanan, sudah diatur",
+        "subtitle": "Pilih gaya menu dan jumlah makan per hari. Harga per orang per hari untuk musim yang sedang berjalan.",
+        "primaryCta": "Lihat Paket Katering",
+        "secondaryCta": "Lihat Paket Umroh"
+      },
+      "facts": {
+        "count": "{count, plural, other {# paket katering}}",
+        "priceFrom": "Mulai {price} per hari",
+        "season": "Harga musim {season}"
+      },
+      "list": {
+        "title": "Pilih paket katering",
+        "description": "Harga per orang per hari, mengikuti musim yang sedang berjalan.",
+        "empty": "Paket katering akan segera tersedia."
+      },
+      "card": {
+        "menu": {
+          "asian": "Menu Asia",
+          "arabic": "Menu Arab",
+          "western": "Menu Barat"
+        },
+        "board": {
+          "fullBoard": "Tiga kali makan",
+          "halfBoard": "Dua kali makan"
+        },
+        "seasons": {
+          "regular": "reguler",
+          "ramadan": "Ramadan",
+          "hajj": "haji"
+        },
+        "priceLabel": "Harga",
+        "perPersonDay": "per orang per hari"
+      },
+      "cta": {
+        "title": "Siap merencanakan perjalanan?",
         "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
         "button": "Daftar Akun"
       }

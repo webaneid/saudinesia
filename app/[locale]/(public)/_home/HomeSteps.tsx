@@ -1,11 +1,16 @@
 import { getPageText } from '@/lib/public-content/content'
+import { availableCatalogs } from '@/lib/catalog/availability'
 import { HomeSectionHeader } from './HomeSectionHeader'
 
 const STEPS = ['choose', 'data', 'pay', 'verify'] as const
 
 // Sesuai alur nyata. Catatan bawah wajib ada selama checkout pelanggan baru Visa dan Transport (§1.2 rencana): hapus setelah produk lain bisa dipesan sendiri.
+// Catatan hanya menyebut layanan yang punya produk (§7): tak satu pun = tanpa catatan.
 export async function HomeSteps({ locale }: { locale: string }) {
-  const t = await getPageText(locale, 'home', 'steps')
+  const [t, available] = await Promise.all([getPageText(locale, 'home', 'steps'), availableCatalogs()])
+  const visa = available.has('visa')
+  const transport = available.has('transport')
+  const note = visa && transport ? 'availability' : visa ? 'availabilityVisa' : transport ? 'availabilityTransport' : null
   return (
     <section className="space-y-6">
       <HomeSectionHeader title={t('title')} />
@@ -18,7 +23,7 @@ export async function HomeSteps({ locale }: { locale: string }) {
           </li>
         ))}
       </ol>
-      <p className="text-sm text-muted-foreground">{t('availability')}</p>
+      {note && <p className="text-sm text-muted-foreground">{t(note)}</p>}
     </section>
   )
 }

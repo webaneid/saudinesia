@@ -1,157 +1,150 @@
-import { ProductImage } from '@/components/shared/ProductImage'
-import { getFeaturedCards } from '@/lib/media/urls'
-import { prisma } from '@/lib/db'
+import type { Metadata } from 'next'
 import Link from 'next/link'
-import { Star, Calendar, Users, ArrowRight } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { formatRupiah } from '@/lib/utils'
-import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { ArrowRight, Calendar, Check, Star, Tag, Users } from 'lucide-react'
+import { prisma } from '@/lib/db'
+import { requireCatalog } from '@/lib/catalog/availability'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { hajiAvailable, hajiPriced } from '@/lib/haji/catalog'
 import { sellPrices } from '@/lib/pricing/engine/read'
 import { requirementsOfMany } from '@/lib/documents/requirements'
-import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
+import { getPageContent, getPageText } from '@/lib/public-content/content'
+import { catalogMetadata } from '@/lib/public-content/metadata'
 import { DATE_LONG, formatCalendarDate } from '@/lib/time'
+import { formatRupiah } from '@/lib/utils'
+import { ProductImage } from '@/components/shared/ProductImage'
+import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { PageHero, type HeroFact } from '@/components/shared/public/PageHero'
+import { PageCta } from '@/components/shared/public/PageCta'
+import { CatalogSection } from '@/components/shared/public/CatalogSection'
+import { PriceTag } from '@/components/shared/public/PriceTag'
 
 type Props = { params: Promise<{ locale: string }> }
 
-const HAJI_TYPE_LABEL: Record<string, string> = {
-  furoda:  'Furoda (Musyarifah)',
-  khusus:  'Haji Khusus',
-  reguler: 'Haji Reguler',
-  plus:    'Haji Plus',
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  return catalogMetadata((await params).locale, 'haji')
 }
 
-const HAJI_TYPE_COLOR: Record<string, string> = {
-  furoda:  'bg-amber-100 text-amber-800',
-  khusus:  'bg-blue-100 text-blue-800',
-  reguler: 'bg-green-100 text-green-800',
-  plus:    'bg-purple-100 text-purple-800',
-}
+const HAJI_TYPES = ['furoda', 'khusus', 'reguler', 'plus'] as const
+const INCLUDES_SHOWN = 4
 
+// Katalog Paket Haji — pola katalog §6.7. Checkout Haji di browser belum ada (docs/arsitektur-haji.md §7): tombol tetap ke daftar akun.
 export default async function HajiCatalogPage({ params }: Props) {
   const { locale } = await params
-  const products = await prisma.hajiProduct.findMany({
-    where: { isActive: true },
-    orderBy: [{ hajiType: 'asc' }, { year: 'asc' }],
-  })
+  await requireCatalog('haji')
+  const [products, content, t] = await Promise.all([
+    prisma.hajiProduct.findMany({ where: { isActive: true }, orderBy: [{ hajiType: 'asc' }, { year: 'asc' }, { id: 'asc' }] }),
+    getPageContent(locale, 'haji'),
+    getPageText(locale, 'haji'),
+  ])
+  const ids = products.map(p => p.id)
+  const [covers, prices, reqs] = await Promise.all([
+    getFeaturedCards('haji', ids),
+    sellPrices('haji', ids),
+    requirementsOfMany(ids.map(id => ({ productType: 'haji', productId: id }))),
+  ])
+  const typeLabel = (type: string) => ((HAJI_TYPES as readonly string[]).includes(type) ? t(`card.types.${type}`) : type)
 
-  const covers = await getFeaturedCards('haji', products.map(p => p.id))
-  const prices = await sellPrices('haji', products.map(p => p.id))
-  const reqs = await requirementsOfMany(products.map(p => ({ productType: 'haji', productId: p.id })))
+  const byType = new Map<string, typeof products>()
+  for (const p of products) byType.set(p.hajiType, [...(byType.get(p.hajiType) ?? []), p])
 
-  const byType = products.reduce<Record<string, typeof products>>((acc, p) => {
-    (acc[p.hajiType] ??= []).push(p)
-    return acc
-  }, {})
+  const priced = ids.map(id => prices.get(id) ?? 0).filter(hajiPriced)
+  const seats = products.reduce((sum, p) => sum + Math.max(0, hajiAvailable(p)), 0)
+  const facts: HeroFact[] = []
+  if (products.length > 0) {
+    facts.push({ icon: Star, label: t('facts.count', { count: products.length }) })
+    if (priced.length > 0) facts.push({ icon: Tag, label: t('facts.priceFrom', { price: formatRupiah(Math.min(...priced)) }) })
+    if (seats > 0) facts.push({ icon: Users, label: t('facts.seats', { count: seats }) })
+  }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <Star className="h-8 w-8 text-amber-500 fill-amber-500" />
-          Paket Ibadah Haji
-        </h1>
-        <p className="text-muted-foreground max-w-2xl">
-          Saudinesia menyediakan berbagai paket haji sesuai kebutuhan — dari Haji Furoda tanpa antrean
-          hingga Haji Reguler. Semua diurus lengkap dengan akomodasi, transportasi, dan pendampingan.
-        </p>
-      </div>
+    <div className="space-y-14">
+      <PageHero locale={locale} content={content.hero} facts={facts} />
 
-      {products.length === 0 && (
-        <div className="rounded-xl border border-dashed p-16 text-center text-muted-foreground">
-          <Star className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Paket haji akan segera tersedia.</p>
-        </div>
-      )}
+      <CatalogSection
+        title={t('list.title')}
+        description={t('list.description')}
+        empty={{ icon: Star, text: t('list.empty') }}
+        isEmpty={products.length === 0}
+      >
+        <div className="space-y-10">
+          {[...byType.entries()].map(([type, items]) => (
+            <div key={type} className="space-y-4">
+              <div className="flex items-center gap-3">
+                <h3 className="text-xl font-semibold text-brand-dark">{typeLabel(type)}</h3>
+                <span className="catalog-chip">{t('card.groupCount', { count: items.length })}</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
 
-      {Object.entries(byType).map(([type, items]) => (
-        <div key={type} className="space-y-4">
-          <div className="flex items-center gap-3">
-            <h2 className="text-xl font-semibold">{HAJI_TYPE_LABEL[type] ?? type}</h2>
-            <div className={`text-xs font-semibold px-3 py-1 rounded-full ${HAJI_TYPE_COLOR[type] ?? 'bg-gray-100 text-gray-700'}`}>
-              {items.length} paket
-            </div>
-          </div>
+              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {items.map(p => {
+                  const sisa = hajiAvailable(p)
+                  const price = prices.get(p.id) ?? 0
+                  const includes = Array.isArray(p.includes) ? p.includes.filter((i): i is string => typeof i === 'string') : []
+                  const cover = covers.get(p.id)
+                  return (
+                    <article key={p.id} className="catalog-card">
+                      <ProductImage src={cover?.src} alt={cover?.alt} fallbackAlt={p.name} type="haji" />
+                      <div className="flex flex-1 flex-col gap-4 p-5">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="catalog-chip">{typeLabel(p.hajiType)}</span>
+                            <span className="text-xs text-muted-foreground">{t('card.year', { year: p.year })}</span>
+                          </div>
+                          <h4 className="text-lg font-semibold leading-snug text-brand-dark">{p.name}</h4>
+                          <RichTextView value={p.description} className="text-sm text-muted-foreground" />
+                        </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map(p => {
-              const sisa = hajiAvailable(p)
-              const includes = p.includes as string[]
-              return (
-                <div key={p.id} className="overflow-hidden rounded-xl border bg-card hover:border-primary hover:shadow-sm transition-all">
-                  <ProductImage src={covers.get(p.id)?.src} alt={covers.get(p.id)?.alt} fallbackAlt={p.name} type="haji" />
-                  <div className="p-5 space-y-4">
-                  <div className="space-y-1">
-                    <p className="font-semibold leading-tight">{p.name}</p>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${HAJI_TYPE_COLOR[p.hajiType] ?? 'bg-gray-100'}`}>
-                        {HAJI_TYPE_LABEL[p.hajiType]}
-                      </span>
-                      <span className="text-xs text-muted-foreground">Tahun {p.year}</span>
-                    </div>
-                  </div>
-
-                  <RichTextView value={p.description} className="text-muted-foreground" />
-
-                  {p.departureDate && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {formatCalendarDate(p.departureDate, DATE_LONG)}
-                      {p.durationDays && <span>· {p.durationDays} hari</span>}
-                    </div>
-                  )}
-
-                  {includes.length > 0 && (
-                    <ul className="space-y-1">
-                      {includes.slice(0, 4).map((item, i) => (
-                        <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-                          <span className="text-green-500 mt-0.5">✓</span> {item}
-                        </li>
-                      ))}
-                      {includes.length > 4 && (
-                        <li className="text-xs text-muted-foreground">+{includes.length - 4} lainnya...</li>
-                      )}
-                    </ul>
-                  )}
-
-                  <RequiredDocuments requirements={reqs.get(`haji:${p.id}`) ?? []} />
-
-                  <div className="pt-2 border-t space-y-3">
-                    <div>
-                      {hajiPriced(prices.get(p.id) ?? 0) ? (
-                        <>
-                          <p className="text-xs text-muted-foreground">Mulai dari</p>
-                          <p className="text-xl font-bold text-primary">
-                            {formatRupiah(prices.get(p.id) ?? 0)}
-                            <span className="text-xs font-normal text-muted-foreground"> /orang</span>
+                        {p.departureDate && (
+                          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Calendar className="h-4 w-4 text-brand" aria-hidden />
+                            {formatCalendarDate(p.departureDate, DATE_LONG)}
+                            {p.durationDays ? <span>· {t('card.days', { days: p.durationDays })}</span> : null}
                           </p>
-                        </>
-                      ) : (
-                        <p className="text-sm font-medium text-muted-foreground">Harga belum ditetapkan</p>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                        <Users className="h-3.5 w-3.5" />
-                        <span className={sisa < 10 ? 'text-red-500 font-medium' : ''}>
-                          {sisa} kursi tersedia
-                        </span>
+                        )}
+
+                        {includes.length > 0 && (
+                          <ul className="space-y-1.5">
+                            {includes.slice(0, INCLUDES_SHOWN).map(item => (
+                              <li key={item} className="flex items-start gap-2 text-sm">
+                                <Check className="mt-0.5 h-4 w-4 shrink-0 text-brand" aria-hidden />
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                            {includes.length > INCLUDES_SHOWN && (
+                              <li className="pl-6 text-xs text-muted-foreground">{t('card.more', { count: includes.length - INCLUDES_SHOWN })}</li>
+                            )}
+                          </ul>
+                        )}
+
+                        <RequiredDocuments requirements={reqs.get(`haji:${p.id}`) ?? []} />
+
+                        <div className="mt-auto space-y-3 border-t pt-4">
+                          <PriceTag
+                            price={hajiPriced(price) ? price : null}
+                            label={t('card.priceFrom')}
+                            unit={t('card.perPerson')}
+                            unpriced={t('card.unpriced')}
+                          />
+                          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Users className="h-4 w-4 text-brand" aria-hidden />
+                            <span className={sisa < 10 ? 'font-medium text-destructive' : ''}>{t('card.seats', { count: Math.max(0, sisa) })}</span>
+                          </p>
+                          <Link href={`/${locale}/register`} className="btn-brand-solid w-full">
+                            {t('card.register')} <ArrowRight className="h-4 w-4" aria-hidden />
+                          </Link>
+                        </div>
                       </div>
-                      <Button asChild size="sm">
-                        <Link href={`/${locale}/register`}>
-                          Daftar <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                        </Link>
-                      </Button>
-                    </div>
-                  </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-      ))}
+      </CatalogSection>
+
+      <PageCta locale={locale} content={content.cta} />
     </div>
   )
 }

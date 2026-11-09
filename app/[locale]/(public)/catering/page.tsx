@@ -1,72 +1,95 @@
-import { ProductImage } from '@/components/shared/ProductImage'
-import { getFeaturedCards } from '@/lib/media/urls'
+import type { Metadata } from 'next'
+import { CalendarDays, Tag, UtensilsCrossed } from 'lucide-react'
 import { prisma } from '@/lib/db'
+import { requireCatalog } from '@/lib/catalog/availability'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { detectSeason } from '@/lib/utils/season'
 import { cateringPricePerPersonPerDay } from '@/lib/pricing/computeCateringPrice'
-import { UtensilsCrossed, CheckCircle } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
-import { formatRupiah } from '@/lib/utils'
-import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { cateringSeasonPrices } from '@/lib/pricing/engine/read'
+import { getPageContent, getPageText } from '@/lib/public-content/content'
+import { catalogMetadata } from '@/lib/public-content/metadata'
+import { dbDateOf, todayInApp } from '@/lib/time'
+import { formatRupiah } from '@/lib/utils'
+import { ProductImage } from '@/components/shared/ProductImage'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { PageHero, type HeroFact } from '@/components/shared/public/PageHero'
+import { PageCta } from '@/components/shared/public/PageCta'
+import { CatalogSection } from '@/components/shared/public/CatalogSection'
+import { PriceTag } from '@/components/shared/public/PriceTag'
 
 type Props = { params: Promise<{ locale: string }> }
 
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  return catalogMetadata((await params).locale, 'catering')
+}
+
+const MENUS = ['asian', 'arabic', 'western'] as const
+/** Kunci DB (snake_case) → kunci pesan (camelCase, §6.5 C1). */
+const BOARDS: Record<string, string> = { full_board: 'fullBoard', half_board: 'halfBoard' }
+
+// Katalog Katering — pola katalog §6.7. Harga = per orang per hari untuk musim HARI INI (zona aplikasi). Blok "Keunggulan" lama dihapus (G5):
+// klaim halal bersertifikat/chef tak bersumber data (K3).
 export default async function CateringPage({ params }: Props) {
   const { locale } = await params
-  const season = await detectSeason(new Date())
-  const options = await prisma.cateringOption.findMany({ where: { isActive: true } })
+  await requireCatalog('catering')
+  const [season, options, content, t] = await Promise.all([
+    detectSeason(dbDateOf(todayInApp())),
+    prisma.cateringOption.findMany({ where: { isActive: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }] }),
+    getPageContent(locale, 'catering'),
+    getPageText(locale, 'catering'),
+  ])
+  const ids = options.map(o => o.id)
+  const [covers, prices] = await Promise.all([getFeaturedCards('catering', ids), cateringSeasonPrices(ids)])
+  const priceOf = (id: string) => {
+    const p = prices.get(id)
+    return p ? cateringPricePerPersonPerDay(p, season) : 0
+  }
 
-  const covers = await getFeaturedCards('catering', options.map(o => o.id))
-  const prices = await cateringSeasonPrices(options.map(o => o.id))
-
-  const menuLabel: Record<string, string> = { asian: 'Menu Asia', arabic: 'Menu Arab', western: 'Menu Barat' }
-  const boardLabel: Record<string, string> = { full_board: 'Full Board (3x makan)', half_board: 'Half Board (2x makan)' }
-
-  const features = ['Halal bersertifikat', 'Disajikan di hotel', 'Chef berpengalaman', 'Menu bervariasi']
+  const priced = ids.map(priceOf).filter(v => v > 0)
+  const facts: HeroFact[] = []
+  if (options.length > 0) {
+    facts.push({ icon: UtensilsCrossed, label: t('facts.count', { count: options.length }) })
+    if (priced.length > 0) facts.push({ icon: Tag, label: t('facts.priceFrom', { price: formatRupiah(Math.min(...priced)) }) })
+    facts.push({ icon: CalendarDays, label: t('facts.season', { season: t(`card.seasons.${season}`) }) })
+  }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold">Paket Katering</h1>
-        <p className="text-muted-foreground mt-1">Konsumsi halal selama perjalanan · Musim <span className="capitalize font-medium">{season}</span></p>
-      </div>
+    <div className="space-y-14">
+      <PageHero locale={locale} content={content.hero} facts={facts} />
 
-      <div className="grid md:grid-cols-2 gap-4">
-        {options.map((o) => (
-          <div key={o.id} className="overflow-hidden rounded-xl border">
-            <ProductImage src={covers.get(o.id)?.src} alt={covers.get(o.id)?.alt} fallbackAlt={o.name} type="catering" />
-            <div className="p-5 space-y-4">
-            <div className="space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <p className="font-semibold">{o.name}</p>
-                <Badge variant="secondary">{menuLabel[o.menuStyle] ?? o.menuStyle}</Badge>
-              </div>
-              <Badge variant="outline">{boardLabel[o.boardType] ?? o.boardType}</Badge>
-              <RichTextView value={o.description} className="text-muted-foreground" />
-            </div>
-            <div className="pt-2 border-t">
-              <p className="text-xs text-muted-foreground">Per orang / hari</p>
-              <p className="text-xl font-bold text-primary">{formatRupiah(cateringPricePerPersonPerDay(prices.get(o.id)!, season))}</p>
-            </div>
-            </div>
-          </div>
-        ))}
-      </div>
+      <CatalogSection
+        title={t('list.title')}
+        description={t('list.description')}
+        empty={{ icon: UtensilsCrossed, text: t('list.empty') }}
+        isEmpty={options.length === 0}
+      >
+        <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+          {options.map(o => {
+            const cover = covers.get(o.id)
+            const board = BOARDS[o.boardType]
+            return (
+              <article key={o.id} className="catalog-card">
+                <ProductImage src={cover?.src} alt={cover?.alt} fallbackAlt={o.name} type="catering" />
+                <div className="flex flex-1 flex-col gap-4 p-5">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      <span className="catalog-chip">{(MENUS as readonly string[]).includes(o.menuStyle) ? t(`card.menu.${o.menuStyle}`) : o.menuStyle}</span>
+                      <span className="catalog-chip">{board ? t(`card.board.${board}`) : o.boardType}</span>
+                    </div>
+                    <h3 className="text-lg font-semibold leading-snug text-brand-dark">{o.name}</h3>
+                    <RichTextView value={o.description} className="text-sm text-muted-foreground" />
+                  </div>
+                  <div className="mt-auto border-t pt-4">
+                    <PriceTag price={priceOf(o.id)} label={t('card.priceLabel')} unit={t('card.perPersonDay')} />
+                  </div>
+                </div>
+              </article>
+            )
+          })}
+        </div>
+      </CatalogSection>
 
-      <div className="rounded-xl bg-muted/50 p-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <UtensilsCrossed className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">Keunggulan Katering Saudinesia</h3>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {features.map((f) => (
-            <div key={f} className="flex items-center gap-2 text-sm">
-              <CheckCircle className="h-4 w-4 text-green-500 shrink-0" />
-              {f}
-            </div>
-          ))}
-        </div>
-      </div>
+      <PageCta locale={locale} content={content.cta} />
     </div>
   )
 }

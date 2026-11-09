@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { availableCatalogs, targetAvailable } from '@/lib/catalog/availability'
 import { prisma } from '@/lib/db'
 import { routing, type AppLocale } from '@/i18n/routing'
 import { writeAudit } from '@/lib/invoice/audit'
@@ -87,6 +88,7 @@ export async function ensurePageRows(): Promise<void> {
 
 export async function listPagesForAdmin() {
   await ensurePageRows()
+  const available = await availableCatalogs()
   const rows = await prisma.publicPageContent.findMany({ select: { id: true, pageKey: true, content: true, updatedAt: true } })
   const byKey = new Map(rows.map(r => [r.pageKey, r]))
   const images = await prisma.productImage.groupBy({ by: ['productId'], where: { productType: 'public_page', productId: { in: rows.map(r => r.id) } }, _count: true })
@@ -95,12 +97,13 @@ export async function listPagesForAdmin() {
     const row = byKey.get(page)!
     const o = parseStoredContent(page, row.content)
     const edited = routing.locales.reduce((n, l) => n + Object.keys(o.text[l] ?? {}).length, 0) + Object.keys(o.links).length
-    return { page, id: row.id, label: PUBLIC_PAGES[page].label, path: PUBLIC_PAGES[page].path, edited, hasHeroImage: withImage.has(row.id), updatedAt: row.updatedAt.toISOString() }
+    return { page, id: row.id, label: PUBLIC_PAGES[page].label, path: PUBLIC_PAGES[page].path, edited, hasHeroImage: withImage.has(row.id), visible: targetAvailable(PUBLIC_PAGES[page].path, available), updatedAt: row.updatedAt.toISOString() }
   })
 }
 
 export async function getPageForAdmin(page: PublicPageKey) {
   await ensurePageRows()
+  const available = await availableCatalogs()
   const row = await prisma.publicPageContent.findUniqueOrThrow({ where: { pageKey: page }, select: { id: true, content: true, updatedAt: true } })
   return {
     page,
@@ -109,7 +112,8 @@ export async function getPageForAdmin(page: PublicPageKey) {
     path: PUBLIC_PAGES[page].path,
     fields: editableFields(page),
     links: linkSlots(page),
-    targets: linkTargetOptions(),
+    // Tujuan ke layanan tanpa produk tetap bisa dipilih, tapi tombolnya tersembunyi di situs sampai ada produk (§7 V4).
+    targets: linkTargetOptions().map(o => (targetAvailable(o.value, available) ? o : { ...o, label: `${o.label} (belum ada produk — tombol disembunyikan)` })),
     content: parseStoredContent(page, row.content),
     updatedAt: row.updatedAt.toISOString(),
   }

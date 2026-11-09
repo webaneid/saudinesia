@@ -37,6 +37,9 @@ export default async function SiteContentPage({ params }: { params: Promise<{ lo
               <ImageIcon className="size-3.5" aria-hidden /> {p.hasHeroImage ? 'Hero berfoto' : 'Hero tanpa foto'}
               <span aria-hidden>·</span> Diubah {formatInstant(p.updatedAt)}
             </p>
+            {!p.visible && (
+              <p className="m-0 text-xs text-admin-warning">Belum ada produk aktif — halaman ini dan menunya disembunyikan dari situs sampai produk pertama diaktifkan.</p>
+            )}
             <div className="mt-auto flex flex-wrap gap-2">
               <Link href={`/${loc}/admin/system/site-content/${p.page}`} className="admin-btn-sm inline-flex items-center gap-1.5">
                 <Pencil className="size-3.5" aria-hidden /> Edit konten

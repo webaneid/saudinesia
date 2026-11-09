@@ -104,6 +104,9 @@
   .btn-brand-gold { @apply btn-brand bg-brand-gold text-brand-dark hover:opacity-90; }
   .btn-brand-glass { @apply btn-brand glass text-white hover:bg-white/20; }
   .btn-brand-solid { @apply btn-brand bg-brand text-white hover:bg-brand-dark; }
+  /* Kartu produk katalog publik (§6.7 G2). */
+  .catalog-card { @apply flex flex-col overflow-hidden rounded-2xl border bg-card transition-colors hover:border-brand; }
+  .catalog-chip { @apply inline-flex items-center gap-1 rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-semibold text-brand; }
   /* Kaca terang di atas kanvas krem (topbar). */
   .glass-light {
     background: rgb(255 255 255 / 0.65);

@@ -18,3 +18,14 @@ export function targetHref(locale: string, target: LinkTarget): string {
   if (target.startsWith('#')) return target
   return target ? '/' + locale + '/' + target : '/' + locale
 }
+
+/** Tautan keluar dari data admin (peta situs, dsb.): hanya http/https, selain itu `null` — `javascript:` tak boleh jadi `href` di halaman publik. */
+export function safeExternalUrl(raw: string | null | undefined): string | null {
+  if (!raw) return null
+  try {
+    const url = new URL(raw)
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url.href : null
+  } catch {
+    return null
+  }
+}

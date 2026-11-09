@@ -1,6 +1,6 @@
 # Arsitektur — Front-end Publik (mulai dari Homepage)
 
-> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06). Tahap 2 (§6) diarahkan pemilik 2026-11-09: F4 dan F5 selesai 2026-11-09, F6 menyusul.**
+> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06). Tahap 2 (§6) diarahkan pemilik 2026-11-09: F4, F5, dan F6 selesai 2026-11-09 — semua katalog memakai satu pola. Tahap 3 (§7, F7 layanan tampil hanya bila berproduk) selesai 2026-11-09.**
 > Urutan pekerjaan menurut pemilik: front-end publik dulu, mulai dari homepage; UI admin terakhir. Istilah "jamaah" tetap dipakai untuk sementara (keputusan pemilik 2026-11-06).
 
 ---
@@ -172,4 +172,79 @@ Sesuai §6.5, dengan catatan:
 - `PageHero` dengan foto: `<img>` penuh + gradasi `brand-dark`; tanpa foto tetap pola.
 - Uji: `scripts/test-site-content.ts` (masuk `bun run test`), `test-public-home` membaca registry dari `pages.ts`, `test-media` memetakan `public_page` ke editor.
 - Katalog lain (F6) cukup: entri di `PUBLIC_PAGES` + pesan `catalog.<halaman>` id/en + `PageHero`/`PageCta` + `getPageText`; editornya otomatis ikut.
+
+
+### 6.7 Rancangan F6 — katalog lain mengikuti pola Paket (ditulis 2026-11-09, sebelum eksekusi)
+
+Arahan pemilik: "duplikasi untuk semua katalog". Recheck delapan halaman (`visa`, `haji`, `hotels`, `transport`, `muthowif`, `tours`, `flight`, `catering`):
+
+| # | Temuan | Halaman |
+|---|---|---|
+| R1 | Judul polos tanpa hero/CTA/metadata; teks Indonesia ditulis langsung (tanpa `/en`). | semua |
+| R2 | Palet mentah (`teal-*`, `amber-*`, `slate-*`, `green-500`, `red-500`), tanda centang karakter "✓"; Pesawat memakai token `admin-*` di halaman publik. | visa, haji, tours, flight, catering, `TransportSearch` |
+| R3 | Harga belum ada bisa tampil "Rp 0" (default 0). | visa, hotels, tours, catering |
+| R4 | Filter Hotel berupa pil, bintang memakai emoji — melanggar aturan tabel (filter = `FilterSelect` di `FilterBar`) dan larangan emoji. | hotels |
+| R5 | Muthowif menampilkan rating, padahal bukan ulasan sungguhan (A7). Katering memuat klaim "Halal bersertifikat / Chef berpengalaman / …" tanpa data (K3). | muthowif, catering |
+
+Keputusan:
+- **G1** Setiap katalog: `PageHero` (fakta dari data nyata) → daftar `#catalog` → `PageCta`, metadata + hreflang lewat satu pembantu `catalogMetadata(locale, page)` (`lib/public-content/metadata.ts`, juga dipakai Paket). Semua teks di pesan `catalog.<halaman>` id + en, dibaca lewat `getPageText`, jadi otomatis bisa diedit di Konten Situs (entri `PUBLIC_PAGES`).
+- **G2** Kepingan dipakai ulang: `CatalogSection` (judul + deskripsi + jangkar `#catalog` + keadaan kosong) dan `PriceTag` (label, harga, satuan, catatan; tidak tampil bila belum berharga) di `components/shared/public/`, kelas kartu `.catalog-card` di `globals.css`.
+- **G3** Warna hanya token `brand`/shadcn; jenis Haji dibedakan label, bukan warna mentah.
+- **G4** Hotel: filter kota dan bintang lewat `FilterSelect` (mode `nav`) di `FilterBar`; param asing diabaikan (daftar putih).
+- **G5** Muthowif: rating dihapus dari kartu (A7); daftar profil tetap, kalimat "Saudinesia yang menugaskan" dipertahankan. Katering: blok "Keunggulan" berisi klaim tanpa data dihapus (K3); bisa dikembalikan bila pemilik memberi data yang benar.
+- **G6** Perilaku tombol pesan tidak diubah (Visa → checkout bila bisa dibeli langsung; lainnya tetap seperti sekarang). Halaman detail (`hotels/[id]`, `muthowif/[id]`) di luar lingkup F6.
+- **G7** Penjaga: semua delapan masuk `REDESIGNED_CATALOGS` di `scripts/test-public-home.ts` (palet, modal, tautan, hero/CTA, metadata, `#catalog`).
+
+### 6.8 As-built F6 (2026-11-09)
+
+Kedelapan katalog (`visa`, `haji`, `hotels`, `transport`, `muthowif`, `tours`, `flight`, `catering`) kini sama dengan Paket: `PageHero` dengan fakta dari data → `CatalogSection` (`#catalog`) → `PageCta`; metadata lewat `catalogMetadata` (Paket ikut dipindah). Semua teks di `catalog.<halaman>` id + en, terdaftar di `PUBLIC_PAGES` — sepuluh halaman bisa diedit di Konten Situs, tujuan tombol bawaan: hero utama `#catalog`, hero kedua katalog terkait, CTA `register`.
+
+- **Fakta hero** hanya dari data aktif: jumlah produk, harga jual termurah (> 0), lalu satu fakta per katalog (proses visa tercepat, total kursi Haji, hotel terdekat dari Haram, jumlah jenis kendaraan, jumlah situs, musim katering yang berlaku). Tak ada data → tak ada fakta.
+- **Harga** lewat `PriceTag`: belum berharga = tidak ada angka (Haji: "Harga belum ditetapkan"; Pesawat: "—"). Visa tanpa harga tidak menampilkan tombol "Ajukan" (server tetap menolak 422); rute Transport tanpa kendaraan berharga tidak menampilkan "Pesan sekarang".
+- **Waktu:** Hotel dan Katering memakai `dbDateOf(todayInApp())` untuk periode/musim berjalan (sebelumnya `new Date()` instan — bisa meleset sehari di 00:00–07:00 WIB).
+- **Hotel:** filter `FilterSelect` (kota daftar tetap, bintang dari data; nilai asing diabaikan) di `FilterBar`; hotel dimuat semua lalu difilter di memori (master data kecil) sehingga fakta hero tetap seluruh katalog. Kartu memakai `ProductImage` (bukan `next/image` `unoptimized`).
+- **Transport:** `TransportSearch` (klien) menerima semua teks dari halaman (`labels`), warna token brand, kategori lewat `FilterSelect` (mode `onChange`) — pil dihapus. Kunci kategori DB `city_tour` dipetakan ke kunci pesan `cityTour` (C1: kunci camelCase).
+- **Pesawat:** nama maskapai dari pembaca `lib/catalog/flight.ts` (hanya `vendor.name`); halaman publik tidak lagi menyentuh tabel `productCost`. Token `admin-*` diganti token brand.
+- **Muthowif:** rating dihapus (G5), urut nama. **Katering:** blok "Keunggulan" dihapus (G5).
+- **Ziarah:** tautan peta situs lewat `safeExternalUrl` (`lib/public-content/links.ts`, hanya http/https) — `gmapsUrl` admin bisa berisi `javascript:` (SEC-220, validator admin masih terbuka).
+- **Penjaga:** `scripts/test-public-home.ts` — kedelapan katalog di `REDESIGNED_CATALOGS` (+ `TransportSearch.tsx` dipindai gaya/modal); setiap katalog wajib `catalogMetadata(…, '<halaman>')`, `PageHero`, `PageCta`, `CatalogSection`, `getPageContent`, dan tidak memakai `getTranslations`.
+
+Celah yang diketahui (di luar lingkup F6): halaman detail `hotels/[id]` dan `muthowif/[id]` belum dirombak; teks kit tabel bersama (`FilterBar` "Atur ulang", `FilterSelect` "Ketik untuk mencari…", `SearchForm`) masih Indonesia di `/en`; label komponen visa plus (`model.parts`) masih Indonesia; memilih filter Hotel memuat ulang halaman ke posisi atas (bukan ke `#catalog`); tombol pesan Paket/Haji/Ziarah masih ke daftar akun (checkout belum ada, §1.2).
+
+## 7. Tahap 3 — Layanan tampil hanya bila ada produknya (arahan pemilik 2026-11-09)
+
+> "Jika produknya terisi … tampilkan shortcut produk-nya di menu maupun home page. Jika tidak ada produk 1 pun, maka jangan ditampilkan … di manapun. Jika sudah mulai ada baru tampilkan." Tujuan: operator memilih sendiri layanan mana yang dipakai dulu; situs tidak menjanjikan layanan yang belum ada (sejalan K3).
+
+### 7.1 Recheck (2026-11-09)
+
+| Tempat | Perilaku sekarang |
+|---|---|
+| Menu desktop `Header` + menu HP `PublicMobileNav` (klien) | Selalu delapan layanan dari `PUBLIC_NAV` |
+| `PublicFooter` | Delapan layanan + Katering (ditulis manual) |
+| Beranda `HomeServices` (kotak layanan) | Selalu delapan |
+| Beranda Paket/Visa/Hotel/Muthowif | **Sudah** tersembunyi bila kosong (`lib/catalog/home.ts`) |
+| Tombol hero/CTA (`getPageContent`) | Bisa menuju katalog kosong (mis. hero beranda → Visa) |
+| `app/sitemap.ts` | Sepuluh alamat tetap |
+| Halaman katalog | Tetap terbuka dengan keadaan kosong "akan segera tersedia" |
+| Detail `hotels/[id]`, `muthowif/[id]` | **Sudah** 404 untuk produk nonaktif |
+
+### 7.2 Keputusan
+
+- **V1 Satu sumber:** `lib/catalog/availability.ts` — `CATALOG_KEYS` (sembilan: delapan menu + `catering`), aturan "ada produk" per layanan = SAMA dengan `where` daftar di halaman katalognya (baris aktif: Paket, Haji, Visa, Hotel, rute Transport, Muthowif, Paket Ziarah, Katering; Pesawat = jadwal aktif pada rute aktif). Tidak bergantung harga: produk aktif yang belum berharga tetap membuat layanannya tampil (harga tak tampil, §6.8). `availableCatalogs()` dibungkus `cache()` React — satu set kueri ringan (`findFirst`) per permintaan, tanpa cache antar-permintaan, jadi produk pertama yang diaktifkan langsung membuat layanannya tampil, dan menonaktifkan produk terakhir langsung menyembunyikannya.
+- **V2 Menu dan beranda:** `Header`, `PublicMobileNav` (menerima daftar dari `Header`, tidak mengambil data sendiri), `PublicFooter`, dan `HomeServices` hanya menampilkan layanan yang tersedia; kotak layanan beranda hilang bila tak satu pun tersedia. Katering tetap hanya di footer (bukan menu utama) seperti sekarang.
+- **V3 Halaman katalog:** layanan tanpa produk → `notFound()` (404), termasuk untuk pengunjung yang mengetik alamatnya. Keadaan kosong di `CatalogSection` tetap untuk hasil filter/pencarian.
+- **V4 Tombol hero/CTA:** `getPageContent` menyembunyikan tombol yang tujuannya katalog tanpa produk (sama seperti tombol yang disembunyikan admin). Editor Konten Situs menandai tujuan itu "belum ada produk — tombol disembunyikan sampai ada" supaya admin tidak bingung.
+- **V5 Sitemap:** hanya katalog yang tersedia.
+- **V6 Di luar lingkup:** area jamaah dan checkout tidak berubah (checkout butuh `productId`, katalog kosong tidak punya). Admin tidak berubah — produk tetap dikelola seperti biasa.
+- **V7 Penjaga:** uji murni + sumber di `scripts/test-public-home.ts`: menu/footer/beranda/sitemap memakai `availableCatalogs`, setiap halaman katalog memanggil `requireCatalog`, setiap kunci `PUBLIC_NAV` punya aturan di `availability.ts`, dan uji DB sekali pakai: layanan tanpa produk aktif → tidak tersedia, satu produk aktif → tersedia, dinonaktifkan → hilang lagi.
+
+### 7.3 As-built F7 (2026-11-09)
+
+Sesuai §7.2, dengan tambahan:
+- **Catatan "Cara kerja"** di beranda (`HomeSteps`) hanya menyebut layanan yang ada: Visa + Transport, salah satunya, atau tanpa catatan (kunci baru `home.steps.availabilityVisa`/`availabilityTransport`, bisa diedit di Konten Situs).
+- **Menu HP** tidak dirender sama sekali bila tak ada layanan berproduk (tombol menu ikut hilang).
+- **Admin Konten Situs:** kartu halaman katalog tanpa produk menampilkan "Belum ada produk aktif — halaman ini dan menunya disembunyikan dari situs …"; pilihan tujuan tombol ke layanan kosong diberi label "(belum ada produk — tombol disembunyikan)".
+- **Bukti:** artefak produksi (`bun server.js`) dijalankan pada database KOSONG sekali pakai → sembilan katalog 404, menu/footer/kotak layanan/tombol hero ke katalog/catatan Cara kerja tidak tampil, sitemap hanya beranda; artefak yang sama pada database dev → sembilan katalog 200, menu delapan, footer sembilan (dengan Katering), tombol hero tampil, sitemap lengkap. Uji DB sekali pakai (`scripts/test-catalog-availability.ts`): satu Katering aktif → tampil, dinonaktifkan → hilang.
+
+Celah yang diketahui: teks hero beranda bawaan menyebut semua layanan ("Visa, hotel, transportasi, muthowif, dan paket …") — itu teks bebas yang diedit admin di Konten Situs, tidak disaring otomatis; ubah di sana bila layanan tertentu belum dibuka.
 
