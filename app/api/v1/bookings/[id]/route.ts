@@ -21,7 +21,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         catering:   { include: { cateringOption: true } },
         tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
         // select aman: tanpa kolom NIK/paspor tersegel (docs/arsitektur-jamaah.md §5.3); modal/jejak beku ada di price_snapshots (tak pernah untuk pilgrim — I5)
-        pilgrims:   { select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: true } },
+        pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: true } },
         // select eksplisit: `notes` (catatan staf) dan `confirmedById` TIDAK boleh sampai ke jamaah (Fase 7: catatan jumlah pembayaran bersifat internal)
         payments:   { orderBy: { createdAt: 'desc' }, take: 1, select: { id: true, status: true, amount: true, method: true, buktiTransferUploadedAt: true, confirmedAt: true, createdAt: true } },
       },

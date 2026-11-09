@@ -26,6 +26,9 @@ import { canRecordCost } from '@/lib/pricing/policy'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
 import { DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
+import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
+import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
+import { formatRupiah } from '@/lib/utils'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -45,7 +48,7 @@ export default async function AdminBookingDetail({ params }: Props) {
       tourPackages: { include: { tourPackage: true, transportQuota: { include: { pricing: { include: { vehicle: true } } } } } },
       flights:    { include: { flightSchedule: { include: { route: true } } } },
       packages:   { include: { package: { select: { name: true } } } },
-      pilgrims:   { select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
+      pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
       payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] },
       invoice:    true,
     },
@@ -69,11 +72,16 @@ export default async function AdminBookingDetail({ params }: Props) {
       manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))
     }
   }
-  function displayName(p: NonNullable<typeof booking>['pilgrims'][number]): string {
+  function displayName(p: NonNullable<typeof booking>['pilgrims'][number], index: number): string {
     const fields = manifestFieldsByPilgrim.get(p.id) ?? []
     const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
-    return typeof name === 'string' && name ? name : 'Jamaah'
+    return typeof name === 'string' && name ? name : `Jamaah ${index + 1}`
   }
+  // Visa per jamaah diringkas: produk + harga satuan sama → satu baris "3 jamaah × Rp … = Rp …" (lib/booking/orderSummary.ts), harga = jual beku berlaku.
+  const sells = await itemSellTotals(prisma, booking.id)
+  const visaRows = collapseRows(booking.pilgrims.flatMap(p => p.visaApplication
+    ? [{ group: 'visa', name: p.visaApplication.visaProduct?.name ?? 'Visa', detail: p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', unit: 'jamaah', amount: sells.get(`visa:${p.visaApplication.id}`) ?? 0 }]
+    : []))
 
   const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
   const cfg     = BOOKING_STATUS[st]
@@ -258,6 +266,21 @@ export default async function AdminBookingDetail({ params }: Props) {
           </div>
         )}
 
+        {visaRows.length > 0 && (
+          <div className="admin-card p-4 space-y-2">
+            <p className="admin-section">Visa</p>
+            {visaRows.map(r => (
+              <p key={r.key} className="text-[13px] text-admin-ink/80">
+                <span className="font-medium text-admin-ink">{r.name}</span>
+                {r.detail && <span className="text-admin-muted ml-2 text-[12px]">{r.detail}</span>}
+                <span className="block text-[12px] text-admin-muted tabular-nums">
+                  {formulaOf(r, formatRupiah) ?? `1 ${r.unit}`} = <span className="font-semibold text-admin-ink">{formatRupiah(r.amount)}</span>
+                </span>
+              </p>
+            ))}
+          </div>
+        )}
+
         {booking.muthowif.length > 0 && (
           <div className="admin-card p-4 space-y-3">
             <p className="admin-section">Muthowif</p>
@@ -296,7 +319,7 @@ export default async function AdminBookingDetail({ params }: Props) {
           </span>
         </div>
         <div className="divide-y divide-admin-line">
-          {booking.pilgrims.map((p) => {
+          {booking.pilgrims.map((p, i) => {
             const visaCfg = VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]
             const check = checklists.get(p.id)
             const required = (check?.items ?? []).filter(i => i.required)
@@ -306,7 +329,7 @@ export default async function AdminBookingDetail({ params }: Props) {
               <div key={p.id} className="p-5 space-y-3">
                 <div className="flex items-start justify-between gap-4">
                   <div>
-                    <p className="font-semibold text-admin-ink text-[14px]">{displayName(p)}</p>
+                    <p className="font-semibold text-admin-ink text-[14px]">{displayName(p, i)}</p>
                     <p className="text-[11px] text-admin-muted mt-0.5">
                       {VISA_TYPE_LABEL[p.visaApplication?.visaType ?? ''] ?? '-'}
                     </p>

@@ -19,9 +19,11 @@ type Props = {
   onChange: (v: SavedPilgrimFormValue) => void
   /** "Saya sendiri" hanya relevan untuk pemilik akun (dan staf atas nama pelanggan). */
   showSelf?: boolean
+  /** Awalan id kolom — beda per formulir bila beberapa formulir bisa tampil di satu halaman. */
+  idPrefix?: string
 }
 
-export function SavedPilgrimFields({ value: v, onChange, showSelf = true }: Props) {
+export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPrefix = 'sp' }: Props) {
   const set = <K extends keyof SavedPilgrimFormValue>(k: K, x: SavedPilgrimFormValue[K]) => onChange({ ...v, [k]: x })
   const wni = v.nationality === 'ID'
 
@@ -30,8 +32,8 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true }: Prop
       <section className="space-y-4">
         <h2 className="text-sm font-semibold">Identitas</h2>
         <div className="space-y-2">
-          <Label htmlFor="sp-name">Nama lengkap (sesuai paspor/KTP)</Label>
-          <Input id="sp-name" value={v.fullName} onChange={e => set('fullName', e.target.value)} maxLength={120} required />
+          <Label htmlFor={`${idPrefix}-name`}>Nama lengkap (sesuai paspor/KTP)</Label>
+          <Input id={`${idPrefix}-name`} value={v.fullName} onChange={e => set('fullName', e.target.value)} maxLength={120} required />
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2">
@@ -43,19 +45,19 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true }: Prop
             <ChoiceSelect options={COUNTRY_OPTIONS} value={v.nationality} onChange={x => set('nationality', x || 'ID')} clearable={false} ariaLabel="Kewarganegaraan" />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="sp-bplace">Tempat lahir</Label>
-            <Input id="sp-bplace" value={v.birthPlace} onChange={e => set('birthPlace', e.target.value)} maxLength={100} />
+            <Label htmlFor={`${idPrefix}-bplace`}>Tempat lahir</Label>
+            <Input id={`${idPrefix}-bplace`} value={v.birthPlace} onChange={e => set('birthPlace', e.target.value)} maxLength={100} />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="sp-bdate">Tanggal lahir</Label>
-            <Input id="sp-bdate" type="date" value={v.birthDate} onChange={e => set('birthDate', e.target.value)} required />
+            <Label htmlFor={`${idPrefix}-bdate`}>Tanggal lahir</Label>
+            <Input id={`${idPrefix}-bdate`} type="date" value={v.birthDate} onChange={e => set('birthDate', e.target.value)} required />
           </div>
         </div>
 
         {wni && (
           <div className="space-y-2">
-            <Label htmlFor="sp-nik">NIK (16 digit)</Label>
-            <Input id="sp-nik" inputMode="numeric" autoComplete="off" value={v.nik} maxLength={40}
+            <Label htmlFor={`${idPrefix}-nik`}>NIK (16 digit)</Label>
+            <Input id={`${idPrefix}-nik`} inputMode="numeric" autoComplete="off" value={v.nik} maxLength={40}
               placeholder={v.hasNik && !v.clearNik ? `Tersimpan ${NIK_MASK} — kosongkan untuk tetap` : '16 digit sesuai KTP/KK'}
               onChange={e => onChange({ ...v, nik: e.target.value, clearNik: false })} />
             <p className="text-xs text-muted-foreground">Wajib untuk WNI, kecuali bayi di bawah 2 tahun. NIK disimpan terenkripsi dan tidak pernah ditampilkan kembali.</p>
@@ -72,8 +74,8 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true }: Prop
       <section className="space-y-4 border-t pt-4">
         <h2 className="text-sm font-semibold">Paspor {wni ? '(opsional)' : '(wajib untuk warga negara lain)'}</h2>
         <div className="space-y-2">
-          <Label htmlFor="sp-pass">Nomor paspor</Label>
-          <Input id="sp-pass" autoComplete="off" value={v.passportNumber} maxLength={40}
+          <Label htmlFor={`${idPrefix}-pass`}>Nomor paspor</Label>
+          <Input id={`${idPrefix}-pass`} autoComplete="off" value={v.passportNumber} maxLength={40}
             placeholder={v.passportMask && !v.clearPassport ? `Tersimpan ${v.passportMask} — kosongkan untuk tetap` : 'Contoh: C1234567'}
             onChange={e => onChange({ ...v, passportNumber: e.target.value, clearPassport: false })} />
           {v.passportMask && !v.passportNumber && (
@@ -86,12 +88,12 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true }: Prop
         {!v.clearPassport && (
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="sp-pissued">Tanggal terbit</Label>
-              <Input id="sp-pissued" type="date" value={v.passportIssuedAt} onChange={e => set('passportIssuedAt', e.target.value)} />
+              <Label htmlFor={`${idPrefix}-pissued`}>Tanggal terbit</Label>
+              <Input id={`${idPrefix}-pissued`} type="date" value={v.passportIssuedAt} onChange={e => set('passportIssuedAt', e.target.value)} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="sp-pexp">Berlaku sampai</Label>
-              <Input id="sp-pexp" type="date" value={v.passportExpiry} onChange={e => set('passportExpiry', e.target.value)} />
+              <Label htmlFor={`${idPrefix}-pexp`}>Berlaku sampai</Label>
+              <Input id={`${idPrefix}-pexp`} type="date" value={v.passportExpiry} onChange={e => set('passportExpiry', e.target.value)} />
             </div>
           </div>
         )}
@@ -101,8 +103,8 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true }: Prop
         <h2 className="text-sm font-semibold">Kontak (opsional)</h2>
         <ContactPicker value={v.contact} onChange={c => set('contact', c)} showEmail={false} />
         <div className="space-y-2">
-          <Label htmlFor="sp-email">Email</Label>
-          <Input id="sp-email" type="email" value={v.email} onChange={e => set('email', e.target.value)} maxLength={254} />
+          <Label htmlFor={`${idPrefix}-email`}>Email</Label>
+          <Input id={`${idPrefix}-email`} type="email" value={v.email} onChange={e => set('email', e.target.value)} maxLength={254} />
         </div>
       </section>
 

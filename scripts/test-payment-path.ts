@@ -34,7 +34,8 @@ await t('setiap jenis item tampil di detail booking admin', () => {
   }
 })
 await t('rincian jamaah menjumlah ke tagihan: penyesuaian total tampil terpisah', () => {
-  assert.match(read(PILGRIM), /Penyesuaian harga/)
+  assert.match(read(PILGRIM), /<OrderSummaryCard[^>]*adjustment=/)
+  assert.match(read('app/[locale]/(pilgrim)/bookings/[id]/OrderSummaryCard.tsx'), /Penyesuaian harga/)
 })
 
 await t('route bukti tidak mempercayai MIME/nama dari klien dan tidak melewati penyimpanan di dev', () => {

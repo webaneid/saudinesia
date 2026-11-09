@@ -19,7 +19,7 @@ import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
 export const invoiceBookingInclude = {
   user: { include: { address: { include: { province: true, regency: true, district: true, village: true } } } },
   priceSnapshots: { where: { voidedAt: null }, orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] }, // baris di-void revisi tak tampil (T1)
-  pilgrims: { select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { id: true, visaProductId: true } } } }, // tanpa kolom NIK/paspor tersegel
+  pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { id: true, visaProductId: true } } } }, // tanpa kolom NIK/paspor tersegel
   payments: true,
   invoice: true,
 } satisfies Prisma.BookingInclude
@@ -32,6 +32,8 @@ export type InvoiceLineItem = {
   qty:         number
   unitPrice:   number
   amount:      number
+  /** Baris per jamaah (visa): label TANPA nama + satuan, supaya tampilan ringkas bisa menggabungkannya jadi "3 jamaah × Rp …" (lib/booking/orderSummary.ts). PDF tidak memakainya. */
+  group?:      { label: string; unit: string }
 }
 
 export type InvoiceData = {
@@ -108,7 +110,9 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
   const fieldsByProduct = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const g of ordered) {
     let label = g.label
+    let group: InvoiceLineItem['group']
     if (g.type === 'visa') {
+      group = { label: g.label, unit: 'jamaah' }
       const p = pilgrimByVisa.get(g.itemId)
       const productId = p?.visaApplication?.visaProductId
       if (productId && !fieldsByProduct.has(productId)) fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId, db))
@@ -117,7 +121,7 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
       label = `${g.label} — ${typeof rawName === 'string' && rawName ? rawName : 'Jamaah'}`
     }
     const amount = g.amountCents / 100
-    lineItems.push({ label, description: g.detail, qty: g.qty, unitPrice: amount / g.qty, amount })
+    lineItems.push({ label, description: g.detail, qty: g.qty, unitPrice: amount / g.qty, amount, ...(group ? { group } : {}) })
   }
 
   const subtotal = lineItems.reduce((sum, li) => sum + li.amount, 0)
