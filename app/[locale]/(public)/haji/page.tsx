@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { hajiAvailable, hajiPriced } from '@/lib/haji/catalog'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { sellPrices } from '@/lib/pricing/engine/read'
 import { requirementsOfMany } from '@/lib/documents/requirements'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
@@ -130,9 +131,12 @@ export default async function HajiCatalogPage({ params }: Props) {
                             <Users className="h-4 w-4 text-brand" aria-hidden />
                             <span className={sisa < 10 ? 'font-medium text-destructive' : ''}>{t('card.seats', { count: Math.max(0, sisa) })}</span>
                           </p>
-                          <Link href={`/${locale}/register`} className="btn-brand-solid w-full">
-                            {t('card.register')} <ArrowRight className="h-4 w-4" aria-hidden />
-                          </Link>
+                          {/* Checkout Haji (§10.5, H1 = b): hanya produk berharga dengan sisa kuota. */}
+                          {hajiPriced(price) && sisa > 0 && (
+                            <Link href={checkoutPath(locale, 'haji', p.id)} className="btn-brand-solid w-full">
+                              {t('card.register')} <ArrowRight className="h-4 w-4" aria-hidden />
+                            </Link>
+                          )}
                         </div>
                       </div>
                     </article>

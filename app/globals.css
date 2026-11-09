@@ -107,6 +107,11 @@
   /* Kartu produk katalog publik (§6.7 G2). */
   .catalog-card { @apply flex flex-col overflow-hidden rounded-2xl border bg-card transition-colors hover:border-brand; }
   .catalog-chip { @apply inline-flex items-center gap-1 rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-semibold text-brand; }
+  /* Checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5). */
+  .checkout-panel { @apply space-y-4 rounded-2xl border bg-card p-5 sm:p-6; }
+  .checkout-label { @apply block text-sm font-semibold text-brand-dark; }
+  .checkout-input { @apply min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15; }
+  .checkout-option { @apply flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors hover:border-brand; }
   /* Kaca terang di atas kanvas krem (topbar). */
   .glass-light {
     background: rgb(255 255 255 / 0.65);

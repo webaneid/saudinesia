@@ -33,11 +33,11 @@ export default async function PilgrimLayout({ children, params }: Props) {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
-      {/* Pilgrim nav */}
-      <nav className="flex items-center gap-1 border-b pb-4">
+      {/* Pilgrim nav — flex-wrap: turun baris di HP, tanpa geser samping */}
+      <nav className="flex flex-wrap items-center gap-1 border-b pb-4">
         {navItems.map(({ href, icon: Icon, label }) => (
           <Link key={href} href={href}
-            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
+            className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
             <Icon className="h-3.5 w-3.5" />{label}
           </Link>
         ))}

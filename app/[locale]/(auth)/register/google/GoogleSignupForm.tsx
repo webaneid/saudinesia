@@ -8,7 +8,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-export function GoogleSignupForm({ locale, email, initialName }: { locale: string; email: string; initialName: string }) {
+/** `next` = jalur kembali yang SUDAH disaring server (cookie pendaftaran bertanda tangan), atau null. */
+export function GoogleSignupForm({ locale, next = null, email, initialName }: { locale: string; next?: string | null; email: string; initialName: string }) {
   const router = useRouter()
   const [fullName, setFullName] = useState(initialName)
   const [privacyConsent, setPrivacyConsent] = useState(false)
@@ -25,7 +26,7 @@ export function GoogleSignupForm({ locale, email, initialName }: { locale: strin
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Gagal membuat akun.'); return }
-      router.push(`/${locale}/dashboard`)
+      router.push(next ?? `/${locale}/dashboard`)
     } catch {
       setError('Terjadi kesalahan. Periksa koneksi internet.')
     } finally {

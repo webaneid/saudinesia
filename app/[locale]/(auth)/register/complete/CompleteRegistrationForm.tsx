@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 
-type Preview = { email: string; fullName: string; phone: string; whatsapp: string }
+type Preview = { email: string; fullName: string; phone: string; whatsapp: string; next: string | null }
 
 // Menampilkan isian pendaftaran dari token (hanya baca) lalu meminta password. Token baru dikonsumsi saat tombol ditekan —
 // membuka halaman ini (juga oleh pemindai tautan email) tidak menghanguskan tautan.
@@ -50,7 +50,7 @@ export function CompleteRegistrationForm({ locale, token }: { locale: string; to
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Gagal mengaktifkan akun.'); return }
-      router.push(`/${locale}/dashboard`)
+      router.push(preview?.next ?? `/${locale}/dashboard`) // jalur kembali sudah disaring server (lib/auth/nextPath.ts)
     } catch {
       setError('Terjadi kesalahan. Periksa koneksi internet.')
     } finally {

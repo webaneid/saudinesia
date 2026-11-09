@@ -41,6 +41,8 @@ export const registerSchema = z
     phone: e164Schema,
     whatsapp: e164Schema,
     locale: localeSchema,
+    // Jalur kembali sesudah aktivasi (mis. checkout produk) — HANYA disimpan bila lolos daftar putih lib/auth/nextPath.ts; selain itu dibuang.
+    next: z.string().max(200).optional(),
   })
   .strict()
 
@@ -49,6 +51,7 @@ export const registrationPayloadSchema = z.object({
   fullName: z.string(),
   phone: e164Schema,
   whatsapp: e164Schema,
+  next: z.string().nullish(),
 })
 
 export const tokenOnlySchema = z.object({ token: tokenSchema }).strict()

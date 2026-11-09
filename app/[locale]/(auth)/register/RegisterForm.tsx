@@ -13,9 +13,10 @@ import { e164FromCountry } from '@/lib/utils/phone'
 
 type Step = 'form' | 'sent'
 
-interface RegisterFormProps { locale: string; googleEnabled?: boolean }
+/** `next` = jalur kembali yang SUDAH disaring server; ikut tersimpan di tautan pendaftaran (disaring lagi di server). */
+interface RegisterFormProps { locale: string; next?: string | null; googleEnabled?: boolean }
 
-export function RegisterForm({ locale, googleEnabled = false }: RegisterFormProps) {
+export function RegisterForm({ locale, next = null, googleEnabled = false }: RegisterFormProps) {
   const [step, setStep] = useState<Step>('form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -36,7 +37,7 @@ export function RegisterForm({ locale, googleEnabled = false }: RegisterFormProp
       const res = await fetch('/api/v1/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fullName, email, phone, whatsapp, locale }),
+        body: JSON.stringify({ fullName, email, phone, whatsapp, locale, ...(next ? { next } : {}) }),
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Pendaftaran gagal.'); return false }
@@ -71,7 +72,7 @@ export function RegisterForm({ locale, googleEnabled = false }: RegisterFormProp
       <CardContent className="space-y-4">
         {step === 'form' && googleEnabled && (
           <>
-            <GoogleButton locale={locale} label="Daftar dengan Google" />
+            <GoogleButton locale={locale} next={next} label="Daftar dengan Google" />
             <OrDivider />
           </>
         )}
@@ -98,7 +99,7 @@ export function RegisterForm({ locale, googleEnabled = false }: RegisterFormProp
               {loading ? 'Mengirim...' : 'Daftar'}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              Sudah punya akun? <a href={`/${locale}/login`} className="text-primary hover:underline">Masuk</a>
+              Sudah punya akun? <a href={next ? `/${locale}/login?next=${encodeURIComponent(next)}` : `/${locale}/login`} className="text-primary hover:underline">Masuk</a>
             </p>
           </form>
         )}

@@ -3,6 +3,7 @@ import { buildAuthUrl, newAuthRequest, signStateCookie } from '@/lib/auth/google
 import { setStateCookie } from '@/lib/auth/googleCookies'
 import { appUrl } from '@/lib/email/templates'
 import { clientIp, consume, policy } from '@/lib/auth/rateLimit'
+import { safeNextPath } from '@/lib/auth/nextPath'
 
 // Awal login Google: buat state + nonce + PKCE, simpan di cookie bertanda tangan, alihkan ke Google.
 export async function GET(request: Request) {
@@ -20,6 +21,6 @@ export async function GET(request: Request) {
   const authUrl = buildAuthUrl(req)
   if (!authUrl) return back('google_unavailable') // kredensial belum diisi → fitur mati
 
-  await setStateCookie(await signStateCookie({ state: req.state, nonce: req.nonce, verifier: req.verifier, locale }))
+  await setStateCookie(await signStateCookie({ state: req.state, nonce: req.nonce, verifier: req.verifier, locale, next: safeNextPath(url.searchParams.get('next')) }))
   return NextResponse.redirect(authUrl)
 }

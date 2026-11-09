@@ -82,8 +82,18 @@ await t('daftar ulang untuk email yang sama menghanguskan tautan lama (hanya yan
 await t('pratinjau menampilkan isian dan TIDAK mengonsumsi token (aman dari pemindai tautan)', async () => {
   const e = email(); const token = await pending(e)
   const p1 = await previewRegistration(token); const p2 = await previewRegistration(token)
-  assert.deepEqual(p1, { email: e, fullName: 'Uji Daftar', phone: '628111222333', whatsapp: '628111222333' })
+  assert.deepEqual(p1, { email: e, fullName: 'Uji Daftar', phone: '628111222333', whatsapp: '628111222333', next: null })
   assert.deepEqual(p2, p1)
+})
+
+await t('alamat kembali (`next`) ikut token pendaftaran HANYA bila halaman checkout sah; selain itu dibuang (lib/auth/nextPath.ts)', async () => {
+  const good = '/id/checkout/haji?id=00000000-0000-4000-8000-000000000001'
+  const e1 = email(); const r1 = await requestRegistration({ ...reg(e1), next: good })
+  assert.equal((await previewRegistration((r1 as { token: string }).token))?.next, good)
+  for (const bad of ['//evil.test', 'https://evil.test', '/id/admin']) {
+    const e2 = email(); const r2 = await requestRegistration({ ...reg(e2), next: bad })
+    assert.equal((await previewRegistration((r2 as { token: string }).token))?.next, null, bad)
+  }
 })
 
 await t('selesaikan: akun dibuat (email terverifikasi, password bcrypt, 2 ConsentLog), tautan sekali pakai', async () => {
@@ -287,7 +297,7 @@ await t('route POST /bookings memanggil onboardingRefusal (gerbang langkah awal,
   const guard = post.indexOf('onboardingRefusal(')
   assert.ok(guard > 0, 'penjaga hilang dari POST /bookings')
   assert.ok(guard < post.indexOf('request.json()'), 'penjaga harus sebelum membaca body')
-  assert.ok(guard < post.indexOf('withBookingCode(async'), 'penjaga harus sebelum transaksi/efek samping')
+  assert.ok(post.indexOf('placeCheckout(') > 0 && guard < post.indexOf('placeCheckout('), 'penjaga harus sebelum transaksi/efek samping (lib/checkout/place.ts)')
   assert.match(post, /if \(refusal\) return refusal/)
   assert.match(readFileSync(new URL('../lib/auth/contact.ts', import.meta.url), 'utf8'), /status: 422/, 'gerbang menjawab 422')
 })

@@ -1,5 +1,6 @@
 'use client'
 
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import {
@@ -167,7 +168,7 @@ export default function TransportSearch({ trips, locale, labels }: Props) {
 
                 {bookable && (
                   <div className="mt-auto border-t pt-4">
-                    <Link href={`/${locale}/bookings/checkout/transport?tripId=${trip.id}`} className="btn-brand-solid w-full sm:w-auto">
+                    <Link href={checkoutPath(locale, 'transport', trip.id)} className="btn-brand-solid w-full sm:w-auto">
                       {labels.order} <ArrowRight className="h-4 w-4" aria-hidden />
                     </Link>
                   </div>

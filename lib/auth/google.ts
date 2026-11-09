@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { safeNextPath } from '@/lib/auth/nextPath'
 import { SignJWT, createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose'
 import { appUrl } from '@/lib/email/templates'
 import { requireJwtSecret } from '@/lib/auth/secret'
@@ -48,7 +49,8 @@ function key(label: string): Uint8Array {
 export const STATE_COOKIE = 'snd-g-state'
 export const SIGNUP_COOKIE = 'snd-g-new'
 
-type StateClaims = { state: string; nonce: string; verifier: string; locale: string }
+/** `next` = jalur kembali sesudah login (lib/auth/nextPath.ts) — disaring saat ditulis DAN saat dibaca; bukan bagian identitas. */
+type StateClaims = { state: string; nonce: string; verifier: string; locale: string; next?: string | null }
 export type GoogleIdentity = { sub: string; email: string; name: string }
 
 async function sign(label: string, claims: Record<string, unknown>, ttl: string): Promise<string> {
@@ -65,15 +67,19 @@ async function verify(label: string, token: string | undefined): Promise<JWTPayl
 }
 
 /** `ttl` hanya untuk uji kedaluwarsa; produksi selalu memakai bawaan. */
-export const signStateCookie = (c: StateClaims, ttl = '10m') => sign('google-oauth-state', c, ttl)
+export const signStateCookie = (c: StateClaims, ttl = '10m') => sign('google-oauth-state', { ...c, next: safeNextPath(c.next) }, ttl)
 export async function readStateCookie(token: string | undefined): Promise<StateClaims | null> {
   const p = await verify('google-oauth-state', token)
   return p && typeof p.state === 'string' && typeof p.nonce === 'string' && typeof p.verifier === 'string' && typeof p.locale === 'string'
-    ? { state: p.state, nonce: p.nonce, verifier: p.verifier, locale: p.locale }
+    ? { state: p.state, nonce: p.nonce, verifier: p.verifier, locale: p.locale, next: safeNextPath(p.next) }
     : null
 }
 
-export const signSignupCookie = (i: GoogleIdentity, ttl = '15m') => sign('google-signup', { ...i }, ttl)
+export const signSignupCookie = (i: GoogleIdentity, ttl = '15m', next: string | null = null) => sign('google-signup', { ...i, next: safeNextPath(next) }, ttl)
+/** Jalur kembali yang dibawa cookie pendaftaran Google (terpisah dari identitas supaya tak ikut ke pembuatan akun). */
+export async function readSignupNext(token: string | undefined): Promise<string | null> {
+  return safeNextPath((await verify('google-signup', token))?.next)
+}
 export async function readSignupCookie(token: string | undefined): Promise<GoogleIdentity | null> {
   const p = await verify('google-signup', token)
   return p && typeof p.sub === 'string' && typeof p.email === 'string' && typeof p.name === 'string' ? { sub: p.sub, email: p.email, name: p.name } : null

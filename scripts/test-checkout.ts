@@ -1,0 +1,246 @@
+// Checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5, Fase 11a) terhadap DATABASE SUNGGUHAN:
+// alamat kembali sesudah login (`safeNextPath` — daftar putih, tanpa dekode), skema checkout ketat, pemuat produk (harga jual saja, produk nonaktif = tak ada),
+// pratinjau = angka yang SAMA dengan pesanan sungguhan dan tidak meninggalkan jejak (booking/kuota), pesan → booking aktif + invoice + jamaah kosong,
+// penolakan terarah (visa plus 422 + pelanggaran, belum berharga 422, pilihan paket liar 422, kuota habis 409, tanggal lampau 400), dan penjaga sumber
+// (urutan gerbang di kedua route, formulir masuk/daftar menghormati `next`).
+//
+// PENGAMAN: menulis data sementara → menolak jalan kecuali nama database memuat "test", "ci" atau "tmp".
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { prisma } from '@/lib/db'
+import { repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
+import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
+import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
+import { checkoutPath } from '@/lib/checkout/kinds'
+import { loadCheckoutProduct } from '@/lib/checkout/options'
+import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
+import { checkoutDateRefusal } from '@/lib/checkout/dates'
+import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
+import { checkoutInput, checkoutSchema, type CheckoutInput } from '@/lib/validators/checkout'
+import { billOf, billSelect } from '@/lib/invoice/bill'
+import { addDays, todayInApp } from '@/lib/time'
+import { assertThrowawayDb } from './lib/testDb'
+
+await assertThrowawayDb()
+
+let failed = 0
+async function t(name: string, fn: () => Promise<void> | void) {
+  try { await fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
+}
+const root = new URL('..', import.meta.url).pathname
+const read = (f: string) => readFileSync(join(root, f), 'utf8')
+const tag = `co${Date.now()}`
+const U = '00000000-0000-4000-8000-000000000001'
+
+// ── murni: alamat kembali ───────────────────────────────────────────────────────────────────────────────────────────
+await t('safeNextPath: hanya halaman checkout berlocale + uuid; semua bentuk lain ditolak tanpa dekode', () => {
+  for (const ok of [checkoutPath('id', 'package', U), checkoutPath('en', 'visa', U), checkoutPath('id', 'transport', U), checkoutPath('id', 'haji', U)]) assert.equal(safeNextPath(ok), ok, ok)
+  for (const bad of [
+    '//evil.test', '/\\evil.test', 'https://evil.test/id/checkout/visa?id=' + U, '/id/admin', '/id/dashboard', `/fr/checkout/visa?id=${U}`,
+    `/id/checkout/hotel?id=${U}`, `/id/checkout/visa?id=${U}&x=1`, `/id/checkout/visa?id=${U}#a`, '/id/checkout/visa?id=nope', `/id/checkout/%76isa?id=${U}`,
+    `/id/checkout/visa%3Fid=${U}`, `/id//checkout/visa?id=${U}`, ` /id/checkout/visa?id=${U}`, `/id/checkout/visa?id=${U}\n`, `/ID/checkout/visa?id=${U}`, '',
+    `/id/checkout/visa?id=${U}${'a'.repeat(200)}`, null, undefined, 42, [`/id/checkout/visa?id=${U}`],
+  ]) assert.equal(safeNextPath(bad), null, JSON.stringify(bad))
+  assert.equal(afterAuthPath('id', '//evil.test'), '/id/dashboard')
+  assert.equal(afterAuthPath('en', checkoutPath('en', 'haji', U)), checkoutPath('en', 'haji', U))
+  assert.equal(withNext('/id/login', '//evil.test'), '/id/login')
+  assert.equal(withNext('/id/login', checkoutPath('id', 'visa', U)), `/id/login?next=${encodeURIComponent(checkoutPath('id', 'visa', U))}`)
+})
+
+await t('checkoutSchema: ketat — harga/total/jamaah/pemilik dari klien ditolak; jenis liar ditolak; batas orang 1..100; visa wajib tanggal', () => {
+  const ok = (v: unknown) => checkoutSchema.safeParse(v).success
+  assert.equal(ok({ kind: 'haji', hajiProductId: U, numPeople: 2 }), true)
+  for (const extra of [{ totalPrice: 1 }, { totalAmount: 1 }, { pilgrims: [] }, { userId: U }, { departureDate: '2090-01-01' }, { status: 'confirmed' }]) {
+    assert.equal(ok({ kind: 'haji', hajiProductId: U, numPeople: 1, ...extra }), false, JSON.stringify(extra))
+  }
+  assert.equal(ok({ kind: 'package', packageId: U, departureDate: '2090-06-05', numPeople: 1, choices: { price: 1 } }), false, 'pilihan paket liar')
+  assert.equal(ok({ kind: 'hotel', id: U }), false)
+  assert.equal(ok({ kind: 'haji', hajiProductId: U, numPeople: 0 }), false)
+  assert.equal(ok({ kind: 'haji', hajiProductId: U, numPeople: 101 }), false)
+  assert.equal(ok({ kind: 'haji', hajiProductId: U, numPeople: 1.5 }), false)
+  assert.equal(ok({ kind: 'visa', visaProductId: U, numPeople: 1 }), false, 'visa tanpa rencana tanggal')
+  assert.equal(ok({ kind: 'visa', visaProductId: 'x', numPeople: 1, plannedTravelDate: '2090-01-01' }), false)
+  // Haji tanpa visa umroh (H1 = b): jamaah tak pernah membawa visaProductId.
+  assert.ok(checkoutInput({ kind: 'haji', hajiProductId: U, numPeople: 3 }).pilgrims.every(p => !('visaProductId' in p)))
+})
+
+// ── dunia uji ────────────────────────────────────────────────────────────────────────────────────────────────────────
+const flat = (cost: number) => [{ minDays: 0, maxDays: 9999, cost }]
+const savedRules = await prisma.pricingRule.findMany()
+await prisma.pricingRule.deleteMany({})
+await prisma.pricingRule.create({ data: { productType: GLOBAL_RULE_KEY, defaultMarginPercent: 20, roundingIncrement: 50000 } })
+const vendor = await prisma.vendor.create({ data: { name: `${tag} vendor`, nameKey: `${tag} vendor`, countryCode: 'SA' } })
+const user = await prisma.user.create({ data: { email: `${tag}@example.test`, passwordHash: 'x', fullName: 'Uji Checkout', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+async function addCost(productType: string, productId: string, component: string, cost: number) {
+  await prisma.productCost.create({ data: { productType, productId, vendorId: vendor.id, costComponent: component, currency: 'IDR', costTiers: flat(cost) as never } })
+  await prisma.preferredVendor.create({ data: { productType, productId, costComponent: component, vendorId: vendor.id } }).catch(() => undefined)
+}
+
+const visa = await prisma.visaProduct.create({ data: { name: `${tag} Visa Mandiri`, visaType: 'Umroh' } })
+await addCost('visa', visa.id, 'visa', 1_000_000); await repriceOwner('visa', visa.id) // jual 1.200.000
+const visaPlus = await prisma.visaProduct.create({ data: { name: `${tag} Visa Plus`, visaType: 'Umroh', requiredComponents: [{ type: 'flight' }] } })
+await addCost('visa', visaPlus.id, 'visa', 1_000_000); await repriceOwner('visa', visaPlus.id)
+const visaOff = await prisma.visaProduct.create({ data: { name: `${tag} Visa Nonaktif`, visaType: 'Umroh', isActive: false } })
+
+const haji = await prisma.hajiProduct.create({ data: { name: `${tag} Haji`, hajiType: 'khusus', year: 2090, totalQuota: 3, departureDate: new Date('2090-05-01'), returnDate: new Date('2090-06-10') } })
+await addCost('haji', haji.id, 'paket', 100_000_000); await repriceOwner('haji', haji.id)
+const hajiUnpriced = await prisma.hajiProduct.create({ data: { name: `${tag} Haji Tanpa Harga`, hajiType: 'khusus', year: 2090, totalQuota: 10 } })
+
+const trip = await prisma.transportTrip.create({ data: { name: `${tag} bandara`, category: 'airport', origin: 'JED', destination: 'Makkah' } })
+const van = await prisma.transportVehicle.create({ data: { name: `${tag} van`, vehicleType: 'van', capacity: 10 } })
+const pricing = await prisma.transportPricing.create({ data: { tripId: trip.id, vehicleId: van.id } })
+await addCost('transport', pricing.id, 'sewa', 800_000); await repriceOwner('transport', pricing.id) // jual 1.000.000
+const quota = await prisma.transportQuota.create({ data: { pricingId: pricing.id, travelDate: new Date('2090-06-02'), totalSeats: 10 } })
+const pastQuota = await prisma.transportQuota.create({ data: { pricingId: pricing.id, travelDate: new Date('2020-06-02'), totalSeats: 10 } })
+
+const roomType = await prisma.roomType.create({ data: { name: `${tag} double`, defaultCapacity: 2 } })
+const hotel = await prisma.hotel.create({ data: { name: `${tag} hotel`, city: 'madinah' } })
+const period = await prisma.hotelPricePeriod.create({ data: { hotelId: hotel.id, periodStart: new Date('2090-01-01'), periodEnd: new Date('2090-12-31') } })
+const room = await prisma.hotelRoomSchedule.create({ data: { periodId: period.id, roomTypeId: roomType.id, totalQuota: 50 } })
+await addCost('hotel', room.id, 'kamar', 1_000_000); await repriceOwner('hotel', room.id)
+const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, hotelMadinahMode: 'user_choice' } })
+await prisma.packageHotelOption.create({ data: { packageId: pkg.id, slot: 'madinah', hotelRoomScheduleId: room.id, nights: 2 } })
+await addCost('package', pkg.id, 'handling', 500_000); await repriceOwner('package', pkg.id)
+
+const place = async (c: CheckoutInput) => { return placeCheckout(user.id, c, 3) }
+const failOf = async (c: CheckoutInput) => {
+  try { await place(c) } catch (e) { return bookingFailure(e) }
+  assert.fail('seharusnya ditolak')
+}
+const bookingsOfUser = () => prisma.booking.count({ where: { userId: user.id } })
+
+const VISA: CheckoutInput = { kind: 'visa', visaProductId: visa.id, numPeople: 2, plannedTravelDate: '2090-06-01' }
+const HAJI: CheckoutInput = { kind: 'haji', hajiProductId: haji.id, numPeople: 2 }
+const TRANSPORT: CheckoutInput = { kind: 'transport', transportQuotaId: quota.id, numPassengers: 4, pickupDetail: 'GA 980' }
+const PACKAGE: CheckoutInput = { kind: 'package', packageId: pkg.id, departureDate: '2090-06-05', numPeople: 2, choices: { hotelMadinahScheduleId: room.id } }
+
+await t('pemuat produk: harga JUAL saja (tanpa modal/HPP/vendor); nonaktif = null; Haji/visa/transport/paket memuat pilihannya', async () => {
+  for (const [kind, id] of [['visa', visa.id], ['haji', haji.id], ['transport', trip.id], ['package', pkg.id]] as const) {
+    const p = await loadCheckoutProduct(kind, id)
+    assert.ok(p, kind)
+    const json = JSON.stringify(p)
+    assert.doesNotMatch(json, /cost|hpp|modal|vendor|margin/i, `${kind}: tak boleh membawa modal`)
+  }
+  const v = await loadCheckoutProduct('visa', visa.id); assert.ok(v?.kind === 'visa'); assert.equal(v.tiers[0]?.fee, 1_200_000); assert.deepEqual(v.bundledWith, [])
+  const vp = await loadCheckoutProduct('visa', visaPlus.id); assert.ok(vp?.kind === 'visa'); assert.ok(vp.bundledWith.length > 0, 'visa plus dijelaskan')
+  const h = await loadCheckoutProduct('haji', haji.id); assert.ok(h?.kind === 'haji'); assert.equal(h.seatsLeft, 3); assert.ok(h.price > 0)
+  const tr = await loadCheckoutProduct('transport', trip.id); assert.ok(tr?.kind === 'transport')
+  assert.deepEqual(tr.slots.map(s => s.quotaId), [quota.id], 'kuota lampau tak ditawarkan'); assert.ok((tr.slots[0]?.price ?? 0) > 0)
+  assert.equal(await loadCheckoutProduct('visa', visaOff.id), null)
+  assert.equal(await loadCheckoutProduct('haji', U), null)
+})
+
+for (const [label, c] of [['visa', VISA], ['haji', HAJI], ['transport', TRANSPORT], ['paket', PACKAGE]] as const) {
+  await t(`${label}: pratinjau = angka pesanan sungguhan; pratinjau tak meninggalkan booking/kuota; pesanan = booking aktif + invoice + jamaah kosong sebanyak orang`, async () => {
+    const before = await bookingsOfUser()
+    const hajiBefore = await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id }, select: { pendingQuota: true } })
+    const quotaBefore = await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id }, select: { pendingSeats: true } })
+    const p = await simulateBooking({ userId: user.id }, checkoutInput(c), 3)
+    assert.equal(await bookingsOfUser(), before, 'pratinjau tidak menyimpan booking')
+    assert.deepEqual(await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id }, select: { pendingQuota: true } }), hajiBefore, 'pratinjau tak menahan kuota haji')
+    assert.deepEqual(await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id }, select: { pendingSeats: true } }), quotaBefore, 'pratinjau tak menahan kursi')
+    assert.ok(p.total > 0 && p.lines.length > 0)
+
+    const b = await place(c)
+    const row = await prisma.booking.findUniqueOrThrow({ where: { id: b.id }, select: { status: true, userId: true, bookingCode: true, ...billSelect, pilgrims: { select: { fieldValues: true, visaApplication: { select: { visaProductId: true } } } } } })
+    assert.equal(row.status, 'active'); assert.equal(row.userId, user.id); assert.doesNotMatch(row.bookingCode, /PRATINJAU/)
+    assert.ok((await prisma.invoice.findUnique({ where: { bookingId: b.id }, select: { number: true } }))?.number, 'invoice terbit bersama booking')
+    const bill = billOf(row)
+    assert.equal(Number(row.totalAmount), p.total, 'subtotal pratinjau = subtotal pesanan'); assert.equal(bill.grandTotal, p.grandTotal, 'tagihan pratinjau = tagihan pesanan')
+    const people = c.kind === 'transport' ? c.numPassengers : c.numPeople
+    assert.equal(row.pilgrims.length, people)
+    assert.ok(row.pilgrims.every(x => JSON.stringify(x.fieldValues) === '{}'), 'data jamaah diisi SESUDAH terbit (D3)')
+    if (c.kind === 'visa') assert.ok(row.pilgrims.every(x => x.visaApplication?.visaProductId === visa.id))
+    if (c.kind === 'haji') assert.ok(row.pilgrims.every(x => x.visaApplication === null), 'Haji tanpa visa umroh (H1 = b)')
+  })
+}
+
+await t('kuota ditahan pending oleh pesanan (haji & transport)', async () => {
+  assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota, 2)
+  assert.equal((await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id } })).pendingSeats, 4)
+})
+
+await t('penolakan terarah: visa plus 422 + pelanggaran; visa nonaktif/haji tanpa harga 422; pilihan paket di luar daftar 422; kuota habis 409; id tak ada 422 — tanpa booking tersisa', async () => {
+  const before = await bookingsOfUser()
+  const plus = await failOf({ ...VISA, visaProductId: visaPlus.id } as CheckoutInput)
+  assert.equal(plus.status, 422); assert.equal(plus.violations?.[0]?.missing, 'flight')
+  assert.equal((await failOf({ ...VISA, visaProductId: visaOff.id } as CheckoutInput)).status, 422)
+  assert.equal((await failOf({ kind: 'haji', hajiProductId: hajiUnpriced.id, numPeople: 1 })).status, 422)
+  assert.equal((await failOf({ ...PACKAGE, choices: { hotelMadinahScheduleId: U } } as CheckoutInput)).status, 422)
+  assert.equal((await failOf({ kind: 'haji', hajiProductId: haji.id, numPeople: 2 })).status, 409, 'sisa kuota haji 1')
+  assert.equal((await failOf({ kind: 'haji', hajiProductId: U, numPeople: 1 })).status, 422)
+  // Pratinjau memakai pemeta yang sama.
+  await assert.rejects(simulateBooking({ userId: user.id }, checkoutInput({ ...VISA, visaProductId: visaPlus.id } as CheckoutInput), 3), (e: unknown) => bookingFailure(e).status === 422)
+  assert.equal(await bookingsOfUser(), before, 'pesanan yang ditolak tidak meninggalkan booking')
+})
+
+await t('tanggal lampau ditolak 400 (paket, visa, kuota transport lampau); hari ini boleh', async () => {
+  const yesterday = addDays(todayInApp(), -1)
+  assert.equal((await checkoutDateRefusal({ ...VISA, plannedTravelDate: yesterday } as CheckoutInput))?.status, 400)
+  assert.equal((await checkoutDateRefusal({ ...PACKAGE, departureDate: yesterday } as CheckoutInput))?.status, 400)
+  assert.equal((await checkoutDateRefusal({ ...TRANSPORT, transportQuotaId: pastQuota.id } as CheckoutInput))?.status, 400)
+  assert.equal(await checkoutDateRefusal({ ...VISA, plannedTravelDate: todayInApp() } as CheckoutInput), null)
+  assert.equal(await checkoutDateRefusal(TRANSPORT), null)
+})
+
+await t('akun dibaca ulang di dalam kunci: nonaktif / terhapus sesudah cek sesi → CheckoutAccountError, tanpa booking dan tanpa kuota tertahan (setara publishDraft)', async () => {
+  const before = await bookingsOfUser()
+  const held = (await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota
+  await prisma.user.update({ where: { id: user.id }, data: { isActive: false } })
+  await assert.rejects(placeCheckout(user.id, { kind: 'haji', hajiProductId: haji.id, numPeople: 1 }, 3), CheckoutAccountError)
+  await prisma.user.update({ where: { id: user.id }, data: { isActive: true } })
+  const gone = await prisma.user.create({ data: { email: `deleted-${tag}@deleted.invalid`, passwordHash: 'x', fullName: 'Terhapus', role: 'pilgrim', isActive: true } })
+  await assert.rejects(placeCheckout(gone.id, { kind: 'haji', hajiProductId: haji.id, numPeople: 1 }, 3), CheckoutAccountError)
+  assert.equal(await bookingsOfUser(), before)
+  assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota, held, 'kuota tak tertahan')
+})
+
+// ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
+await t('PENJAGA route: sesi → hanya pelanggan → onboardingRefusal → batas laju → Zod → tanggal, SEBELUM mesin; pratinjau tak memberi modal', () => {
+  for (const [f, engine] of [['app/api/v1/bookings/route.ts', 'placeCheckout('], ['app/api/v1/bookings/preview/route.ts', 'simulateBooking(']] as const) {
+    const src = read(f); const post = src.slice(src.indexOf('export async function POST'))
+    const order = ['requireSession()', "session.role !== 'pilgrim'", 'onboardingRefusal(', 'consume(policy(', 'checkoutSchema.safeParse(', 'checkoutDateRefusal(', engine].map(s => post.indexOf(s))
+    assert.ok(order.every(i => i > 0), `${f}: ${JSON.stringify(order)}`)
+    assert.deepEqual([...order].sort((a, b) => a - b), order, `${f}: urutan gerbang`)
+  }
+  const preview = read('app/api/v1/bookings/preview/route.ts')
+  assert.match(preview, /ok\(\{ lines: p\.lines, total: p\.total, tax: p\.tax, taxAdded: p\.taxAdded, grandTotal: p\.grandTotal, dueDays: p\.dueDays \}\)/)
+})
+
+await t('PENJAGA alamat kembali: formulir masuk/daftar/Google/lengkapi-data menghormati `next`; halaman checkout mengalihkan dengan withNext', () => {
+  for (const f of ['app/[locale]/(auth)/login/LoginForm.tsx', 'app/[locale]/(auth)/register/google/GoogleSignupForm.tsx', 'app/[locale]/(auth)/lengkapi-data/LengkapiDataForm.tsx', 'app/[locale]/(auth)/register/complete/CompleteRegistrationForm.tsx']) {
+    const src = read(f)
+    assert.doesNotMatch(src, /push\(`\/\$\{locale\}\/dashboard`\)/, `${f}: dasbor tanpa memeriksa next`)
+    assert.match(src, /\?\? `\/\$\{locale\}\/dashboard`/, f)
+  }
+  const page = read('app/[locale]/(public)/checkout/[kind]/page.tsx')
+  assert.match(page, /withNext\(`\/\$\{locale\}\/login`, here\)/); assert.match(page, /withNext\(`\/\$\{locale\}\/lengkapi-data`, here\)/)
+  assert.match(read('app/api/v1/auth/google/callback/route.ts'), /afterAuthPath\(locale, stateCookie\.next\)/)
+  // `next` yang dibawa dibersihkan lagi setiap kali dibaca (cookie/token bisa basi atau dari versi lain).
+  assert.match(read('lib/auth/google.ts'), /safeNextPath\(/); assert.match(read('lib/auth/accounts.ts'), /safeNextPath\(/)
+})
+
+// ── pembersihan (test-seed-guard sesudahnya butuh DB tanpa jamaah/booking) ───────────────────────────────────────────
+await prisma.booking.deleteMany({ where: { userId: { in: [user.id] } } }) // cascade: item, jamaah, visa, snapshot, invoice
+const starts = { startsWith: tag }
+await prisma.package.deleteMany({ where: { name: starts } })
+await prisma.visaProduct.deleteMany({ where: { name: starts } })
+await prisma.hajiProduct.deleteMany({ where: { name: starts } })
+await prisma.transportQuota.deleteMany({ where: { pricing: { trip: { name: starts } } } })
+await prisma.transportPricing.deleteMany({ where: { trip: { name: starts } } })
+await prisma.transportTrip.deleteMany({ where: { name: starts } })
+await prisma.transportVehicle.deleteMany({ where: { name: starts } })
+await prisma.hotel.deleteMany({ where: { name: starts } })
+await prisma.roomType.deleteMany({ where: { name: starts } })
+await prisma.productCost.deleteMany({ where: { vendorId: vendor.id } })
+await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } })
+await sweepOrphanPricePoints()
+await prisma.vendor.delete({ where: { id: vendor.id } })
+await prisma.user.deleteMany({ where: { email: { contains: tag } } })
+await prisma.pricingRule.deleteMany({})
+for (const r of savedRules) await prisma.pricingRule.create({ data: { productType: r.productType, defaultMarginPercent: r.defaultMarginPercent, roundingIncrement: r.roundingIncrement, warnBelowPercent: r.warnBelowPercent } })
+assert.equal(await prisma.booking.count({ where: { userId: user.id } }), 0)
+await prisma.$disconnect()
+console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
+process.exit(failed ? 1 : 0)

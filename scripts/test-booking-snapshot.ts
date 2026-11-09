@@ -486,14 +486,14 @@ await t('PENJAGA SUMBER: hanya engine/snapshot.ts menulis price_snapshots; route
   const readers = [...walk(join(root, 'app')), ...walk(join(root, 'components'))].filter(f => /priceSnapshots?\b/.test(readFileSync(f, 'utf8')))
   assert.deepEqual(readers.map(f => f.slice(root.length)), [], 'snapshot (berisi modal) tak boleh dibaca dari app/ atau components/')
   // Jalur pesan (route jamaah + penerbitan draf admin) = mesin bersama lib/booking/create.ts; tak satu pun menghitung harga sendiri.
-  for (const f of ['app/api/v1/bookings/route.ts', 'lib/booking/create.ts', 'lib/booking/drafts.ts']) {
+  for (const f of ['app/api/v1/bookings/route.ts', 'app/api/v1/bookings/preview/route.ts', 'lib/checkout/place.ts', 'lib/booking/simulate.ts', 'lib/booking/create.ts', 'lib/booking/drafts.ts']) {
     const src = readFileSync(join(root, f), 'utf8')
     for (const forbidden of [/requireSellPrice/, /computeSellPrice/, /computeCateringBookingPrice/, /baseTotal|totalForVehicle|hotelChoicePrice/, /\btotalAmount \+=/, /pricePoint\./]) {
       assert.doesNotMatch(src, forbidden, `${f} tidak boleh memuat ${forbidden}`)
     }
   }
   assert.match(readFileSync(join(root, 'lib/booking/create.ts'), 'utf8'), /const total = await writeBookingItems\(tx, bookingId, p\.data, p\.tours, p\.packages(, written)?\)/)
-  assert.match(readFileSync(join(root, 'app/api/v1/bookings/route.ts'), 'utf8'), /await writeBooking\(tx, prepared, bk\.id\)/)
+  assert.match(readFileSync(join(root, 'lib/checkout/place.ts'), 'utf8'), /await writeBooking\(tx, prepared, bk\.id\)/)
   const invoice = readFileSync(join(root, 'lib/pdf/invoiceData.ts'), 'utf8')
   assert.doesNotMatch(invoice, /\.totalPrice|\.unitPrice|\.pricePerNight|sellPriceSnapshot|\.hotels|\.transports|\.tourPackages/, 'invoice hanya membaca price_snapshots')
   const items = readFileSync(join(root, 'lib/booking/lineItems.ts'), 'utf8')

@@ -212,7 +212,11 @@ console.log('== cookie sementara ==')
 await t('cookie state: roundtrip; dirusak / kedaluwarsa / dibuat dengan rahasia lain ditolak', async () => {
   const c = { state: 's', nonce: 'n', verifier: 'v', locale: 'id' }
   const tok = await signStateCookie(c)
-  assert.deepEqual(await readStateCookie(tok), c)
+  assert.deepEqual(await readStateCookie(tok), { ...c, next: null })
+  // Alamat kembali (lib/auth/nextPath.ts): hanya halaman checkout sah yang ikut; selain itu dibuang saat ditulis DAN saat dibaca.
+  const good = '/id/checkout/visa?id=00000000-0000-4000-8000-000000000001'
+  assert.equal((await readStateCookie(await signStateCookie({ ...c, next: good })))?.next, good)
+  for (const bad of ['//evil.test', 'https://evil.test', '/id/admin']) assert.equal((await readStateCookie(await signStateCookie({ ...c, next: bad })))?.next, null, bad)
   assert.equal(await readStateCookie(tok.slice(0, -3) + 'abc'), null)
   assert.equal(await readStateCookie(undefined), null)
   assert.equal(await readStateCookie('bukan.jwt.sama-sekali'), null)

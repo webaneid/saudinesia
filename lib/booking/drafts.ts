@@ -4,15 +4,13 @@ import { bookingDraftSchema, type BookingDraft } from '@/lib/validators/booking'
 import { isBookingCodeBusy, withBookingCode } from '@/lib/utils/bookingCode'
 import { detectSeason } from '@/lib/utils/season'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
-import { InvoiceError, issueInvoice, taxFor } from '@/lib/invoice/issue'
-import type { TaxLine } from '@/lib/invoice/tax'
+import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
 import { isDeletedAccount } from '@/lib/customers/query'
-import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
-import { itemSellTotals, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
 import { ItemNotBookableError, itemIndexOf } from './errors'
 import { isSerializationConflict, retrySerializable } from './serializable'
 import { partialItemTotals } from './partialTotals'
+import { simulateBooking, type BookingPreview } from './simulate'
 import type { RuleViolation } from './rules'
 
 // Draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3). Draf = baris `Booking` berstatus `draft` + masukan pesan di kolom `draft` (JSON) — TANPA item,
@@ -90,23 +88,9 @@ export async function deleteDraft(id: string): Promise<{ ok: true } | DraftError
   })
 }
 
-export type DraftPreview = {
-  lines: InvoiceLineItem[]
-  /** Σ baris (sebelum pajak). */
-  total: number
-  /** Pajak menurut aturan TERKINI (dibekukan saat terbit). */
-  tax: TaxLine[]
-  taxAdded: number
-  /** Yang akan ditagihkan = total + pajak ditambahkan. */
-  grandTotal: number
-  dueDays: number
-  /** Harga jual tiap item, URUT `draft.items` (editor baris menampilkannya sebagai subtotal baris). */
-  itemTotals: number[]
-  /** Harga jual visa milik tiap jamaah, URUT `draft.pilgrims` (0 = tanpa visa sendiri) — editor menjumlahkannya per baris Visa (docs/rencana-visa-produk.md §2.2). */
-  pilgrimVisaTotals: number[]
-}
+/** Pratinjau draf = pratinjau mesin pesan (lib/booking/simulate.ts) — `itemTotals` urut `draft.items`, `pilgrimVisaTotals` urut `draft.pilgrims`. */
+export type DraftPreview = BookingPreview
 
-class Rollback extends Error { constructor(public readonly result: DraftPreview) { super('rollback') } }
 
 /** Akibat terbit, TANPA terbit: angka, baris invoice, pelanggaran aturan, dan galat kuota sama persis dengan saat terbit; seluruh tulisan di-rollback. */
 /** `override` = isi draf yang BELUM disimpan (editor baris memperbarui total otomatis saat mengetik) — divalidasi skema yang sama oleh route; tak ada yang disimpan. */
@@ -117,41 +101,20 @@ export async function previewDraft(id: string, override?: BookingDraft): Promise
   if (draft.items.length === 0 && draft.pilgrims.every(p => !p.visaProductId)) return { ok: false, status: 422, message: 'Tambahkan minimal satu produk' }
   const dueDays = draft.dueDays ?? (await getInvoiceSettings()).defaultDueDays
   try {
-    return { ok: true, preview: await simulate(id, b.userId, draft, dueDays) }
+    return { ok: true, preview: await simulate(id, draft, dueDays) }
   } catch (e) {
     const f = failure(e)
     if (f.itemIndex === undefined) return f
     // Satu baris gagal → subtotal baris lain tetap dihitung (tanpa baris itu); ringkasan tetap tak ditampilkan.
     const itemTotals = await partialItemTotals(draft.items.length, f.itemIndex, async keep =>
-      (await simulate(id, b.userId, { ...draft, items: keep.map(i => draft.items[i]!) }, dueDays)).itemTotals)
+      (await simulate(id, { ...draft, items: keep.map(i => draft.items[i]!) }, dueDays)).itemTotals)
     return { ...f, itemTotals }
   }
 }
 
-/** Satu simulasi terbit di transaksi yang selalu di-rollback; galat mesin diteruskan apa adanya. */
-async function simulate(id: string, userId: string, draft: BookingDraft, dueDays: number): Promise<DraftPreview> {
-  try {
-    const prepared = await prepareBooking(draftInput(draft))
-    await prisma.$transaction(async (tx) => {
-      const written: ItemMeta[] = []
-      await writeBooking(tx, prepared, id, written)
-      const full = await tx.booking.findUniqueOrThrow({ where: { id }, include: invoiceBookingInclude })
-      const inv = await buildInvoiceData(full, tx)
-      const tax = await taxFor(tx, inv.subtotal)
-      const sells = await itemSellTotals(tx, id)
-      const itemTotals = draft.items.map((_, i) => { const m = written[i]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
-      // Visa ditulis SESUDAH item, satu meta per jamaah bervisa sendiri, urut jamaah (lib/booking/lineItems.ts).
-      const visaMetas = written.slice(draft.items.length)
-      let k = 0
-      const pilgrimVisaTotals = draft.pilgrims.map(p => { if (!p.visaProductId) return 0; const m = visaMetas[k++]; return m ? sells.get(`${m.itemType}:${m.itemId}`) ?? 0 : 0 })
-      throw new Rollback({ lines: inv.lineItems, total: inv.subtotal, tax: tax.lines, taxAdded: tax.addedIdr, grandTotal: inv.subtotal + tax.addedIdr, dueDays, itemTotals, pilgrimVisaTotals })
-    }, { isolationLevel: 'Serializable' })
-  } catch (e) {
-    if (e instanceof Rollback) return e.result
-    throw e
-  }
-  throw new Error('pratinjau tidak di-rollback') // tak terjangkau: transaksi di atas selalu melempar Rollback
-}
+/** Simulasi atas baris draf ini (mesin bersama, selalu di-rollback — lib/booking/simulate.ts). */
+const simulate = (id: string, draft: BookingDraft, dueDays: number): Promise<DraftPreview> =>
+  simulateBooking({ bookingId: id }, draftInput(draft), dueDays)
 
 /** Terbitkan: draf dikunci, mesin pesan menulis item ke baris yang sama, status `draft → active`, isi draf dikosongkan, jatuh tempo ditetapkan (D4). Atomik. */
 export async function publishDraft(id: string, input: { dueDays?: number; expectedUpdatedAt?: string; byUserId: string | null }): Promise<{ ok: true; id: string; bookingCode: string; invoiceNumber: string } | DraftError> {

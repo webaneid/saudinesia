@@ -9,9 +9,10 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GoogleButton, OrDivider } from '@/components/shared/GoogleButton'
 
-interface LoginFormProps { locale: string; googleEnabled?: boolean; initialError?: string }
+/** `next` = jalur kembali yang SUDAH disaring server (lib/auth/nextPath.ts), atau null. */
+interface LoginFormProps { locale: string; next?: string | null; googleEnabled?: boolean; initialError?: string }
 
-export function LoginForm({ locale, googleEnabled = false, initialError = '' }: LoginFormProps) {
+export function LoginForm({ locale, next = null, googleEnabled = false, initialError = '' }: LoginFormProps) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -31,7 +32,7 @@ export function LoginForm({ locale, googleEnabled = false, initialError = '' }: 
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Login gagal.'); return }
-      router.push(`/${locale}/dashboard`)
+      router.push(next ?? `/${locale}/dashboard`)
     } catch {
       setError('Terjadi kesalahan. Periksa koneksi internet.')
     } finally {
@@ -51,7 +52,7 @@ export function LoginForm({ locale, googleEnabled = false, initialError = '' }: 
       <CardContent className="space-y-4">
         {googleEnabled && (
           <>
-            <GoogleButton locale={locale} label="Masuk dengan Google" />
+            <GoogleButton locale={locale} next={next} label="Masuk dengan Google" />
             <OrDivider />
           </>
         )}
@@ -92,7 +93,7 @@ export function LoginForm({ locale, googleEnabled = false, initialError = '' }: 
           </Button>
           <p className="text-center text-sm text-muted-foreground">
             Belum punya akun?{' '}
-            <a href={`/${locale}/register`} className="text-primary hover:underline">Daftar</a>
+            <a href={next ? `/${locale}/register?next=${encodeURIComponent(next)}` : `/${locale}/register`} className="text-primary hover:underline">Daftar</a>
           </p>
         </form>
       </CardContent>

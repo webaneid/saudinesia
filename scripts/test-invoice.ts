@@ -204,7 +204,8 @@ await t('PENJAGA: hanya lib/invoice/issue.ts yang menulis invoice; hanya lib/inv
   const deadline = SRC.filter(f => f !== 'lib/invoice/issue.ts' && /paymentDeadline\s*:(?!\s*(?:true\b|\{))/.test(read(f)) && /\b(create|update|upsert)\(/.test(read(f)))
   assert.deepEqual(deadline, [], 'paymentDeadline ditulis di luar lib/invoice/issue.ts')
   assert.match(read('lib/booking/drafts.ts'), /issueInvoice\(tx, id, \{ dueDays, byUserId: input\.byUserId \}\)/)
-  assert.match(read('app/api/v1/bookings/route.ts'), /await issueInvoice\(tx, bk\.id, \{ dueDays: defaultDueDays, byUserId: null \}\)/)
+  assert.match(read('lib/checkout/place.ts'), /await issueInvoice\(tx, bk\.id, \{ dueDays, byUserId: null \}\)/)
+  assert.match(read('app/api/v1/bookings/route.ts'), /placeCheckout\(session\.userId, parsed\.data, defaultDueDays\)/)
 })
 await t('PENJAGA: app/ dan components/ tak menampilkan `totalAmount` mentah sebagai tagihan (Number(x.totalAmount)) — tagihan lewat billOf', () => {
   const bad = [...files('app'), ...files('components')].filter(f => /Number\(\s*[\w.?]*totalAmount\s*\)/.test(read(f)))

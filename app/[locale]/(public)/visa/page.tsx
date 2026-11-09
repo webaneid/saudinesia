@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import Link from 'next/link'
 import { ArrowRight, Clock, Globe, Info, KeyRound, Tag } from 'lucide-react'
 import { prisma } from '@/lib/db'
@@ -110,7 +111,7 @@ export default async function VisaCatalogPage({ params }: Props) {
                               <span>{t('card.bundled', { parts: model.parts.join(', ') })}</span>
                             </p>
                           ) : summary.from > 0 ? (
-                            <Link href={`/${locale}/bookings/checkout/visa?productId=${v.id}`} className="btn-brand-solid w-full">
+                            <Link href={checkoutPath(locale, 'visa', v.id)} className="btn-brand-solid w-full">
                               {t('card.apply')} <ArrowRight className="h-4 w-4" aria-hidden />
                             </Link>
                           ) : null}

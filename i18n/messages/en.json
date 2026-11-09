@@ -278,7 +278,7 @@
         "perPerson": "per person",
         "unpriced": "Price not set yet",
         "seats": "{count, plural, one {# seat available} other {# seats available}}",
-        "register": "Register"
+        "register": "Book Now"
       },
       "cta": {
         "title": "Ready to plan your trip?",

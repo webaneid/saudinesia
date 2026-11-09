@@ -5,6 +5,7 @@ import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { withSellPrice } from '@/lib/pricing/engine/read'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { requirementsOfMany } from '@/lib/documents/requirements'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { catalogMetadata } from '@/lib/public-content/metadata'
@@ -96,10 +97,12 @@ export default async function PackagesCatalogPage({ params }: Props) {
                       unit={pkg.priceLabel ?? t('card.perPerson')}
                       note={hasAddOns(pkg) ? t('card.addOns') : null}
                     />
-                    {/* Checkout Paket belum ada (§1.2, §6.1): tetap ke daftar akun seperti sebelumnya. */}
-                    <Link href={`/${locale}/register`} className="btn-brand-solid w-full">
-                      {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
-                    </Link>
+                    {/* Checkout Paket (docs/arsitektur-booking-engine-v2.md §10.5); paket belum berharga tak dapat dipesan (tak pernah gratis). */}
+                    {Number(pkg.price) > 0 && (
+                      <Link href={checkoutPath(locale, 'package', pkg.id)} className="btn-brand-solid w-full">
+                        {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </article>

@@ -1,19 +1,18 @@
 import { NextResponse } from 'next/server'
-import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { requireSession } from '@/lib/auth/session'
-import { createBookingSchema } from '@/lib/validators/booking'
-import { isBookingCodeBusy, withBookingCode } from '@/lib/utils/bookingCode'
+import { checkoutSchema } from '@/lib/validators/checkout'
+import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
+import { checkoutDateRefusal } from '@/lib/checkout/dates'
+import { isBookingCodeBusy } from '@/lib/utils/bookingCode'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { ok, err } from '@/lib/validators'
-import { ItemNotBookableError } from '@/lib/booking/errors'
-import { prepareBooking, writeBooking, RuleViolationError } from '@/lib/booking/create'
+import { bookingFailure } from '@/lib/booking/simulate'
 import { displayStatusOf, statusSelect } from '@/lib/booking/lifecycle'
-import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
+import { InvoiceError } from '@/lib/invoice/issue'
 import { sendInvoiceNotification } from '@/lib/invoice/notifyInvoice'
-import { isSerializationConflict, retrySerializable } from '@/lib/booking/serializable'
 import { billOf, billSelect } from '@/lib/invoice/bill'
 
 export async function GET() {
@@ -43,6 +42,8 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const session = await requireSession()
+    // Checkout = jalur PELANGGAN (docs/arsitektur-booking-engine-v2.md §10.5); staf memesan untuk pelanggan lewat form booking admin (draf).
+    if (session.role !== 'pilgrim') return NextResponse.json(err('Akun staf memesan lewat form booking admin'), { status: 403 })
 
     // Notifikasi pembayaran/pembaruan bergantung pada nomor ini — gerbang UI saja tidak cukup (docs/arsitektur-auth.md §3.5; SEC-107).
     const refusal = await onboardingRefusal(session.userId, session.role)
@@ -50,35 +51,15 @@ export async function POST(request: Request) {
     const limit = await consume(policy('bookingCreateUser', session.userId))
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
 
-    const body = await request.json().catch(() => null)
-    const parsed = await createBookingSchema.safeParseAsync(body)
-    if (!parsed.success) {
-      const msg = parsed.error.issues[0]?.message ?? 'Data tidak valid'
-      return NextResponse.json(err(msg), { status: 400 })
-    }
+    const parsed = checkoutSchema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
+    const pastDate = await checkoutDateRefusal(parsed.data)
+    if (pastDate) return pastDate
 
-    const data = parsed.data
     // Jatuh tempo = `defaultDueDays` dari Pengaturan Invoice (saran, tidak mengikat — D4); invoice terbit LANGSUNG bersama booking (keputusan pemilik K6-c).
     const { defaultDueDays } = await getInvoiceSettings()
 
-    // Resolusi + aturan visa di luar transaksi, lalu kuota + item + snapshot di dalam — mesin yang SAMA dengan penerbitan draf admin (lib/booking/create.ts).
-    const prepared = await prepareBooking({ items: data.items, pilgrims: data.pilgrims, departureDate: data.departureDate, totalPilgrims: data.totalPilgrims })
-    const booking = await retrySerializable(() => withBookingCode(async (tx, bookingCode) => {
-      const bk = await tx.booking.create({
-        data: {
-          bookingCode,
-          userId:          session.userId,
-          status:          'active',
-          departureDate:   new Date(data.departureDate),
-          returnDate:      new Date(data.returnDate),
-          season:          data.season,
-          totalAmount:     0,
-        },
-      })
-      await writeBooking(tx, prepared, bk.id)
-      await issueInvoice(tx, bk.id, { dueDays: defaultDueDays, byUserId: null })
-      return tx.booking.findUniqueOrThrow({ where: { id: bk.id }, select: { id: true, bookingCode: true } })
-    }, { isolationLevel: 'Serializable' }))
+    const booking = await placeCheckout(session.userId, parsed.data, defaultDueDays)
 
     // Konfirmasi pesanan = notifikasi invoice terbit berisi tautan invoice publik (Fase 6c, menggantikan `booking_submitted` supaya tak dobel).
     // Best-effort setelah transaksi commit; tidak pernah melempar dan tidak memblokir respons.
@@ -86,24 +67,21 @@ export async function POST(request: Request) {
 
     return NextResponse.json(ok({ bookingId: booking.id, bookingCode: booking.bookingCode }), { status: 201 })
   } catch (error) {
-    if (error instanceof Error) {
-      if (error.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
-      // Aturan visa per produk (lib/booking/rules.ts): daftar apa yang kurang, untuk ditampilkan
-      if (error instanceof RuleViolationError) return NextResponse.json({ success: false, error: error.message, meta: { violations: error.violations } }, { status: 422 })
-      // Item yang belum/tidak bisa dijual (produk nonaktif, belum berharga) — bukan kuota habis (SEC-66)
-      if (error instanceof ItemNotBookableError) return NextResponse.json(err(error.message), { status: 422 })
-      // Invoice tak dapat diterbitkan (setelan nomor/jatuh tempo bermasalah) — urusan admin; jamaah menerima pesan umum, rinciannya di log server.
-      if (error instanceof InvoiceError) return NextResponse.json(err('Pesanan belum dapat diterbitkan — silakan hubungi admin'), { status: 422 })
-      // Quota errors thrown by reserve helpers
-      if (error.message.includes('insufficient') || error.message.includes('capacity')) {
-        return NextResponse.json(err(error.message), { status: 409 })
-      }
+    if (error instanceof Error && error.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
+    // Invoice tak dapat diterbitkan (setelan nomor/jatuh tempo bermasalah) — urusan admin; jamaah menerima pesan umum, rinciannya di log server.
+    if (error instanceof InvoiceError) {
+      console.error('[bookings/POST] invoice', error.message)
+      return NextResponse.json(err('Pesanan belum dapat diterbitkan — silakan hubungi admin'), { status: 422 })
     }
-    // Id produk/jadwal yang tidak ada → masukan salah, bukan galat server (SEC-130); bentrok serialisasi yang tersisa setelah diulang → coba lagi (SEC-83/113).
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') return NextResponse.json(err('Produk yang dipilih tidak ditemukan lagi'), { status: 422 })
-    if (isSerializationConflict(error)) return NextResponse.json(err('Kuota sedang diperebutkan — coba lagi'), { status: 409 })
+    if (error instanceof CheckoutAccountError) return NextResponse.json(err('Akun Anda tidak dapat memesan saat ini — silakan hubungi admin'), { status: 409 })
     if (isBookingCodeBusy(error)) return NextResponse.json(err('Pemesanan sedang ramai — coba lagi'), { status: 409 })
-    console.error('[bookings/POST]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    try {
+      // Aturan visa (422 + daftar pelanggaran), item tak dapat dijual / tak ditemukan (422), kuota habis / bentrok (409) — satu pemeta dengan pratinjau.
+      const f = bookingFailure(error)
+      return NextResponse.json({ success: false, error: f.message, ...(f.violations ? { meta: { violations: f.violations } } : {}) }, { status: f.status })
+    } catch {
+      console.error('[bookings/POST]', error instanceof Error ? error.name : error)
+      return NextResponse.json(err('Internal server error'), { status: 500 })
+    }
   }
 }

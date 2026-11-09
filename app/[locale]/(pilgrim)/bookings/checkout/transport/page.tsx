@@ -1,29 +1,14 @@
-import { prisma } from '@/lib/db'
-import { TransportCheckoutForm } from '@/components/booking/TransportCheckoutForm'
+import { redirect } from 'next/navigation'
+import { checkoutPath } from '@/lib/checkout/kinds'
+import { safeNextPath } from '@/lib/auth/nextPath'
+import { safeLocale } from '@/lib/utils/locale'
 
-type Props = {
-  params: Promise<{ locale: string }>
-  searchParams: Promise<{ tripId?: string }>
-}
+type Props = { params: Promise<{ locale: string }>; searchParams: Promise<{ tripId?: string }> }
 
-// docs/arsitektur-booking.md §6 Step 6c — checkout pendek Transport-only, tanpa visa sama
-// sekali (§6a) — pilgrim manifest pakai field "core", bukan field terikat produk visa apa pun.
-export default async function TransportCheckoutPage({ searchParams }: Props) {
-  const { tripId } = await searchParams
-
-  const trips = await prisma.transportTrip.findMany({
-    where: { isActive: true },
-    orderBy: { name: 'asc' },
-    select: { id: true, name: true, category: true, origin: true, destination: true },
-  })
-
-  return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Checkout Transport</h1>
-        <p className="text-sm text-muted-foreground">Pesan transport saja, tanpa produk lain — pilih kendaraan, isi data penumpang, dan lanjut ke pembayaran.</p>
-      </div>
-      <TransportCheckoutForm trips={trips} preselectedTripId={tripId ?? null} />
-    </div>
-  )
+// Alamat lama checkout Transport (Step 6, 2026-07-25) — tetap hidup untuk tautan di email/markah: dialihkan ke checkout pelanggan baru
+// (docs/arsitektur-booking-engine-v2.md §10.5). Id tak sah → katalog Transportasi.
+export default async function LegacyTransportCheckout({ params, searchParams }: Props) {
+  const locale = safeLocale((await params).locale)
+  const target = checkoutPath(locale, 'transport', (await searchParams).tripId ?? '')
+  redirect(safeNextPath(target) ?? `/${locale}/transport`)
 }

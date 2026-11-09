@@ -900,6 +900,10 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 8 — QRIS dinamis (porting Facport)
 - [ ] Fase 9 — iPaymu · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
 - [ ] Fase 11 — Front-end pelanggan memakai engine
+  - [x] 11a — checkout pelanggan Paket Umroh, Visa, Transport, Haji (Haji tanpa visa umroh, H1 = b): satu halaman `/{locale}/checkout/[jenis]?id=`, pratinjau server (`lib/booking/simulate.ts`, dipakai bersama draf admin), pesan = `lib/checkout/place.ts` (invoice langsung terbit, data jamaah sesudahnya), alamat kembali aman sesudah login/daftar/Google/lengkapi-data (`lib/auth/nextPath.ts`), pita "Pesanan diterbitkan"; form lama Visa/Transport dihapus — selesai 2026-11-10 (§10.5)
+  - [ ] 11b — Hotel, Muthowif, Katering, Paket Ziarah, Tiket pesawat di halaman checkout yang sama
+  - [ ] 11c — keranjang campur (Visa plus dari front-end)
+  - [ ] SEC-221 — batas penahanan kuota tanpa bayar per akun (menunggu angka dari pemilik)
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
 

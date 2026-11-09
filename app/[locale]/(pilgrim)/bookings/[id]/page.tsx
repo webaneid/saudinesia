@@ -25,10 +25,11 @@ import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/get
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
 
-type Props = { params: Promise<{ locale: string; id: string }> }
+type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ baru?: string }> }
 
-export default async function BookingDetailPage({ params }: Props) {
+export default async function BookingDetailPage({ params, searchParams }: Props) {
   const { locale, id } = await params
+  const justBooked = (await searchParams).baru === '1' // datang dari checkout (docs/arsitektur-booking-engine-v2.md §10.5)
   const { banks } = getPaymentConfig()
   const session = await getSession()
   if (!session) redirect(`/${safeLocale(locale)}/login`)
@@ -130,9 +131,21 @@ export default async function BookingDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {/* Baru dipesan dari checkout: dua langkah berikutnya, tertaut ke bagiannya. */}
+      {justBooked && (
+        <div className="rounded-2xl border border-brand/30 bg-brand-light p-5 space-y-3" role="status">
+          <p className="flex items-center gap-2 font-bold text-brand-dark"><CheckCircle className="h-5 w-5 text-brand" aria-hidden /> Pesanan diterbitkan</p>
+          <p className="text-sm text-brand-dark">Invoice bisa diunduh lewat tombol &ldquo;Unduh Invoice&rdquo;. Selesaikan dua langkah berikut:</p>
+          <ol className="grid gap-2 text-sm sm:grid-cols-2">
+            <li><a href="#data-jamaah" className="flex h-full items-start gap-2 rounded-xl bg-white/80 p-3 font-medium text-brand-dark hover:bg-white"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">1</span> Isi data & dokumen jamaah — pilih dari Jamaah Saya.</a></li>
+            <li><a href="#pembayaran" className="flex h-full items-start gap-2 rounded-xl bg-white/80 p-3 font-medium text-brand-dark hover:bg-white"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">2</span> Transfer sesuai tagihan, lalu unggah bukti transfer.</a></li>
+          </ol>
+        </div>
+      )}
+
       {/* Payment notice */}
       {(st === 'awaiting_payment' || st === 'payment_review') && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
+        <div id="pembayaran" className="scroll-mt-24 rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-amber-600" />
             <p className="font-semibold text-amber-800">Selesaikan Pembayaran</p>
@@ -186,7 +199,7 @@ export default async function BookingDetailPage({ params }: Props) {
       {serviceCards.map(c => <BookingServiceCard key={c.title} icon={c.icon} title={c.title} rows={c.rows} />)}
 
       {/* Pilgrims + document upload per jamaah */}
-      <div className="space-y-4">
+      <div id="data-jamaah" className="scroll-mt-24 space-y-4">
         <h3 className="font-semibold flex items-center gap-2">
           <UserRound className="h-4 w-4 text-primary" /> Data & Dokumen Jamaah
         </h3>
@@ -197,12 +210,15 @@ export default async function BookingDetailPage({ params }: Props) {
                 <p className="font-medium">{displayName(p)}</p>
                 <p className="text-muted-foreground capitalize">{p.visaApplication?.visaType ?? ''}</p>
               </div>
-              <Badge variant={
-                (VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]?.badge ?? 'secondary') as
-                'success' | 'warning' | 'secondary' | 'destructive' | 'muted'
-              }>
-                {VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]?.label ?? p.visaApplication?.status}
-              </Badge>
+              {/* Jamaah tanpa visa (Transport/Haji) tak punya status visa — lencana kosong tidak ditampilkan. */}
+              {p.visaApplication && (
+                <Badge variant={
+                  (VISA_STATUS[p.visaApplication.status as keyof typeof VISA_STATUS]?.badge ?? 'secondary') as
+                  'success' | 'warning' | 'secondary' | 'destructive' | 'muted'
+                }>
+                  {VISA_STATUS[p.visaApplication.status as keyof typeof VISA_STATUS]?.label ?? p.visaApplication.status}
+                </Badge>
+              )}
             </div>
             {/* Data & dokumen dari Jamaah Saya + dokumen per perjalanan (docs/arsitektur-jamaah.md §5.5). */}
             <PilgrimTripPanel

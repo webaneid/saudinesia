@@ -94,10 +94,10 @@ t('pemeriksa modal menolak kolom modal dan pembaca admin', () => {
 })
 
 t('pemeriksa rute menolak tautan yang tak ada', () => {
-  const routes = [['hotels'], ['hotels', '[id]'], ['bookings', 'checkout', 'visa'], []]
+  const routes = [['hotels'], ['hotels', '[id]'], ['checkout', '[kind]'], []]
   assert.ok(routeExists(linkSegments('/${locale}'), routes))
   assert.ok(routeExists(linkSegments('/${locale}/hotels/${h.id}'), routes))
-  assert.ok(routeExists(linkSegments('/${locale}/bookings/checkout/visa?productId=${v.id}'), routes))
+  assert.ok(routeExists(linkSegments('/${locale}/checkout/visa?id=${v.id}'), routes))
   assert.ok(!routeExists(linkSegments('/${locale}/hotel'), routes))
   assert.ok(!routeExists(linkSegments('/${locale}/hotels/${h.id}/kamar'), routes))
   assert.ok(!routeExists(linkSegments('/${locale}/${path}'), [['hotels']]), 'segmen variabel tak boleh cocok dengan rute tetap')
@@ -156,7 +156,7 @@ t('tiap tautan homepage menuju rute yang ada', () => {
 t('tombol ajukan visa hanya untuk yang bisa dibeli langsung', () => {
   const src = read(`${HOME_DIR}/HomeVisa.tsx`)
   assert.match(src, /canBuyDirectly/)
-  assert.ok(src.indexOf('canBuyDirectly') < src.indexOf('bookings/checkout/visa'), 'checkout harus berada di dalam syarat canBuyDirectly')
+  assert.ok(src.indexOf('canBuyDirectly') < src.indexOf("checkoutPath(locale, 'visa'"), 'checkout harus berada di dalam syarat canBuyDirectly')
 })
 
 t('pesan home dan catalog id dan en memiliki kunci yang sama', () => {
