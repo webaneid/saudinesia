@@ -167,5 +167,42 @@
       "description": "Your pilgrim details and orders are kept in one place.",
       "button": "Create Account"
     }
+  },
+  "catalog": {
+    "packages": {
+      "meta": {
+        "title": "Umrah Packages",
+        "description": "Complete Umrah packages from Saudinesia: Makkah and Madinah hotels, transport, muthowif, visa, and catering in one order and one invoice."
+      },
+      "hero": {
+        "eyebrow": "Umrah Packages",
+        "title": "Your whole Umrah journey in one package",
+        "subtitle": "Hotels, transport, muthowif, visa, and catering arranged by our team. You choose the package, we take care of the rest.",
+        "primaryCta": "View Packages",
+        "secondaryCta": "Only Need a Visa"
+      },
+      "facts": {
+        "count": "{count, plural, one {# package available} other {# packages available}}",
+        "priceFrom": "From {price}",
+        "oneInvoice": "One invoice for everything"
+      },
+      "list": {
+        "title": "Choose your package",
+        "description": "Prices include the package components. Optional components you choose yourself are calculated when you book.",
+        "empty": "Umrah packages will be available soon."
+      },
+      "card": {
+        "featured": "Best Choice",
+        "priceFrom": "Price from",
+        "perPerson": "per person",
+        "addOns": "+ optional components of your choice at booking",
+        "order": "Book This Package"
+      },
+      "cta": {
+        "title": "Ready to plan your Umrah?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    }
   }
 }

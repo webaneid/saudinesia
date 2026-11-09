@@ -99,6 +99,11 @@
     border: 1px solid rgb(255 255 255 / 0.2);
     backdrop-filter: blur(14px);
   }
+  /* Tombol brand area publik (hero, CTA, kartu katalog) — satu definisi, dipakai ulang (docs/arsitektur-frontend-publik.md §6 H2). */
+  .btn-brand { @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-6 font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold focus-visible:ring-offset-2; }
+  .btn-brand-gold { @apply btn-brand bg-brand-gold text-brand-dark hover:opacity-90; }
+  .btn-brand-glass { @apply btn-brand glass text-white hover:bg-white/20; }
+  .btn-brand-solid { @apply btn-brand bg-brand text-white hover:bg-brand-dark; }
   /* Kaca terang di atas kanvas krem (topbar). */
   .glass-light {
     background: rgb(255 255 255 / 0.65);

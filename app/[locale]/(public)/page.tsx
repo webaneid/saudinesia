@@ -4,14 +4,15 @@ import { getTranslations } from 'next-intl/server'
 import { routing } from '@/i18n/routing'
 import { getHomeData } from '@/lib/catalog/home'
 import { localizedAlternates, ogAlternateLocales, ogLocale } from '@/lib/seo/site'
-import { HomeHero } from './_home/HomeHero'
+import { getPageContent } from '@/lib/public-content/content'
+import { PageHero } from '@/components/shared/public/PageHero'
+import { PageCta } from '@/components/shared/public/PageCta'
 import { HomeServices } from './_home/HomeServices'
 import { HomePackages } from './_home/HomePackages'
 import { HomeVisa } from './_home/HomeVisa'
 import { HomeHotels } from './_home/HomeHotels'
 import { HomeMuthowif } from './_home/HomeMuthowif'
 import { HomeSteps } from './_home/HomeSteps'
-import { HomeCta } from './_home/HomeCta'
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params
@@ -40,17 +41,17 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
 // Homepage publik (docs/arsitektur-frontend-publik.md §3): halaman ini hanya menyusun; data di lib/catalog/home.ts, bagian tanpa data tersembunyi.
 export default async function LandingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
-  const data = await getHomeData()
+  const [data, content] = await Promise.all([getHomeData(), getPageContent(locale, 'home')])
   return (
     <div className="space-y-14">
-      <HomeHero locale={locale} />
+      <PageHero locale={locale} content={content.hero} size="lg" />
       <HomeServices locale={locale} />
       <HomePackages locale={locale} packages={data.packages} />
       <HomeVisa locale={locale} visas={data.visas} />
       <HomeHotels locale={locale} hotels={data.hotels} />
       <HomeMuthowif locale={locale} pricePerDay={data.muthowif?.pricePerDay ?? null} />
       <HomeSteps locale={locale} />
-      <HomeCta locale={locale} />
+      <PageCta locale={locale} content={content.cta} />
     </div>
   )
 }

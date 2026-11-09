@@ -1,6 +1,6 @@
 # Arsitektur — Front-end Publik (mulai dari Homepage)
 
-> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06).**
+> **Status: DISETUJUI PEMILIK (2026-11-06). F1, F2, dan F3 selesai (2026-11-06). Tahap 2 (§6) diarahkan pemilik 2026-11-09: F4 selesai 2026-11-09, F5–F6 menyusul.**
 > Urutan pekerjaan menurut pemilik: front-end publik dulu, mulai dari homepage; UI admin terakhir. Istilah "jamaah" tetap dipakai untuk sementara (keputusan pemilik 2026-11-06).
 
 ---
@@ -104,3 +104,44 @@ Tidak menghalangi F1–F3; bagian terkait disembunyikan sampai datanya ada.
 - Nomor WhatsApp dan email layanan pelanggan untuk footer.
 - Nama badan usaha dan izin (mis. PPIU) bila ingin ditampilkan.
 - Logo dan foto yang berhak dipakai.
+
+---
+
+## 6. Tahap 2 — Hero dan CTA di setiap katalog, lalu konten yang bisa diedit (arahan pemilik 2026-11-09)
+
+> Arahan pemilik: setiap halaman katalog produk selalu punya hero dan CTA seperti homepage, supaya konsisten. Buat satu dulu sampai benar, katalog lain mengikuti. Sesudah itu, setelan dan halaman admin khusus supaya seluruh teks front-end (hero sampai CTA) bisa diedit. CSS dipakai ulang supaya ringan.
+
+### 6.1 Recheck (2026-11-09)
+
+- Hero dan CTA homepage hanya ada di `_home/HomeHero.tsx` dan `_home/HomeCta.tsx`, dengan kelas tombol yang ditulis ulang di masing-masing berkas. Pola geometri ada di `_home/HomePattern.tsx`.
+- Halaman katalog (`packages`, `visa`, `hotels`, `haji`, `transport`, `muthowif`, `tours`, `flight`, `catering`) membuka dengan judul polos `h1` + paragraf, tanpa hero dan CTA. Teksnya ditulis langsung dalam bahasa Indonesia.
+- Katalog Paket memakai palet mentah (`text-green-500`) dan tanda centang berupa karakter teks, bukan ikon Lucide. Tombol "Pesan Paket Ini" menuju `/register`, yang buntu (§1.2). Perilaku ini **tidak diubah** di F4, karena checkout Paket belum ada.
+
+### 6.2 Rancangan
+
+| # | Keputusan | Alasan |
+|---|---|---|
+| H1 | Satu komponen `PageHero` dan satu `PageCta` di `components/shared/public/`, dipakai homepage dan semua katalog. Pola geometri dipindah ke `BrandPattern` di folder yang sama. | Satu desain, satu tempat diubah. |
+| H2 | Tombol brand jadi kelas komponen di `globals.css` (`btn-brand-gold`, `btn-brand-glass`, `btn-brand-outline`), bukan rangkaian utilitas yang disalin. | Permintaan pemilik: CSS dipakai ulang, ringan. |
+| H3 | Hero menerima isi sebagai data (`HeroContent`: label kecil, judul, subjudul, dua tombol). Gambar latar opsional dengan lapisan hijau gelap (gaya foto + overlay). Tanpa gambar, permukaan hijau + pola (K6). | Bentuk isi sudah sama dengan yang nanti disimpan admin di F5. Foto baru dipasang bila ada yang berhak dipakai. |
+| H4 | Hero katalog boleh memuat fakta dari data nyata (mis. jumlah paket aktif, harga mulai). Fakta tanpa data disembunyikan. | K3: hanya klaim yang benar. |
+| H5 | Isi bawaan tetap di berkas pesan (`catalog.<halaman>.hero/cta`, id + en). Satu pembaca `lib/public-content/` mengembalikan isi halaman. Di F4 pembaca hanya membaca pesan; di F5 suntingan admin menimpa pesan, dan pesan tetap jadi cadangan. | Halaman tidak perlu diubah lagi saat F5 masuk. |
+| H6 | Tautan tombol hanya boleh menuju rute publik dari daftar putih (`PUBLIC_NAV`, beranda, daftar akun), tidak pernah alamat bebas. | Cegah tautan keluar atau open redirect saat isi bisa diedit. |
+
+### 6.3 Fase
+
+| Fase | Isi | Bukti selesai |
+|---|---|---|
+| **F4 Hero & CTA bersama + katalog Paket** | H1–H5. Homepage memakai komponen bersama (tampilan sama). Katalog Paket: hero, kartu dengan token brand dan ikon Lucide, CTA, metadata + hreflang. Penjaga `scripts/test-public-home.ts` diperluas ke katalog yang sudah dirombak. | Homepage tampak sama seperti sebelumnya; katalog Paket rapi di desktop dan 375 px; penjaga merah bila dilanggar; `bun run build` hijau. |
+| **F5 Konten situs bisa diedit** | Tabel isi halaman publik per halaman + bahasa (kolom JSON divalidasi Zod `.strict()`, teks polos dengan batas panjang, penanda pengubah dan waktu); halaman admin Sistem → Konten Situs (daftar halaman, editor per halaman dari hero sampai CTA, pratinjau, kembalikan ke bawaan); foto hero lewat registry media (`docs/arsitektur-media.md`); tautan hanya dari daftar putih H6; halaman publik disegarkan saat disimpan. Rincian peran, jejak perubahan, dan bentuk tabel ditulis di sini sebelum F5 dieksekusi. | Suntingan admin tampil di halaman publik; kosongkan = kembali ke bawaan; tautan di luar daftar putih ditolak 400. |
+| **F6 Katalog lain mengikuti** | Visa, Hotel, Haji, Transport, Muthowif, Ziarah, Pesawat, Katering memakai `PageHero` + `PageCta` dan pola kartu F4, satu PR per beberapa halaman. | Semua katalog punya hero + CTA, terdaftar di penjaga. |
+
+### 6.4 As-built F4 (2026-11-09)
+
+- `components/shared/public/`: `PageHero` (`size` `lg` beranda / `md` katalog, `facts` opsional), `PageCta`, `BrandLink`, `BrandPattern` (pindahan `_home/HomePattern`). `_home/HomeHero` dan `_home/HomeCta` dihapus; beranda memakai komponen bersama dengan tampilan sama.
+- Kelas `btn-brand`, `btn-brand-gold`, `btn-brand-glass`, `btn-brand-solid` di `app/globals.css`.
+- `lib/public-content/content.ts`: registry halaman (`home` → pesan `home`, `packages` → pesan `catalog.packages`) dan tujuan tombolnya. `lib/public-content/links.ts`: `LINK_TARGETS`, `targetHref` (melempar galat di luar daftar putih), `CATALOG_ANCHOR`.
+- Katalog Paket: hero (fakta jumlah paket, harga mulai, satu invoice; disembunyikan bila tak ada paket), daftar `#catalog` dengan kartu token brand dan ikon `Check`, harga belum ada disembunyikan (bukan "Rp 0"), CTA, metadata + hreflang. Urutan diberi tie-breaker `id`.
+- **Deviasi dari H3:** foto latar hero belum dibuat di F4. Ditambahkan di F5 bersama unggahannya, supaya kode gambar tidak masuk tanpa pernah dipakai.
+- Penjaga `scripts/test-public-home.ts`: komponen bersama dan katalog dirombak ikut diperiksa (palet, modal, tautan); tiap tujuan daftar putih harus rute yang ada; beranda dan katalog wajib `PageHero` + `PageCta` + `getPageContent`; katalog wajib metadata + `localizedAlternates(locale, '<path>')` + elemen `#catalog`; selain komponen bersama tidak boleh merakit `panel-brand`. Katalog yang dirombak di F6 ditambahkan ke `REDESIGNED_CATALOGS`.
+
