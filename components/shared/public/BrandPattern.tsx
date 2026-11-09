@@ -1,5 +1,5 @@
-// Pola geometri bintang delapan untuk permukaan hijau (K6 — tanpa foto sampai ada yang berhak dipakai). Dekoratif saja.
-export function HomePattern({ id }: { id: string }) {
+// Pola geometri bintang delapan untuk permukaan hijau (hero, CTA). K6: tanpa foto sampai ada yang berhak dipakai. Dekoratif saja.
+export function BrandPattern({ id }: { id: string }) {
   return (
     <svg className="pointer-events-none absolute inset-0 h-full w-full text-white/10" aria-hidden>
       <defs>

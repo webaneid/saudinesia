@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { PUBLIC_NAV } from '../components/shared/publicNav'
+import { LINK_TARGETS, targetHref } from '../lib/public-content/links'
 
 let failed = 0
 function t(name: string, fn: () => void) {
@@ -14,10 +15,17 @@ function t(name: string, fn: () => void) {
 const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const read = (f: string) => readFileSync(join(root, f), 'utf8')
 const HOME_DIR = 'app/[locale]/(public)/_home'
+const filesIn = (dir: string, ext: string) => readdirSync(join(root, dir)).filter(f => f.endsWith(ext)).map(f => `${dir}/${f}`)
+/** Katalog yang sudah memakai pola hero + daftar + CTA (§6). Katalog yang dirombak di F6 WAJIB ditambahkan di sini. */
+const REDESIGNED_CATALOGS = ['packages']
+const SHARED_SOURCES = [...filesIn('components/shared/public', '.tsx'), ...filesIn('lib/public-content', '.ts')]
+const CATALOG_SOURCES = REDESIGNED_CATALOGS.map(c => `app/[locale]/(public)/${c}/page.tsx`)
 const HOME_SOURCES = [
   'app/[locale]/(public)/page.tsx',
   'lib/catalog/home.ts',
-  ...readdirSync(join(root, HOME_DIR)).filter(f => f.endsWith('.tsx')).map(f => `${HOME_DIR}/${f}`),
+  ...filesIn(HOME_DIR, '.tsx'),
+  ...SHARED_SOURCES,
+  ...CATALOG_SOURCES,
 ]
 
 // ── Pemeriksa ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -98,8 +106,16 @@ t('pemeriksa rute menolak tautan yang tak ada', () => {
 
 // ── Homepage ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
+t('pemeriksa tujuan tautan menolak alamat di luar daftar putih', () => {
+  for (const bad of ['https://contoh.test', '//contoh.test', 'admin', '../admin', 'javascript:alert(1)']) assert.throws(() => targetHref('id', bad), bad)
+  assert.equal(targetHref('id', ''), '/id')
+  assert.equal(targetHref('en', 'packages'), '/en/packages')
+  assert.equal(targetHref('id', '#catalog'), '#catalog')
+})
+
 t('penemu berkas menemukan bagian homepage', () => {
   assert.ok(HOME_SOURCES.length >= 10, `hanya ${HOME_SOURCES.length} berkas`)
+  assert.ok(SHARED_SOURCES.some(f => f.endsWith('PageHero.tsx')) && SHARED_SOURCES.some(f => f.endsWith('PageCta.tsx')))
   assert.ok(discoverRoutes().length > 10)
 })
 
@@ -141,11 +157,37 @@ t('tombol ajukan visa hanya untuk yang bisa dibeli langsung', () => {
   assert.ok(src.indexOf('canBuyDirectly') < src.indexOf('bookings/checkout/visa'), 'checkout harus berada di dalam syarat canBuyDirectly')
 })
 
-t('pesan home id dan en memiliki kunci yang sama', () => {
-  const id = keyPaths(JSON.parse(read('i18n/messages/id.json')).home)
-  const en = keyPaths(JSON.parse(read('i18n/messages/en.json')).home)
-  assert.deepEqual([...id].sort(), [...en].sort())
-  assert.ok(id.includes('meta.title') && id.includes('meta.description'))
+t('pesan home dan catalog id dan en memiliki kunci yang sama', () => {
+  for (const ns of ['home', 'catalog']) {
+    const id = keyPaths(JSON.parse(read('i18n/messages/id.json'))[ns])
+    const en = keyPaths(JSON.parse(read('i18n/messages/en.json'))[ns])
+    assert.deepEqual([...id].sort(), [...en].sort(), ns)
+  }
+  const home = keyPaths(JSON.parse(read('i18n/messages/id.json')).home)
+  assert.ok(home.includes('meta.title') && home.includes('meta.description'))
+})
+
+t('tiap tujuan tautan daftar putih menuju rute yang ada', () => {
+  const routes = discoverRoutes()
+  const missing = LINK_TARGETS.filter(x => !x.startsWith('#') && !routeExists(x ? x.split('/') : [], routes))
+  assert.deepEqual(missing, [])
+})
+
+t('beranda dan katalog memakai hero dan CTA bersama, bukan buatan sendiri', () => {
+  const content = read('lib/public-content/content.ts')
+  for (const f of ['app/[locale]/(public)/page.tsx', ...CATALOG_SOURCES]) {
+    const src = read(f)
+    for (const part of ['<PageHero', '<PageCta', 'getPageContent(locale,']) assert.ok(src.includes(part), `${f}: ${part}`)
+  }
+  for (const c of REDESIGNED_CATALOGS) {
+    const src = read(`app/[locale]/(public)/${c}/page.tsx`)
+    assert.ok(new RegExp(`\\b${c}: \\{`).test(content), `${c}: belum terdaftar di lib/public-content/content.ts`)
+    for (const part of ['generateMetadata', 'openGraph', `localizedAlternates(locale, '${c}')`]) assert.ok(src.includes(part), `${c}: ${part}`)
+    if (content.includes("'#catalog'")) assert.ok(src.includes('id={CATALOG_ANCHOR}'), `${c}: tujuan #catalog tanpa elemen tujuan`)
+  }
+  // Hanya komponen bersama yang boleh merakit permukaan hero/CTA.
+  const others = [...filesIn(HOME_DIR, '.tsx'), ...CATALOG_SOURCES].filter(f => /panel-brand|<BrandPattern/.test(read(f)))
+  assert.deepEqual(others, [])
 })
 
 t('homepage punya metadata, Open Graph, dan hreflang dari satu sumber', () => {

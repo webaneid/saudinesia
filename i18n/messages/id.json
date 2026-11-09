@@ -167,5 +167,42 @@
       "description": "Data jamaah dan pesanan Anda tersimpan di satu tempat.",
       "button": "Daftar Akun"
     }
+  },
+  "catalog": {
+    "packages": {
+      "meta": {
+        "title": "Paket Umroh",
+        "description": "Paket Umroh lengkap dari Saudinesia: hotel Makkah dan Madinah, transportasi, muthowif, visa, dan katering dalam satu pesanan dan satu invoice."
+      },
+      "hero": {
+        "eyebrow": "Paket Umroh",
+        "title": "Seluruh perjalanan Umroh dalam satu paket",
+        "subtitle": "Hotel, transportasi, muthowif, visa, dan katering disusun tim kami. Anda cukup memilih paket, kami yang mengurus sisanya.",
+        "primaryCta": "Lihat Paket",
+        "secondaryCta": "Hanya Butuh Visa"
+      },
+      "facts": {
+        "count": "{count, plural, other {# paket tersedia}}",
+        "priceFrom": "Mulai {price}",
+        "oneInvoice": "Satu invoice untuk semua"
+      },
+      "list": {
+        "title": "Pilih paket Anda",
+        "description": "Harga sudah termasuk komponen paket. Komponen tambahan yang Anda pilih sendiri dihitung saat pemesanan.",
+        "empty": "Paket Umroh akan segera tersedia."
+      },
+      "card": {
+        "featured": "Pilihan Terbaik",
+        "priceFrom": "Harga mulai",
+        "perPerson": "per orang",
+        "addOns": "+ komponen tambahan sesuai pilihan Anda saat booking",
+        "order": "Pesan Paket Ini"
+      },
+      "cta": {
+        "title": "Siap merencanakan Umroh?",
+        "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
+        "button": "Daftar Akun"
+      }
+    }
   }
 }
