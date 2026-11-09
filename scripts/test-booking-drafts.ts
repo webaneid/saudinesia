@@ -343,16 +343,24 @@ await t('PENJAGA kode booking: satu penulis (`withBookingCode`), `POST /bookings
   const src = read('lib/utils/bookingCode.ts')
   assert.ok(src.indexOf('LOCK TABLE') > 0 && src.indexOf('LOCK TABLE') < src.indexOf('SELECT max('), 'kunci sebelum baca')
   assert.doesNotMatch(src.replace(/^\s*\/\/.*$/gm, ''), /pg_advisory/, 'advisory lock mengambil snapshot lebih dulu di Serializable')
-  assert.match(read('app/api/v1/bookings/route.ts'), /retrySerializable\(\(\) => withBookingCode\(/)
+  assert.match(read('lib/checkout/place.ts'), /retrySerializable\(\(\) => withBookingCode\(/)
+  assert.match(read('app/api/v1/bookings/route.ts'), /placeCheckout\(session\.userId, parsed\.data/)
   const creators = execFileSync('grep', ['-rlE', 'booking\\.create\\(', 'app', 'lib'], { cwd: root, encoding: 'utf8' }).trim().split('\n').sort()
-  assert.deepEqual(creators, ['app/api/v1/bookings/route.ts', 'lib/booking/drafts.ts'])
+  // lib/booking/simulate.ts: baris sementara pratinjau checkout (kode `PRATINJAU-uuid`, di luar urutan) — transaksinya SELALU di-rollback, tak pernah tersimpan.
+  assert.deepEqual(creators, ['lib/booking/drafts.ts', 'lib/booking/simulate.ts', 'lib/checkout/place.ts'])
+  const sim = read('lib/booking/simulate.ts')
+  assert.match(sim, /bookingCode: `PRATINJAU-\$\{randomUUID\(\)\}`/, 'baris pratinjau tak memakai urutan kode')
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 await t('PENJAGA: satu mesin pesan (route jamaah + draf memakai prepareBooking/writeBooking); pratinjau selalu rollback; terbit mengunci & membaca ulang; route admin memakai requireBookingManage', () => {
-  const engine = read('lib/booking/create.ts'); const dr = read('lib/booking/drafts.ts'); const route = read('app/api/v1/bookings/route.ts')
+  const engine = read('lib/booking/create.ts'); const dr = read('lib/booking/drafts.ts'); const route = read('lib/checkout/place.ts') // jalur POST /bookings
   assert.match(route, /prepareBooking\(/); assert.match(route, /writeBooking\(tx, prepared, bk\.id\)/)
-  assert.match(dr, /throw new Rollback\(/); assert.match(dr, /if \(e instanceof Rollback\) return e\.result/); assert.match(dr, /return \{ ok: true, preview: await simulate\(/)
+  // Pratinjau draf dan checkout = satu simulasi bersama (lib/booking/simulate.ts) yang selalu melempar Rollback.
+  const sim = read('lib/booking/simulate.ts')
+  assert.match(sim, /throw new Rollback\(/); assert.match(sim, /if \(e instanceof Rollback\) return e\.result/)
+  assert.match(dr, /simulateBooking\(\{ bookingId: id \}/); assert.match(dr, /return \{ ok: true, preview: await simulate\(/)
+  assert.match(read('app/api/v1/bookings/preview/route.ts'), /simulateBooking\(\{ userId: session\.userId \}/)
   assert.ok(dr.indexOf('lockDraft(tx, id)', dr.indexOf('export async function publishDraft')) > 0, 'terbit mengunci draf')
   assert.match(dr, /row\.status !== 'draft'/)
   assert.match(engine, /export async function writeBooking/)

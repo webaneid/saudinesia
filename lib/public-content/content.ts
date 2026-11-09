@@ -4,6 +4,7 @@ import { hasLocale } from 'next-intl'
 import { prisma } from '@/lib/db'
 import { routing } from '@/i18n/routing'
 import { getProductImages } from '@/lib/media/urls'
+import { availableCatalogs, targetAvailable } from '@/lib/catalog/availability'
 import { isLinkTarget, type LinkTarget } from './links'
 import { PUBLIC_PAGES, linkSlots, type PageOverrides, type PublicPageKey } from './pages'
 import { parseStoredContent } from './service'
@@ -58,7 +59,7 @@ async function heroImageOf(stored: StoredPage | null): Promise<HeroImage | null>
 }
 
 export async function getPageContent(locale: string, page: PublicPageKey): Promise<PageContent> {
-  const [t, stored] = await Promise.all([getPageText(locale, page), loadPage(page)])
+  const [t, stored, available] = await Promise.all([getPageText(locale, page), loadPage(page), availableCatalogs()])
   const image = await heroImageOf(stored)
   const opt = (key: string) => (t.has(key) ? t(key) : null)
   const link = (slot: string): ContentLink | null => {
@@ -67,6 +68,8 @@ export async function getPageContent(locale: string, page: PublicPageKey): Promi
     const over = stored?.overrides.links[slot]
     if (over === null) return null // disembunyikan admin
     const target = over !== undefined && isLinkTarget(over) ? over : def.target
+    // Katalog tanpa produk = tombol disembunyikan sampai ada produk (§7 V4).
+    if (!targetAvailable(target, available)) return null
     return { label: t(def.labelKey), target }
   }
   return {

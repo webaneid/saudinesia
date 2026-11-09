@@ -183,9 +183,11 @@ jobs:
             sleep 3
           done
           [ "${OK:-0}" = "1" ] || { echo "web tidak sehat"; exit 1; }
-          # Halaman publik yang membaca DB harus 200 (bukan 500) pada DB kosong hasil migrasi
-          for path in /id /id/hotels /id/login; do
-            $C exec -T web bun -e "fetch('http://localhost:3000$path').then((r) => { console.log('$path', r.status); process.exit(r.status === 200 ? 0 : 1) })"
+          # Halaman publik yang membaca DB tidak boleh 500 pada DB kosong hasil migrasi. Katalog tanpa produk aktif = 404 (F7,
+          # lib/catalog/availability.ts) — sekaligus membuktikan gerbang itu jalan di image produksi.
+          for check in /id:200 /id/login:200 /id/hotels:404; do
+            path=${check%%:*}; want=${check##*:}
+            $C exec -T web bun -e "fetch('http://localhost:3000$path').then((r) => { console.log('$path', r.status, 'harap $want'); process.exit(r.status === $want ? 0 : 1) })"
           done
           # Log tidak boleh memuat kegagalan klasik image: engine Prisma/openssl, modul hilang
           if $C logs web | grep -E "PrismaClientInitializationError|libssl|Cannot find module|Unable to require"; then

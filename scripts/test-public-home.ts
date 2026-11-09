@@ -17,9 +17,11 @@ const read = (f: string) => readFileSync(join(root, f), 'utf8')
 const HOME_DIR = 'app/[locale]/(public)/_home'
 const filesIn = (dir: string, ext: string) => readdirSync(join(root, dir)).filter(f => f.endsWith(ext)).map(f => `${dir}/${f}`)
 /** Katalog yang sudah memakai pola hero + daftar + CTA (§6). Katalog yang dirombak di F6 WAJIB ditambahkan di sini. */
-const REDESIGNED_CATALOGS = ['packages']
+const REDESIGNED_CATALOGS = ['packages', 'visa', 'haji', 'hotels', 'transport', 'muthowif', 'tours', 'flight', 'catering']
 const SHARED_SOURCES = [...filesIn('components/shared/public', '.tsx'), ...filesIn('lib/public-content', '.ts')]
-const CATALOG_SOURCES = REDESIGNED_CATALOGS.map(c => `app/[locale]/(public)/${c}/page.tsx`)
+const CATALOG_PAGES = REDESIGNED_CATALOGS.map(c => `app/[locale]/(public)/${c}/page.tsx`)
+// Komponen klien milik satu katalog ikut dipindai gaya dan modal.
+const CATALOG_SOURCES = [...CATALOG_PAGES, 'components/shared/TransportSearch.tsx']
 const HOME_SOURCES = [
   'app/[locale]/(public)/page.tsx',
   'lib/catalog/home.ts',
@@ -92,10 +94,10 @@ t('pemeriksa modal menolak kolom modal dan pembaca admin', () => {
 })
 
 t('pemeriksa rute menolak tautan yang tak ada', () => {
-  const routes = [['hotels'], ['hotels', '[id]'], ['bookings', 'checkout', 'visa'], []]
+  const routes = [['hotels'], ['hotels', '[id]'], ['checkout', '[kind]'], []]
   assert.ok(routeExists(linkSegments('/${locale}'), routes))
   assert.ok(routeExists(linkSegments('/${locale}/hotels/${h.id}'), routes))
-  assert.ok(routeExists(linkSegments('/${locale}/bookings/checkout/visa?productId=${v.id}'), routes))
+  assert.ok(routeExists(linkSegments('/${locale}/checkout/visa?id=${v.id}'), routes))
   assert.ok(!routeExists(linkSegments('/${locale}/hotel'), routes))
   assert.ok(!routeExists(linkSegments('/${locale}/hotels/${h.id}/kamar'), routes))
   assert.ok(!routeExists(linkSegments('/${locale}/${path}'), [['hotels']]), 'segmen variabel tak boleh cocok dengan rute tetap')
@@ -154,7 +156,7 @@ t('tiap tautan homepage menuju rute yang ada', () => {
 t('tombol ajukan visa hanya untuk yang bisa dibeli langsung', () => {
   const src = read(`${HOME_DIR}/HomeVisa.tsx`)
   assert.match(src, /canBuyDirectly/)
-  assert.ok(src.indexOf('canBuyDirectly') < src.indexOf('bookings/checkout/visa'), 'checkout harus berada di dalam syarat canBuyDirectly')
+  assert.ok(src.indexOf('canBuyDirectly') < src.indexOf("checkoutPath(locale, 'visa'"), 'checkout harus berada di dalam syarat canBuyDirectly')
 })
 
 t('pesan home dan catalog id dan en memiliki kunci yang sama', () => {
@@ -175,16 +177,22 @@ t('tiap tujuan tautan daftar putih menuju rute yang ada', () => {
 
 t('beranda dan katalog memakai hero dan CTA bersama, bukan buatan sendiri', () => {
   const content = read('lib/public-content/pages.ts')
-  for (const f of ['app/[locale]/(public)/page.tsx', ...CATALOG_SOURCES]) {
+  for (const f of ['app/[locale]/(public)/page.tsx', ...CATALOG_PAGES]) {
     const src = read(f)
     for (const part of ['<PageHero', '<PageCta', 'getPageContent(locale,']) assert.ok(src.includes(part), `${f}: ${part}`)
   }
   for (const c of REDESIGNED_CATALOGS) {
     const src = read(`app/[locale]/(public)/${c}/page.tsx`)
     assert.ok(new RegExp(`\\b${c}: \\{`).test(content), `${c}: belum terdaftar di lib/public-content/pages.ts`)
-    for (const part of ['generateMetadata', 'openGraph', `localizedAlternates(locale, '${c}')`]) assert.ok(src.includes(part), `${c}: ${part}`)
-    if (content.includes("'#catalog'")) assert.ok(src.includes('id={CATALOG_ANCHOR}'), `${c}: tujuan #catalog tanpa elemen tujuan`)
+    assert.ok(src.includes('generateMetadata') && src.includes(`catalogMetadata((await params).locale, '${c}')`), `${c}: metadata harus lewat catalogMetadata`)
+    for (const part of ['<PageHero', '<PageCta', '<CatalogSection', `getPageContent(locale, '${c}')`]) assert.ok(src.includes(part), `${c}: ${part}`)
+    assert.doesNotMatch(src, /getTranslations\(/, `${c}: teks halaman hanya lewat getPageText/getPageContent`)
   }
+  // Metadata katalog dari satu pembantu: judul/deskripsi suntingan, hreflang, Open Graph.
+  const meta = read('lib/public-content/metadata.ts')
+  for (const part of ["getPageText(locale, page, 'meta')", 'localizedAlternates(locale, path)', 'openGraph']) assert.ok(meta.includes(part), `metadata.ts: ${part}`)
+  // Tujuan #catalog: CatalogSection memasang jangkarnya.
+  assert.match(read('components/shared/public/CatalogSection.tsx'), /id=\{CATALOG_ANCHOR\}/)
   // Hanya komponen bersama yang boleh merakit permukaan hero/CTA.
   const others = [...filesIn(HOME_DIR, '.tsx'), ...CATALOG_SOURCES].filter(f => /panel-brand|<BrandPattern/.test(read(f)))
   assert.deepEqual(others, [])

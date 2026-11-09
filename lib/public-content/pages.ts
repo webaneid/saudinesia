@@ -40,6 +40,86 @@ export const PUBLIC_PAGES = {
       'cta.primary': { labelKey: 'cta.button', target: 'register' },
     },
   },
+  visa: {
+    label: 'Katalog Visa',
+    ns: 'catalog.visa',
+    path: 'visa',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'packages' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  haji: {
+    label: 'Katalog Paket Haji',
+    ns: 'catalog.haji',
+    path: 'haji',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'packages' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  hotels: {
+    label: 'Katalog Hotel',
+    ns: 'catalog.hotels',
+    path: 'hotels',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'packages' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  transport: {
+    label: 'Katalog Transportasi',
+    ns: 'catalog.transport',
+    path: 'transport',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'tours' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  muthowif: {
+    label: 'Katalog Muthowif',
+    ns: 'catalog.muthowif',
+    path: 'muthowif',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'packages' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  tours: {
+    label: 'Katalog Ziarah',
+    ns: 'catalog.tours',
+    path: 'tours',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'transport' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  flight: {
+    label: 'Katalog Tiket Pesawat',
+    ns: 'catalog.flight',
+    path: 'flight',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'packages' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
+  catering: {
+    label: 'Katalog Katering',
+    ns: 'catalog.catering',
+    path: 'catering',
+    links: {
+      'hero.primary': { labelKey: 'hero.primaryCta', target: '#catalog' },
+      'hero.secondary': { labelKey: 'hero.secondaryCta', target: 'packages' },
+      'cta.primary': { labelKey: 'cta.button', target: 'register' },
+    },
+  },
 } as const satisfies Record<string, PageDef>
 
 export type PublicPageKey = keyof typeof PUBLIC_PAGES

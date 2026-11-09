@@ -64,7 +64,7 @@ const projectRoot = new URL('..', import.meta.url).pathname
 const { roots, hits } = analyze(projectRoot)
 await t(`jalur tulis booking tercakup sebagai akar (${roots.length} transaksi di app/ dan lib/)`, () => {
   const labels = roots.map(r => r.label)
-  for (const f of ['app/api/v1/bookings/route.ts', 'lib/booking/drafts.ts', 'lib/booking/revise.ts', 'lib/booking/adjustments.ts', 'lib/booking/expire.ts', 'lib/payments/process.ts']) {
+  for (const f of ['lib/checkout/place.ts', 'lib/booking/simulate.ts', 'lib/booking/drafts.ts', 'lib/booking/revise.ts', 'lib/booking/adjustments.ts', 'lib/booking/expire.ts', 'lib/payments/process.ts']) {
     assert.ok(labels.some(l => l.startsWith(`${f}:`)), `akar transaksi ${f} tak ditemukan`)
   }
   assert.ok(roots.length >= 50, `hanya ${roots.length} akar: penemu akar rusak?`)

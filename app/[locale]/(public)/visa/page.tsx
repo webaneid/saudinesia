@@ -1,136 +1,132 @@
-import { ProductImage } from '@/components/shared/ProductImage'
-import { getFeaturedCards } from '@/lib/media/urls'
-import { prisma } from '@/lib/db'
+import type { Metadata } from 'next'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import Link from 'next/link'
-import { KeyRound, Clock, ArrowRight, Globe, Info } from 'lucide-react'
-import { Button } from '@/components/ui/button'
-import { formatRupiah } from '@/lib/utils'
+import { ArrowRight, Clock, Globe, Info, KeyRound, Tag } from 'lucide-react'
+import { prisma } from '@/lib/db'
+import { requireCatalog } from '@/lib/catalog/availability'
+import { getFeaturedCards } from '@/lib/media/urls'
 import { requirementsOfMany } from '@/lib/documents/requirements'
-import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
-import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { visaPriceSummary } from '@/lib/pricing/engine/read'
 import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
+import { getPageContent, getPageText } from '@/lib/public-content/content'
+import { catalogMetadata } from '@/lib/public-content/metadata'
+import { formatRupiah } from '@/lib/utils'
+import { ProductImage } from '@/components/shared/ProductImage'
+import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
+import { RichTextView } from '@/components/shared/rich-text/RichTextView'
+import { PageHero, type HeroFact } from '@/components/shared/public/PageHero'
+import { PageCta } from '@/components/shared/public/PageCta'
+import { CatalogSection } from '@/components/shared/public/CatalogSection'
+import { PriceTag } from '@/components/shared/public/PriceTag'
 
 type Props = { params: Promise<{ locale: string }> }
 
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  return catalogMetadata((await params).locale, 'visa')
+}
+
+// Katalog Visa — pola katalog §6.7. Visa tunggal dipesan lewat checkout Visa; visa plus wajib bersama produk lain (lib/booking/rules.ts) → lewat admin.
 export default async function VisaCatalogPage({ params }: Props) {
   const { locale } = await params
-  const products = await prisma.visaProduct.findMany({
-    where: { isActive: true },
-    orderBy: [{ country: 'asc' }, { visaType: 'asc' }],
-  })
+  await requireCatalog('visa')
+  const [products, content, t] = await Promise.all([
+    prisma.visaProduct.findMany({ where: { isActive: true }, orderBy: [{ country: 'asc' }, { visaType: 'asc' }, { id: 'asc' }] }),
+    getPageContent(locale, 'visa'),
+    getPageText(locale, 'visa'),
+  ])
+  const ids = products.map(p => p.id)
+  const [reqs, covers, priceSummary] = await Promise.all([
+    requirementsOfMany(ids.map(id => ({ productType: 'visa', productId: id }))),
+    getFeaturedCards('visa', ids),
+    visaPriceSummary(ids),
+  ])
 
-  // Syarat dokumen per produk (lib/documents/requirements.ts) — label publik + petunjuk saja.
-  const visaReqs = await requirementsOfMany(products.map(p => ({ productType: 'visa', productId: p.id })))
-  const requirementsByProduct = new Map(products.map(p => [p.id, visaReqs.get(`visa:${p.id}`) ?? []]))
-
-  const covers = await getFeaturedCards('visa', products.map(p => p.id))
-  const priceSummary = await visaPriceSummary(products.map(p => p.id))
-
-  // Group by country
-  const grouped = products.reduce<Record<string, typeof products>>((acc, p) => {
+  const grouped = new Map<string, typeof products>()
+  for (const p of products) {
     const key = p.country || 'Saudi Arabia'
-    acc[key] = acc[key] ?? []
-    acc[key].push(p)
-    return acc
-  }, {})
+    grouped.set(key, [...(grouped.get(key) ?? []), p])
+  }
+
+  const priced = ids.map(id => priceSummary.get(id)?.from ?? 0).filter(v => v > 0)
+  const days = products.map(p => p.processDays).filter(d => d > 0)
+  const facts: HeroFact[] = []
+  if (products.length > 0) {
+    facts.push({ icon: KeyRound, label: t('facts.count', { count: products.length }) })
+    if (priced.length > 0) facts.push({ icon: Tag, label: t('facts.priceFrom', { price: formatRupiah(Math.min(...priced)) }) })
+    if (days.length > 0) facts.push({ icon: Clock, label: t('facts.process', { days: Math.min(...days) }) })
+  }
 
   return (
-    <div className="space-y-10">
-      <div className="space-y-2">
-        <h1 className="text-3xl font-bold flex items-center gap-3">
-          <KeyRound className="h-8 w-8 text-teal-600" />
-          Layanan Visa
-        </h1>
-        <p className="text-muted-foreground max-w-2xl">
-          Saudinesia membantu pengurusan berbagai jenis visa — dari visa umroh, visitor, bisnis, hingga kerja.
-          Proses cepat, dokumen lengkap, hasil terpercaya.
-        </p>
-      </div>
+    <div className="space-y-14">
+      <PageHero locale={locale} content={content.hero} facts={facts} />
 
-      {products.length === 0 && (
-        <div className="rounded-xl border border-dashed p-16 text-center text-muted-foreground">
-          <KeyRound className="h-12 w-12 mx-auto mb-3 opacity-30" />
-          <p>Informasi layanan visa akan segera tersedia.</p>
+      <CatalogSection
+        title={t('list.title')}
+        description={t('list.description')}
+        empty={{ icon: KeyRound, text: t('list.empty') }}
+        isEmpty={products.length === 0}
+      >
+        <div className="space-y-10">
+          {[...grouped.entries()].map(([country, items]) => (
+            <div key={country} className="space-y-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-brand-dark">
+                <Globe className="h-4 w-4 text-brand" aria-hidden />
+                <span>{country}</span>
+                <div className="ml-2 h-px flex-1 bg-border" />
+              </div>
+
+              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+                {items.map(v => {
+                  const summary = priceSummary.get(v.id) ?? { from: 0, isRange: false }
+                  const model = visaSalesModel(parseRequiredComponents(v.requiredComponents).components)
+                  const cover = covers.get(v.id)
+                  return (
+                    <article key={v.id} className="catalog-card">
+                      <ProductImage src={cover?.src} alt={cover?.alt} fallbackAlt={v.name} type="visa" />
+                      <div className="flex flex-1 flex-col gap-4 p-5">
+                        <div className="space-y-2">
+                          <span className="catalog-chip">{v.visaType}</span>
+                          <h3 className="text-lg font-semibold leading-snug text-brand-dark">{v.name}</h3>
+                          <RichTextView value={v.description} className="text-sm text-muted-foreground" />
+                        </div>
+
+                        {v.processDays > 0 && (
+                          <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                            <Clock className="h-4 w-4 text-brand" aria-hidden />
+                            {t('card.process', { days: v.processDays })}
+                          </p>
+                        )}
+
+                        <RequiredDocuments requirements={reqs.get(`visa:${v.id}`) ?? []} />
+
+                        <div className="mt-auto space-y-3 border-t pt-4">
+                          <PriceTag
+                            price={summary.from}
+                            label={summary.isRange ? t('card.priceFrom') : null}
+                            unit={v.priceLabel ?? t('card.perPerson')}
+                          />
+                          {model.plus ? (
+                            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+                              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                              <span>{t('card.bundled', { parts: model.parts.join(', ') })}</span>
+                            </p>
+                          ) : summary.from > 0 ? (
+                            <Link href={checkoutPath(locale, 'visa', v.id)} className="btn-brand-solid w-full">
+                              {t('card.apply')} <ArrowRight className="h-4 w-4" aria-hidden />
+                            </Link>
+                          ) : null}
+                        </div>
+                      </div>
+                    </article>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-      )}
+      </CatalogSection>
 
-      {Object.entries(grouped).map(([country, items]) => (
-        <div key={country} className="space-y-4">
-          {/* Country header */}
-          <div className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-            <Globe className="h-4 w-4 text-teal-600" />
-            <span>{country}</span>
-            <div className="flex-1 h-px bg-border ml-2" />
-          </div>
-
-          <div className="grid md:grid-cols-2 gap-4">
-            {items.map(v => {
-              const requirements = requirementsByProduct.get(v.id) ?? []
-              // "Mulai dari" kalau ada >=2 harga berbeda di antara tier durasi — docs/arsitektur-harga.md §17.5
-              const { from: fromPrice, isRange: priceIsRange } = priceSummary.get(v.id) ?? { from: 0, isRange: false }
-
-              return (
-                <div
-                  key={v.id}
-                  className="overflow-hidden rounded-xl border bg-card hover:border-teal-400 hover:shadow-sm transition-all"
-                >
-                  <ProductImage src={covers.get(v.id)?.src} alt={covers.get(v.id)?.alt} fallbackAlt={v.name} type="visa" />
-                  <div className="p-5 space-y-4">
-                  {/* Title + type badge + price */}
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="space-y-1.5">
-                      <p className="font-semibold text-foreground">{v.name}</p>
-                      <span className="inline-block text-xs font-medium px-2.5 py-0.5 rounded-full bg-teal-50 text-teal-700 border border-teal-100">
-                        {v.visaType}
-                      </span>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-xl font-bold text-teal-700">
-                        {priceIsRange && <span className="text-sm font-medium text-muted-foreground">Mulai dari </span>}
-                        {formatRupiah(fromPrice)}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{v.priceLabel ?? 'per orang'}</p>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  <RichTextView value={v.description} className="text-muted-foreground" />
-
-                  {/* Process time */}
-                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5 text-teal-500" />
-                    Estimasi proses:{' '}
-                    <span className="font-semibold text-foreground">{v.processDays} hari kerja</span>
-                  </div>
-
-                  <RequiredDocuments requirements={requirements} />
-
-                  <div className="pt-2 border-t border-border">
-                    {/* Visa plus wajib dibeli bersama produk lain (docs/rencana-visa-produk.md §2.4) — checkout pendek hanya memuat visa, jadi dipesan lewat admin. */}
-                    {(() => {
-                      const model = visaSalesModel(parseRequiredComponents(v.requiredComponents).components)
-                      return model.plus ? (
-                        <p className="flex items-start gap-2 text-xs text-muted-foreground">
-                          <Info className="h-3.5 w-3.5 mt-0.5 shrink-0" />
-                          <span>Dipesan bersama: <span className="font-medium text-foreground">{model.parts.join(', ')}</span>. Hubungi admin Saudinesia untuk pemesanan.</span>
-                        </p>
-                      ) : (
-                        <Button asChild className="w-full" size="sm">
-                          <Link href={`/${locale}/bookings/checkout/visa?productId=${v.id}`}>
-                            Ajukan Sekarang <ArrowRight className="ml-1.5 h-3.5 w-3.5" />
-                          </Link>
-                        </Button>
-                      )
-                    })()}
-                  </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+      <PageCta locale={locale} content={content.cta} />
     </div>
   )
 }

@@ -371,11 +371,13 @@ await t('SEC-127: visa paket (included) yang NONAKTIF → 422, tak bisa menjadi 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 await t('PENJAGA: aturan visa hanya di rules.ts (validator tak lagi membaca requiredComponents); route POST menolak 422 + meta.violations SEBELUM transaksi; kursi tiket/paket ditahan', () => {
   assert.ok(!read('lib/validators/booking.ts').includes('requiredComponents'), 'superRefine lama dihapus')
-  const route = read('app/api/v1/bookings/route.ts')
+  const route = read('app/api/v1/bookings/route.ts'); const place = read('lib/checkout/place.ts'); const sim = read('lib/booking/simulate.ts')
   const engine = read('lib/booking/create.ts')
-  assert.ok(route.indexOf('prepareBooking(') < route.indexOf('withBookingCode(async'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
+  assert.ok(place.indexOf('prepareBooking(') < place.indexOf('withBookingCode(async'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
   assert.match(engine, /if \(violations\.length > 0\) throw new RuleViolationError\(violations\)/)
-  assert.match(route, /status: 422/); assert.match(route, /meta: \{ violations: error\.violations \}/)
+  // Pemeta galat bersama pratinjau & pesan: aturan visa → 422 + daftar pelanggaran di meta.
+  assert.match(sim, /if \(e instanceof RuleViolationError\) return \{ ok: false, status: 422, message: e\.message, violations: e\.violations \}/)
+  assert.match(route, /const f = bookingFailure\(error\)/); assert.match(route, /meta: \{ violations: f\.violations \}/)
   assert.match(engine, /case 'flight':\s*\n\s*await reserveFlightQuota\(tx, item\.flightScheduleId, item\.numPassengers\)/)
   assert.match(engine, /if \(r\.flightScheduleId\) await reserveFlightQuota\(tx, r\.flightScheduleId, item\.numPeople\)/)
   for (const f of ['lib/booking/cancel.ts', 'lib/payments/process.ts']) {

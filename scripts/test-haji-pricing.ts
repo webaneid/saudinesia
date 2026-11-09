@@ -202,8 +202,10 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
     assert.match(src, /createCostComponentHandlers\('haji'\)/, f); assert.ok(src.split('\n').length <= 10, f); assert.doesNotMatch(src, /prisma|productCost/i, f)
   }
   assert.doesNotMatch(readFileSync('app/api/v1/admin/products/haji/route.ts', 'utf8'), /price: 0/) // produk baru TANPA titik harga (belum berharga) — kolom harga sudah dihapus
-  const bk = readFileSync('app/api/v1/bookings/route.ts', 'utf8')
-  assert.match(bk, /error instanceof ItemNotBookableError\) return NextResponse\.json\(err\(error\.message\), \{ status: 422 \}\)/)
+  // Pemeta galat POST /bookings = bookingFailure (lib/booking/simulate.ts): produk tak dapat dijual → 422, dicek sebelum pemetaan kuota 409.
+  assert.match(readFileSync('app/api/v1/bookings/route.ts', 'utf8'), /const f = bookingFailure\(error\)/)
+  const bk = readFileSync('lib/booking/simulate.ts', 'utf8')
+  assert.match(bk, /if \(e instanceof ItemNotBookableError\) return \{ ok: false, status: 422, message: e\.message \}/)
   assert.ok(bk.indexOf('ItemNotBookableError)') < bk.indexOf("includes('insufficient')"), '422 dicek sebelum pemetaan 409')
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
   // Daftar refresh kini satu (lib/pricing/refreshAll.ts, Fase 0 harga terpadu): cron memakai agregator, Haji ada di dalamnya.

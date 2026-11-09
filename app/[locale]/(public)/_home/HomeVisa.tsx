@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { getPageText } from '@/lib/public-content/content'
 import { ArrowRight, Clock } from 'lucide-react'
 import { ProductImage } from '@/components/shared/ProductImage'
@@ -36,7 +37,7 @@ export async function HomeVisa({ locale, visas }: { locale: string; visas: HomeV
               <div className="mt-auto border-t pt-3">
                 {v.canBuyDirectly ? (
                   <Link
-                    href={`/${locale}/bookings/checkout/visa?productId=${v.id}`}
+                    href={checkoutPath(locale, 'visa', v.id)}
                     className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground transition-colors hover:bg-brand-dark"
                   >
                     {t('apply')} <ArrowRight className="h-4 w-4" aria-hidden />

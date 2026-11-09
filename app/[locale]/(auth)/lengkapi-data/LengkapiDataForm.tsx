@@ -8,9 +8,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { ContactPicker, contactFromStored, type ContactValue } from '@/components/shared/ContactPicker'
 import { e164FromCountry } from '@/lib/utils/phone'
 
-interface Props { locale: string; name: string; phone: string; whatsapp: string; needsConsent: boolean; needsPrivacy: boolean }
+/** `next` = jalur kembali yang SUDAH disaring server, atau null. */
+interface Props { locale: string; next?: string | null; name: string; phone: string; whatsapp: string; needsConsent: boolean; needsPrivacy: boolean }
 
-export function LengkapiDataForm({ locale, name, phone, whatsapp, needsConsent, needsPrivacy }: Props) {
+export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, needsConsent, needsPrivacy }: Props) {
   const router = useRouter()
   const [contact, setContact] = useState<ContactValue>(() => contactFromStored(phone, whatsapp))
   const [consent, setConsent] = useState(!needsConsent)
@@ -33,7 +34,7 @@ export function LengkapiDataForm({ locale, name, phone, whatsapp, needsConsent, 
       })
       const json = await res.json()
       if (!json.success) { setError(json.error ?? 'Gagal menyimpan.'); return }
-      router.push(`/${locale}/dashboard`)
+      router.push(next ?? `/${locale}/dashboard`)
       router.refresh()
     } catch {
       setError('Terjadi kesalahan. Periksa koneksi internet.')

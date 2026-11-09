@@ -6,6 +6,7 @@ import { resolveGoogleLogin } from '@/lib/auth/googleAccounts'
 import { createSession } from '@/lib/auth/session'
 import { appUrl } from '@/lib/email/templates'
 import { clientIp, consume, policy } from '@/lib/auth/rateLimit'
+import { afterAuthPath } from '@/lib/auth/nextPath'
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 
@@ -39,11 +40,12 @@ export async function GET(request: Request) {
     if (resolved.kind === 'refused') return fail(`google_${resolved.reason}`)
     if (resolved.kind === 'session') {
       await createSession(resolved.user.id)
-      return go('/dashboard')
+      // Jalur kembali (checkout) dari cookie state bertanda tangan, disaring ulang; selain itu dashboard. Selalu jalur relatif di origin aplikasi.
+      return NextResponse.redirect(new URL(afterAuthPath(locale, stateCookie.next), origin))
     }
 
     // Pengguna baru: identitas terverifikasi disimpan sementara; akun dibuat setelah persetujuan privasi (halaman lengkapi).
-    await setSignupCookie(await signSignupCookie(result.identity))
+    await setSignupCookie(await signSignupCookie(result.identity, undefined, stateCookie.next ?? null))
     return go('/register/google')
   } catch (error) {
     console.error('[auth/google/callback]', error instanceof Error ? error.name : error)

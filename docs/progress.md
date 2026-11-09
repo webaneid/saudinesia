@@ -900,6 +900,10 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 8 — QRIS dinamis (porting Facport)
 - [ ] Fase 9 — iPaymu · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
 - [ ] Fase 11 — Front-end pelanggan memakai engine
+  - [x] 11a — checkout pelanggan Paket Umroh, Visa, Transport, Haji (Haji tanpa visa umroh, H1 = b): satu halaman `/{locale}/checkout/[jenis]?id=`, pratinjau server (`lib/booking/simulate.ts`, dipakai bersama draf admin), pesan = `lib/checkout/place.ts` (invoice langsung terbit, data jamaah sesudahnya), alamat kembali aman sesudah login/daftar/Google/lengkapi-data (`lib/auth/nextPath.ts`), pita "Pesanan diterbitkan"; form lama Visa/Transport dihapus — selesai 2026-11-10 (§10.5)
+  - [ ] 11b — Hotel, Muthowif, Katering, Paket Ziarah, Tiket pesawat di halaman checkout yang sama
+  - [ ] 11c — keranjang campur (Visa plus dari front-end)
+  - [ ] SEC-221 — batas penahanan kuota tanpa bayar per akun (menunggu angka dari pemilik)
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
 
@@ -924,4 +928,5 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] F3 SEO + penjaga: judul, deskripsi, Open Graph, canonical + `hreflang` homepage (`lib/seo/site.ts`), `<html lang>` dan halaman 404 mengikuti locale, robots/sitemap satu sumber alamat, `scripts/test-public-home.ts` — selesai 2026-11-06 (artefak produksi; 3 mutasi membuat penjaga merah). Gambar Open Graph menunggu foto/logo pemilik
 - [x] F4 hero + CTA bersama (`components/shared/public/PageHero`/`PageCta`/`BrandLink`, kelas `btn-brand-*`, isi lewat `lib/public-content/`, tujuan tombol daftar putih) + katalog Paket dirombak jadi acuan (hero dengan fakta nyata, kartu token brand, CTA, metadata + hreflang) — selesai 2026-11-09 (artefak produksi desktop + 375 px, homepage tampak sama; 3 mutasi membuat penjaga merah)
 - [x] F5 Konten Situs: Sistem → Konten Situs (superadmin) — semua teks Beranda + katalog Paket (id/en, kolom diturunkan dari berkas pesan, teks ICU tak bisa diedit), tujuan tombol daftar putih/sembunyikan, foto hero (pemilik media `public_page`), kembalikan ke bawaan, jejak `settings_audit`, versi basi 409 — selesai 2026-11-09 (`scripts/test-site-content.ts` di DB sekali pakai; API 403 tanpa sesi; pemilik mengedit SEO + hero dari browser dan tampil di halaman)
-- [ ] F6 katalog lain mengikuti pola Paket
+- [x] F6 katalog lain mengikuti pola Paket: Visa, Haji, Hotel, Transport, Muthowif, Ziarah, Pesawat, Katering — hero + fakta data + `#catalog` + CTA + metadata/hreflang, teks id/en bisa diedit di Konten Situs, filter Hotel `FilterSelect`, tanpa "Rp 0"/palet mentah/rating palsu/klaim tanpa data — selesai 2026-11-09 (build produksi, artefak `bun server.js` 200 untuk 9 katalog, 375 px tanpa geser, penjaga `test-public-home` + `test-site-content` di DB sekali pakai; `docs/arsitektur-frontend-publik.md` §6.8)
+- [x] F7 layanan tampil hanya bila berproduk: satu sumber `lib/catalog/availability.ts` untuk menu desktop/HP, footer, kotak layanan + catatan Cara kerja beranda, tombol hero/CTA, sitemap, dan halaman katalog (kosong = 404); penanda di Konten Situs — selesai 2026-11-09 (artefak produksi pada DB kosong vs DB dev, `scripts/test-catalog-availability.ts` di DB sekali pakai; `docs/arsitektur-frontend-publik.md` §7)

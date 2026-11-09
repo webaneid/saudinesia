@@ -5,6 +5,7 @@ import { claimToken, issueToken, peekToken } from '@/lib/auth/tokens'
 import { PRIVACY_POLICY_VERSION, WHATSAPP_CONSENT_VERSION } from '@/lib/constants/legal'
 import { registrationPayloadSchema, type RegisterInput } from '@/lib/validators/auth'
 import type { UserRole } from '@prisma/client'
+import { safeNextPath } from '@/lib/auth/nextPath'
 
 // Logika akun TANPA HTTP/sesi/rate limit (route yang mengurus itu) supaya bisa diuji langsung terhadap database.
 // docs/arsitektur-auth.md §3.2.
@@ -28,19 +29,20 @@ export async function requestRegistration(input: RegisterInput): Promise<Registr
   const token = await issueToken({
     type: 'registration',
     email: input.email,
-    payload: { fullName: input.fullName, phone: input.phone, whatsapp: input.whatsapp },
+    payload: { fullName: input.fullName, phone: input.phone, whatsapp: input.whatsapp, next: safeNextPath(input.next) },
   })
   return { kind: 'pending', token }
 }
 
-export type RegistrationPreview = { email: string; fullName: string; phone: string; whatsapp: string }
+/** `next` = jalur kembali sesudah aktivasi (disaring ulang saat dibaca), atau null. */
+export type RegistrationPreview = { email: string; fullName: string; phone: string; whatsapp: string; next: string | null }
 
 /** Untuk halaman tautan: tampilkan isian agar pemilik email bisa mengenali pendaftaran itu miliknya. Tidak mengonsumsi token. */
 export async function previewRegistration(rawToken: string): Promise<RegistrationPreview | null> {
   const t = await peekToken(rawToken, 'registration')
   const payload = t ? registrationPayloadSchema.safeParse(t.payload) : null
   if (!t?.email || !payload?.success) return null
-  return { email: t.email, fullName: payload.data.fullName, phone: payload.data.phone, whatsapp: payload.data.whatsapp }
+  return { email: t.email, fullName: payload.data.fullName, phone: payload.data.phone, whatsapp: payload.data.whatsapp, next: safeNextPath(payload.data.next) }
 }
 
 export type CompleteResult =

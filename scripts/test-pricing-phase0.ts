@@ -69,7 +69,7 @@ await t('katering: skema booking TIDAK punya totalPrice (klien tak bisa menentuk
   const block = schema.slice(schema.indexOf("itemType: z.literal('catering')"), schema.indexOf("itemType: z.literal('tourPackage')"))
   assert.ok(block.includes('cateringOptionId') && block.includes('numPeople'), 'blok katering tidak ditemukan')
   assert.doesNotMatch(block.replace(/\/\/.*$/gm, ''), /totalPrice/, 'skema katering tak boleh menerima totalPrice')
-  const route = readFileSync('app/api/v1/bookings/route.ts', 'utf8')
+  const route = readFileSync('app/api/v1/bookings/route.ts', 'utf8') + readFileSync('lib/checkout/place.ts', 'utf8') + readFileSync('lib/validators/checkout.ts', 'utf8')
   const items = readFileSync('lib/booking/lineItems.ts', 'utf8')
   assert.doesNotMatch(route, /item\.totalPrice/, 'route tak boleh memakai totalPrice dari klien')
   assert.doesNotMatch(items, /item\.totalPrice/, 'lineItems tak boleh memakai totalPrice dari klien')

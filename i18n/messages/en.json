@@ -160,7 +160,9 @@
         "title": "Our team verifies",
         "description": "Our staff review your payment and documents."
       },
-      "availability": "Visa and Transport can currently be booked online by yourself. Online booking for other services is being prepared."
+      "availability": "Visa and Transport can currently be booked online by yourself. Online booking for other services is being prepared.",
+      "availabilityVisa": "Visa can currently be booked online by yourself. Online booking for other services is being prepared.",
+      "availabilityTransport": "Transport can currently be booked online by yourself. Online booking for other services is being prepared."
     },
     "cta": {
       "title": "Start by creating an account",
@@ -200,6 +202,333 @@
       },
       "cta": {
         "title": "Ready to plan your Umrah?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "visa": {
+      "meta": {
+        "title": "Visa Services",
+        "description": "Saudi Arabia visa processing by Saudinesia: visa types, estimated processing time, required documents, and current prices."
+      },
+      "hero": {
+        "eyebrow": "Visa Services",
+        "title": "Your visa, handled by our team",
+        "subtitle": "Choose a visa type, upload the requested documents, and we process the application. Requirements and estimated time are listed for each visa type.",
+        "primaryCta": "View Visa Types",
+        "secondaryCta": "View Umrah Packages"
+      },
+      "facts": {
+        "count": "{count, plural, one {# visa type} other {# visa types}}",
+        "priceFrom": "From {price}",
+        "process": "Processing from {days} working days"
+      },
+      "list": {
+        "title": "Choose a visa type",
+        "description": "Prices per person. Some visa types must be booked together with other services; see the card for details.",
+        "empty": "Visa services will be available soon."
+      },
+      "card": {
+        "priceFrom": "From",
+        "perPerson": "per person",
+        "process": "Estimated processing {days} working days",
+        "apply": "Apply Now",
+        "bundled": "Booked together with: {parts}. Contact Saudinesia to book."
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "haji": {
+      "meta": {
+        "title": "Hajj Packages",
+        "description": "Hajj packages from Saudinesia: package type, departure year, inclusions, remaining seats, and current prices."
+      },
+      "hero": {
+        "eyebrow": "Hajj Packages",
+        "title": "Hajj packages with clear seat availability",
+        "subtitle": "Each package lists the year, inclusions, remaining seats, and required documents. Registration and processing are handled by our team.",
+        "primaryCta": "View Hajj Packages",
+        "secondaryCta": "View Umrah Packages"
+      },
+      "facts": {
+        "count": "{count, plural, one {# Hajj package} other {# Hajj packages}}",
+        "priceFrom": "From {price}",
+        "seats": "{count, plural, one {# seat available} other {# seats available}}"
+      },
+      "list": {
+        "title": "Choose a Hajj package",
+        "description": "Packages are grouped by Hajj type. Prices per person.",
+        "empty": "Hajj packages will be available soon."
+      },
+      "card": {
+        "types": {
+          "furoda": "Furoda Hajj",
+          "khusus": "Special Hajj",
+          "reguler": "Regular Hajj",
+          "plus": "Hajj Plus"
+        },
+        "groupCount": "{count, plural, one {# package} other {# packages}}",
+        "year": "Year {year}",
+        "days": "{days} days",
+        "more": "+{count} more",
+        "priceFrom": "From",
+        "perPerson": "per person",
+        "unpriced": "Price not set yet",
+        "seats": "{count, plural, one {# seat available} other {# seats available}}",
+        "register": "Book Now"
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "hotels": {
+      "meta": {
+        "title": "Hotels in Makkah and Madinah",
+        "description": "Hotels near the Haram in Makkah and Madinah from Saudinesia: star rating, distance, room types, and current-period prices."
+      },
+      "hero": {
+        "eyebrow": "Hotels",
+        "title": "Hotels near the Haram in Makkah and Madinah",
+        "subtitle": "Compare star rating, distance to the Haram, and room prices for the current period.",
+        "primaryCta": "View Hotels",
+        "secondaryCta": "View Umrah Packages"
+      },
+      "facts": {
+        "count": "{count, plural, one {# hotel} other {# hotels}}",
+        "priceFrom": "From {price} per night",
+        "nearest": "Closest {distance} from the Haram"
+      },
+      "list": {
+        "title": "Choose a hotel",
+        "description": "Lowest price per room per night for the current period.",
+        "empty": "Hotels will be available soon.",
+        "emptyFiltered": "No hotels match the filter."
+      },
+      "filters": {
+        "city": "City",
+        "stars": "Stars",
+        "all": "All"
+      },
+      "card": {
+        "cities": {
+          "makkah": "Makkah",
+          "madinah": "Madinah"
+        },
+        "stars": "{count} stars",
+        "distance": "{distance} from the Haram",
+        "priceFrom": "From",
+        "perNight": "per room per night",
+        "roomTypes": "{count, plural, one {# room type available} other {# room types available}}",
+        "details": "View hotel"
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "transport": {
+      "meta": {
+        "title": "Transport Services",
+        "description": "Transport in Saudi Arabia from Saudinesia: airport pickup, intercity, and city tours, priced per route and vehicle."
+      },
+      "hero": {
+        "eyebrow": "Transport",
+        "title": "Vehicles from pickup to destination",
+        "subtitle": "Find the route you need, then choose the vehicle. Prices are listed per route and vehicle.",
+        "primaryCta": "Find a Route",
+        "secondaryCta": "View Ziyarah"
+      },
+      "facts": {
+        "routes": "{count, plural, one {# route} other {# routes}}",
+        "vehicles": "{count, plural, one {# vehicle type} other {# vehicle types}}",
+        "priceFrom": "From {price}"
+      },
+      "list": {
+        "title": "Find a route",
+        "description": "Airport pickup, intercity, and ziyarah city tours.",
+        "empty": "Transport schedules will be available soon."
+      },
+      "search": {
+        "where": "Where to?",
+        "from": "From",
+        "to": "To",
+        "anyOrigin": "All pickup points",
+        "anyDestination": "All destinations",
+        "swap": "Swap pickup and destination",
+        "category": "Category",
+        "all": "All",
+        "empty": "No routes match your selection.",
+        "reset": "Reset search",
+        "order": "Book now",
+        "capacity": "{count} people",
+        "categories": {
+          "airport": "Airport Pickup",
+          "intercity": "Intercity",
+          "cityTour": "City Tour",
+          "shuttle": "Shuttle",
+          "other": "Other"
+        }
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "muthowif": {
+      "meta": {
+        "title": "Muthowif Services",
+        "description": "Worship guides (muthowif) from Saudinesia. You book the service, and we assign a muthowif to your trip."
+      },
+      "hero": {
+        "eyebrow": "Muthowif",
+        "title": "A worship guide during your time in the Holy Land",
+        "subtitle": "You book the muthowif service, and Saudinesia decides who is assigned to your trip.",
+        "primaryCta": "View Guides",
+        "secondaryCta": "View Umrah Packages"
+      },
+      "facts": {
+        "count": "{count, plural, one {# active guide} other {# active guides}}",
+        "priceFrom": "From {price} per day"
+      },
+      "list": {
+        "title": "Our guides",
+        "description": "Profiles of active guides. Assignment is decided by the Saudinesia team based on your travel schedule.",
+        "empty": "Guide profiles will be available soon."
+      },
+      "card": {
+        "details": "View profile"
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "tours": {
+      "meta": {
+        "title": "Ziyarah Packages",
+        "description": "Ziyarah packages to historic Islamic sites from Saudinesia: site list, route, and package prices."
+      },
+      "hero": {
+        "eyebrow": "Ziyarah",
+        "title": "Ziyarah to historic Islamic sites",
+        "subtitle": "Each package lists the sites visited with a map. Vehicles and hotels can be chosen to fit your needs.",
+        "primaryCta": "View Ziyarah Packages",
+        "secondaryCta": "View Transport"
+      },
+      "facts": {
+        "count": "{count, plural, one {# ziyarah package} other {# ziyarah packages}}",
+        "sites": "{count, plural, one {# site} other {# sites}}",
+        "priceFrom": "From {price}"
+      },
+      "list": {
+        "title": "Choose a ziyarah package",
+        "description": "Base package price. Vehicles or hotels you choose yourself are calculated when you book.",
+        "empty": "Ziyarah packages will be available soon."
+      },
+      "card": {
+        "cities": {
+          "makkah": "Makkah",
+          "madinah": "Madinah",
+          "jeddah": "Jeddah"
+        },
+        "sites": "Sites visited",
+        "map": "Map",
+        "priceFrom": "From",
+        "addOnsTransport": "+ vehicle of your choice",
+        "addOnsHotel": "+ hotel of your choice",
+        "addOnsBoth": "+ vehicle and hotel of your choice",
+        "order": "Add to package"
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "flight": {
+      "meta": {
+        "title": "Flight Tickets",
+        "description": "Flight schedules for Umrah and Hajj departures from Saudinesia, priced per person for the listed departure period."
+      },
+      "hero": {
+        "eyebrow": "Flight Tickets",
+        "title": "Umrah and Hajj flight schedules",
+        "subtitle": "Prices per person, valid for the departure period listed on each schedule.",
+        "primaryCta": "View Schedules",
+        "secondaryCta": "View Umrah Packages"
+      },
+      "facts": {
+        "count": "{count, plural, one {# schedule} other {# schedules}}"
+      },
+      "list": {
+        "title": "Flight schedules",
+        "description": "Search by origin or destination city.",
+        "empty": "Flight schedules will be available soon.",
+        "emptyFiltered": "No schedules match your search.",
+        "search": "Search origin / destination city…"
+      },
+      "table": {
+        "route": "Route",
+        "airline": "Airline",
+        "period": "Departure period",
+        "price": "Price per person"
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
+        "description": "Create an account to keep pilgrim data and track your orders in one place.",
+        "button": "Create Account"
+      }
+    },
+    "catering": {
+      "meta": {
+        "title": "Catering Packages",
+        "description": "Catering packages during Umrah and Hajj trips from Saudinesia: menu style, meals per day, and price per person per day."
+      },
+      "hero": {
+        "eyebrow": "Catering",
+        "title": "Meals during your trip, arranged",
+        "subtitle": "Choose a menu style and number of meals per day. Prices per person per day for the current season.",
+        "primaryCta": "View Catering Packages",
+        "secondaryCta": "View Umrah Packages"
+      },
+      "facts": {
+        "count": "{count, plural, one {# catering package} other {# catering packages}}",
+        "priceFrom": "From {price} per day",
+        "season": "{season} season prices"
+      },
+      "list": {
+        "title": "Choose a catering package",
+        "description": "Price per person per day, following the current season.",
+        "empty": "Catering packages will be available soon."
+      },
+      "card": {
+        "menu": {
+          "asian": "Asian menu",
+          "arabic": "Arabic menu",
+          "western": "Western menu"
+        },
+        "board": {
+          "fullBoard": "Three meals a day",
+          "halfBoard": "Two meals a day"
+        },
+        "seasons": {
+          "regular": "Regular",
+          "ramadan": "Ramadan",
+          "hajj": "Hajj"
+        },
+        "priceLabel": "Price",
+        "perPersonDay": "per person per day"
+      },
+      "cta": {
+        "title": "Ready to plan your trip?",
         "description": "Create an account to keep pilgrim data and track your orders in one place.",
         "button": "Create Account"
       }

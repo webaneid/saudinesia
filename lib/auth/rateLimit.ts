@@ -24,6 +24,7 @@ export const LIMITS = {
   deletionRequestUser: { limit: 3, windowSec: 86400 }, // pengajuan hapus akun per akun (tiap pengajuan masuk antrean superadmin)
   addressCreateUser:  { limit: 20, windowSec: 3600 },  // baris alamat baru per akun (POST /address membuat baris yatim bila tak dipakai; tanpa batas = tabel bisa dibanjiri)
   bookingCreateUser:  { limit: 20, windowSec: 3600 },  // booking baru per akun (tiap booking memicu 3 WhatsApp ke nomor akun)
+  bookingPreviewUser: { limit: 120, windowSec: 600 },  // pratinjau harga checkout per akun (transaksi rollback berisi penahanan kuota — murah tapi bukan gratis; ringkasan diperbarui saat isian berubah)
   whatsappVerifyUser: { limit: 5,  windowSec: 3600 },  // permintaan kode verifikasi WhatsApp per akun
   webhookIp:          { limit: 3000, windowSec: 600 }, // webhook WhatsApp (sudah bertanda tangan) per IP sumber — pagar kasar; SEMUA pesan masuk ke nomor bisnis terhitung
   webhookBadSigIp:    { limit: 30, windowSec: 600 },   // tanda tangan SALAH per IP — GOWA sah tak pernah salah; menahan tebakan secret online

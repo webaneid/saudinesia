@@ -61,8 +61,6 @@ const UNBOUNDED_ADMIN_GET: Record<string, string> = {
 
 /** Halaman server dengan `findMany` tanpa paginasi: katalog KARTU kurasi (bukan tabel) — operator memegang seluruh inventori; atau pilihan checkout satu produk. */
 const UNPAGINATED_PAGES: Record<string, string> = {
-  'app/[locale]/(pilgrim)/bookings/checkout/transport/page.tsx': 'pilihan trip pada checkout (daftar kurasi kecil)',
-  'app/[locale]/(pilgrim)/bookings/checkout/visa/page.tsx': 'pilihan produk visa pada checkout (daftar kurasi kecil)',
   'app/[locale]/(public)/catering/page.tsx': 'katalog kartu kurasi',
   'app/[locale]/(public)/haji/page.tsx': 'katalog kartu kurasi',
   'app/[locale]/(public)/hotels/page.tsx': 'katalog kartu kurasi',

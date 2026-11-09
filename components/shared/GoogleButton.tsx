@@ -1,10 +1,11 @@
 // Tombol "Masuk/Daftar dengan Google" mengikuti pedoman branding Google: logo "G" berwarna asli di atas latar putih, teks jelas.
 // Berupa tautan biasa (navigasi tingkat-atas ke /api/v1/auth/google/start) — bukan fetch — karena alur OAuth meninggalkan situs.
 
-export function GoogleButton({ locale, label }: { locale: string; label: string }) {
+/** `next` = jalur kembali yang SUDAH disaring server; route `start` menyaringnya lagi sebelum disimpan di cookie state bertanda tangan. */
+export function GoogleButton({ locale, label, next = null }: { locale: string; label: string; next?: string | null }) {
   return (
     <a
-      href={`/api/v1/auth/google/start?locale=${locale}`}
+      href={`/api/v1/auth/google/start?locale=${locale}${next ? `&next=${encodeURIComponent(next)}` : ''}`}
       className="inline-flex h-10 w-full items-center justify-center gap-3 rounded-md border border-input bg-background px-4 text-sm font-medium text-foreground shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
     >
       <svg viewBox="0 0 48 48" className="h-[18px] w-[18px]" aria-hidden="true">

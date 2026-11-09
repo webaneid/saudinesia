@@ -11,7 +11,8 @@ import { Button } from '@/components/ui/button'
 import { PUBLIC_NAV } from './publicNav'
 
 // Menu katalog di layar sempit. Lewat portal karena header memakai backdrop-filter: elemen `fixed` di dalamnya akan mengikuti header, bukan layar.
-export function PublicMobileNav({ locale }: { locale: string }) {
+/** `keys` = layanan berproduk, dihitung `Header` di server (§7) — komponen klien ini tidak mengambil data sendiri. */
+export function PublicMobileNav({ locale, keys }: { locale: string; keys: readonly string[] }) {
   const t = useTranslations('nav')
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
@@ -60,7 +61,7 @@ export function PublicMobileNav({ locale }: { locale: string }) {
               </Button>
             </div>
             <nav className="p-2">
-              {PUBLIC_NAV.map(({ key, path, icon: Icon }) => {
+              {PUBLIC_NAV.filter(n => keys.includes(n.key)).map(({ key, path, icon: Icon }) => {
                 const href = `/${locale}/${path}`
                 const current = pathname === href || pathname.startsWith(`${href}/`)
                 return (

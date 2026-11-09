@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { safeLocale } from '@/lib/utils/locale'
 import { getSession } from '@/lib/auth/session'
 import { googleConfigured } from '@/lib/auth/google'
+import { afterAuthPath, safeNextPath } from '@/lib/auth/nextPath'
 import { LoginForm } from './LoginForm'
 
 const GOOGLE_ERRORS: Record<string, string> = {
@@ -16,15 +17,17 @@ const GOOGLE_ERRORS: Record<string, string> = {
   google_conflict: 'Email ini sudah tersambung dengan akun Google lain. Hubungi kami untuk bantuan.',
 }
 
-export default async function LoginPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ error?: string }> }) {
+export default async function LoginPage({ params, searchParams }: { params: Promise<{ locale: string }>; searchParams: Promise<{ error?: string; next?: string }> }) {
   const { locale } = await params
-  const { error } = await searchParams
+  const { error, next: rawNext } = await searchParams
+  // Jalur kembali (mis. checkout) disaring daftar putih di server; klien hanya menerima nilai yang sudah sah (lib/auth/nextPath.ts).
+  const next = safeNextPath(rawNext)
   const session = await getSession()
-  if (session) redirect(`/${safeLocale(locale)}/dashboard`)
+  if (session) redirect(afterAuthPath(safeLocale(locale), next))
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-muted/30 p-4">
-      <LoginForm locale={locale} googleEnabled={googleConfigured()} initialError={typeof error === 'string' && Object.hasOwn(GOOGLE_ERRORS, error) ? (GOOGLE_ERRORS[error] ?? '') : ''} />
+      <LoginForm locale={locale} next={next} googleEnabled={googleConfigured()} initialError={typeof error === 'string' && Object.hasOwn(GOOGLE_ERRORS, error) ? (GOOGLE_ERRORS[error] ?? '') : ''} />
     </main>
   )
 }
