@@ -82,7 +82,7 @@ t('RowActions/ActionLink (render nyata): hanya ikon + teks aksesibel (title/aria
   const html = renderToStaticMarkup(createElement(RowActions, null,
     createElement(ActionLink, { kind: 'view', href: '/a/1' }), createElement(ActionLink, { kind: 'edit', href: '/a/1/edit', label: 'Edit Hotel Safwah' })))
   assert.match(html, /<a [^>]*href="\/a\/1"[^>]*>/)
-  assert.ok(html.includes('aria-label="Lihat detail"') && html.includes('title="Lihat detail"'))
+  assert.ok(html.includes('aria-label="Lihat detail"') && html.includes('data-tip="Lihat detail"'))
   assert.ok(html.includes('aria-label="Edit Hotel Safwah"'))
   assert.equal((html.match(/<svg/g) ?? []).length, 2, 'dua ikon')
   assert.ok(!/>\s*(Lihat detail|Edit)\s*</.test(html), 'tak ada teks tampak — hanya ikon')
@@ -219,7 +219,7 @@ t('PENJAGA SUMBER (katalog, Fase 3): halaman memakai CatalogList + CatalogAction
   assert.match(cm, /ApiAction/); assert.match(cm, /<Pagination/); assert.doesNotMatch(cm, /confirmingDelete|window\.confirm/)
 })
 
-const PUBLIC_PAGES = ['app/[locale]/(public)/flight/page.tsx', 'app/[locale]/(public)/hotels/[id]/page.tsx', 'app/[locale]/(pilgrim)/dashboard/page.tsx']
+const PUBLIC_PAGES = ['app/[locale]/(public)/flight/page.tsx', 'app/[locale]/(public)/hotels/[id]/page.tsx', 'app/[locale]/(pilgrim)/bookings/page.tsx']
 
 t('PENJAGA SUMBER (Fase 4): satu-satunya <table> adalah DataTable bersama ; halaman publik/jamaah memakai kit BERSAMA; batas admin ↔ jamaah/publik terjaga', () => {
   const all = [...walk(join(root, 'app')), ...walk(join(root, 'components'))]

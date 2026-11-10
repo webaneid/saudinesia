@@ -8,27 +8,39 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { documentIcon } from '@/lib/documents/icons'
+import { FileViewerDialog } from './FileViewerDialog'
 import { formatCalendarDate } from '@/lib/time'
 import type { DocumentTypeOption, PilgrimDocumentView } from '@/lib/documents/service'
 import { EMPTY_DRAFT, REJECT_TEXT, STATUS_TEXT, canUpload, documentRows, formatBytes, uploadFields, type DocumentRow, type UploadDraft } from './documentRows'
 
 // Dokumen satu jamaah (docs/arsitektur-jamaah.md §7.4) — satu komponen untuk "Jamaah Saya" dan admin atas nama pelanggan (tanpa impor admin).
-// `endpoint` = koleksi dokumen kartu (GET daftar + jenis, POST unggah); `${endpoint}/${id}` = lihat (URL presigned) / hapus.
+// `endpoint` = koleksi dokumen kartu (GET daftar + jenis, POST unggah); `${endpoint}/${id}` = lihat (URL presigned, ditampilkan di popup FileViewerDialog) / hapus.
 // Berkas gambar diubah ke WebP di server; status pemeriksaan diisi admin (Fase 6) — di sini hanya ditampilkan.
 
-type Props = { endpoint: string; readOnly?: boolean }
+type Props = {
+  endpoint: string
+  readOnly?: boolean
+  /** Jenis dokumen yang formulir unggahnya langsung terbuka (mis. dari tombol "Unggah" di daftar kelengkapan). */
+  openTypeId?: string
+  /** Dipanggil sesudah dokumen diunggah/dihapus — pemanggil memuat ulang kelengkapan yang dihitung server. */
+  onChange?: () => void
+  /** Hanya jenis ini yang tampil (dokumen pribadi di halaman booking = syarat produk saja; kartu tetap menyimpan jenis lain untuk booking lain,
+   *  jadi berkas jenis lain disembunyikan, bukan ditandai "tidak diperlukan"). Tanpa ini = semua jenis dari server. */
+  onlyTypeIds?: readonly string[]
+}
 type Loaded = { documents: PilgrimDocumentView[]; types: DocumentTypeOption[] }
 
 const STATUS_VARIANT = { pending: 'muted', accepted: 'success', rejected: 'destructive' } as const
 
-export function DocumentRepeater({ endpoint, readOnly = false }: Props) {
+export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onChange, onlyTypeIds }: Props) {
   const [data, setData] = useState<Loaded | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null) // id baris yang sedang diproses
-  const [openFor, setOpenFor] = useState<string | null>(null) // id jenis yang formulir unggahnya terbuka
+  const [openFor, setOpenFor] = useState<string | null>(readOnly ? null : openTypeId ?? null) // id jenis yang formulir unggahnya terbuka
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [viewing, setViewing] = useState<PilgrimDocumentView | null>(null) // berkas yang sedang dilihat di popup
 
   const load = useCallback(async () => {
     try {
@@ -43,22 +55,6 @@ export function DocumentRepeater({ endpoint, readOnly = false }: Props) {
 
   useEffect(() => { void load() }, [load])
 
-  async function preview(doc: PilgrimDocumentView) {
-    // Jendela dibuka SINKRON (di dalam klik) supaya tak diblokir; alamatnya diisi setelah URL presigned didapat.
-    const win = window.open('', '_blank')
-    if (win) win.opener = null
-    setError(null)
-    try {
-      const res = await fetch(`${endpoint}/${doc.id}`, { cache: 'no-store' })
-      const json = await res.json().catch(() => null) as { data?: { url: string }; error?: string } | null
-      if (!res.ok || !json?.data?.url) { win?.close(); setError(json?.error ?? 'Dokumen tidak dapat dibuka.'); return }
-      if (win) win.location.href = json.data.url
-      else window.location.href = json.data.url
-    } catch {
-      win?.close(); setError('Tidak dapat menghubungi server.')
-    }
-  }
-
   async function remove(doc: PilgrimDocumentView) {
     setBusy(doc.id); setError(null); setNotice(null)
     try {
@@ -66,7 +62,7 @@ export function DocumentRepeater({ endpoint, readOnly = false }: Props) {
       const json = await res.json().catch(() => null) as { error?: string } | null
       if (!res.ok) { setError(json?.error ?? 'Dokumen gagal dihapus.'); return }
       setConfirmDelete(null); setNotice('Dokumen dihapus.')
-      await load()
+      await load(); onChange?.()
     } catch {
       setError('Tidak dapat menghubungi server.')
     } finally {
@@ -77,15 +73,18 @@ export function DocumentRepeater({ endpoint, readOnly = false }: Props) {
   if (loadError) return <p role="alert" className="text-sm text-destructive">{loadError}</p>
   if (!data) return <p className="text-sm text-muted-foreground">Memuat dokumen…</p>
 
-  const rows = documentRows(data.types, data.documents)
-  const multiTypes = data.types.filter(t => t.allowMultiple)
+  const only = onlyTypeIds ? new Set(onlyTypeIds) : null
+  const types = only ? data.types.filter(t => only.has(t.id)) : data.types
+  const rows = documentRows(types, only ? data.documents.filter(d => only.has(d.documentTypeId)) : data.documents)
+  const multiTypes = types.filter(t => t.allowMultiple)
 
   return (
     <div className="space-y-3">
       {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">{error}</p>}
       {notice && <p role="status" className="rounded-lg border bg-muted px-3 py-2 text-sm">{notice}</p>}
 
-      <ul className="divide-y rounded-xl border">
+      {rows.length === 0 && <p className="text-sm text-muted-foreground">Tidak ada dokumen yang diminta di sini.</p>}
+      <ul className="divide-y rounded-xl border empty:hidden">
         {rows.map(row => (
           <RowItem
             key={row.document?.id ?? row.type.id} row={row} readOnly={readOnly} busy={busy === row.document?.id}
@@ -93,8 +92,8 @@ export function DocumentRepeater({ endpoint, readOnly = false }: Props) {
             formOpen={row.kind === 'single' && openFor === row.type.id}
             onOpenForm={() => { setOpenFor(row.type.id); setNotice(null) }}
             onCloseForm={() => setOpenFor(null)}
-            onUploaded={async () => { setOpenFor(null); setNotice('Dokumen tersimpan.'); await load() }}
-            onPreview={() => row.document && void preview(row.document)}
+            onUploaded={async () => { setOpenFor(null); setNotice('Dokumen tersimpan.'); await load(); onChange?.() }}
+            onPreview={() => row.document && setViewing(row.document)}
             onAskDelete={() => row.document && setConfirmDelete(row.document.id)}
             onCancelDelete={() => setConfirmDelete(null)}
             onDelete={() => row.document && void remove(row.document)}
@@ -105,8 +104,9 @@ export function DocumentRepeater({ endpoint, readOnly = false }: Props) {
 
       {!readOnly && multiTypes.length > 0 && (
         <AddExtra types={multiTypes} endpoint={endpoint} open={openFor === 'extra'} onOpen={() => { setOpenFor('extra'); setNotice(null) }} onClose={() => setOpenFor(null)}
-          onUploaded={async () => { setOpenFor(null); setNotice('Dokumen tersimpan.'); await load() }} />
+          onUploaded={async () => { setOpenFor(null); setNotice('Dokumen tersimpan.'); await load(); onChange?.() }} />
       )}
+      {viewing && <FileViewerDialog title={viewing.label} endpoint={`${endpoint}/${viewing.id}`} onClose={() => setViewing(null)} />}
       <p className="text-xs text-muted-foreground">Foto (JPG, PNG, WebP) atau PDF, maksimal 5 MB. Foto disimpan ulang sebagai WebP tanpa data lokasi.</p>
     </div>
   )
@@ -130,13 +130,18 @@ function RowItem({ row, readOnly, busy, confirming, formOpen, endpoint, onOpenFo
           {doc ? (
             <>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <Badge variant={STATUS_VARIANT[doc.status]}>{STATUS_TEXT[doc.status]}</Badge>
+                {row.kind === 'extra' && row.unlisted
+                  ? <Badge variant="muted">Tidak diperlukan</Badge>
+                  : <Badge variant={STATUS_VARIANT[doc.status]}>{STATUS_TEXT[doc.status]}</Badge>}
                 <span>{doc.mimeType === 'application/pdf' ? 'PDF' : 'Foto'} · {formatBytes(doc.sizeBytes)}</span>
                 {doc.referenceCode && <span>{row.type.referenceLabel ?? 'Kode'}: {doc.referenceCode}</span>}
                 {doc.expiresAt && <span>Berlaku s.d. {formatCalendarDate(doc.expiresAt)}</span>}
                 {doc.byStaff && <span>Diunggah petugas</span>}
               </div>
-              {doc.status === 'rejected' && (
+              {row.kind === 'extra' && row.unlisted && (
+                <p className="text-xs text-muted-foreground">Tidak diperlukan di sini — tidak diperiksa petugas. Boleh dihapus.</p>
+              )}
+              {doc.status === 'rejected' && !(row.kind === 'extra' && row.unlisted) && (
                 <p className="text-xs text-destructive">Ditolak{doc.rejectReason ? ` (${REJECT_TEXT[doc.rejectReason]})` : ''}{doc.reviewNote ? `: ${doc.reviewNote}` : ''} — unggah ulang berkas yang benar.</p>
               )}
             </>
@@ -171,7 +176,7 @@ function RowItem({ row, readOnly, busy, confirming, formOpen, endpoint, onOpenFo
 function AddExtra({ types, endpoint, open, onOpen, onClose, onUploaded }: { types: DocumentTypeOption[]; endpoint: string; open: boolean; onOpen: () => void; onClose: () => void; onUploaded: () => Promise<void> }) {
   const [typeId, setTypeId] = useState(types[0]?.id ?? '')
   const type = types.find(t => t.id === typeId) ?? types[0]
-  if (!open || !type) return <Button type="button" variant="outline" size="sm" onClick={onOpen}><Plus className="mr-1.5 h-3.5 w-3.5" />Tambah dokumen lain</Button>
+  if (!open || !type) return <Button type="button" variant="outline" size="sm" onClick={onOpen}><Plus className="mr-1.5 h-3.5 w-3.5" />{types.length === 1 && types[0] ? `Tambah ${types[0].label}` : 'Tambah dokumen lain'}</Button>
   return (
     <div className="space-y-3 rounded-xl border p-4">
       {types.length > 1 && (

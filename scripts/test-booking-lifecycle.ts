@@ -232,7 +232,7 @@ await t('PENGINGAT: H-0 / H-1 menurut hari kalender WIB (tepat 00.00 hari beriku
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────
 await t('PENJAGA: draf tak pernah sampai ke jamaah (daftar, detail, API, invoice); batal-sendiri & unggah bukti mengunci baris lalu memeriksa ULANG status', () => {
-  for (const f of ['app/[locale]/(pilgrim)/dashboard/page.tsx', 'app/[locale]/(pilgrim)/bookings/[id]/page.tsx', 'app/api/v1/bookings/route.ts', 'app/api/v1/bookings/[id]/route.ts']) assert.match(read(f), /status: \{ not: 'draft' \}/, f)
+  for (const f of ['app/[locale]/(pilgrim)/dashboard/page.tsx', 'app/[locale]/(pilgrim)/bookings/page.tsx', 'app/[locale]/(pilgrim)/bookings/[id]/page.tsx', 'app/[locale]/(pilgrim)/bookings/[id]/jamaah/[pilgrimId]/page.tsx', 'app/api/v1/bookings/route.ts', 'app/api/v1/bookings/[id]/route.ts']) assert.match(read(f), /status: \{ not: 'draft' \}/, f)
   assert.match(read('app/api/v1/bookings/[id]/invoice/route.ts'), /status === 'draft'/)
   const cancel = read('app/api/v1/bookings/[id]/route.ts')
   assert.match(cancel, /FOR UPDATE/); assert.match(cancel, /isPilgrimCancellable\(booking\)/)

@@ -281,6 +281,14 @@ await t('UI murni: baris repeater (jenis tunggal satu baris, boleh-banyak per be
   const rows = documentRows(tys, docs)
   assert.equal(rows.filter(r => r.kind === 'single' && r.type.key === 'ktp').length, 1)
   assert.equal(rows.filter(r => r.kind === 'extra').length, docs.filter(d => d.typeKey === 'other').length)
+  // Berkas yang jenisnya tak ada di daftar (tak diminta / dinonaktifkan) tampil di akhir bertanda `unlisted` (tak bisa diganti).
+  const ktpDoc = docs.find(d => d.typeKey === 'ktp')
+  if (ktpDoc) {
+    const without = documentRows(tys.filter(x => x.key !== 'ktp'), docs)
+    const last = without.find(r => r.document?.id === ktpDoc.id)
+    assert.ok(last && last.kind === 'extra' && last.unlisted, 'berkas jenis tak terdaftar ditandai unlisted')
+  }
+  assert.ok(rows.every(r => !(r.kind === 'extra' && r.unlisted)), 'jenis terdaftar tak pernah unlisted')
   const ktp = tys.find(x => x.key === 'ktp')!
   assert.deepEqual(uploadFields(ktp, { label: 'x', referenceCode: 'y', issuedAt: '2020-01-01', expiresAt: '2030-01-01' }), { documentTypeId: ktp.id })
   const pass = tys.find(x => x.key === 'passport')!

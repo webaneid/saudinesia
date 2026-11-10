@@ -72,7 +72,7 @@ Bentuk dijaga `visaRequiredComponentsSchema` (`.strict()`, tiap jenis sekali); d
 4. **Revisi** (`lib/booking/revise.ts`): visa boleh dihapus/diganti hanya bila R3 (belum ada dokumen, status `pending_documents`); visa baru pada jamaah terverifikasi
    membuka ulang pemeriksaan (SEC-201); anggota diselaraskan ulang (`syncMembers`).
 5. **Dokumen & data jamaah**: syarat = `pilgrimRequirements` (`lib/documents/requirements.ts`, gabungan Paket → Haji → Visa dengan sumber "Diminta oleh");
-   kelengkapan `evaluateCompleteness`; ajukan/verifikasi `lib/pilgrims/review.ts`. Checklist tampil di halaman booking admin (`PilgrimCardPanel`) dan jamaah (`PilgrimTripPanel`).
+   kelengkapan `evaluateCompleteness`; ajukan/verifikasi `lib/pilgrims/review.ts`. Admin memeriksa di halaman booking (`PilgrimReviewPanel`) dan mengubah kartu/data/dokumen di halaman Kelola jamaah `admin/bookings/[id]/pilgrims/[pilgrimId]` (sejak 2026-11-10); jamaah lewat `PilgrimTripPanel`.
 6. **Proses visa**: Admin → Visa (`admin/visa/page.tsx`, daftar berpaginasi + filter status) dan tombol status di halaman booking (`VisaActions`); ke Syarikah
    hanya untuk jamaah terverifikasi; setiap perubahan status → notifikasi email lewat `notify` (tanpa WhatsApp).
 7. **Batal/hangus**: visa tidak memakai kuota — `visaAdapter` no-op eksplisit di registry `lib/quota/adapters`.

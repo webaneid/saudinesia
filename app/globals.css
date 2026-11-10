@@ -109,6 +109,13 @@
   .catalog-chip { @apply inline-flex items-center gap-1 rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-semibold text-brand; }
   /* Checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5). */
   .checkout-panel { @apply space-y-4 rounded-2xl border bg-card p-5 sm:p-6; }
+  /* Popup area jamaah/publik (components/shared/Modal): lembar dari bawah di HP, kotak di tengah mulai sm. */
+  .modal-sheet { @apply mx-0 mb-0 mt-auto w-full max-w-none max-h-[92dvh] flex-col rounded-t-2xl border bg-background p-0 text-foreground shadow-xl backdrop:bg-black/40 open:flex sm:m-auto sm:w-[min(42rem,94vw)] sm:max-h-[90vh] sm:rounded-2xl; }
+  .modal-sheet-wide { @apply sm:w-[min(64rem,96vw)]; }
+  /* Tooltip aksi tabel (ikon saja; teks dari data-tip, juga aria-label) — muncul saat hover/fokus keyboard, tanpa jeda title bawaan peramban. */
+  .action-tip { @apply relative; }
+  .action-tip::after { content: attr(data-tip); @apply pointer-events-none absolute bottom-full right-0 z-20 mb-1.5 whitespace-nowrap rounded-md bg-admin-ink px-2 py-1 text-[11px] font-medium leading-tight text-white opacity-0 shadow-lg transition-opacity duration-100; }
+  .action-tip:hover::after, .action-tip:focus-visible::after { @apply opacity-100; }
   .checkout-label { @apply block text-sm font-semibold text-brand-dark; }
   .checkout-input { @apply min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm outline-none focus:border-brand focus:ring-2 focus:ring-brand/15; }
   .checkout-option { @apply flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-colors hover:border-brand; }

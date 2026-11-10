@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { Save } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
@@ -18,9 +19,12 @@ type Props = {
   cardBound?: string[]
   /** null = jamaah tanpa visa (tak ada rencana tanggal visa). */
   plannedTravelDate: string | null | undefined
+  /** Dikunci selama diperiksa/terverifikasi (isReviewLocked) — server menolak 409; formulir dinonaktifkan supaya jelas. */
+  locked?: boolean
 }
 
-export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, plannedTravelDate, cardBound = [] }: Props) {
+export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, plannedTravelDate, cardBound = [], locked = false }: Props) {
+  const router = useRouter()
   const [values, setValues] = useState<Record<string, unknown>>(initial)
   const [planned, setPlanned] = useState(plannedTravelDate ?? '')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -40,20 +44,21 @@ export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, planned
         return
       }
       setNotice({ text: 'Data jamaah tersimpan.', error: false })
+      router.refresh()
     } catch {
       setNotice({ text: 'Tidak dapat menghubungi server.', error: true })
     } finally { setBusy(false) }
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-admin-line p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="m-0 text-[12px] font-semibold text-admin-ink">Data jamaah</p>
+    <fieldset disabled={locked} className="m-0 min-w-0 space-y-3 border-0 p-0">
+      <div className="flex flex-wrap items-center gap-2">
         <Badge tone={status.complete ? 'ok' : 'warning'}>{status.filled}/{status.required} wajib terisi</Badge>
+        {!status.complete && <span className="text-[11.5px] text-admin-muted">Belum diisi: {status.missing.join(', ')}</span>}
       </div>
       {cardBound.length > 0 && (
         <p className="m-0 text-[11.5px] text-admin-muted">
-          Terisi dari kartu jamaah: {fields.filter(f => cardBound.includes(f.fieldKey)).map(f => f.label).join(', ')}. Mengubahnya di sini hanya berlaku untuk booking ini; NIK/paspor tersamar = tetap.
+          Terisi dari kartu jamaah: {fields.filter(f => cardBound.includes(f.fieldKey)).map(f => f.label).join(', ')}. Mengubahnya di sini hanya berlaku untuk booking ini (kartu tidak berubah); NIK/paspor tersamar = tetap.
         </p>
       )}
       {fields.length === 0
@@ -67,9 +72,8 @@ export function PilgrimDataForm({ bookingId, pilgrimId, fields, initial, planned
       )}
       <div className="flex flex-wrap items-center gap-3">
         <Button size="sm" onClick={save} loading={busy}><Save className="size-4" /> Simpan data jamaah</Button>
-        {!status.complete && <p className="m-0 text-[11px] text-admin-muted">Belum diisi: {status.missing.join(', ')}</p>}
         {notice && <p role={notice.error ? 'alert' : 'status'} className={`m-0 text-[12px] font-medium ${notice.error ? 'text-admin-danger' : 'text-admin-ok'}`}>{notice.text}</p>}
       </div>
-    </div>
+    </fieldset>
   )
 }

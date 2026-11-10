@@ -54,7 +54,7 @@ export function ApiAction(props: Props) {
 
   return (
     <>
-      <button type="button" title={text} aria-label={text} disabled={busy && !open} onClick={onClick} className={actionClass(kind)}><Icon className="size-4" /></button>
+      <button type="button" data-tip={text} aria-label={text} disabled={busy && !open} onClick={onClick} className={actionClass(kind)}><Icon className="size-4" /></button>
       <ConfirmDialog
         open={open} busy={busy} error={error} result={result} tone={props.kind === 'delete' ? 'danger' : 'primary'}
         title={props.kind === 'delete' ? `Hapus ${props.subject}?` : text}

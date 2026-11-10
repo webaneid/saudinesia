@@ -2,7 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CheckCircle, XCircle, ExternalLink } from 'lucide-react'
+import { CheckCircle, XCircle, FileSearch } from 'lucide-react'
+import { FileViewerDialog } from '@/components/shared/documents/FileViewerDialog'
 
 interface PaymentActionsProps {
   /** Pembayaran yang menunggu verifikasi; null = tak ada. Komponen tetap terpasang supaya pesan hasil tampil sesudah halaman disegarkan. */
@@ -18,6 +19,7 @@ export function PaymentActions({ payment, billTotal }: PaymentActionsProps) {
   const [error,   setError]   = useState('')
   const [amount,  setAmount]  = useState(String(billTotal))
   const [notes,   setNotes]   = useState('')
+  const [viewing, setViewing] = useState(false) // bukti transfer dilihat di popup, bukan tab baru
   const over = Number(amount) > billTotal
   const under = Number(amount) < billTotal
 
@@ -47,11 +49,12 @@ export function PaymentActions({ payment, billTotal }: PaymentActionsProps) {
     <div className="admin-form-panel">
       <p className="text-sm font-semibold text-admin-ink">Verifikasi Pembayaran</p>
       {payment.hasProof && (
-        <a href={`/api/v1/admin/payments/${payment.id}/bukti`} target="_blank" rel="noopener noreferrer"
-          className="inline-flex items-center gap-1.5 text-[12px] text-admin-accent-strong hover:text-admin-accent-strong font-medium">
-          <ExternalLink className="h-3.5 w-3.5" /> Lihat Bukti Transfer
-        </a>
+        <button type="button" onClick={() => setViewing(true)}
+          className="inline-flex items-center gap-1.5 text-[12px] text-admin-accent-strong hover:underline font-medium">
+          <FileSearch className="h-3.5 w-3.5" /> Lihat Bukti Transfer
+        </button>
       )}
+      {viewing && <FileViewerDialog title="Bukti transfer" endpoint={`/api/v1/admin/payments/${payment.id}/bukti`} onClose={() => setViewing(false)} />}
       <div className="space-y-1.5">
         <label className="block text-[12px] font-medium text-admin-muted" htmlFor="pay-amount">Jumlah diterima (Rp)</label>
         <input id="pay-amount" type="number" min={1} className="admin-inp w-full" value={amount} onChange={e => setAmount(e.target.value)} />
