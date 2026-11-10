@@ -37,7 +37,7 @@
     }
     respond @tolak 405
     respond /minio/* 404
-    # Preview dokumen memakai <iframe> (components/shared/media/PreviewModal.tsx) dari URL presigned, jadi
+    # Preview dokumen memakai <iframe> (components/shared/documents/FileViewerDialog.tsx) dari URL presigned, jadi
     # X-Frame-Options: DENY akan memblokirnya. Hanya aplikasi sendiri yang boleh menyematkan.
     header Content-Security-Policy "frame-ancestors https://{$APP_DOMAIN}"
     request_body {

@@ -96,4 +96,4 @@ export const LABEL_SEGMEN: Record<string, string> = {
 }
 
 /** Segmen yang tidak punya halaman sendiri (hanya folder pengelompok) — di breadcrumb tampil sebagai teks, bukan tautan. */
-export const SEGMEN_TANPA_HALAMAN = new Set(['products', 'system', 'trips', 'vehicles'])
+export const SEGMEN_TANPA_HALAMAN = new Set(['products', 'system', 'trips', 'vehicles', 'pilgrims'])

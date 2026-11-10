@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { getOnboardingState, isOnboardingComplete } from '@/lib/auth/contact'
 import { safeLocale } from '@/lib/utils/locale'
-import { LayoutDashboard, UserRound, UsersRound, Plus } from 'lucide-react'
+import { ClipboardList, LayoutDashboard, UserRound, UsersRound, Plus } from 'lucide-react'
 
 type Props = {
   children: React.ReactNode
@@ -27,6 +27,7 @@ export default async function PilgrimLayout({ children, params }: Props) {
     // Wizard 7-langkah lama dihapus (docs/decisions.md 2026-07-25) — arahkan ke hub katalog
     // publik sampai checkout pengganti per-produk (hotel/muthowif/catering/tourPackage) dibangun.
     { href: `/${locale}`, icon: Plus, label: 'Buat Booking' },
+    { href: `/${locale}/bookings`, icon: ClipboardList, label: 'Booking Saya' },
     { href: `/${locale}/jamaah`, icon: UsersRound, label: 'Jamaah Saya' },
     { href: `/${locale}/profile`, icon: UserRound, label: 'Profil' },
   ]

@@ -3,37 +3,37 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { FolderOpen, Link2, Plus, RefreshCw, Send, Unlink, UserCheck } from 'lucide-react'
+import { AlertCircle, FolderOpen, Link2, Pencil, Plus, Send, Unlink, UserCheck } from 'lucide-react'
 import type { PilgrimReviewStatus } from '@prisma/client'
 import type { PilgrimWarning } from '@/lib/pilgrims/service'
 import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
-import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { checklistState, type ChecklistTone } from '@/lib/documents/checklistLabels'
 import { isReviewLocked, REVIEW_LABEL, REVIEW_TONE } from '@/lib/pilgrims/reviewState'
 import { contactFromStored } from '@/components/shared/ContactPicker'
+import type { AddressValue } from '@/components/shared/AddressPicker'
 import { EMPTY_PILGRIM_FORM, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import { WARNING_TEXT } from '@/components/shared/pilgrims/warningText'
-import { InlinePilgrimForm } from './InlinePilgrimForm'
+import { PilgrimCardDialog } from '@/components/shared/pilgrims/PilgrimCardDialog'
+import { DocumentChecklist, type ChecklistItemView } from '@/components/shared/documents/DocumentChecklist'
 
-// Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot — mengedit kartu
-// kemudian tidak mengubah booking sampai "Perbarui"), checklist kelengkapan (dihitung server), dan dokumen per perjalanan. Paspor/KTP diunggah di kartu.
-export type TripChecklistItem = { key: string; label: string; required: boolean; state: string; sources: string[] }
+// Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot); "Ubah data jamaah"
+// = popup kartu yang sama dengan "Tambah", sesudah disimpan kartu langsung disalin ulang ke booking ini (tak perlu keluar halaman), kelengkapan dokumen (DocumentChecklist: progres + unggah dalam popup, dokumen pribadi ke kartu, dokumen perjalanan ke booking ini).
 
 type Props = {
   locale: string
   bookingId: string
   pilgrimId: string
   linked: { id: string; name: string } | null
-  checklist: TripChecklistItem[]
+  checklist: ChecklistItemView[]
   /** Pemeriksaan petugas (Fase 6): `ready` = dokumen wajib siap (server); `note` = catatan perbaikan terakhir. */
   review: { status: PilgrimReviewStatus; open: boolean; ready: boolean; note: string | null }
   /** Pemesan sebagai jamaah: kartu "Saya sendiri" (bila ada), sudah dipakai di booking ini, dan data akun untuk mengisi kartu baru. */
-  self: { cardId: string | null; usedHere: boolean; fullName: string; email: string; phone: string | null; whatsapp: string | null }
+  self: { cardId: string | null; usedHere: boolean; fullName: string; email: string; phone: string | null; whatsapp: string | null; address: AddressValue | null }
+  /** Kolom data wajib yang masih kosong (`fromCard` = bisa diisi lewat Ubah data jamaah). */
+  missingFields: { label: string; fromCard: boolean }[]
 }
 
-const VARIANT: Record<ChecklistTone, 'success' | 'warning' | 'destructive' | 'muted'> = { ok: 'success', warning: 'warning', danger: 'destructive', neutral: 'muted' }
 const REVIEW_HINT: Record<PilgrimReviewStatus, string> = {
   draft: 'Setelah data dan dokumen lengkap, ajukan untuk diperiksa petugas.',
   submitted: 'Sedang diperiksa petugas. Data jamaah dikunci selama pemeriksaan; mengganti dokumen membuat pemeriksaan diulang.',
@@ -41,16 +41,16 @@ const REVIEW_HINT: Record<PilgrimReviewStatus, string> = {
   verified: 'Data jamaah ini sudah diverifikasi petugas.',
 }
 
-export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checklist, review, self }: Props) {
+export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checklist, review, self, missingFields }: Props) {
   const router = useRouter()
   const [options, setOptions] = useState<AutocompleteOption[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
   const [cardId, setCardId] = useState('')
   const [busy, setBusy] = useState(false)
-  const [confirming, setConfirming] = useState<'refresh' | 'unlink' | null>(null)
+  const [confirming, setConfirming] = useState(false)
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null)
-  const [creating, setCreating] = useState<'new' | 'self' | null>(null)
+  const [creating, setCreating] = useState<'new' | 'self' | 'edit' | null>(null)
   const base = `/api/v1/bookings/${bookingId}/pilgrims/${pilgrimId}`
 
   useEffect(() => {
@@ -68,7 +68,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
 
   /** Mengembalikan pesan galat (null = berhasil). */
   async function call(method: 'PUT' | 'DELETE' | 'POST', body: object | undefined, done: string, path = 'card'): Promise<string | null> {
-    setBusy(true); setNotice(null); setConfirming(null)
+    setBusy(true); setNotice(null); setConfirming(false)
     try {
       const res = await fetch(`${base}/${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       const json = await res.json().catch(() => null)
@@ -94,6 +94,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
   }
   const selfForm = (): SavedPilgrimFormValue => ({
     ...EMPTY_PILGRIM_FORM, fullName: self.fullName, email: self.email, isSelf: true, contact: contactFromStored(self.phone ?? '', self.whatsapp ?? ''),
+    ...(self.address ? { address: self.address } : {}),
   })
 
   const locked = isReviewLocked(review.status)
@@ -107,11 +108,24 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
         <p className="text-sm text-muted-foreground">{REVIEW_HINT[review.status]}</p>
         {review.note && <p className="text-sm text-destructive whitespace-pre-line">{review.note}</p>}
         {review.open && (review.status === 'draft' || review.status === 'needs_revision') && (
-          <Button size="sm" onClick={() => call('POST', undefined, 'Data jamaah diajukan untuk diperiksa.', 'submit')} disabled={busy || !linked || !review.ready}>
+          <Button size="sm" onClick={() => call('POST', undefined, 'Data jamaah diajukan untuk diperiksa.', 'submit')} disabled={busy || !linked || !review.ready || missingFields.length > 0}>
             <Send className="h-4 w-4" /> Ajukan untuk diperiksa
           </Button>
         )}
       </div>
+
+      {linked && missingFields.length > 0 && (
+        <div className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="space-y-2">
+            <p>Data belum lengkap: <span className="font-medium">{missingFields.map(f => f.label).join(', ')}</span>.</p>
+            {missingFields.some(f => f.fromCard) && !locked && (
+              <Button size="sm" variant="outline" onClick={() => { setNotice(null); setCreating('edit') }} disabled={busy}><Pencil className="h-4 w-4" /> Lengkapi sekarang</Button>
+            )}
+            {missingFields.some(f => !f.fromCard) && <p className="text-xs">Kolom selain data jamaah diisi petugas — hubungi kami bila perlu.</p>}
+          </div>
+        </div>
+      )}
 
       {linked ? (
         <div className="space-y-2">
@@ -122,33 +136,17 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
           </div>
           {locked ? null : confirming ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/40 p-3 text-sm">
-              <span>{confirming === 'refresh'
-                ? 'Ganti data jamaah di booking ini dengan isi Jamaah Saya saat ini?'
-                : 'Lepas tautan? Data jamaah di booking ini tetap seperti sekarang.'}</span>
-              <Button size="sm" disabled={busy}
-                onClick={() => confirming === 'refresh'
-                  ? call('PUT', { cardId: linked.id }, 'Data jamaah diperbarui dari Jamaah Saya.')
-                  : call('DELETE', undefined, 'Tautan dilepas.')}>
-                Ya, lanjutkan
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming(null)} disabled={busy}>Batal</Button>
+              <span>Lepas tautan? Data jamaah di booking ini tetap seperti sekarang.</span>
+              <Button size="sm" disabled={busy} onClick={() => call('DELETE', undefined, 'Tautan dilepas.')}>Ya, lepas</Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(false)} disabled={busy}>Batal</Button>
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => setConfirming('refresh')} disabled={busy}><RefreshCw className="h-4 w-4" /> Perbarui dari Jamaah Saya</Button>
-              <Button size="sm" variant="ghost" onClick={() => setConfirming('unlink')} disabled={busy}><Unlink className="h-4 w-4" /> Lepas</Button>
+              <Button size="sm" variant="outline" onClick={() => { setNotice(null); setCreating('edit') }} disabled={busy}><Pencil className="h-4 w-4" /> Ubah data jamaah</Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirming(true)} disabled={busy}><Unlink className="h-4 w-4" /> Lepas</Button>
             </div>
           )}
         </div>
-      ) : creating ? (
-        <InlinePilgrimForm
-          idPrefix={`sp-${pilgrimId}`}
-          title={creating === 'self' ? 'Data Anda sebagai jamaah' : 'Tambah jamaah baru'}
-          initial={creating === 'self' ? selfForm() : EMPTY_PILGRIM_FORM}
-          showSelf={creating === 'new' && !self.cardId}
-          onCancel={() => setCreating(null)}
-          onSaved={linkNew}
-        />
       ) : (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">Pilih data jamaah ini dari Jamaah Saya — data dan dokumennya terisi otomatis.</p>
@@ -163,33 +161,34 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
           </div>
         </div>
       )}
+      {creating === 'edit' && linked && (
+        <PilgrimCardDialog
+          endpoint="/api/v1/account/pilgrims"
+          cardId={linked.id}
+          intro="Perubahan tersimpan di Jamaah Saya dan langsung dipakai untuk booking ini."
+          idPrefix={`sp-${pilgrimId}`}
+          title="Ubah data jamaah"
+          showSelf={!self.cardId || self.cardId === linked.id}
+          saveLabel="Simpan"
+          onClose={() => setCreating(null)}
+          onSaved={(id, warnings) => call('PUT', { cardId: id }, ['Data jamaah diperbarui.', ...warnings.map(w => WARNING_TEXT[w])].join(' '))}
+        />
+      )}
+      {(creating === 'new' || creating === 'self') && (
+        <PilgrimCardDialog
+          endpoint="/api/v1/account/pilgrims"
+          intro="Data ini juga tersimpan di Jamaah Saya, jadi bisa dipakai lagi untuk pesanan berikutnya. Paspor dan KTP diunggah sesudah disimpan."
+          idPrefix={`sp-${pilgrimId}`}
+          title={creating === 'self' ? 'Data Anda sebagai jamaah' : 'Tambah jamaah baru'}
+          initial={creating === 'self' ? selfForm() : EMPTY_PILGRIM_FORM}
+          showSelf={creating === 'new' && !self.cardId}
+          onClose={() => setCreating(null)}
+          onSaved={linkNew}
+        />
+      )}
       {notice && <p className={`text-sm ${notice.error ? 'text-destructive' : 'text-muted-foreground'}`} role="status">{notice.text}</p>}
 
-      {checklist.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-sm font-medium">Kelengkapan dokumen</p>
-          <ul className="grid gap-1.5 sm:grid-cols-2">
-            {checklist.map(c => {
-              const st = checklistState(c.state)
-              return (
-                <li key={c.key} className="flex items-center justify-between gap-2 text-sm">
-                  <span className="min-w-0">
-                    {c.label}{c.required ? '' : ' (opsional)'}
-                    {c.sources.length > 0 && <span className="block text-xs text-muted-foreground">Diminta oleh: {c.sources.join(', ')}</span>}
-                  </span>
-                  <Badge variant={VARIANT[st.tone]}>{st.label}</Badge>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
-      )}
-      {linked && (
-        <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">Dokumen perjalanan ini (tiket, reservasi). Paspor, KTP, dan dokumen pribadi diunggah di Jamaah Saya.</p>
-          <DocumentRepeater endpoint={`${base}/documents`} />
-        </div>
-      )}
+      <DocumentChecklist items={checklist} card={linked} endpoints={linked ? { personal: `/api/v1/account/pilgrims/${linked.id}/documents`, trip: `${base}/documents` } : null} />
     </div>
   )
 }

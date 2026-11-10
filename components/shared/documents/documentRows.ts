@@ -4,7 +4,7 @@ import type { DocumentTypeOption, PilgrimDocumentView } from '@/lib/documents/se
 
 export type DocumentRow =
   | { kind: 'single'; type: DocumentTypeOption; document: PilgrimDocumentView | null }
-  | { kind: 'extra'; type: DocumentTypeOption; document: PilgrimDocumentView }
+  | { kind: 'extra'; type: DocumentTypeOption; document: PilgrimDocumentView; unlisted?: true }
 
 /** Jenis tunggal: satu baris per jenis (terisi/kosong). Jenis boleh-banyak: satu baris per berkas; tambahannya lewat "Tambah dokumen lain". */
 export function documentRows(types: DocumentTypeOption[], documents: PilgrimDocumentView[]): DocumentRow[] {
@@ -14,10 +14,11 @@ export function documentRows(types: DocumentTypeOption[], documents: PilgrimDocu
     if (type.allowMultiple) for (const document of mine) rows.push({ kind: 'extra', type, document })
     else rows.push({ kind: 'single', type, document: mine[0] ?? null })
   }
-  // Berkas jenis yang sudah dinonaktifkan tetap tampil (masih tersimpan & bisa dihapus), di akhir.
+  // Berkas yang jenisnya tak ada di daftar (jenis dinonaktifkan, atau dokumen perjalanan yang tak diminta produk booking ini) tetap tampil
+  // — masih tersimpan & bisa dihapus — di akhir, ditandai `unlisted` (tak bisa diganti, tak diperiksa petugas).
   const known = new Set(types.map(t => t.id))
   for (const document of documents.filter(d => !known.has(d.documentTypeId))) {
-    rows.push({ kind: 'extra', type: { id: document.documentTypeId, key: document.typeKey, label: document.label, icon: 'FileText', hasExpiry: false, minValidityMonths: null, referenceLabel: null, referencePattern: null, allowMultiple: true }, document })
+    rows.push({ kind: 'extra', unlisted: true, type: { id: document.documentTypeId, key: document.typeKey, label: document.label, icon: 'FileText', hasExpiry: false, minValidityMonths: null, referenceLabel: null, referencePattern: null, allowMultiple: true }, document })
   }
   return rows
 }

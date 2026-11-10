@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
-import { ArrowLeft, FileDown, Pencil } from 'lucide-react'
+import { ArrowLeft, FileDown, Pencil, UserCog } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
 import { InvoiceBox } from './InvoiceBox'
 import { RevisionHistory } from './RevisionHistory'
@@ -12,34 +12,32 @@ import { payableBanks } from '@/lib/invoice/banks'
 import type { BankSnapshot } from '@/lib/invoice/issue'
 import type { TaxLine } from '@/lib/invoice/tax'
 import { VisaActions } from './VisaActions'
-import { PilgrimDataForm } from './PilgrimDataForm'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
-import { PilgrimCardPanel } from './PilgrimCardPanel'
 import { PilgrimReviewPanel } from './PilgrimReviewPanel'
 import { reviewHistoryOf } from '@/lib/pilgrims/review'
-import { BOOKING_PILGRIM_SAFE_SELECT, bookingChecklists } from '@/lib/pilgrims/bookingLink'
-import { cardBoundKeys } from '@/lib/manifest/roles'
-import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
-import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
+import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
+import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
+import { PilgrimSlotsTable } from '@/components/shared/pilgrims/PilgrimSlotsTable'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canRecordCost } from '@/lib/pricing/policy'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
-import { DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
+import { DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
 import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
 import { formatRupiah } from '@/lib/utils'
 
-type Props = { params: Promise<{ locale: string; id: string }> }
+type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ periksa?: string }> }
 
-export default async function AdminBookingDetail({ params }: Props) {
+export default async function AdminBookingDetail({ params, searchParams }: Props) {
   const { locale, id } = await params
+  const { periksa } = await searchParams
   const session = await requireAdminPage(locale)
 
   const booking = await prisma.booking.findUnique({
     where: { id },
     include: {
-      user:       { select: { fullName: true, email: true, phone: true } },
+      user:       { select: { fullName: true, email: true, phone: true, whatsapp: true, address: { select: { type: true, fullAddress: true, postalCode: true, provinceId: true, regencyId: true, districtId: true, villageId: true, countryCode: true, city: true, stateRegion: true } } } },
       hotels:     { include: { hotelRoomSchedule: { include: { period: { include: { hotel: true } } } } } },
       transports: { include: { transportQuota: { include: { pricing: { include: { trip: true, vehicle: true } } } } } },
       muthowif:   { include: { muthowif: true } },
@@ -56,27 +54,15 @@ export default async function AdminBookingDetail({ params }: Props) {
   if (!booking) notFound()
   if (booking.status === 'draft') redirect(`/${locale}/admin/bookings/drafts/${id}`) // draf diedit di editor draf (§10.3)
 
-  // Kartu tertaut + kelengkapan dokumen per jamaah (docs/arsitektur-jamaah.md §5.3) — dihitung server, satu kueri per jenis data.
-  const checklists = await bookingChecklists(id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(p => ({
-    id: p.id, savedPilgrimId: p.savedPilgrimId,
-    plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
-  })))
+  // Tabel jamaah (pemilik 2026-11-10): satu pemuat bersama halaman jamaah (lib/pilgrims/slots.ts). Halaman ini MEMERIKSA satu jamaah sekaligus
+  // (`?periksa=<id>`; bawaan = jamaah pertama yang menunggu pemeriksaan); mengubah data/dokumen di halaman Kelola jamaah.
+  const { slots, checklists } = await bookingPilgrimSlots(id, booking.departureDate, booking.pilgrims)
   const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), true, session.userId)
-  const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
-  for (const p of booking.pilgrims) {
-    if (p.visaApplication?.visaProductId) {
-      manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements('visa', p.visaApplication.visaProductId))
-    } else {
-      // docs/arsitektur-booking.md §6 Step 6a — pilgrim tanpa visa (mis. checkout Transport-only)
-      // tetap punya field manifest generik untuk menampilkan nama dkk. — bukan 'Jamaah' fallback.
-      manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))
-    }
-  }
-  function displayName(p: NonNullable<typeof booking>['pilgrims'][number], index: number): string {
-    const fields = manifestFieldsByPilgrim.get(p.id) ?? []
-    const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
-    return typeof name === 'string' && name ? name : `Jamaah ${index + 1}`
-  }
+  const selectedId = booking.pilgrims.some(p => p.id === periksa) ? periksa : booking.pilgrims.find(p => p.reviewStatus === 'submitted')?.id
+  const selected = booking.pilgrims.find(p => p.id === selectedId)
+  const selectedSlot = slots.find(x => x.id === selectedId)
+  const manageHref = (pid: string) => `/${locale}/admin/bookings/${id}/pilgrims/${pid}`
+  const nextEmpty = slots.find(x => !x.filled)
   // Visa per jamaah diringkas: produk + harga satuan sama → satu baris "3 jamaah × Rp … = Rp …" (lib/booking/orderSummary.ts), harga = jual beku berlaku.
   const sells = await itemSellTotals(prisma, booking.id)
   const visaRows = collapseRows(booking.pilgrims.flatMap(p => p.visaApplication
@@ -311,80 +297,64 @@ export default async function AdminBookingDetail({ params }: Props) {
       {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
       <RevisionHistory rows={revisions} />
 
-      {/* Pilgrim list */}
-      <div className="admin-card overflow-hidden">
+      {/* Jamaah: tabel (kelengkapan per slot) + pemeriksaan SATU jamaah terpilih */}
+      <div id="jamaah" className="admin-card overflow-hidden scroll-mt-20">
         <div className="px-5 py-3.5 border-b border-admin-line">
-          <span className="text-[14px] font-bold text-admin-ink">
-            Jamaah ({booking.pilgrims.length} orang)
-          </span>
+          <span className="text-[14px] font-bold text-admin-ink">Jamaah ({booking.pilgrims.length} orang)</span>
         </div>
-        <div className="divide-y divide-admin-line">
-          {booking.pilgrims.map((p, i) => {
-            const visaCfg = VISA_STATUS[p.visaApplication?.status as keyof typeof VISA_STATUS]
-            const check = checklists.get(p.id)
-            const required = (check?.items ?? []).filter(i => i.required)
-            const okCount = required.filter(i => i.state === 'pending' || i.state === 'accepted').length
-            const fields = manifestFieldsByPilgrim.get(p.id) ?? []
-            return (
-              <div key={p.id} className="p-5 space-y-3">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="font-semibold text-admin-ink text-[14px]">{displayName(p, i)}</p>
-                    <p className="text-[11px] text-admin-muted mt-0.5">
-                      {VISA_TYPE_LABEL[p.visaApplication?.visaType ?? ''] ?? '-'}
-                    </p>
-                  </div>
-                  <div className="text-right space-y-1">
-                    <span className={VISA_BADGE[p.visaApplication?.status ?? ''] ?? 'admin-badge-gray'}>
-                      {visaCfg?.label}
-                    </span>
-                    <p className="text-[10.5px] text-admin-muted">
-                      {okCount}/{required.length} dok
-                    </p>
-                  </div>
-                </div>
-
-                <PilgrimCardPanel
-                  locale={locale}
-                  bookingId={id}
-                  pilgrimId={p.id}
-                  customerId={booking.userId}
-                  linked={check?.card ?? null}
-                  checklist={(check?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state, sources: i.sources ?? [] }))}
-                />
-
-                <PilgrimReviewPanel
-                  bookingId={id}
-                  pilgrimId={p.id}
-                  status={p.reviewStatus}
-                  active={booking.status === 'active'}
-                  linked={!!p.savedPilgrimId}
-                  documents={(check?.documents ?? []).map(d => ({ ...d, requirementState: check?.items.find(i => i.documentTypeId === d.documentTypeId)?.state ?? null }))}
-                  history={reviewHistory.get(p.id) ?? []}
-                />
-
-                <PilgrimDataForm
-                  key={JSON.stringify(p.fieldValues)}
-                  bookingId={id}
-                  pilgrimId={p.id}
-                  cardBound={p.savedPilgrimId ? cardBoundKeys(fields) : []}
-                  fields={fields.map(f => ({ id: f.id, fieldKey: f.fieldKey, label: f.label, fieldType: f.fieldType, options: f.options, required: f.required, role: f.role, order: f.order }))}
-                  initial={p.fieldValues as Record<string, unknown>}
-                  plannedTravelDate={p.visaApplication ? (p.visaApplication.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null) : undefined}
-                />
-
-                {p.visaApplication && (
-                  <VisaActions
-                    pilgrimId={p.id}
-                    visaAppId={p.visaApplication.id}
-                    currentStatus={p.visaApplication.status}
-                  />
-                )}
-              </div>
-            )
-          })}
+        <div className="p-5">
+          <PilgrimSlotsTable
+            total={slots.length}
+            slots={slots.map(x => ({ ...x, editHref: manageHref(x.id), viewHref: `/${locale}/admin/bookings/${id}?periksa=${x.id}#periksa` }))}
+            addHref={booking.status === 'active' && nextEmpty ? manageHref(nextEmpty.id) : null}
+            deleteEndpoint={booking.status === 'active' ? `/api/v1/admin/bookings/${id}/pilgrims/{id}` : null}
+          />
         </div>
       </div>
+
+      {selected && selectedSlot ? (() => {
+        const check = checklists.get(selected.id)
+        const visaCfg = VISA_STATUS[selected.visaApplication?.status as keyof typeof VISA_STATUS]
+        return (
+          <div id="periksa" className="admin-card overflow-hidden scroll-mt-20">
+            <div className="flex flex-wrap items-start justify-between gap-3 border-b border-admin-line px-5 py-3.5">
+              <div>
+                <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">Pemeriksaan jamaah {selectedSlot.no} dari {slots.length}</p>
+                <p className="m-0 mt-0.5 text-[14px] font-bold text-admin-ink">{selectedSlot.name ?? `Jamaah ${selectedSlot.no}`}</p>
+                <p className="m-0 mt-0.5 text-[11px] text-admin-muted">{selected.visaApplication?.visaProduct?.name ?? VISA_TYPE_LABEL[selected.visaApplication?.visaType ?? ''] ?? 'Tanpa visa'}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {visaCfg && <span className={VISA_BADGE[selected.visaApplication?.status ?? ''] ?? 'admin-badge-gray'}>{visaCfg.label}</span>}
+                {/* Halaman ini untuk MEMERIKSA; mengubah kartu/data/dokumen di halaman Kelola jamaah (per jamaah — pemilik 2026-11-10). */}
+                <Link href={manageHref(selected.id)} className="admin-btn-sm inline-flex items-center gap-1.5">
+                  <UserCog className="h-3.5 w-3.5" /> Kelola data &amp; dokumen
+                </Link>
+              </div>
+            </div>
+            <div className="space-y-3 p-5">
+              <PilgrimReviewPanel
+                key={selected.id}
+                bookingId={id}
+                pilgrimId={selected.id}
+                status={selected.reviewStatus}
+                active={booking.status === 'active'}
+                linked={!!selected.savedPilgrimId}
+                documents={(check?.documents ?? []).map(d => ({ ...d, requirementState: check?.items.find(i => i.documentTypeId === d.documentTypeId)?.state ?? null }))}
+                history={reviewHistory.get(selected.id) ?? []}
+                data={selectedSlot.rows}
+                requirements={(check?.items ?? []).map(i => ({ documentTypeId: i.documentTypeId, label: i.label, required: i.required, reusable: i.reusable }))}
+              />
+              {selected.visaApplication && (
+                <VisaActions pilgrimId={selected.id} visaAppId={selected.visaApplication.id} currentStatus={selected.visaApplication.status} />
+              )}
+            </div>
+          </div>
+        )
+      })() : (
+        <p className="m-0 rounded-xl border border-dashed border-admin-line px-5 py-4 text-[13px] text-admin-muted">
+          Pilih ikon <span className="font-semibold text-admin-ink">Lihat</span> pada tabel jamaah untuk memeriksa data dan dokumennya.
+        </p>
+      )}
     </div>
   )
 }

@@ -5,75 +5,42 @@ import { getSession } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
 import { billOf, billSelect } from '@/lib/invoice/bill'
-import { Plus, FileText } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
+import { ArrowRight, CheckCircle, ClipboardList, FileText, Plus, UsersRound, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { BOOKING_STATUS } from '@/lib/constants/booking'
-import { STATUS_FILTERS, displayStatusOf, statusSelect, statusWhere, type StatusFilter } from '@/lib/booking/lifecycle'
-import type { BookingStatus, Prisma } from '@prisma/client'
-import { buildListHref, paginate, parseListParams } from '@/lib/table/pagination'
-import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
-import { FilterBar } from '@/components/shared/data-table/FilterBar'
-import { FilterSelect } from '@/components/shared/data-table/FilterSelect'
-import { Pagination } from '@/components/shared/data-table/Pagination'
-import { ActionLink, RowActions } from '@/components/shared/data-table/RowActions'
+import { bookingWhere, displayStatusOf, statusSelect } from '@/lib/booking/lifecycle'
 import { formatCalendarDate } from '@/lib/time'
+import type { Prisma } from '@prisma/client'
 
-type Props = {
-  params: Promise<{ locale: string }>
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}
+type Props = { params: Promise<{ locale: string }> }
 
-type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } }; payments: { select: { id: true } }; invoice: { select: { taxAddedIdr: true; taxIncludedIdr: true } } } }>
+// Dashboard jamaah: "Perlu tindakan" — booking aktif yang menunggu pembayaran atau jamaahnya belum diajukan/perlu perbaikan, masing-masing
+// bertaut langsung ke bagian booking yang harus dikerjakan (#pembayaran / #data-jamaah). Daftar lengkap ada di Booking Saya (/bookings).
+const ACTION_LIMIT = 5
 
-// Draf adalah urusan admin (belum diterbitkan) — tak pernah tampil ke jamaah, juga bukan pilihan filter.
-const PILGRIM_STATUS_FILTERS = STATUS_FILTERS.filter(s => s !== 'draft')
-const isPilgrimFilter = (v: string | undefined): v is StatusFilter => !!v && (PILGRIM_STATUS_FILTERS as readonly string[]).includes(v)
-
-export default async function DashboardPage({ params, searchParams }: Props) {
+export default async function DashboardPage({ params }: Props) {
   const { locale } = await params
-  const sp = await searchParams
-  const list = parseListParams(sp, 10)
-  const rawStatus = typeof sp.status === 'string' ? sp.status : undefined
-  const status = isPilgrimFilter(rawStatus) ? rawStatus : undefined
   const session = await getSession()
   if (!session) redirect(`/${safeLocale(locale)}/login`)
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.userId },
-    select: { fullName: true, email: true, phone: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true },
-  })
-
-  // Jumlah SELURUH booking pemilik (tanpa filter) menentukan tampilan "belum ada booking"; daftar sendiri berpaginasi + filter status.
-  const ownBookings = await prisma.booking.count({ where: { userId: session.userId, status: { not: 'draft' } } })
-  const where: Prisma.BookingWhereInput = { userId: session.userId, status: { not: 'draft' }, ...(status ? { AND: [statusWhere(status)] } : {}) }
-  const { items: bookings, meta } = await paginate<BookingRow>(
-    list,
-    () => prisma.booking.count({ where }),
-    range => prisma.booking.findMany({
-      where,
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: createdAt bisa kembar, halaman harus stabil
-      include: { _count: { select: { pilgrims: true } }, payments: statusSelect.payments, invoice: billSelect.invoice },
-      ...range,
+  const pendingPilgrims: Prisma.BookingPilgrimWhereInput = { reviewStatus: { in: ['draft', 'needs_revision'] } }
+  const [user, ownBookings, actions] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: session.userId },
+      select: { fullName: true, email: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true },
     }),
-  )
-
-  const base = `/${locale}/dashboard`
-  const limitParam = sp.limit === undefined ? undefined : String(list.limit)
-  const columns: Column<BookingRow>[] = [
-    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
-    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{b.departureDate ? formatCalendarDate(b.departureDate) : '-'}</span> },
-    { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{b._count.pilgrims} jamaah</span> },
-    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
-    {
-      key: 'status', header: 'Status',
-      cell: b => {
-        const cfg = BOOKING_STATUS[displayStatusOf(b)]
-        return <Badge variant={cfg.badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>{cfg.label}</Badge>
+    prisma.booking.count({ where: { userId: session.userId, status: { not: 'draft' } } }),
+    prisma.booking.findMany({
+      where: { userId: session.userId, status: 'active', OR: [bookingWhere.awaiting_payment, { pilgrims: { some: pendingPilgrims } }] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: ACTION_LIMIT,
+      select: {
+        id: true, bookingCode: true, totalAmount: true, ...statusSelect, invoice: billSelect.invoice,
+        pilgrims: { where: pendingPilgrims, select: { reviewStatus: true } },
       },
-    },
-    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
-  ]
+    }),
+  ])
+
+  const href = (id: string, part: string) => `/${locale}/bookings/${id}#${part}`
 
   return (
     <div className="space-y-8">
@@ -85,22 +52,16 @@ export default async function DashboardPage({ params, searchParams }: Props) {
         </div>
       )}
 
-      {/* Greeting */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">Selamat datang, {user?.fullName?.split(' ')[0] ?? 'Jamaah'}</h1>
           <p className="text-muted-foreground">{user?.email}</p>
         </div>
         <Button asChild>
-          {/* Wizard 7-langkah lama dihapus (docs/decisions.md 2026-07-25) — arahkan ke hub
-              katalog publik sampai checkout pengganti per-produk dibangun. */}
-          <Link href={`/${locale}`}>
-            <Plus className="mr-2 h-4 w-4" /> Buat Booking Baru
-          </Link>
+          <Link href={`/${locale}`}><Plus className="mr-2 h-4 w-4" /> Buat Booking Baru</Link>
         </Button>
       </div>
 
-      {/* Booking list */}
       {ownBookings === 0 ? (
         <div className="rounded-xl border border-dashed p-12 text-center space-y-4">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-muted">
@@ -110,23 +71,55 @@ export default async function DashboardPage({ params, searchParams }: Props) {
             <p className="font-semibold">Belum ada booking</p>
             <p className="text-sm text-muted-foreground mt-1">Mulai rencanakan perjalanan umrah Anda</p>
           </div>
-          <Button asChild>
-            {/* Wizard 7-langkah lama dihapus (docs/decisions.md 2026-07-25) — arahkan ke hub
-              katalog publik sampai checkout pengganti per-produk dibangun. */}
-          <Link href={`/${locale}`}>Buat Booking Pertama</Link>
-          </Button>
+          <Button asChild><Link href={`/${locale}`}>Buat Booking Pertama</Link></Button>
         </div>
       ) : (
-        <div className="space-y-3">
-          <h2 className="text-lg font-semibold">Riwayat Booking</h2>
-          <FilterBar active={Boolean(status)} resetHref={buildListHref(base, { limit: limitParam })}>
-            <FilterSelect label="Status" value={status ?? ''} options={Object.entries(BOOKING_STATUS).filter(([value]) => value !== 'draft').map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: { limit: limitParam } }} />
-          </FilterBar>
-          <DataTable
-            columns={columns} rows={bookings} getRowId={b => b.id} empty="Tidak ada booking dengan status ini."
-            footer={meta.total > 0 ? <Pagination {...meta} hrefFor={page => buildListHref(base, { status, limit: limitParam, page })} /> : undefined}
-          />
-        </div>
+        <section className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-lg font-semibold"><ClipboardList className="h-5 w-5" /> Perlu tindakan</h2>
+            <Link href={`/${locale}/bookings`} className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+              Semua booking ({ownBookings}) <ArrowRight className="h-4 w-4" />
+            </Link>
+          </div>
+          {actions.length === 0 ? (
+            <div className="flex items-center gap-3 rounded-xl border p-4 text-sm text-muted-foreground">
+              <CheckCircle className="h-5 w-5 shrink-0 text-emerald-600" /> Tidak ada yang perlu dikerjakan sekarang. Status booking bisa dilihat di Booking Saya.
+            </div>
+          ) : (
+            <ul className="space-y-3">
+              {actions.map(b => {
+                const unpaid = displayStatusOf(b) === 'awaiting_payment'
+                const revise = b.pilgrims.filter(p => p.reviewStatus === 'needs_revision').length
+                const incomplete = b.pilgrims.length - revise
+                return (
+                  <li key={b.id} className="rounded-xl border p-4 space-y-3">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-sm font-bold text-primary hover:underline">{b.bookingCode}</Link>
+                      <span className="text-xs text-muted-foreground">{b.departureDate ? `Berangkat ${formatCalendarDate(b.departureDate)}` : 'Tanggal menyusul'}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {unpaid && (
+                        <Button asChild size="sm">
+                          <Link href={href(b.id, 'pembayaran')}><Wallet className="h-4 w-4" /> Bayar {formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</Link>
+                        </Button>
+                      )}
+                      {revise > 0 && (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={href(b.id, 'data-jamaah')}><UsersRound className="h-4 w-4" /> {revise} jamaah perlu diperbaiki</Link>
+                        </Button>
+                      )}
+                      {incomplete > 0 && (
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={href(b.id, 'data-jamaah')}><UsersRound className="h-4 w-4" /> Lengkapi data {incomplete} jamaah</Link>
+                        </Button>
+                      )}
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </section>
       )}
     </div>
   )

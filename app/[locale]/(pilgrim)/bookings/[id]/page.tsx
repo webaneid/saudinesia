@@ -16,14 +16,12 @@ import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, L
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
-import { BOOKING_STATUS, VISA_STATUS } from '@/lib/constants/booking'
+import { BOOKING_STATUS } from '@/lib/constants/booking'
 import { getPaymentConfig } from '@/lib/constants/payment'
-import { BOOKING_PILGRIM_SAFE_SELECT, bookingChecklists } from '@/lib/pilgrims/bookingLink'
-import { PilgrimTripPanel } from './PilgrimTripPanel'
-import { reviewHistoryOf } from '@/lib/pilgrims/review'
-import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
-import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
-import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, calendarDateOf, formatCalendarDate, formatInstant } from '@/lib/time'
+import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
+import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
+import { PilgrimSlotsTable } from '@/components/shared/pilgrims/PilgrimSlotsTable'
+import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ baru?: string }> }
 
@@ -63,38 +61,12 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
-  // Kartu tertaut + kelengkapan dokumen per jamaah — aturan yang sama dengan halaman admin (lib/pilgrims/bookingLink.ts → evaluateCompleteness).
-  const checklists = await bookingChecklists(booking.id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(p => ({
-    id: p.id, savedPilgrimId: p.savedPilgrimId,
-    plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
-  })))
-  // Catatan perbaikan terakhir dari petugas (Fase 6) — nama petugas tidak dikirim ke pemesan.
-  const reviewHistory = await reviewHistoryOf(booking.pilgrims.map(p => p.id), false)
-  const manifestFieldsByPilgrim = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
-  for (const p of booking.pilgrims) {
-    if (p.visaApplication?.visaProductId) {
-      manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements('visa', p.visaApplication.visaProductId))
-    } else {
-      // docs/arsitektur-booking.md §6 Step 6a — pilgrim tanpa visa (mis. checkout Transport-only)
-      // tetap punya field manifest generik untuk menampilkan nama dkk. — bukan 'Jamaah' fallback.
-      manifestFieldsByPilgrim.set(p.id, await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))
-    }
-  }
-  function displayName(p: NonNullable<typeof booking>['pilgrims'][number], index: number): string {
-    const fields = manifestFieldsByPilgrim.get(p.id) ?? []
-    const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
-    return typeof name === 'string' && name ? name : `Jamaah ${index + 1}`
-  }
-  // Pemesan sebagai jamaah: kartu "Saya sendiri" (dibaca saja — kartu ditulis hanya lib/pilgrims/service.ts) + data akun untuk mengisi kartu baru.
-  const [account, selfCard] = await Promise.all([
-    prisma.user.findUnique({ where: { id: session.userId }, select: { fullName: true, email: true, phone: true, whatsapp: true } }),
-    prisma.savedPilgrim.findFirst({ where: { selfOfUserId: session.userId, archivedAt: null }, select: { id: true } }),
-  ])
-  const self = {
-    cardId: selfCard?.id ?? null,
-    usedHere: !!selfCard && booking.pilgrims.some(p => p.savedPilgrimId === selfCard.id),
-    fullName: account?.fullName ?? '', email: account?.email ?? '', phone: account?.phone ?? null, whatsapp: account?.whatsapp ?? null,
-  }
+  // Tabel jamaah (pemilik 2026-11-10): kelengkapan per slot dihitung SATU pemuat yang sama dengan admin (lib/pilgrims/slots.ts); isi/edit per jamaah
+  // di halaman bookings/[id]/jamaah/[pilgrimId]. Hanya booking aktif yang bisa diisi/dikosongkan.
+  const { slots } = await bookingPilgrimSlots(booking.id, booking.departureDate, booking.pilgrims)
+  const open = booking.status === 'active'
+  const jamaahHref = (pid: string) => `/${locale}/bookings/${booking.id}/jamaah/${pid}`
+  const nextEmpty = slots.find(x => !x.filled)
 
   const day = (d: Date) => formatCalendarDate(d, DATE_NUMERIC)
   // Satu baris per item; baris identik (mis. visa yang sama untuk tiap jamaah) digabung jadi rumus "3 jamaah × Rp …" (lib/booking/orderSummary.ts).
@@ -215,38 +187,13 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
         <h3 className="font-semibold flex items-center gap-2">
           <UserRound className="h-4 w-4 text-primary" /> Data & Dokumen Jamaah
         </h3>
-        {booking.pilgrims.map((p, i) => (
-          <div key={p.id} className="rounded-xl border bg-card p-5 space-y-4">
-            <div className="flex items-center justify-between text-sm">
-              <div>
-                <p className="font-medium">{displayName(p, i)}</p>
-                <p className="text-muted-foreground capitalize">{p.visaApplication?.visaType ?? ''}</p>
-              </div>
-              {/* Jamaah tanpa visa (Transport/Haji) tak punya status visa — lencana kosong tidak ditampilkan. */}
-              {p.visaApplication && (
-                <Badge variant={
-                  (VISA_STATUS[p.visaApplication.status as keyof typeof VISA_STATUS]?.badge ?? 'secondary') as
-                  'success' | 'warning' | 'secondary' | 'destructive' | 'muted'
-                }>
-                  {VISA_STATUS[p.visaApplication.status as keyof typeof VISA_STATUS]?.label ?? p.visaApplication.status}
-                </Badge>
-              )}
-            </div>
-            {/* Data & dokumen dari Jamaah Saya + dokumen per perjalanan (docs/arsitektur-jamaah.md §5.5). */}
-            <PilgrimTripPanel
-              locale={safeLocale(locale)} bookingId={booking.id} pilgrimId={p.id}
-              linked={checklists.get(p.id)?.card ?? null}
-              checklist={(checklists.get(p.id)?.items ?? []).map(i => ({ key: i.key, label: i.label, required: i.required, state: i.state, sources: i.sources ?? [] }))}
-              review={{
-                status: p.reviewStatus,
-                open: booking.status === 'active',
-                ready: checklists.get(p.id)?.ready ?? false,
-                note: p.reviewStatus === 'needs_revision' ? (reviewHistory.get(p.id)?.find(h => h.to === 'needs_revision')?.note ?? null) : null,
-              }}
-              self={self}
-            />
-          </div>
-        ))}
+        <p className="text-sm text-muted-foreground">Isi satu per satu: data diri dan dokumen tiap jamaah, lalu ajukan untuk diperiksa petugas.</p>
+        <PilgrimSlotsTable
+          total={slots.length}
+          slots={slots.map(x => ({ ...x, editHref: jamaahHref(x.id) }))}
+          addHref={open && nextEmpty ? jamaahHref(nextEmpty.id) : null}
+          deleteEndpoint={open ? `/api/v1/bookings/${booking.id}/pilgrims/{id}` : null}
+        />
       </div>
 
     </div>

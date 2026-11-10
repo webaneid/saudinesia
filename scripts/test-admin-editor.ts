@@ -17,6 +17,17 @@ const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'pro
 const fileOf = (e: string) => ADMIN + (e.endsWith('.tsx') ? e : e + '/page.tsx')
 // EditPage tanpa foto (entitas tak bergambar — dokumen jamaah menyusul Fase 4 jamaah sebagai kotak sendiri).
 const EDITPAGE_NO_MEDIA_PAGES = ['customers/[id]/pilgrims/[cardId]']
+// Halaman kelola server (EditorShell + MetaBox) yang setiap kotaknya komponen yang menyimpan sendiri — tanpa satu tombol Simpan (PublishBox).
+const PANEL_PAGES = ['bookings/[id]/pilgrims/[pilgrimId]']
+
+await t('halaman kelola berkotak: EditorShell + MetaBox (lewat pembungkus klien ManageBox — ikon tak bisa dikirim server→klien), penjaga halaman admin', () => {
+  for (const e of PANEL_PAGES) {
+    const src = read(fileOf(e))
+    for (const c of ['EditorShell', 'ManageBox']) assert.match(src, new RegExp(`<${c}\\b`), `${e}: tidak memakai <${c}>`)
+    assert.match(read(ADMIN + e + '/ManageBox.tsx'), /<MetaBox\b/, `${e}: ManageBox harus membungkus MetaBox`)
+    assert.match(src, /requireAdminPage\(/, `${e}: tanpa requireAdminPage`)
+  }
+})
 
 await t('halaman bespoke memakai EditorShell + PublishBox + MetaBox + useUnsavedGuard + useDirtyForm/baseline', () => {
   for (const e of SHELL_PAGES) {
@@ -54,7 +65,7 @@ await t('EditPage = EditorShell + PublishBox + DeleteBox; tidak ada panel terseb
 })
 
 await t('halaman edit tidak kembali ke panel tersebar (kartu komponen manual)', () => {
-  for (const e of [...SHELL_PAGES, ...EDITPAGE_PAGES, ...EDITPAGE_NO_MEDIA_PAGES]) {
+  for (const e of [...SHELL_PAGES, ...EDITPAGE_PAGES, ...EDITPAGE_NO_MEDIA_PAGES, ...PANEL_PAGES]) {
     const src = read(fileOf(e))
     assert.doesNotMatch(src, /className="admin-card p-4 space-y-3"/, `${e}: kartu komponen manual — pakai MetaBox`)
     assert.doesNotMatch(src, /<ArrowLeft\b/, `${e}: tombol kembali ad-hoc — EditorShell menyediakannya`)

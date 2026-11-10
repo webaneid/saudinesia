@@ -155,6 +155,25 @@ export function unlinkCard(actor: Actor, bookingId: string, bookingPilgrimId: st
   })
 }
 
+/** KOSONGKAN slot jamaah (aksi "Hapus" di tabel jamaah, pemilik 2026-11-10): lepas kartu DAN hapus isian + segel NIK/paspor — slot tetap ada
+ *  karena jumlah jamaah terikat ke tagihan (mengurangi orang = revisi booking oleh admin). Aturan kunci sama dengan lepas: ditolak selama
+ *  diajukan/terverifikasi dan bila kartu masih memegang dokumen perjalanan booking ini (dokumen dihapus dulu, tidak diam-diam). */
+export function clearSlot(actor: Actor, bookingId: string, bookingPilgrimId: string): Promise<LinkResult> {
+  return run(actor, async (tx) => {
+    const bp = await lockBookingPilgrim(tx, actor, bookingId, bookingPilgrimId)
+    if (bp.savedPilgrimId) await refuseTripDocs(tx, bookingId, bp.savedPilgrimId)
+    await tx.bookingPilgrim.update({
+      where: { id: bookingPilgrimId },
+      data: {
+        savedPilgrimId: null, identityId: null, fieldValues: {},
+        nikHash: null, nikCipher: null, passportCountry: null, passportKeyHash: null, passportCipher: null, passportLast4: null,
+      },
+      select: { id: true },
+    })
+    return { ok: true, savedPilgrimId: null, fieldValues: {} }
+  })
+}
+
 // ── Isian manual NIK/paspor (formulir data jamaah) ─────────────────────────────────────────────────────────────────────────────────────
 
 type SealedColumns = Partial<Record<'nikHash' | 'nikCipher' | 'passportCountry' | 'passportKeyHash' | 'passportCipher' | 'passportLast4', string | null>>

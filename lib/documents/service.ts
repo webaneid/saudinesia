@@ -4,6 +4,7 @@ import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { lockCardOwner, type Actor } from '@/lib/pilgrims/service'
 import { reopenForChangedDocument } from '@/lib/pilgrims/review'
+import { pilgrimRequirements } from './requirements'
 import { calendarDateOf, dbDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import type { DocumentUploadFields } from '@/lib/validators/documents'
 import { DocumentFileRejected, prepareDocumentFile } from './file'
@@ -67,6 +68,7 @@ const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 const allowed = (actor: Actor, ownerId: string) => actor.userId === ownerId || isStaff(actor)
 const notFound = (): DocServiceError => ({ ok: false, status: 404, error: 'Data jamaah tidak ditemukan' })
 const bad = (error: string, field?: string): DocServiceError => ({ ok: false, status: 400, error, ...(field ? { field } : {}) })
+const notRequired = (): DocServiceError => bad('Dokumen ini tidak diminta untuk booking ini', 'documentTypeId')
 
 class Abort extends Error {
   constructor(readonly result: DocServiceError) { super(result.error) }
@@ -76,9 +78,27 @@ class Abort extends Error {
 export type DocScope = { bookingId: string | null }
 const CARD_SCOPE: DocScope = { bookingId: null }
 
-/** Jenis yang bisa diunggah di cakupan itu (aktif; milik orang untuk kartu, per perjalanan untuk booking), urut katalog. */
-export function uploadableTypes(scope: DocScope = CARD_SCOPE): Promise<DocumentTypeOption[]> {
-  return prisma.documentType.findMany({ where: { isActive: true, reusable: scope.bookingId === null }, select: typeSelect, orderBy: [{ order: 'asc' }, { label: 'asc' }, { id: 'asc' }] })
+const typeOrder = [{ order: 'asc' }, { label: 'asc' }, { id: 'asc' }] satisfies Prisma.DocumentTypeOrderByWithRelationInput[]
+
+/** Jenis milik orang (kartu Jamaah Saya — dipakai lintas booking, jadi semua jenis aktif), urut katalog. */
+export function uploadableTypes(): Promise<DocumentTypeOption[]> {
+  return prisma.documentType.findMany({ where: { isActive: true, reusable: true }, select: typeSelect, orderBy: typeOrder })
+}
+
+/** Jenis dokumen PERJALANAN yang DIMINTA produk jamaah booking yang menautkan kartu ini (pilgrimRequirements: Paket → Haji → Visa) —
+ *  sumber yang SAMA dengan daftar periksa jamaah dan pemeriksaan petugas, supaya yang bisa diunggah = yang diperiksa (pemilik 2026-11-10). */
+async function tripTypeIds(db: Prisma.TransactionClient | typeof prisma, bookingId: string, cardId: string): Promise<Set<string> | null> {
+  const bps = await db.bookingPilgrim.findMany({ where: { bookingId, savedPilgrimId: cardId }, select: { id: true } })
+  if (bps.length === 0) return null // kartu tak tertaut ke booking ini → 404 (sama dengan lockTripScope), bukan "tak diminta"
+  const reqs = await pilgrimRequirements(db, bps.map(b => b.id))
+  return new Set([...reqs.values()].flat().filter(r => !r.reusable).map(r => r.documentTypeId))
+}
+
+/** Jenis yang bisa diunggah per perjalanan: hanya syarat produk (aktif), urut katalog. */
+export async function tripUploadableTypes(bookingId: string, cardId: string): Promise<DocumentTypeOption[]> {
+  const ids = await tripTypeIds(prisma, bookingId, cardId)
+  if (!ids || ids.size === 0) return []
+  return prisma.documentType.findMany({ where: { id: { in: [...ids] }, isActive: true, reusable: false }, select: typeSelect, orderBy: typeOrder })
 }
 
 /** Dokumen kartu milik `ownerId`; `null` = bukan haknya / kartu tidak ada (404 yang sama). */
@@ -155,6 +175,11 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
     if (limited) return limited
     const type = await prisma.documentType.findFirst({ where: { id: fields.documentTypeId, isActive: true, reusable: scope.bookingId === null }, select: typeSelect })
     if (!type) return bad('Jenis dokumen tidak tersedia', 'documentTypeId')
+    if (scope.bookingId !== null) {
+      const ids = await tripTypeIds(prisma, scope.bookingId, cardId)
+      if (!ids) return notFound()
+      if (!ids.has(type.id)) return notRequired()
+    }
     const checked = checkUploadFields(type, fields)
     if ('ok' in checked) return checked
     // Pemeriksaan murah sebelum memproses berkas (yang otoritatif diulang di dalam kunci).
@@ -179,6 +204,8 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
       const row = await prisma.$transaction(async (tx) => {
         await lockCard(tx, actor, ownerId, cardId)
         await lockTripScope(tx, ownerId, cardId, scope)
+        // Diperiksa ulang di dalam kunci: syarat bisa berubah (revisi booking) sejak pemeriksaan murah di atas.
+        if (scope.bookingId !== null && !(await tripTypeIds(tx, scope.bookingId, cardId))?.has(type.id)) throw new Abort(notRequired())
         if (!type.allowMultiple) {
           const old = await tx.pilgrimDocument.findMany({ where: { savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: type.id }, select: { id: true, objectKey: true } })
           replaced = old.map(o => o.objectKey)

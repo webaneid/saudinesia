@@ -11,8 +11,8 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { __resetForTests } from '@/lib/auth/rateLimit'
 import { createSavedPilgrim, type Actor } from '@/lib/pilgrims/service'
-import { bookingChecklists, linkCard, pilgrimBookingState, sealManualPii, sealNewPilgrim, tripScopeOf, unlinkCard } from '@/lib/pilgrims/bookingLink'
-import { createDocumentService, listCardDocuments } from '@/lib/documents/service'
+import { bookingChecklists, clearSlot, linkCard, pilgrimBookingState, sealManualPii, sealNewPilgrim, tripScopeOf, unlinkCard } from '@/lib/pilgrims/bookingLink'
+import { createDocumentService, listCardDocuments, tripUploadableTypes } from '@/lib/documents/service'
 import type { DocumentStorage } from '@/lib/documents/storage'
 import { writeRequirements } from '@/lib/documents/requirements'
 import { MANIFEST_ROLES, snapshotFromCard } from '@/lib/manifest/roles'
@@ -104,6 +104,7 @@ const pdf = Buffer.from('%PDF-1.4\n1 0 obj << /Type /Catalog /Pages 2 0 R >> end
 const cardA = await makeCard(owner, staff, { birthDate: '1985-07-15', nik: NIK, passport: { number: PASSPORT, expiry: '2030-01-01' } })
 const bk = await makeBooking(owner)
 const [p1, p2] = bk.pilgrims as [string, string]
+const randomUUIDLike = () => '00000000-0000-4000-8000-000000000000'
 
 await t('TAUTKAN: hanya field berperan diisi dari kartu (field bebas tetap), NIK/paspor tersamar di snapshot, segel disalin apa adanya', async () => {
   const r = await linkCard(staff, bk.id, p1, cardA)
@@ -167,6 +168,12 @@ await t('DOKUMEN PERJALANAN: jenis reusable (paspor) ditolak; tiket diterima men
   const scope = { bookingId: bk.id }
   const bad = await svc.upload(staff, owner.userId, cardA, { documentTypeId: types.passport!.id }, pdf, scope)
   assert.equal(!bad.ok && bad.status, 400, 'jenis milik orang tak boleh diunggah per perjalanan')
+  // Yang bisa diunggah = syarat produk saja (sama dengan yang diperiksa petugas): visa ini hanya meminta tiket.
+  assert.deepEqual((await tripUploadableTypes(bk.id, cardA)).map(x => x.key), ['flight_ticket'])
+  assert.deepEqual(await tripUploadableTypes(bk.id, randomUUIDLike()), [], 'kartu tak tertaut → tak ada jenis')
+  const unrequired = await svc.upload(staff, owner.userId, cardA, { documentTypeId: types.hotel_reservation!.id }, pdf, scope)
+  assert.equal(!unrequired.ok && unrequired.status, 400, 'jenis perjalanan yang tak diminta produk ditolak')
+  assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: cardA, documentTypeId: types.hotel_reservation!.id } }), 0)
   const ok = await svc.upload(staff, owner.userId, cardA, { documentTypeId: types.flight_ticket!.id, referenceCode: 'ABC123' }, pdf, scope)
   assert.ok(ok.ok, JSON.stringify(ok))
   const doc = await prisma.pilgrimDocument.findUniqueOrThrow({ where: { id: ok.ok ? ok.document.id : '' } })
@@ -219,6 +226,37 @@ await t('JAMAAH BARU (checkout/booking admin): NIK/paspor disegel sebelum dituli
   assert.ok(plain.ok && plain.columns.passportCountry === 'ID', 'kebangsaan bukan kode ISO → ID')
   const bad = await prisma.$transaction(tx => sealNewPilgrim(tx, visa.id, { nik: '123' }))
   assert.ok(!bad.ok && 'nik' in bad.errors)
+})
+
+await t('KOSONGKAN SLOT (Hapus di tabel jamaah): kartu dilepas + isian + segel NIK/paspor dihapus, slot tetap; dokumen perjalanan / diperiksa → 409; akun lain → 404', async () => {
+  const b = await makeBooking(owner, 1)
+  const pid = b.pilgrims[0]!
+  const card = await makeCard(owner, owner)
+  assert.ok((await linkCard(owner, b.id, pid, card)).ok)
+  // Kartu uji tanpa NIK: segel diisi langsung supaya terbukti ikut dikosongkan.
+  const sealed = await sealManualPii([{ fieldKey: 'nik', label: 'NIK', role: 'nik' }, { fieldKey: 'passportNumber', label: 'Paspor', role: 'passport_number' }], { nik: NIK, passportNumber: 'C7654321' }, 'ID')
+  assert.ok(sealed.ok)
+  if (sealed.ok) await prisma.bookingPilgrim.update({ where: { id: pid }, data: sealed.columns })
+  assert.ok((await row(pid)).nikCipher, 'segel terisi sebelum dikosongkan')
+  assert.ok(Object.keys((await row(pid)).fieldValues as object).length > 0, 'tertaut → isian terisi dari kartu')
+  assert.equal(!(await clearSlot(other, b.id, pid)).ok && (await clearSlot(other, b.id, pid) as { status: number }).status, 404, 'booking akun lain')
+  const doc = await svc.upload(owner, owner.userId, card, { documentTypeId: types.flight_ticket!.id, referenceCode: 'ABC123' }, pdf, { bookingId: b.id })
+  assert.ok(doc.ok, JSON.stringify(doc))
+  const blocked = await clearSlot(owner, b.id, pid)
+  assert.equal(!blocked.ok && blocked.status, 409, 'dokumen perjalanan masih ada → hapus dulu, tidak diam-diam')
+  assert.ok((await svc.remove(owner, owner.userId, card, doc.ok ? doc.document.id : '', { bookingId: b.id })).ok)
+  await prisma.bookingPilgrim.update({ where: { id: pid }, data: { reviewStatus: 'submitted', submittedAt: new Date() } })
+  const locked = await clearSlot(owner, b.id, pid)
+  assert.equal(!locked.ok && locked.status, 409, 'diajukan → dikunci')
+  await prisma.bookingPilgrim.update({ where: { id: pid }, data: { reviewStatus: 'draft', submittedAt: null } })
+  const r = await clearSlot(owner, b.id, pid)
+  assert.ok(r.ok, JSON.stringify(r))
+  const after = await row(pid)
+  assert.equal(after.savedPilgrimId, null); assert.equal(after.identityId, null)
+  assert.deepEqual(after.fieldValues, {})
+  for (const k of ['nikHash', 'nikCipher', 'passportCountry', 'passportKeyHash', 'passportCipher', 'passportLast4'] as const) assert.equal(after[k], null, k)
+  assert.equal(await prisma.bookingPilgrim.count({ where: { bookingId: b.id } }), 1, 'slot tetap ada (jumlah = tagihan)')
+  assert.ok(await prisma.savedPilgrim.findUnique({ where: { id: card } }), 'kartu Jamaah Saya tidak ikut terhapus')
 })
 
 await t('JAMAAH MENAMBAH hanya pada booking aktif: batal/selesai → closed; booking akun lain / draf → missing (404 di route)', async () => {

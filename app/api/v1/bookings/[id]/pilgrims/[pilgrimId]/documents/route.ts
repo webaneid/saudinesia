@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ok } from '@/lib/validators'
 import { onboardingRefusal } from '@/lib/auth/contact'
-import { documentService, listCardDocuments, uploadableTypes } from '@/lib/documents/service'
+import { documentService, listCardDocuments, tripUploadableTypes } from '@/lib/documents/service'
 import { createdResponse, docFailure, docIpLimited, docNotFound, readUpload } from '@/lib/documents/http'
 import { pilgrimBookingState, tripScopeOf } from '@/lib/pilgrims/bookingLink'
 import { requirePilgrimActor } from '@/lib/pilgrims/session'
@@ -29,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (!s) return docNotFound()
     const documents = await listCardDocuments(actor, s.ownerId, s.cardId, { bookingId: s.bookingId })
     if (!documents) return docNotFound()
-    return NextResponse.json(ok({ documents, types: await uploadableTypes({ bookingId: s.bookingId }) }))
+    return NextResponse.json(ok({ documents, types: await tripUploadableTypes(s.bookingId, s.cardId) }))
   } catch (e) {
     return routeFailure(e, 'bookings/pilgrims/documents/GET')
   }

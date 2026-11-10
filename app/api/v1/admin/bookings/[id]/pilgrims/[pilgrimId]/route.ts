@@ -10,7 +10,8 @@ import { completeness, validateFieldValues } from '@/lib/manifest/values'
 import { dbDateOf } from '@/lib/time'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { isDeletedAccount } from '@/lib/customers/query'
-import { passportCountryOf, sealManualPii } from '@/lib/pilgrims/bookingLink'
+import { clearSlot, passportCountryOf, sealManualPii } from '@/lib/pilgrims/bookingLink'
+import { cardIdSchema, notFound as pilgrimNotFound, serviceFailure } from '@/lib/pilgrims/http'
 import { isSealedRole } from '@/lib/manifest/roles'
 import { resolveAddressValues } from '@/lib/manifest/address'
 import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from '@/lib/pilgrims/reviewState'
@@ -81,5 +82,21 @@ export async function PUT(req: Request, { params }: Ctx) {
   } catch (e) {
     if (e instanceof Refused) return NextResponse.json(err(e.message), { status: 409 })
     return authFailureResponse(e, 'admin/bookings/pilgrims/PUT')
+  }
+}
+
+// KOSONGKAN slot jamaah (aksi Hapus di tabel jamaah): kartu dilepas, isian + segel dihapus, slot tetap (jumlah jamaah = tagihan; kurangi orang
+// lewat revisi booking). Aturan & kunci di lib/pilgrims/bookingLink.ts `clearSlot`.
+export async function DELETE(_req: Request, { params }: Ctx) {
+  try {
+    const session = await requireBookingManage()
+    const p = await params
+    const b = cardIdSchema.safeParse(p.id)
+    const bp = cardIdSchema.safeParse(p.pilgrimId)
+    if (!b.success || !bp.success) return pilgrimNotFound()
+    const r = await clearSlot({ userId: session.userId, role: session.role }, b.data, bp.data)
+    return r.ok ? NextResponse.json(ok({ cleared: true })) : serviceFailure(r)
+  } catch (e) {
+    return authFailureResponse(e, 'admin/bookings/pilgrims/DELETE')
   }
 }
