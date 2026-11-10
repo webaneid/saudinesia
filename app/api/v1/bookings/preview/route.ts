@@ -4,8 +4,8 @@ import { onboardingRefusal } from '@/lib/auth/contact'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
-import { checkoutDateRefusal } from '@/lib/checkout/dates'
-import { checkoutInput, checkoutSchema } from '@/lib/validators/checkout'
+import { cartDateRefusal } from '@/lib/checkout/dates'
+import { cartInput, checkoutCartSchema } from '@/lib/validators/checkout'
 import { ok, err } from '@/lib/validators'
 import { InvoiceError } from '@/lib/invoice/issue'
 
@@ -20,14 +20,14 @@ export async function POST(request: Request) {
     const limit = await consume(policy('bookingPreviewUser', session.userId))
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
 
-    const parsed = checkoutSchema.safeParse(await request.json().catch(() => null))
+    const parsed = checkoutCartSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const pastDate = await checkoutDateRefusal(parsed.data)
+    const pastDate = await cartDateRefusal(parsed.data)
     if (pastDate) return pastDate
 
     const { defaultDueDays } = await getInvoiceSettings()
     try {
-      const p = await simulateBooking({ userId: session.userId }, checkoutInput(parsed.data), defaultDueDays)
+      const p = await simulateBooking({ userId: session.userId }, cartInput(parsed.data), defaultDueDays)
       return NextResponse.json(ok({ lines: p.lines, total: p.total, tax: p.tax, taxAdded: p.taxAdded, grandTotal: p.grandTotal, dueDays: p.dueDays }))
     } catch (e) {
       if (e instanceof InvoiceError) { // setelan invoice bermasalah = urusan admin; rinciannya hanya di log (sama dengan POST /bookings)

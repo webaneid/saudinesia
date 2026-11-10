@@ -12,10 +12,12 @@ type Props = {
   submitting: boolean
   submitError: string
   onSubmit: () => void
+  /** Tombol tambahan di bawah tombol pesan (mis. "Tambah ke keranjang"). */
+  children?: React.ReactNode
 }
 
 // Ringkasan pesanan dari PRATINJAU SERVER (harga jual saja). Tombol pesan hanya aktif bila pratinjau berhasil — angka yang dilihat = angka di invoice.
-export function CheckoutSummary({ preview, missing, submitting, submitError, onSubmit }: Props) {
+export function CheckoutSummary({ preview, missing, submitting, submitError, onSubmit, children }: Props) {
   const ready = preview.status === 'ok' && !missing
   return (
     <div className="checkout-panel lg:sticky lg:top-24">
@@ -28,7 +30,7 @@ export function CheckoutSummary({ preview, missing, submitting, submitError, onS
       ) : preview.status === 'error' ? (
         <div className="space-y-1.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive" role="alert">
           <p className="flex items-start gap-2 font-semibold"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {preview.message}</p>
-          {preview.violations.length > 1 && <ul className="list-disc space-y-0.5 pl-9">{preview.violations.map(v => <li key={v}>{v}</li>)}</ul>}
+          {preview.violations.length > 1 && <ul className="list-disc space-y-0.5 pl-9">{preview.violations.map(v => <li key={v.message}>{v.message}</li>)}</ul>}
         </div>
       ) : (
         <div className="space-y-4">
@@ -76,6 +78,7 @@ export function CheckoutSummary({ preview, missing, submitting, submitError, onS
       <button type="button" onClick={onSubmit} disabled={!ready || submitting} className="btn-brand-solid w-full disabled:opacity-50">
         {submitting ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Memproses…</> : <>Pesan &amp; terbitkan invoice <ArrowRight className="h-4 w-4" aria-hidden /></>}
       </button>
+      {children}
 
       <div className="space-y-2 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">
         <p className="font-semibold text-foreground">Setelah memesan</p>

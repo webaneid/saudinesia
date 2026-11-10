@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { requireSession } from '@/lib/auth/session'
-import { checkoutSchema } from '@/lib/validators/checkout'
+import { checkoutCartSchema } from '@/lib/validators/checkout'
 import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
-import { checkoutDateRefusal } from '@/lib/checkout/dates'
+import { cartDateRefusal } from '@/lib/checkout/dates'
 import { isBookingCodeBusy } from '@/lib/utils/bookingCode'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
@@ -51,9 +51,9 @@ export async function POST(request: Request) {
     const limit = await consume(policy('bookingCreateUser', session.userId))
     if (!limit.allowed) return tooManyRequests(limit.retryAfterSec)
 
-    const parsed = checkoutSchema.safeParse(await request.json().catch(() => null))
+    const parsed = checkoutCartSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    const pastDate = await checkoutDateRefusal(parsed.data)
+    const pastDate = await cartDateRefusal(parsed.data)
     if (pastDate) return pastDate
 
     // Jatuh tempo = `defaultDueDays` dari Pengaturan Invoice (saran, tidak mengikat — D4); invoice terbit LANGSUNG bersama booking (keputusan pemilik K6-c).

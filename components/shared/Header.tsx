@@ -4,6 +4,7 @@ import { getSession } from '@/lib/auth/session'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { Button } from '@/components/ui/button'
 import { PublicMobileNav } from './PublicMobileNav'
+import { CartButton } from './CartButton'
 import { availableCatalogs } from '@/lib/catalog/availability'
 import { PUBLIC_NAV } from './publicNav'
 
@@ -31,6 +32,7 @@ export async function Header({ locale }: HeaderProps) {
           ))}
         </nav>
         <div className="flex items-center gap-1 sm:gap-2">
+          {session?.role === 'pilgrim' && <CartButton locale={locale} />}
           {session ? (
             <Button asChild size="sm">
               <Link href={`/${locale}/${ADMIN_ROLES.includes(session.role) ? 'admin' : 'dashboard'}`}>{t('dashboard')}</Link>
