@@ -3,8 +3,9 @@ import { prisma } from '@/lib/db'
 import { err } from '@/lib/validators'
 import { calendarDateOf, todayInApp } from '@/lib/time'
 import { checkoutDate, type CheckoutInput } from '@/lib/validators/checkout'
+import { isReturnRoute } from './flight'
 
-// Tanggal pilihan pelanggan (berangkat paket, rencana berangkat visa, tanggal kuota kendaraan, check-in hotel, tanggal tur) tidak boleh di masa lalu menurut zona aplikasi (lib/time).
+// Tanggal pilihan pelanggan (berangkat paket, rencana berangkat visa, tanggal kuota kendaraan, check-in hotel, tanggal tur, mulai muthowif/katering, terbang) tidak boleh di masa lalu menurut zona aplikasi (lib/time).
 // Halaman checkout tidak menawarkan tanggal lampau; ini pemeriksaan server untuk permintaan yang dibuat langsung. Admin boleh mencatat tanggal lampau lewat form admin.
 
 export async function checkoutDateRefusal(c: CheckoutInput): Promise<NextResponse | null> {
@@ -21,6 +22,13 @@ export async function checkoutDateRefusal(c: CheckoutInput): Promise<NextRespons
   if (c.kind === 'tour' && c.transportQuotaId) {
     const q = await prisma.transportQuota.findUnique({ where: { id: c.transportQuotaId }, select: { travelDate: true } })
     if (q && calendarDateOf(q.travelDate) !== c.tourDate) return NextResponse.json(err('Tanggal kendaraan tidak sesuai dengan tanggal tur'), { status: 400 })
+  }
+  // Tiket pulang: hanya jadwal rute kebalikan (yang memang ditawarkan halaman) — jadwal lain = 400, bukan tiket kedua sembarang.
+  if (c.kind === 'flight' && c.returnScheduleId) {
+    const [dep, ret] = await Promise.all([c.flightScheduleId, c.returnScheduleId].map(id => prisma.flightSchedule.findUnique({
+      where: { id }, select: { route: { select: { origin: true, destination: true } } },
+    })))
+    if (dep && ret && !isReturnRoute(dep.route, ret.route)) return NextResponse.json(err('Jadwal pulang harus rute kebalikan dari jadwal berangkat'), { status: 400 })
   }
   return null
 }

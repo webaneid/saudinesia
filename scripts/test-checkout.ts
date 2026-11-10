@@ -10,6 +10,8 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
+import { setManualSell } from '@/lib/pricing/engine/manual'
+import { detectSeason } from '@/lib/utils/season'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { checkoutPath } from '@/lib/checkout/kinds'
@@ -35,10 +37,10 @@ const U = '00000000-0000-4000-8000-000000000001'
 
 // ── murni: alamat kembali ───────────────────────────────────────────────────────────────────────────────────────────
 await t('safeNextPath: hanya halaman checkout berlocale + uuid; semua bentuk lain ditolak tanpa dekode', () => {
-  for (const ok of [checkoutPath('id', 'package', U), checkoutPath('en', 'visa', U), checkoutPath('id', 'transport', U), checkoutPath('id', 'haji', U), checkoutPath('id', 'hotel', U), checkoutPath('en', 'tour', U)]) assert.equal(safeNextPath(ok), ok, ok)
+  for (const ok of [checkoutPath('id', 'package', U), checkoutPath('en', 'visa', U), checkoutPath('id', 'transport', U), checkoutPath('id', 'haji', U), checkoutPath('id', 'hotel', U), checkoutPath('en', 'tour', U), checkoutPath('id', 'muthowif', U), checkoutPath('id', 'catering', U), checkoutPath('en', 'flight', U)]) assert.equal(safeNextPath(ok), ok, ok)
   for (const bad of [
     '//evil.test', '/\\evil.test', 'https://evil.test/id/checkout/visa?id=' + U, '/id/admin', '/id/dashboard', `/fr/checkout/visa?id=${U}`,
-    `/id/checkout/tourPackage?id=${U}`, `/id/checkout/muthowif?id=${U}`, `/id/checkout/visa?id=${U}&x=1`, `/id/checkout/visa?id=${U}#a`, '/id/checkout/visa?id=nope', `/id/checkout/%76isa?id=${U}`,
+    `/id/checkout/tourPackage?id=${U}`, `/id/checkout/flights?id=${U}`, `/id/checkout/visa?id=${U}&x=1`, `/id/checkout/visa?id=${U}#a`, '/id/checkout/visa?id=nope', `/id/checkout/%76isa?id=${U}`,
     `/id/checkout/visa%3Fid=${U}`, `/id//checkout/visa?id=${U}`, ` /id/checkout/visa?id=${U}`, `/id/checkout/visa?id=${U}\n`, `/ID/checkout/visa?id=${U}`, '',
     `/id/checkout/visa?id=${U}${'a'.repeat(200)}`, null, undefined, 42, [`/id/checkout/visa?id=${U}`],
   ]) assert.equal(safeNextPath(bad), null, JSON.stringify(bad))
@@ -56,7 +58,25 @@ await t('checkoutSchema: ketat — harga/total/jamaah/pemilik dari klien ditolak
   }
   assert.equal(ok({ kind: 'package', packageId: U, departureDate: '2090-06-05', numPeople: 1, choices: { price: 1 } }), false, 'pilihan paket liar')
   assert.equal(ok({ kind: 'hotel', id: U }), false)
-  assert.equal(ok({ kind: 'muthowif', id: U }), false, 'jenis 11b-2 belum dibuka')
+  // Muthowif & Katering (11b-2): jumlah hari TIDAK dari klien (termasuk hari mulai dan selesai); muthowif tanpa memilih orang (K11b-3).
+  const M = { kind: 'muthowif', startDate: '2090-06-01', endDate: '2090-06-04', numPeople: 2 }
+  assert.equal(ok(M), true); assert.equal(ok({ ...M, endDate: '2090-06-01' }), true, 'satu hari')
+  for (const extra of [{ numDays: 1 }, { muthowifId: U }, { totalPrice: 1 }]) assert.equal(ok({ ...M, ...extra }), false, JSON.stringify(extra))
+  assert.equal(ok({ ...M, endDate: '2090-05-31' }), false, 'terbalik'); assert.equal(ok({ ...M, endDate: '2090-07-31' }), false, '> 60 hari')
+  const mi = checkoutInput(M as CheckoutInput)
+  assert.equal(mi.items[0]?.itemType === 'muthowif' && mi.items[0].numDays, 4, 'hari = selisih + 1'); assert.equal(mi.pilgrims.length, 2)
+  const C = { kind: 'catering', cateringOptionId: U, startDate: '2090-06-01', endDate: '2090-06-02', numPeople: 3 }
+  assert.equal(ok(C), true); assert.equal(ok({ ...C, numDays: 2 }), false); assert.equal(ok({ ...C, endDate: '2090-05-01' }), false)
+  const ci = checkoutInput(C as CheckoutInput).items[0]
+  assert.equal(ci?.itemType === 'catering' && ci.numDays, 2); assert.equal(checkoutInput(C as CheckoutInput).pilgrims.length, 3)
+  // Tiket (11b-2, K11b-1 = b): pulang opsional, berpasangan, tak sebelum berangkat → dua item tiket.
+  const F = { kind: 'flight', flightScheduleId: U, departureDate: '2090-06-05', numPassengers: 2 }
+  assert.equal(ok(F), true); assert.equal(ok({ ...F, unitPrice: 1 }), false)
+  assert.equal(ok({ ...F, returnScheduleId: U }), false, 'pulang tanpa tanggal'); assert.equal(ok({ ...F, returnDate: '2090-06-09' }), false, 'tanggal tanpa jadwal')
+  assert.equal(ok({ ...F, returnScheduleId: U, returnDate: '2090-06-04' }), false, 'pulang sebelum berangkat')
+  assert.equal(checkoutInput(F as CheckoutInput).items.length, 1)
+  const fr = checkoutInput({ ...F, returnScheduleId: U, returnDate: '2090-06-09' } as CheckoutInput)
+  assert.deepEqual(fr.items.map(i => i.itemType === 'flight' && [i.departureDate, i.numPassengers]), [['2090-06-05', 2], ['2090-06-09', 2]]); assert.equal(fr.pilgrims.length, 2)
   // Hotel (11b): jumlah malam TIDAK dari klien — dihitung dari tanggal; rentang terbalik/kosong/terlalu panjang ditolak.
   const H = { kind: 'hotel', hotelRoomScheduleId: U, checkIn: '2090-06-05', checkOut: '2090-06-08', numRooms: 1, numGuests: 2 }
   assert.equal(ok(H), true)
@@ -126,6 +146,29 @@ await prisma.tourPackageHotelOption.create({ data: { tourPackageId: tourChoice.i
 await addCost('tour_package', tourChoice.id, 'guide', 500_000); await repriceOwner('tour_package', tourChoice.id)
 const tourUnpriced = await prisma.tourPackage.create({ data: { name: `${tag} Ziarah Tanpa Harga` } })
 const hotelOff = await prisma.hotel.create({ data: { name: `${tag} hotel nonaktif`, city: 'makkah', isActive: false } })
+// Muthowif (11b-2): layanan tunggal + satu pembimbing (kapasitas harian pool = jumlah kapasitas pembimbing aktif).
+let svc = await prisma.muthowifServicePrice.findFirst()
+const createdSvc = !svc
+svc ??= await prisma.muthowifServicePrice.create({ data: {} })
+await prisma.productCost.deleteMany({ where: { productType: 'muthowif', productId: svc.id } })
+await prisma.preferredVendor.deleteMany({ where: { productType: 'muthowif', productId: svc.id } })
+await addCost('muthowif', svc.id, 'layanan', 100_000); await repriceOwner('muthowif', svc.id)
+await prisma.muthowif.create({ data: { name: `${tag} pembimbing`, dailyCapacity: 5 } })
+const poolCap = (await prisma.muthowif.aggregate({ where: { isActive: true }, _sum: { dailyCapacity: true } }))._sum.dailyCapacity ?? 0
+// Katering (11b-2): harga manual per musim (musim tanggal mulai uji), satu opsi tanpa harga.
+const cateringSeason = await detectSeason(new Date('2090-06-10'))
+const catering = await prisma.cateringOption.create({ data: { name: `${tag} katering`, boardType: 'full_board', menuStyle: 'asian' } })
+await setManualSell({ ownerType: 'catering', ownerId: catering.id, variantKey: `season:${cateringSeason}`, sellIdr: 150_000, byUserId: user.id })
+const cateringUnpriced = await prisma.cateringOption.create({ data: { name: `${tag} katering tanpa harga`, boardType: 'half_board', menuStyle: 'arabic' } })
+// Tiket (11b-2): berangkat CGK→MED, pulang MED→CGK (rute kebalikan), rute lain CGK→JED, jadwal tanpa harga.
+const routeOut = await prisma.flightRoute.create({ data: { origin: `${tag} CGK`, destination: `${tag} MED` } })
+const routeBack = await prisma.flightRoute.create({ data: { origin: `${tag} med `, destination: `${tag} cgk` } }) // beda huruf/spasi tepi tetap rute kebalikan
+const routeOther = await prisma.flightRoute.create({ data: { origin: `${tag} CGK`, destination: `${tag} JED` } })
+const flightOut = await prisma.flightSchedule.create({ data: { routeId: routeOut.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-06-30'), totalSeats: 10 } })
+const flightBack = await prisma.flightSchedule.create({ data: { routeId: routeBack.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-07-31'), totalSeats: 10 } })
+const flightOther = await prisma.flightSchedule.create({ data: { routeId: routeOther.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-07-31'), totalSeats: 10 } })
+const flightUnpriced = await prisma.flightSchedule.create({ data: { routeId: routeBack.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-07-31'), totalSeats: 10 } })
+for (const f of [flightOut, flightBack, flightOther]) { await addCost('flight', f.id, 'tiket', 5_000_000); await repriceOwner('flight', f.id) }
 const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, hotelMadinahMode: 'user_choice' } })
 await prisma.packageHotelOption.create({ data: { packageId: pkg.id, slot: 'madinah', hotelRoomScheduleId: room.id, nights: 2 } })
 await addCost('package', pkg.id, 'handling', 500_000); await repriceOwner('package', pkg.id)
@@ -144,6 +187,10 @@ const PACKAGE: CheckoutInput = { kind: 'package', packageId: pkg.id, departureDa
 const HOTEL: CheckoutInput = { kind: 'hotel', hotelRoomScheduleId: room.id, checkIn: '2090-06-05', checkOut: '2090-06-08', numRooms: 2, numGuests: 5 }
 const TOUR_INCL: CheckoutInput = { kind: 'tour', tourPackageId: tourIncl.id, tourDate: '2090-07-01', numPeople: 3 }
 const TOUR_CHOICE: CheckoutInput = { kind: 'tour', tourPackageId: tourChoice.id, tourDate: '2090-06-02', numPeople: 2, transportQuotaId: quota.id, chosenHotelRoomScheduleId: room.id, chosenHotelNumRooms: 1 }
+const MUTHOWIF: CheckoutInput = { kind: 'muthowif', startDate: '2090-06-10', endDate: '2090-06-12', numPeople: 2 }
+const CATERING: CheckoutInput = { kind: 'catering', cateringOptionId: catering.id, startDate: '2090-06-10', endDate: '2090-06-14', numPeople: 3 }
+const FLIGHT: CheckoutInput = { kind: 'flight', flightScheduleId: flightOut.id, departureDate: '2090-06-05', numPassengers: 2, returnScheduleId: flightBack.id, returnDate: '2090-06-20' }
+const FLIGHT_ONEWAY: CheckoutInput = { kind: 'flight', flightScheduleId: flightOut.id, departureDate: '2090-06-06', numPassengers: 1 }
 
 await t('pemuat produk: harga JUAL saja (tanpa modal/HPP/vendor); nonaktif = null; Haji/visa/transport/paket memuat pilihannya', async () => {
   for (const [kind, id] of [['visa', visa.id], ['haji', haji.id], ['transport', trip.id], ['package', pkg.id]] as const) {
@@ -165,12 +212,22 @@ await t('pemuat produk: harga JUAL saja (tanpa modal/HPP/vendor); nonaktif = nul
   assert.ok(tc.slots.length === 2 && tc.slots.every(x => x.price > 0), 'kendaraan pilihan berharga'); assert.deepEqual(tc.hotelOptions.map(x => x.id), [room.id])
   const tu = await loadCheckoutProduct('tour', tourUnpriced.id); assert.ok(tu?.kind === 'tour'); assert.ok(tu.blocked, 'paket belum berharga tak dapat dipesan')
   for (const p of [ho, ti, tc]) assert.doesNotMatch(JSON.stringify(p), /cost|hpp|modal|vendor|margin/i)
+  const mu = await loadCheckoutProduct('muthowif', svc!.id); assert.ok(mu?.kind === 'muthowif'); assert.ok(mu.pricePerPersonDay > 0); assert.ok(mu.guides >= 1)
+  assert.equal(await loadCheckoutProduct('muthowif', U), null, 'id layanan liar')
+  const ca = await loadCheckoutProduct('catering', catering.id); assert.ok(ca?.kind === 'catering'); assert.equal(ca.prices[cateringSeason], 150_000)
+  const fl = await loadCheckoutProduct('flight', flightOut.id); assert.ok(fl?.kind === 'flight')
+  assert.equal(fl.blocked, null); assert.ok(fl.schedule.price > 0)
+  assert.deepEqual(fl.returns.map(r => r.id), [flightBack.id], 'pulang = rute kebalikan berharga; rute lain / tanpa harga tidak')
+  const fu = await loadCheckoutProduct('flight', flightUnpriced.id); assert.ok(fu?.kind === 'flight'); assert.ok(fu.blocked, 'jadwal tanpa harga tak dapat dipesan')
+  // Nama maskapai = nama vendor tiket yang memang publik di katalog Tiket (lib/catalog/flight.ts) — selain itu tak ada jejak modal/vendor.
+  for (const p of [mu, ca, { ...fl, schedule: { ...fl.schedule, airline: null }, returns: fl.returns.map(r => ({ ...r, airline: null })) }]) assert.doesNotMatch(JSON.stringify(p), /cost|hpp|modal|vendor|margin/i)
+  assert.equal(fl.schedule.airline, `${tag} vendor`)
   assert.equal(await loadCheckoutProduct('hotel', hotelOff.id), null)
   assert.equal(await loadCheckoutProduct('visa', visaOff.id), null)
   assert.equal(await loadCheckoutProduct('haji', U), null)
 })
 
-for (const [label, c] of [['visa', VISA], ['haji', HAJI], ['transport', TRANSPORT], ['paket', PACKAGE], ['hotel', HOTEL], ['ziarah termasuk', TOUR_INCL], ['ziarah pilihan', TOUR_CHOICE]] as const) {
+for (const [label, c] of [['visa', VISA], ['haji', HAJI], ['transport', TRANSPORT], ['paket', PACKAGE], ['hotel', HOTEL], ['ziarah termasuk', TOUR_INCL], ['ziarah pilihan', TOUR_CHOICE], ['muthowif', MUTHOWIF], ['katering', CATERING], ['tiket pulang-pergi', FLIGHT], ['tiket sekali jalan', FLIGHT_ONEWAY]] as const) {
   await t(`${label}: pratinjau = angka pesanan sungguhan; pratinjau tak meninggalkan booking/kuota; pesanan = booking aktif + invoice + jamaah kosong sebanyak orang`, async () => {
     const before = await bookingsOfUser()
     const hajiBefore = await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id }, select: { pendingQuota: true } })
@@ -187,7 +244,7 @@ for (const [label, c] of [['visa', VISA], ['haji', HAJI], ['transport', TRANSPOR
     assert.ok((await prisma.invoice.findUnique({ where: { bookingId: b.id }, select: { number: true } }))?.number, 'invoice terbit bersama booking')
     const bill = billOf(row)
     assert.equal(Number(row.totalAmount), p.total, 'subtotal pratinjau = subtotal pesanan'); assert.equal(bill.grandTotal, p.grandTotal, 'tagihan pratinjau = tagihan pesanan')
-    const people = c.kind === 'transport' ? c.numPassengers : c.kind === 'hotel' ? c.numGuests : c.numPeople
+    const people = c.kind === 'transport' || c.kind === 'flight' ? c.numPassengers : c.kind === 'hotel' ? c.numGuests : c.numPeople
     assert.equal(row.pilgrims.length, people)
     assert.ok(row.pilgrims.every(x => JSON.stringify(x.fieldValues) === '{}'), 'data jamaah diisi SESUDAH terbit (D3)')
     if (c.kind === 'visa') assert.ok(row.pilgrims.every(x => x.visaApplication?.visaProductId === visa.id))
@@ -206,6 +263,16 @@ await t('kuota ditahan pending oleh pesanan (haji, transport, kamar hotel, kenda
   assert.deepEqual(tours, [{ transportQuotaId: quota.id, chosenHotelRoomScheduleId: room.id }, { transportQuotaId: quota2.id, chosenHotelRoomScheduleId: null }])
 })
 
+await t('11b-2 tertahan: kapasitas muthowif per tanggal, kursi tiket berangkat/pulang; hari dihitung server', async () => {
+  const pool = await prisma.muthowifPoolAvailability.findMany({ where: { date: { gte: new Date('2090-06-09'), lte: new Date('2090-06-13') } }, orderBy: { date: 'asc' }, select: { pendingCount: true } })
+  assert.deepEqual(pool.map(p => p.pendingCount), [2, 2, 2], '10–12 Juni, dua orang per hari')
+  assert.equal((await prisma.flightSchedule.findUniqueOrThrow({ where: { id: flightOut.id } })).pendingSeats, 2 + 1, 'pulang-pergi 2 + sekali jalan 1')
+  assert.equal((await prisma.flightSchedule.findUniqueOrThrow({ where: { id: flightBack.id } })).pendingSeats, 2)
+  assert.equal((await prisma.bookingMuthowif.findFirstOrThrow({ where: { booking: { userId: user.id } } })).numDays, 3)
+  assert.equal((await prisma.bookingCatering.findFirstOrThrow({ where: { booking: { userId: user.id } } })).numDays, 5)
+  assert.equal(await prisma.bookingFlight.count({ where: { booking: { userId: user.id } } }), 3)
+})
+
 await t('penolakan terarah: visa plus 422 + pelanggaran; visa nonaktif/haji tanpa harga 422; pilihan paket di luar daftar 422; kuota habis 409; id tak ada 422 — tanpa booking tersisa', async () => {
   const before = await bookingsOfUser()
   const plus = await failOf({ ...VISA, visaProductId: visaPlus.id } as CheckoutInput)
@@ -220,6 +287,12 @@ await t('penolakan terarah: visa plus 422 + pelanggaran; visa nonaktif/haji tanp
   assert.equal((await failOf({ ...TOUR_INCL, tourDate: '2090-08-01' } as CheckoutInput)).status, 422, 'tak ada kendaraan paket di tanggal itu')
   assert.equal((await failOf({ ...TOUR_CHOICE, chosenHotelRoomScheduleId: U } as CheckoutInput)).status, 422, 'hotel di luar opsi paket')
   assert.equal((await failOf({ kind: 'tour', tourPackageId: tourUnpriced.id, tourDate: '2090-06-05', numPeople: 1 })).status, 422, 'paket belum berharga')
+  assert.equal((await failOf({ ...MUTHOWIF, numPeople: poolCap - 1 } as CheckoutInput)).status, 409, 'kapasitas pembimbing per tanggal habis')
+  assert.equal((await failOf({ ...CATERING, cateringOptionId: cateringUnpriced.id } as CheckoutInput)).status, 422, 'katering belum berharga')
+  assert.equal((await failOf({ ...FLIGHT_ONEWAY, departureDate: '2090-07-15' } as CheckoutInput)).status, 422, 'tanggal di luar periode jadwal')
+  assert.equal((await failOf({ ...FLIGHT, returnDate: '2090-08-05' } as CheckoutInput)).status, 422, 'tanggal pulang di luar periode jadwal pulang')
+  assert.equal((await failOf({ ...FLIGHT_ONEWAY, numPassengers: 8 } as CheckoutInput)).status, 409, 'kursi habis')
+  assert.equal((await failOf({ ...FLIGHT_ONEWAY, flightScheduleId: flightUnpriced.id } as CheckoutInput)).status, 422, 'jadwal belum berharga')
   // Pratinjau memakai pemeta yang sama.
   await assert.rejects(simulateBooking({ userId: user.id }, checkoutInput({ ...VISA, visaProductId: visaPlus.id } as CheckoutInput), 3), (e: unknown) => bookingFailure(e).status === 422)
   assert.equal(await bookingsOfUser(), before, 'pesanan yang ditolak tidak meninggalkan booking')
@@ -234,6 +307,12 @@ await t('tanggal lampau ditolak 400 (paket, visa, kuota transport lampau); hari 
   assert.equal((await checkoutDateRefusal({ ...TOUR_INCL, tourDate: yesterday } as CheckoutInput))?.status, 400)
   assert.equal((await checkoutDateRefusal({ ...TOUR_CHOICE, tourDate: '2090-06-03' } as CheckoutInput))?.status, 400, 'tanggal tur ≠ tanggal kendaraan pilihan')
   assert.equal(await checkoutDateRefusal(TOUR_CHOICE), null)
+  assert.equal((await checkoutDateRefusal({ ...MUTHOWIF, startDate: yesterday } as CheckoutInput))?.status, 400)
+  assert.equal((await checkoutDateRefusal({ ...CATERING, startDate: yesterday } as CheckoutInput))?.status, 400)
+  assert.equal((await checkoutDateRefusal({ ...FLIGHT_ONEWAY, departureDate: yesterday } as CheckoutInput))?.status, 400)
+  assert.equal((await checkoutDateRefusal({ ...FLIGHT, returnScheduleId: flightOther.id } as CheckoutInput))?.status, 400, 'pulang bukan rute kebalikan')
+  assert.equal((await checkoutDateRefusal({ ...FLIGHT, returnScheduleId: flightOut.id } as CheckoutInput))?.status, 400, 'pulang = rute berangkat yang sama')
+  assert.equal(await checkoutDateRefusal(FLIGHT), null)
   assert.equal(await checkoutDateRefusal({ ...VISA, plannedTravelDate: todayInApp() } as CheckoutInput), null)
   assert.equal(await checkoutDateRefusal(TRANSPORT), null)
 })
@@ -275,8 +354,11 @@ await t('PENJAGA alamat kembali: formulir masuk/daftar/Google/lengkapi-data meng
   assert.match(read('lib/auth/google.ts'), /safeNextPath\(/); assert.match(read('lib/auth/accounts.ts'), /safeNextPath\(/)
 })
 
-await t('PENJAGA tombol katalog: Hotel detail dan Paket Ziarah menuju checkoutPath (bukan /register) dan hanya bila berharga', () => {
-  for (const [f, kind] of [['app/[locale]/(public)/hotels/[id]/page.tsx', 'hotel'], ['app/[locale]/(public)/tours/page.tsx', 'tour']] as const) {
+await t('PENJAGA tombol katalog: Hotel, Paket Ziarah, Muthowif, Katering, Tiket menuju checkoutPath (bukan /register) dan hanya bila berharga', () => {
+  for (const [f, kind] of [
+    ['app/[locale]/(public)/hotels/[id]/page.tsx', 'hotel'], ['app/[locale]/(public)/tours/page.tsx', 'tour'], ['app/[locale]/(public)/muthowif/[id]/page.tsx', 'muthowif'],
+    ['app/[locale]/(public)/catering/page.tsx', 'catering'], ['app/[locale]/(public)/flight/page.tsx', 'flight'],
+  ] as const) {
     const src = read(f)
     assert.doesNotMatch(src, /\/register`/, `${f}: tombol pesan ke /register kehilangan produk sesudah login`)
     assert.match(src, new RegExp(`checkoutPath\\(locale, '${kind}'`), f)
@@ -295,9 +377,17 @@ await prisma.transportPricing.deleteMany({ where: { trip: { name: starts } } })
 await prisma.transportTrip.deleteMany({ where: { name: starts } })
 await prisma.transportVehicle.deleteMany({ where: { name: starts } })
 await prisma.hotel.deleteMany({ where: { name: starts } })
+await prisma.flightSchedule.deleteMany({ where: { route: { origin: starts } } })
+await prisma.flightRoute.deleteMany({ where: { origin: starts } })
+await prisma.cateringOption.deleteMany({ where: { name: starts } })
+await prisma.muthowif.deleteMany({ where: { name: starts } })
+await prisma.muthowifPoolAvailability.deleteMany({ where: { date: { gte: new Date('2090-01-01') } } })
+await prisma.priceChange.deleteMany({ where: { byUserId: user.id } })
 await prisma.roomType.deleteMany({ where: { name: starts } })
 await prisma.productCost.deleteMany({ where: { vendorId: vendor.id } })
 await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } })
+if (createdSvc) await prisma.muthowifServicePrice.delete({ where: { id: svc.id } })
+else await repriceOwner('muthowif', svc.id)
 await sweepOrphanPricePoints()
 await prisma.vendor.delete({ where: { id: vendor.id } })
 await prisma.user.deleteMany({ where: { email: { contains: tag } } })

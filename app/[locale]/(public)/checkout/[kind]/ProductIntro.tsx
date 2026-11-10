@@ -1,11 +1,14 @@
-import { Building2, Clock, Globe2, Landmark, MapPin, Moon, Plane, Star } from 'lucide-react'
+import { Building2, Clock, Globe2, Landmark, MapPin, Moon, Plane, Star, UsersRound, UtensilsCrossed } from 'lucide-react'
 import type { CheckoutProduct } from '@/lib/checkout/options'
 import { formatRupiah } from '@/lib/utils'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 
-const TYPE_LABEL = { package: 'Paket Umroh', visa: 'Visa', transport: 'Transportasi', haji: 'Haji', hotel: 'Hotel', tour: 'Paket Ziarah' } as const
-const MEDIA_TYPE = { package: 'package', visa: 'visa', haji: 'haji', hotel: 'hotel', tour: 'tour_package' } as const
+const TYPE_LABEL = { package: 'Paket Umroh', visa: 'Visa', transport: 'Transportasi', haji: 'Haji', hotel: 'Hotel', tour: 'Paket Ziarah', muthowif: 'Muthowif', catering: 'Katering', flight: 'Tiket Pesawat' } as const
+/** Kunci DB katering → label (sama dengan katalog Katering). */
+const MENU: Record<string, string> = { asian: 'Menu Asia', arabic: 'Menu Arab', western: 'Menu Barat' }
+const BOARD: Record<string, string> = { full_board: 'Tiga kali makan', half_board: 'Dua kali makan' }
+const MEDIA_TYPE = { package: 'package', visa: 'visa', haji: 'haji', hotel: 'hotel', tour: 'tour_package', catering: 'catering' } as const
 
 // Kartu produk di atas formulir checkout: foto, nama, fakta singkat, harga mulai (petunjuk — angka yang mengikat ada di ringkasan dari server).
 export function ProductIntro({ product }: { product: CheckoutProduct }) {
@@ -40,14 +43,29 @@ export function ProductIntro({ product }: { product: CheckoutProduct }) {
       if (product.includedVehicle) facts.push({ icon: MapPin, text: product.includedVehicle })
       from = product.price; unit = '/paket'
       break
+    case 'muthowif':
+      facts.push({ icon: UsersRound, text: 'Pembimbing ditentukan tim kami' })
+      from = product.pricePerPersonDay; unit = '/orang/hari'
+      break
+    case 'catering': {
+      facts.push({ icon: UtensilsCrossed, text: `${MENU[product.menuStyle] ?? product.menuStyle} · ${BOARD[product.boardType] ?? product.boardType}` })
+      const priced = [product.prices.regular, product.prices.ramadan, product.prices.hajj].filter(n => n > 0)
+      from = priced.length ? Math.min(...priced) : 0; unit = '/orang/hari'
+      break
+    }
+    case 'flight':
+      facts.push({ icon: Plane, text: product.schedule.airline ?? 'Tiket pesawat' })
+      from = product.schedule.price; unit = '/penumpang'
+      break
   }
-  const cover = product.kind === 'transport' ? null : product.cover
+  // Foto hanya untuk jenis yang punya foto produk (registry media); transport/muthowif/tiket tanpa foto di sini.
+  const media = product.kind in MEDIA_TYPE && 'cover' in product ? { type: MEDIA_TYPE[product.kind as keyof typeof MEDIA_TYPE], cover: product.cover } : null
 
   return (
     <div className="checkout-panel flex flex-col gap-5 sm:flex-row">
-      {product.kind !== 'transport' && (
+      {media && (
         <div className="overflow-hidden rounded-xl sm:w-56 sm:shrink-0">
-          <ProductImage src={cover?.src} alt={cover?.alt} fallbackAlt={product.name} type={MEDIA_TYPE[product.kind]} />
+          <ProductImage src={media.cover?.src} alt={media.cover?.alt} fallbackAlt={product.name} type={media.type} />
         </div>
       )}
       <div className="min-w-0 flex-1 space-y-2">

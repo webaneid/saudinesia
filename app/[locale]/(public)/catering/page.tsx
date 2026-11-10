@@ -1,7 +1,9 @@
 import type { Metadata } from 'next'
-import { CalendarDays, Tag, UtensilsCrossed } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRight, CalendarDays, Tag, UtensilsCrossed } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { detectSeason } from '@/lib/utils/season'
 import { cateringPricePerPersonPerDay } from '@/lib/pricing/computeCateringPrice'
@@ -45,6 +47,7 @@ export default async function CateringPage({ params }: Props) {
     return p ? cateringPricePerPersonPerDay(p, season) : 0
   }
 
+  const hasPrice = (id: string) => { const p = prices.get(id); return !!p && (p.regular > 0 || p.ramadan > 0 || p.hajj > 0) }
   const priced = ids.map(priceOf).filter(v => v > 0)
   const facts: HeroFact[] = []
   if (options.length > 0) {
@@ -79,8 +82,14 @@ export default async function CateringPage({ params }: Props) {
                     <h3 className="text-lg font-semibold leading-snug text-brand-dark">{o.name}</h3>
                     <RichTextView value={o.description} className="text-sm text-muted-foreground" />
                   </div>
-                  <div className="mt-auto border-t pt-4">
+                  <div className="mt-auto space-y-3 border-t pt-4">
                     <PriceTag price={priceOf(o.id)} label={t('card.priceLabel')} unit={t('card.perPersonDay')} />
+                    {/* Checkout Katering (docs/arsitektur-booking-engine-v2.md §10.6) — hanya bila ada musim berharga (mesin menolak musim tanpa harga). */}
+                    {hasPrice(o.id) && (
+                      <Link href={checkoutPath(locale, 'catering', o.id)} className="btn-brand-solid w-full">
+                        {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </article>

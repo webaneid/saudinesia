@@ -479,7 +479,8 @@
         "route": "Rute",
         "airline": "Maskapai",
         "period": "Periode keberangkatan",
-        "price": "Harga per orang"
+        "price": "Harga per orang",
+        "order": "Pesan"
       },
       "cta": {
         "title": "Siap merencanakan perjalanan?",
@@ -525,7 +526,8 @@
           "hajj": "haji"
         },
         "priceLabel": "Harga",
-        "perPersonDay": "per orang per hari"
+        "perPersonDay": "per orang per hari",
+        "order": "Pesan sekarang"
       },
       "cta": {
         "title": "Siap merencanakan perjalanan?",

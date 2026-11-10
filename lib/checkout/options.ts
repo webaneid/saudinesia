@@ -2,7 +2,9 @@ import { prisma } from '@/lib/db'
 import { computePackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import type { HotelScheduleOpt } from '@/lib/booking/hotelPick'
-import { sellPrices, visaFeeRules } from '@/lib/pricing/engine/read'
+import { cateringSeasonPrices, sellPrices, visaFeeRules } from '@/lib/pricing/engine/read'
+import { flightAirlines } from '@/lib/catalog/flight'
+import { isReturnRoute } from './flight'
 import { getFeaturedCards, getFeaturedCardUrls } from '@/lib/media/urls'
 import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
 import { addDays, calendarDateOf, dbDateOf, todayInApp, type CalendarDate } from '@/lib/time'
@@ -66,8 +68,33 @@ export type TourCheckout = {
   includedHotels: string[]
   hotelOptions: Array<{ id: string; label: string; nights: number; pricePerNight: number; roomsLeft: number }>
 }
-export type CheckoutProduct = PackageCheckout | VisaCheckout | TransportCheckout | HajiCheckout | HotelCheckout | TourCheckout
+/** Layanan muthowif — satu layanan umum (K11b-3); petugas ditentukan tim. `id` = baris layanan (`MuthowifServicePrice`). */
+export type MuthowifCheckout = {
+  kind: 'muthowif'; id: string; name: string; description: string | null
+  /** Harga jual per orang per hari; 0 = belum berharga (tak dapat dipesan). */
+  pricePerPersonDay: number
+  /** Jumlah pembimbing aktif (tampilan saja; kapasitas harian dicek mesin per tanggal). */
+  guides: number
+}
+export type CateringCheckout = {
+  kind: 'catering'; id: string; name: string; boardType: string; menuStyle: string; description: string | null; cover: Cover
+  /** Harga per orang per hari per musim; musim dipilih mesin dari TANGGAL MULAI (angka mengikat = pratinjau). 0 = musim itu belum berharga. */
+  prices: { regular: number; ramadan: number; hajj: number }
+}
+/** Satu jadwal tiket (periode harga/kuota). Tanggal terbang dipilih di dalam [from, to] ∩ ≥ hari ini. */
+export type FlightOpt = { id: string; label: string; airline: string | null; from: CalendarDate; to: CalendarDate; seatsLeft: number; price: number }
+export type FlightCheckout = {
+  kind: 'flight'; id: string; name: string; origin: string; destination: string; description: string | null
+  schedule: FlightOpt
+  /** Alasan jadwal ini tak dapat dipesan online, null = dapat. */
+  blocked: string | null
+  /** Jadwal pulang (rute kebalikan, berharga, periode belum lewat) — opsional (K11b-1 = b). */
+  returns: FlightOpt[]
+}
+export type CheckoutProduct = PackageCheckout | VisaCheckout | TransportCheckout | HajiCheckout | HotelCheckout | TourCheckout | MuthowifCheckout | CateringCheckout | FlightCheckout
 
+/** Batas jumlah jadwal pulang yang ditawarkan (periode terdekat lebih dulu). */
+const RETURN_SCHEDULES = 100
 /** Batas jumlah slot kuota transport yang ditampilkan (tanggal terdekat lebih dulu). */
 const TRANSPORT_SLOTS = 400
 
@@ -79,6 +106,9 @@ export async function loadCheckoutProduct(kind: CheckoutKind, id: string): Promi
     case 'haji': return loadHaji(id)
     case 'hotel': return loadHotel(id)
     case 'tour': return loadTour(id)
+    case 'muthowif': return loadMuthowif(id)
+    case 'catering': return loadCatering(id)
+    case 'flight': return loadFlight(id)
   }
 }
 
@@ -241,6 +271,52 @@ async function loadTour(id: string): Promise<TourCheckout | null> {
     hotelOptions: b.hotelOptions
       .filter(o => rooms.has(o.hotelRoomScheduleId) && o.pricePerNight > 0)
       .map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName}`, nights: o.nights, pricePerNight: o.pricePerNight, roomsLeft: rooms.get(o.hotelRoomScheduleId) ?? 0 })),
+  }
+}
+
+async function loadMuthowif(id: string): Promise<MuthowifCheckout | null> {
+  const svc = await prisma.muthowifServicePrice.findUnique({ where: { id }, select: { id: true } })
+  if (!svc) return null
+  const [price, guides] = await Promise.all([sellPrices('muthowif', [id]), prisma.muthowif.count({ where: { isActive: true } })])
+  return { kind: 'muthowif', id, name: 'Layanan Muthowif', description: null, pricePerPersonDay: price.get(id) ?? 0, guides }
+}
+
+async function loadCatering(id: string): Promise<CateringCheckout | null> {
+  const o = await prisma.cateringOption.findUnique({ where: { id }, select: { id: true, name: true, boardType: true, menuStyle: true, description: true, isActive: true } })
+  if (!o?.isActive) return null
+  const [prices, covers] = await Promise.all([cateringSeasonPrices([id]), getFeaturedCards('catering', [id])])
+  return {
+    kind: 'catering', id: o.id, name: o.name, boardType: o.boardType, menuStyle: o.menuStyle, description: o.description, cover: covers.get(id) ?? null,
+    prices: prices.get(id) ?? { regular: 0, ramadan: 0, hajj: 0 },
+  }
+}
+
+async function loadFlight(id: string): Promise<FlightCheckout | null> {
+  const sel = { id: true, departureFrom: true, departureTo: true, totalSeats: true, pendingSeats: true, bookedSeats: true, route: { select: { origin: true, destination: true } } } as const
+  const s = await prisma.flightSchedule.findUnique({ where: { id }, select: { ...sel, isActive: true, route: { select: { origin: true, destination: true, isActive: true } } } })
+  if (!s?.isActive || !s.route.isActive) return null
+  const today = todayInApp()
+  // Kandidat pulang: rute kebalikan (aturan yang sama dengan pemeriksaan server; rute = master kecil, dicocokkan di aplikasi karena teks bebas), lalu
+  // jadwal aktif rute itu yang periodenya belum lewat.
+  const backRoutes = (await prisma.flightRoute.findMany({ where: { isActive: true }, select: { id: true, origin: true, destination: true } }))
+    .filter(r => isReturnRoute(s.route, r)).map(r => r.id)
+  const candidates = backRoutes.length === 0 ? [] : await prisma.flightSchedule.findMany({
+    where: { isActive: true, departureTo: { gte: dbDateOf(today) }, routeId: { in: backRoutes }, id: { not: id } },
+    orderBy: [{ departureFrom: 'asc' }, { id: 'asc' }], take: RETURN_SCHEDULES, select: sel,
+  })
+  const ids = [id, ...candidates.map(r => r.id)]
+  const [price, airlines] = await Promise.all([sellPrices('flight', ids), flightAirlines(ids)])
+  const opt = (r: typeof candidates[number]): FlightOpt => ({
+    id: r.id, label: `${r.route.origin.trim()} → ${r.route.destination.trim()}`, airline: airlines.get(r.id) ?? null,
+    from: calendarDateOf(r.departureFrom), to: calendarDateOf(r.departureTo), seatsLeft: r.totalSeats - r.pendingSeats - r.bookedSeats, price: price.get(r.id) ?? 0,
+  })
+  const schedule = opt(s)
+  return {
+    kind: 'flight', id: s.id, name: schedule.label, origin: s.route.origin, destination: s.route.destination, description: null, schedule,
+    blocked: !(schedule.price > 0) ? 'Harga tiket ini belum ditetapkan — belum dapat dipesan.'
+      : schedule.to < today ? 'Periode jadwal tiket ini sudah lewat.'
+      : schedule.seatsLeft < 1 ? 'Kursi jadwal ini sudah habis.' : null,
+    returns: candidates.map(opt).filter(r => r.price > 0 && r.seatsLeft > 0), // belum berharga / penuh tak ditawarkan (mesin juga menolak)
   }
 }
 
