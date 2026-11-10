@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { err } from '@/lib/validators'
 import { calendarDateOf, todayInApp } from '@/lib/time'
-import { checkoutDate, type CheckoutInput } from '@/lib/validators/checkout'
+import { checkoutDate, type CheckoutCart, type CheckoutInput } from '@/lib/validators/checkout'
 import { isReturnRoute } from './flight'
 
 // Tanggal pilihan pelanggan (berangkat paket, rencana berangkat visa, tanggal kuota kendaraan, check-in hotel, tanggal tur, mulai muthowif/katering, terbang) tidak boleh di masa lalu menurut zona aplikasi (lib/time).
@@ -29,6 +29,15 @@ export async function checkoutDateRefusal(c: CheckoutInput): Promise<NextRespons
       where: { id }, select: { route: { select: { origin: true, destination: true } } },
     })))
     if (dep && ret && !isReturnRoute(dep.route, ret.route)) return NextResponse.json(err('Jadwal pulang harus rute kebalikan dari jadwal berangkat'), { status: 400 })
+  }
+  return null
+}
+
+/** Pemeriksaan tanggal setiap entri keranjang (§10.7) — penolakan pertama dikembalikan. */
+export async function cartDateRefusal(cart: CheckoutCart): Promise<NextResponse | null> {
+  for (const c of cart.items) {
+    const refusal = await checkoutDateRefusal(c)
+    if (refusal) return refusal
   }
   return null
 }

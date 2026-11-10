@@ -2,12 +2,13 @@ import { routing } from '@/i18n/routing'
 import { CHECKOUT_KINDS } from '@/lib/checkout/kinds'
 
 // Jalur kembali sesudah login/daftar (docs/arsitektur-booking-engine-v2.md §10.5 butir 5). DAFTAR PUTIH, bukan daftar hitam: hanya halaman checkout
-// satu produk persis berbentuk `/{locale}/checkout/{jenis}?id={uuid}` yang diterima — apa pun selain itu (alamat luar, `//`, `\`, skema, encoding,
+// satu produk persis berbentuk `/{locale}/checkout/{jenis}?id={uuid}` dan halaman keranjang persis `/{locale}/keranjang` (§10.7) yang diterima — apa pun selain itu (alamat luar, `//`, `\`, skema, encoding,
 // halaman admin, parameter lain) → null → dashboard. Dicocokkan atas teks MENTAH tanpa decode: karakter selain huruf/angka/`-` tak lolos sama sekali.
 // Murni (tanpa I/O) — dipakai halaman server, route auth, dan penjaga tes.
 
 const UUID = '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-const PATTERN = new RegExp(`^/(${routing.locales.join('|')})/checkout/(${CHECKOUT_KINDS.join('|')})\\?id=${UUID}$`)
+const LOCALES = routing.locales.join('|')
+const PATTERN = new RegExp(`^/(${LOCALES})/(checkout/(${CHECKOUT_KINDS.join('|')})\\?id=${UUID}|keranjang)$`)
 const MAX = 120
 
 export function safeNextPath(raw: unknown): string | null {

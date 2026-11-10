@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
+import Link from 'next/link'
+import { CheckCircle2, ShoppingCart } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import type { CheckoutProduct } from '@/lib/checkout/options'
 import type { CheckoutInput } from '@/lib/validators/checkout'
@@ -15,31 +17,43 @@ import { MuthowifFields } from './MuthowifFields'
 import { CateringFields } from './CateringFields'
 import { FlightFields } from './FlightFields'
 import { useCheckoutPreview } from './useCheckoutPreview'
+import { entrySummary } from './fields'
+import { addToCart } from '@/lib/checkout/cartStore'
 
 type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode }
 
 // Orkestrator checkout (docs/arsitektur-booking-engine-v2.md §10.5): isian per jenis → masukan checkout → pratinjau server → pesan (POST /bookings).
-// Sukses → detail booking (`?baru=1`) untuk mengisi data jamaah dan membayar.
+// Sukses → detail booking (`?baru=1`) untuk mengisi data jamaah dan membayar. "Pesan sekarang" = keranjang satu entri; "Tambah ke keranjang" menyimpan
+// pilihan yang sama di perangkat (lib/checkout/cartStore.ts, §10.7) untuk digabung dengan produk lain — Haji selalu dipesan sendiri.
 export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props) {
   const router = useRouter()
   const [input, setInput] = useState<CheckoutInput | null>(null)
   const [missing, setMissing] = useState<string | null>('Lengkapi pilihan pesanan')
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
-  const preview = useCheckoutPreview(input)
+  const [cartNote, setCartNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const body = useMemo(() => (input ? { items: [input] } : null), [input])
+  const preview = useCheckoutPreview(body)
 
   const onChange = useCallback((next: CheckoutInput | null, why: string | null) => {
     setInput(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next))
     setMissing(why)
     setSubmitError('')
+    setCartNote(null)
   }, [])
+
+  function addCart() {
+    if (!input || missing) return
+    const refusal = addToCart({ kind: product.kind, productId: product.id, title: product.name, summary: entrySummary(input), input })
+    setCartNote(refusal ? { ok: false, text: refusal } : { ok: true, text: 'Ditambahkan ke keranjang' })
+  }
 
   async function submit() {
     if (!input) return
     setSubmitting(true)
     setSubmitError('')
     try {
-      const res = await fetch('/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input) })
+      const res = await fetch('/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json() as { success: boolean; data?: { bookingId: string }; error?: string }
       if (!json.success || !json.data) { setSubmitError(json.error ?? 'Pesanan gagal dibuat — coba lagi'); return }
       router.push(`/${locale}/bookings/${json.data.bookingId}?baru=1`)
@@ -65,7 +79,22 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props
         {product.kind === 'flight' && <FlightFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
       </div>
       <aside className="min-w-0">
-        <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit} />
+        <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit}>
+          {product.kind !== 'haji' && (
+            <>
+              <button type="button" onClick={addCart} disabled={!input || !!missing} className="btn-brand-outline w-full disabled:opacity-50">
+                <ShoppingCart className="h-4 w-4" aria-hidden /> Tambah ke keranjang
+              </button>
+              {cartNote && (
+                <p className={cartNote.ok ? 'flex flex-wrap items-center gap-1.5 text-sm text-brand-dark' : 'text-sm text-destructive'} role="status">
+                  {cartNote.ok && <CheckCircle2 className="h-4 w-4 text-brand" aria-hidden />}
+                  {cartNote.text}
+                  {cartNote.ok && <Link href={`/${locale}/keranjang`} className="font-semibold text-brand hover:underline">Lihat keranjang</Link>}
+                </p>
+              )}
+            </>
+          )}
+        </CheckoutSummary>
       </aside>
     </div>
   )

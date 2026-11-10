@@ -17,9 +17,9 @@ import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { checkoutPath } from '@/lib/checkout/kinds'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
 import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
-import { checkoutDateRefusal } from '@/lib/checkout/dates'
+import { cartDateRefusal, checkoutDateRefusal } from '@/lib/checkout/dates'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
-import { checkoutInput, checkoutSchema, type CheckoutInput } from '@/lib/validators/checkout'
+import { CART_MAX_ITEMS, cartInput, checkoutCartSchema, checkoutInput, checkoutSchema, type CheckoutCart, type CheckoutInput } from '@/lib/validators/checkout'
 import { billOf, billSelect } from '@/lib/invoice/bill'
 import { addDays, todayInApp } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
@@ -48,6 +48,9 @@ await t('safeNextPath: hanya halaman checkout berlocale + uuid; semua bentuk lai
   assert.equal(afterAuthPath('en', checkoutPath('en', 'haji', U)), checkoutPath('en', 'haji', U))
   assert.equal(withNext('/id/login', '//evil.test'), '/id/login')
   assert.equal(withNext('/id/login', checkoutPath('id', 'visa', U)), `/id/login?next=${encodeURIComponent(checkoutPath('id', 'visa', U))}`)
+  // Keranjang (§10.7): persis `/{locale}/keranjang`, tanpa parameter.
+  for (const ok of ['/id/keranjang', '/en/keranjang']) assert.equal(safeNextPath(ok), ok)
+  for (const bad of ['/fr/keranjang', '/id/keranjang?x=1', '/id/keranjang/', '/id/keranjang#a', '/id//keranjang', '/id/Keranjang', '/keranjang']) assert.equal(safeNextPath(bad), null, bad)
 })
 
 await t('checkoutSchema: ketat — harga/total/jamaah/pemilik dari klien ditolak; jenis liar ditolak; batas orang 1..100; visa wajib tanggal', () => {
@@ -173,7 +176,7 @@ const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, hotelMad
 await prisma.packageHotelOption.create({ data: { packageId: pkg.id, slot: 'madinah', hotelRoomScheduleId: room.id, nights: 2 } })
 await addCost('package', pkg.id, 'handling', 500_000); await repriceOwner('package', pkg.id)
 
-const place = async (c: CheckoutInput) => { return placeCheckout(user.id, c, 3) }
+const place = async (c: CheckoutInput) => { return placeCheckout(user.id, { items: [c] }, 3) }
 const failOf = async (c: CheckoutInput) => {
   try { await place(c) } catch (e) { return bookingFailure(e) }
   assert.fail('seharusnya ditolak')
@@ -298,6 +301,48 @@ await t('penolakan terarah: visa plus 422 + pelanggaran; visa nonaktif/haji tanp
   assert.equal(await bookingsOfUser(), before, 'pesanan yang ditolak tidak meninggalkan booking')
 })
 
+// ── keranjang (§10.7, Fase 11c): banyak produk → SATU booking + SATU invoice; satu rombongan; Haji sendiri; satu visa ─────────────────────────
+await t('checkoutCartSchema: kosong/lebih dari batas/kunci liar ditolak; Haji tak digabung; dua visa ditolak; jumlah orang berbeda ditolak', () => {
+  const ok = (v: unknown) => checkoutCartSchema.safeParse(v).success
+  assert.equal(ok({ items: [VISA] }), true)
+  assert.equal(ok({ items: [HAJI] }), true, 'Haji sendirian boleh')
+  assert.equal(ok({ items: [] }), false)
+  assert.equal(ok(VISA), false, 'masukan satu produk tanpa bungkus keranjang')
+  assert.equal(ok({ items: [VISA], totalAmount: 1 }), false, 'kunci liar')
+  assert.equal(ok({ items: [HAJI, { ...VISA }] }), false, 'Haji + produk lain')
+  assert.equal(ok({ items: [VISA, { ...VISA, visaProductId: visaPlus.id }] }), false, 'dua visa')
+  assert.equal(ok({ items: [VISA, { ...FLIGHT_ONEWAY, numPassengers: 3 }] }), false, 'jumlah orang berbeda')
+  assert.equal(ok({ items: Array.from({ length: CART_MAX_ITEMS + 1 }, () => ({ ...MUTHOWIF })) }), false, 'lebih dari batas')
+  assert.equal(ok({ items: Array.from({ length: CART_MAX_ITEMS }, () => ({ ...MUTHOWIF })) }), true)
+  assert.deepEqual(cartInput({ items: [VISA] }), checkoutInput(VISA), 'satu entri = checkout satu produk')
+})
+
+await t('keranjang: entri bertanggal lampau di posisi mana pun → 400', async () => {
+  const yesterday = addDays(todayInApp(), -1)
+  assert.equal((await cartDateRefusal({ items: [VISA, { ...CATERING, numPeople: 2, startDate: yesterday }] } as CheckoutCart))?.status, 400)
+  assert.equal(await cartDateRefusal({ items: [VISA, { ...CATERING, numPeople: 2 }] } as CheckoutCart), null)
+})
+
+await t('keranjang campur: Visa Plus + Tiket + Hotel = SATU booking + SATU invoice; pratinjau = pesanan; visa melekat ke setiap jamaah; aturan visa dinilai atas seluruh keranjang', async () => {
+  const before = await bookingsOfUser()
+  const PLUS: CheckoutInput = { ...VISA, visaProductId: visaPlus.id } as CheckoutInput
+  const lacking = checkoutCartSchema.parse({ items: [PLUS, { ...HOTEL, numRooms: 1, numGuests: 2 }] })
+  const miss = await placeCheckout(user.id, lacking, 3).then(() => assert.fail('seharusnya ditolak'), (e: unknown) => bookingFailure(e))
+  assert.equal(miss.status, 422); assert.equal(miss.violations?.[0]?.missing, 'flight', 'Visa Plus tanpa tiket di keranjang')
+  assert.equal(await bookingsOfUser(), before)
+
+  const cart = checkoutCartSchema.parse({ items: [PLUS, { ...FLIGHT_ONEWAY, numPassengers: 2 }, { ...HOTEL, numRooms: 1, numGuests: 2 }] })
+  const p = await simulateBooking({ userId: user.id }, cartInput(cart), 3)
+  assert.equal(await bookingsOfUser(), before, 'pratinjau tidak menyimpan')
+  const b = await placeCheckout(user.id, cart, 3)
+  assert.equal(await bookingsOfUser(), before + 1, 'satu booking')
+  const row = await prisma.booking.findUniqueOrThrow({ where: { id: b.id }, select: { ...billSelect, pilgrims: { select: { visaApplication: { select: { visaProductId: true } } } }, flights: { select: { id: true } }, hotels: { select: { numGuests: true, numRooms: true } } } })
+  assert.equal(await prisma.invoice.count({ where: { bookingId: b.id } }), 1, 'satu invoice')
+  assert.equal(Number(row.totalAmount), p.total); assert.equal(billOf(row).grandTotal, p.grandTotal)
+  assert.equal(row.pilgrims.length, 2); assert.ok(row.pilgrims.every(x => x.visaApplication?.visaProductId === visaPlus.id))
+  assert.equal(row.flights.length, 1); assert.deepEqual(row.hotels, [{ numGuests: 2, numRooms: 1 }])
+})
+
 await t('tanggal lampau ditolak 400 (paket, visa, kuota transport lampau); hari ini boleh', async () => {
   const yesterday = addDays(todayInApp(), -1)
   assert.equal((await checkoutDateRefusal({ ...VISA, plannedTravelDate: yesterday } as CheckoutInput))?.status, 400)
@@ -321,19 +366,19 @@ await t('akun dibaca ulang di dalam kunci: nonaktif / terhapus sesudah cek sesi 
   const before = await bookingsOfUser()
   const held = (await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota
   await prisma.user.update({ where: { id: user.id }, data: { isActive: false } })
-  await assert.rejects(placeCheckout(user.id, { kind: 'haji', hajiProductId: haji.id, numPeople: 1 }, 3), CheckoutAccountError)
+  await assert.rejects(placeCheckout(user.id, { items: [{ kind: 'haji', hajiProductId: haji.id, numPeople: 1 }] }, 3), CheckoutAccountError)
   await prisma.user.update({ where: { id: user.id }, data: { isActive: true } })
   const gone = await prisma.user.create({ data: { email: `deleted-${tag}@deleted.invalid`, passwordHash: 'x', fullName: 'Terhapus', role: 'pilgrim', isActive: true } })
-  await assert.rejects(placeCheckout(gone.id, { kind: 'haji', hajiProductId: haji.id, numPeople: 1 }, 3), CheckoutAccountError)
+  await assert.rejects(placeCheckout(gone.id, { items: [{ kind: 'haji', hajiProductId: haji.id, numPeople: 1 }] }, 3), CheckoutAccountError)
   assert.equal(await bookingsOfUser(), before)
   assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota, held, 'kuota tak tertahan')
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
 await t('PENJAGA route: sesi → hanya pelanggan → onboardingRefusal → batas laju → Zod → tanggal, SEBELUM mesin; pratinjau tak memberi modal', () => {
-  for (const [f, engine] of [['app/api/v1/bookings/route.ts', 'placeCheckout('], ['app/api/v1/bookings/preview/route.ts', 'simulateBooking(']] as const) {
+  for (const [f, engine] of [['app/api/v1/bookings/route.ts', 'placeCheckout('], ['app/api/v1/bookings/preview/route.ts', 'cartInput(']] as const) { // placeCheckout memanggil cartInput sendiri
     const src = read(f); const post = src.slice(src.indexOf('export async function POST'))
-    const order = ['requireSession()', "session.role !== 'pilgrim'", 'onboardingRefusal(', 'consume(policy(', 'checkoutSchema.safeParse(', 'checkoutDateRefusal(', engine].map(s => post.indexOf(s))
+    const order = ['requireSession()', "session.role !== 'pilgrim'", 'onboardingRefusal(', 'consume(policy(', 'checkoutCartSchema.safeParse(', 'cartDateRefusal(', engine].map(s => post.indexOf(s))
     assert.ok(order.every(i => i > 0), `${f}: ${JSON.stringify(order)}`)
     assert.deepEqual([...order].sort((a, b) => a - b), order, `${f}: urutan gerbang`)
   }
@@ -352,6 +397,17 @@ await t('PENJAGA alamat kembali: formulir masuk/daftar/Google/lengkapi-data meng
   assert.match(read('app/api/v1/auth/google/callback/route.ts'), /afterAuthPath\(locale, stateCookie\.next\)/)
   // `next` yang dibawa dibersihkan lagi setiap kali dibaca (cookie/token bisa basi atau dari versi lain).
   assert.match(read('lib/auth/google.ts'), /safeNextPath\(/); assert.match(read('lib/auth/accounts.ts'), /safeNextPath\(/)
+})
+
+await t('PENJAGA keranjang: halaman bergerbang sesi (withNext ke login/lengkapi-data); isi perangkat tanpa harga; pesan & pratinjau lewat cartBody; ikon hanya untuk pelanggan; Haji tanpa tombol keranjang', () => {
+  const page = read('app/[locale]/(public)/keranjang/page.tsx')
+  assert.match(page, /withNext\(`\/\$\{locale\}\/login`, here\)/); assert.match(page, /withNext\(`\/\$\{locale\}\/lengkapi-data`, here\)/)
+  const store = read('lib/checkout/cartStore.ts')
+  assert.doesNotMatch(store, /price|amount|total|fieldValues|nik|passport/i, 'keranjang perangkat tanpa harga dan data pribadi')
+  const view = read('app/[locale]/(public)/keranjang/CartView.tsx')
+  assert.match(view, /useCheckoutPreview\(body\)/); assert.match(view, /JSON\.stringify\(body\)/); assert.match(view, /const body = cartBody\(cart\)/)
+  assert.match(read('components/shared/Header.tsx'), /session\?\.role === 'pilgrim' && <CartButton/)
+  assert.match(read('app/[locale]/(public)/checkout/[kind]/CheckoutForm.tsx'), /product\.kind !== 'haji' && \(/)
 })
 
 await t('PENJAGA tombol katalog: Hotel, Paket Ziarah, Muthowif, Katering, Tiket menuju checkoutPath (bukan /register) dan hanya bila berharga', () => {
