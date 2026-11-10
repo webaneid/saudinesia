@@ -12,6 +12,7 @@ import type { TaxLine } from '@/lib/invoice/tax'
 import { plainText } from '@/lib/rich-text/doc'
 import { getPaymentConfig } from '@/lib/constants/payment'
 import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
+import { groupView } from '@/lib/booking/groups'
 
 // Invoice dibangun HANYA dari `price_snapshots` (docs/arsitektur-harga-terpadu.md §17, invarian I3/I4/I5): harga yang tertera adalah harga yang DIBEKUKAN saat dipesan —
 // bukan dihitung ulang dan bukan dibaca dari kolom harga item. Hanya JUAL yang masuk ke sini; modal/untung tak pernah keluar ke dokumen pilgrim.
@@ -22,6 +23,16 @@ export const invoiceBookingInclude = {
   pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { id: true, visaProductId: true } } } }, // tanpa kolom NIK/paspor tersegel
   payments: true,
   invoice: true,
+  // Rombongan (§10.8, 11d-2b): nama bagian dirender dari label hidup, bukan snapshot; item hanya membawa rombongannya.
+  groups:       { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true } },
+  hotels:       { select: { id: true, groupId: true } },
+  transports:   { select: { id: true, groupId: true } },
+  flights:      { select: { id: true, groupId: true } },
+  muthowif:     { select: { id: true, groupId: true } },
+  catering:     { select: { id: true, groupId: true } },
+  tourPackages: { select: { id: true, groupId: true } },
+  haji:         { select: { id: true, groupId: true } },
+  packages:     { select: { id: true, groupId: true } },
 } satisfies Prisma.BookingInclude
 
 export type InvoiceBooking = Prisma.BookingGetPayload<{ include: typeof invoiceBookingInclude }>
@@ -34,6 +45,8 @@ export type InvoiceLineItem = {
   amount:      number
   /** Baris per jamaah (visa): label TANPA nama + satuan, supaya tampilan ringkas bisa menggabungkannya jadi "3 jamaah × Rp …" (lib/booking/orderSummary.ts). PDF tidak memakainya. */
   group?:      { label: string; unit: string }
+  /** Booking berrombongan saja: nama bagian (rombongan, "Semua jamaah", atau "Penyesuaian") — tampilan memberi subjudul saat bagian berganti. */
+  section?:    string
 }
 
 export type InvoiceData = {
@@ -104,8 +117,18 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
   }
 
   const pilgrimByVisa = new Map(booking.pilgrims.flatMap(p => (p.visaApplication ? [[p.visaApplication.id, p] as const] : [])))
+  // Booking berrombongan: baris dikelompokkan per rombongan ("Semua jamaah" dulu, lalu urut posisi), penyesuaian tingkat booking paling akhir.
+  const view = groupView(booking.groups)
+  const itemGroup = new Map<string, string | null>([
+    ...booking.hotels.map(r => [`hotel|${r.id}`, r.groupId] as const), ...booking.transports.map(r => [`transport|${r.id}`, r.groupId] as const),
+    ...booking.flights.map(r => [`flight|${r.id}`, r.groupId] as const), ...booking.muthowif.map(r => [`muthowif|${r.id}`, r.groupId] as const),
+    ...booking.catering.map(r => [`catering|${r.id}`, r.groupId] as const), ...booking.tourPackages.map(r => [`tourPackage|${r.id}`, r.groupId] as const),
+    ...booking.haji.map(r => [`haji|${r.id}`, r.groupId] as const), ...booking.packages.map(r => [`package|${r.id}`, r.groupId] as const),
+  ])
+  const groupOf = (type: string, itemId: string) => (type === 'visa' ? pilgrimByVisa.get(itemId)?.groupId : itemGroup.get(`${type}|${itemId}`)) ?? null
+  const rankOf = (type: string, itemId: string) => (!view ? 0 : type === 'booking' ? Number.MAX_SAFE_INTEGER : view.rank(groupOf(type, itemId)))
   const lineItems: InvoiceLineItem[] = []
-  const ordered = [...groups.values()].sort((a, b) => ITEM_ORDER.indexOf(a.type) - ITEM_ORDER.indexOf(b.type))
+  const ordered = [...groups.values()].sort((a, b) => rankOf(a.type, a.itemId) - rankOf(b.type, b.itemId) || ITEM_ORDER.indexOf(a.type) - ITEM_ORDER.indexOf(b.type))
   // Definisi field dimuat SEKALI per produk visa (bukan per baris — booking bisa memuat ribuan jamaah; tautan publik bisa memicunya tanpa login).
   const fieldsByProduct = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
   for (const g of ordered) {
@@ -121,7 +144,8 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
       label = `${g.label} — ${typeof rawName === 'string' && rawName ? rawName : 'Jamaah'}`
     }
     const amount = g.amountCents / 100
-    lineItems.push({ label, description: g.detail, qty: g.qty, unitPrice: amount / g.qty, amount, ...(group ? { group } : {}) })
+    const section = view ? (g.type === 'booking' ? 'Penyesuaian' : view.name(groupOf(g.type, g.itemId))) : undefined
+    lineItems.push({ label, description: g.detail, qty: g.qty, unitPrice: amount / g.qty, amount, ...(group ? { group } : {}), ...(section ? { section } : {}) })
   }
 
   const subtotal = lineItems.reduce((sum, li) => sum + li.amount, 0)

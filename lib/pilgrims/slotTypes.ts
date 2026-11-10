@@ -19,5 +19,7 @@ export type PilgrimSlot = {
   reviewStatus: PilgrimReviewStatus
   rows: FieldRow[]
   documents: SlotDocument[]
+  /** Booking berrombongan: nama rombongan jamaah (diisi halaman dari label hidup, lib/booking/groups.ts `groupView`). */
+  group?: string
 }
 

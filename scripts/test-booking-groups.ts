@@ -9,7 +9,9 @@ import { prisma } from '@/lib/db'
 import { repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { prepareBooking, RuleViolationError, writeBooking, type BookingInput } from '@/lib/booking/create'
-import { groupLabel, normalizeGroups, scopeToGroup } from '@/lib/booking/groups'
+import { groupLabel, groupView, normalizeGroups, scopeToGroup } from '@/lib/booking/groups'
+import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
+import { generateInvoicePdf } from '@/lib/pdf/invoice'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
 import { previewRevision, reviseBooking, revisionEditorState, RevisionError } from '@/lib/booking/revise'
 import { createDraft, publishDraft, saveDraft } from '@/lib/booking/drafts'
@@ -177,6 +179,34 @@ await t('dua rombongan: pratinjau = pesanan; baris rombongan + nama; jumlah oran
   assert.equal((await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id } })).pendingSeats, 2)
 })
 
+await t('groupView: tanpa rombongan = null; nama dari label hidup, kosong → Rombongan A/B; NULL/tak dikenal = "Semua jamaah" urutan 0; urut posisi, bukan urutan baris', () => {
+  assert.equal(groupView([]), null)
+  const v = groupView([{ id: 'b', label: null, position: 2 }, { id: 'a', label: 'Kel. Ahmad', position: 1 }])!
+  assert.deepEqual([v.name('a'), v.name('b'), v.name(null), v.name('x')], ['Kel. Ahmad', 'Rombongan B', 'Semua jamaah', 'Semua jamaah'])
+  assert.deepEqual([v.rank(null), v.rank('a'), v.rank('b')], [0, 1, 2])
+})
+
+await t('invoice (11d-2b): bagian per rombongan — "Semua jamaah" dulu lalu urut posisi; nama dari label HIDUP (ganti nama → invoice ikut, snapshot tak berubah dan tak memuat nama); I4 tetap; PDF jadi', async () => {
+  const load = () => prisma.booking.findUniqueOrThrow({ where: { id: bookingId }, include: invoiceBookingInclude })
+  const inv = await buildInvoiceData(await load())
+  assert.deepEqual(inv.lineItems.map(l => [l.section, l.label.split(' — ')[0]]), [
+    ['Semua jamaah', `${tag} hotel`],
+    ['Keluarga Pak Ahmad', inv.lineItems[1]!.label], ...Array.from({ length: 3 }, () => ['Keluarga Pak Ahmad', `${tag} Visa Plus`]),
+    ['Rombongan B', inv.lineItems[5]!.label], ...Array.from({ length: 2 }, () => ['Rombongan B', `${tag} Visa Mandiri`]),
+  ])
+  assert.match(inv.lineItems[1]!.label, /CGK/); assert.match(inv.lineItems[5]!.label, /bandara/)
+  assert.equal(cents(inv.subtotal), cents(Number((await prisma.booking.findUniqueOrThrow({ where: { id: bookingId } })).totalAmount)), 'I4')
+  const snapsBefore = JSON.stringify(await prisma.priceSnapshot.findMany({ where: { bookingId }, orderBy: { id: 'asc' } }))
+  assert.ok(!snapsBefore.includes('Ahmad'), 'nama rombongan tidak pernah masuk snapshot')
+  await prisma.bookingGroup.updateMany({ where: { bookingId, position: 2 }, data: { label: 'Rombongan Kantor' } })
+  const renamed = await buildInvoiceData(await load())
+  assert.deepEqual([...new Set(renamed.lineItems.map(l => l.section))], ['Semua jamaah', 'Keluarga Pak Ahmad', 'Rombongan Kantor'])
+  assert.equal(JSON.stringify(await prisma.priceSnapshot.findMany({ where: { bookingId }, orderBy: { id: 'asc' } })), snapsBefore, 'snapshot tak tersentuh')
+  await prisma.bookingGroup.updateMany({ where: { bookingId, position: 2 }, data: { label: null } })
+  const pdf = await generateInvoicePdf(renamed)
+  assert.equal(pdf.subarray(0, 5).toString(), '%PDF-')
+})
+
 await t('Visa Plus per rombongan (K11d-1 = a): tiket rombongan A tak memenuhi Visa Plus rombongan B → 422 berlabel rombongan; tiket untuk semua memenuhi keduanya', async () => {
   const before = await prisma.booking.count({ where: { userId: user.id } })
   const plusInB: BookingInput = { ...TWO, pilgrims: TWO.pilgrims.map(p => ({ ...p, visaProductId: visaPlus.id })) }
@@ -199,6 +229,8 @@ await t('tanpa rombongan: perilaku lama — tiket satu-satunya memenuhi semua Vi
   const id = await place(plain)
   const b = await prisma.booking.findUniqueOrThrow({ where: { id }, select: { groups: true, hotels: { select: { numGuests: true, groupId: true } }, pilgrims: { select: { groupId: true } } } })
   assert.deepEqual(b.groups, []); assert.deepEqual(b.hotels, [{ numGuests: 2, groupId: null }]); assert.ok(b.pilgrims.every(p => p.groupId === null))
+  const inv = await buildInvoiceData(await prisma.booking.findUniqueOrThrow({ where: { id }, include: invoiceBookingInclude }))
+  assert.ok(inv.lineItems.length > 0 && inv.lineItems.every(l => !('section' in l)), 'invoice tanpa rombongan: tanpa bagian (tampilan lama)')
 })
 
 await t('DB: item/jamaah tak dapat menunjuk rombongan booking LAIN (FK komposit); nama rombongan dijaga CHECK (panjang, karakter kontrol, posisi ≥ 1)', async () => {

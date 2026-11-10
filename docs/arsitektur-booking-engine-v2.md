@@ -552,7 +552,7 @@ Tujuan: pelanggan memesan BEBERAPA produk dalam satu booking (satu invoice, satu
 - **Dua visa berbeda / pembagian berurutan (butir 1, 2)**: tidak dibuat — satu rombongan memuat paling banyak satu visa (keputusan K11c-2); rombongan ganda = 11d.
 - **Bukti**: `scripts/test-checkout.ts` — skema keranjang (kosong, > 20, kunci liar, Haji + lain, dua visa, orang berbeda), tanggal lampau di entri mana pun, Visa Plus + Tiket + Hotel = satu booking + satu invoice dengan angka pratinjau = pesanan, Visa Plus tanpa tiket = 422 `missing: flight` tanpa booking, `safeNextPath` keranjang persis, penjaga sumber (urutan gerbang kedua route, keranjang tanpa harga/PII, ikon hanya pelanggan, Haji tanpa tombol keranjang).
 
-### 10.8 Fase 11d — Beberapa rombongan dalam satu booking (RANCANGAN 2026-11-10; DISETUJUI pemilik 2026-11-10 — K11d-1 = a, K11d-2 = a, K11d-3 = tanpa batas sendiri, K11d-4 = nama bebas, K11d-5 = ya; 11d-1 DIEKSEKUSI 2026-11-10)
+### 10.8 Fase 11d — Beberapa rombongan dalam satu booking (RANCANGAN 2026-11-10; DISETUJUI pemilik 2026-11-10 — K11d-1 = a, K11d-2 = a, K11d-3 = tanpa batas sendiri, K11d-4 = nama bebas, K11d-5 = ya; 11d-1 DIEKSEKUSI 2026-11-10; 11d-2a + 11d-2b DIEKSEKUSI 2026-11-11)
 
 Tujuan (pemilik 2026-11-10): satu pesanan memuat lebih dari satu rombongan dengan perjalanan berbeda — mis. rombongan A 10 orang via Makkah tgl 5, rombongan B 6 orang via Madinah tgl 8, lalu bertemu di hotel Madinah yang sama — tetap SATU booking, SATU invoice, SATU pembayaran. 11c membatasi keranjang pada satu rombongan (semua entri N orang, satu visa).
 
@@ -624,6 +624,31 @@ Karena besar, 11d-2 dipecah dua PR:
 - **Riwayat**: perubahan baru `groups` ("2 ditambah, 1 dihapus, nama/urutan/rencana berangkat diubah" / "rombongan ditiadakan") dan `group_move` ("Jamaah ke-N → ke Rombongan ke-M") — nama rombongan TIDAK masuk riwayat (teks bebas pemesan).
 - **Form admin**: kotak `GroupsBox` (draf: ukuran per rombongan; revisi: ukuran = jamaah yang menunjuknya, peringatan rombongan kosong), kolom Rombongan di setiap baris `ItemRows` (baris Visa wajib satu rombongan, produk lain "Semua jamaah" atau satu rombongan; jumlah orang baris berrombongan tampil sebagai angka turunan), pilih rombongan per jamaah di editor revisi (jamaah bervisa membawa visanya — baris Visa disusun ulang). Logika editor murni di `drafts/[id]/groupRows.ts` + perluasan `visaRows.ts` (slot berrombongan).
 - **Bukti**: `scripts/test-booking-groups.ts` (editor memuat rombongan, kirim ulang tanpa ubahan = tanpa perubahan; pindah jamaah B→A + jamaah baru B: tiket ditulis ulang 3 orang dengan kuota +1, transport B dipertahankan, hotel tetap dengan 5 tamu, visa jamaah baru = rencana B; ganti nama + rombongan C; Visa Plus per rombongan di revisi; rombongan booking lain/kosong → 422; rombongan ditiadakan + I4), `scripts/test-booking-members.ts` (`assignInGroups`), `scripts/test-group-rows.ts` (logika editor, didaftarkan di `bun run test`), browser: draf dua rombongan (muthowif dipindah ke Rombongan B → 1 orang, total server berubah) dan editor revisi (pratinjau "Rombongan: 2 ditambah"), keduanya tanpa disimpan.
+
+**Rencana 11d-2b (2026-11-11; recheck kode sebelum rencana):**
+
+| # | Temuan recheck | Bukti |
+|---|----------------|-------|
+| G1 | `buildInvoiceData` tidak tahu rombongan; kolom `InvoiceLineItem.group` sudah dipakai untuk penggabungan baris visa (ringkasan checkout) — rombongan butuh kolom lain. Konsumen: PDF, halaman invoice publik, pratinjau revisi admin, ringkasan checkout. | `lib/pdf/invoiceData.ts`, `lib/pdf/invoice.tsx`, `app/[locale]/invoice/[token]/page.tsx`, `bookings/[id]/edit/page.tsx`, `CheckoutSummary.tsx` |
+| G2 | `BOOKING_PILGRIM_SAFE_SELECT` tidak memuat `groupId`; detail admin/jamaah tidak memuat `groups`. | `lib/pilgrims/safeSelect.ts`, `bookings/[id]/page.tsx` (admin & jamaah) |
+| G3 | Detail jamaah meringkas baris dengan `collapseRows` tanpa rombongan → visa dua rombongan dengan produk/harga sama digabung menjadi satu baris. | `(pilgrim)/bookings/[id]/page.tsx` |
+| G4 | **Bug**: `POST admin/bookings/[id]/muthowif/assign` memakai `findFirst({ bookingId, muthowifId: null })` — dengan dua item muthowif (satu per rombongan) panel di item B bisa menugaskan item A. | `app/api/v1/admin/bookings/[id]/muthowif/assign/route.ts` |
+| G5 | ZIP dokumen jamaah: folder per jamaah tanpa rombongan. | `admin/bookings/[id]/documents/zip/route.ts` |
+
+Langkah:
+1. Satu pembaca nama rombongan untuk tampilan: `groupView(groups)` di `lib/booking/groups.ts` (murni) — `name(groupId)` (NULL = "Semua jamaah") dan `rank(groupId)` (semua = 0, lalu posisi); `null` bila booking tanpa rombongan. Nama SELALU dirender dari `booking_groups.label` saat baca (tidak pernah masuk snapshot).
+2. Invoice: `InvoiceLineItem.section?` (hanya booking berrombongan), baris diurut rombongan → `ITEM_ORDER`, penyesuaian tingkat booking di bagian "Penyesuaian" paling akhir; PDF dan halaman publik menampilkan subjudul saat bagian berganti; pratinjau revisi admin juga. Ringkasan checkout menyertakan bagian di kunci penggabungan. I4 tetap.
+3. `groupId` masuk `BOOKING_PILGRIM_SAFE_SELECT` (bukan data pribadi). Detail admin: kartu Rombongan (nama, rencana berangkat, jumlah jamaah) + label rombongan di setiap baris item; detail jamaah: nama rombongan di keterangan baris (kunci `collapseRows` ikut berbeda); tabel jamaah (`PilgrimSlotsTable`) menampilkan rombongan per jamaah.
+4. Muthowif: panel mengirim `bookingMuthowifId` (wajib, skema `.strict()`), rute mencari item itu di booking itu yang belum ditugaskan; panel menyebut rombongan item.
+5. ZIP dokumen: folder rombongan di atas folder jamaah bila booking berrombongan (nama disaring seperti nama jamaah).
+
+**Hasil eksekusi 11d-2b (2026-11-11, tampilan):**
+- **Satu pembaca**: `groupView(groups)` (`lib/booking/groups.ts`) — `name(groupId)` dari label HIDUP ("Rombongan A/B" bila kosong, "Semua jamaah" untuk NULL) dan `rank(groupId)`; `null` = booking tanpa rombongan (semua tampilan persis seperti sebelumnya). Nama rombongan tidak pernah masuk `price_snapshots` (diuji: ganti nama → invoice ikut, snapshot identik byte-per-byte).
+- **Invoice**: `invoiceBookingInclude` memuat `groups` + relasi item TEPAT `{ id, groupId }` (penjaga `scripts/test-booking-snapshot.ts`); `InvoiceLineItem.section` diurut "Semua jamaah" → rombongan per posisi → "Penyesuaian"; subjudul di PDF (`lib/pdf/invoice.tsx`), halaman publik, dan pratinjau revisi admin; ringkasan checkout menyertakan bagian di kunci penggabungan (siap untuk 11d-3). I4 dan pemeriksaan pajak tak berubah.
+- **Detail**: admin — kartu Rombongan (nama, jumlah jamaah, rencana berangkat) + label di setiap baris item; jamaah — nama rombongan mengawali keterangan baris; `PilgrimSlotsTable` menampilkan rombongan di bawah nama (`PilgrimSlot.group`, diisi halaman). `groupId` masuk `BOOKING_PILGRIM_SAFE_SELECT`.
+- **Muthowif**: panel mengirim `bookingMuthowifId`; rute assign menolak tanpa item (400), item booking lain/sudah ditugaskan (404) — SEC-223.
+- **ZIP dokumen**: folder `<urutan>-<nama rombongan>/` di atas folder jamaah bila booking berrombongan.
+- **Bukti**: `scripts/test-booking-groups.ts` (`groupView`; urutan + nama bagian invoice; ganti nama hidup; snapshot tanpa nama; I4; PDF jadi; booking tanpa rombongan tanpa bagian), `scripts/test-muthowif-assign.ts` (baru, didaftarkan di `bun run test`), penjaga sumber invoice diuji dua arah (merah bila kolom harga item dimuat).
 
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.

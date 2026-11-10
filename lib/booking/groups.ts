@@ -85,3 +85,27 @@ export function scopeToGroup<P, T>(data: BookingInput, packages: readonly P[], t
   }
   return { data: { ...data, items, pilgrims: data.pilgrims.filter(p => p.group === g) }, packages: pk, tours: tr }
 }
+
+/** Nama bagian untuk item yang berlaku bagi semua jamaah (booking berrombongan). */
+export const ALL_PILGRIMS_LABEL = 'Semua jamaah'
+
+export type GroupView = {
+  /** Nama tampilan rombongan item/jamaah; `null`/tak dikenal = "Semua jamaah". */
+  name: (groupId: string | null | undefined) => string
+  /** Urutan tampil: semua jamaah = 0, lalu posisi rombongan (1, 2, …). */
+  rank: (groupId: string | null | undefined) => number
+}
+
+/**
+ * Pembaca nama rombongan untuk TAMPILAN (detail booking, invoice, ZIP dokumen — §10.8, 11d-2b). Nama selalu dirender dari `booking_groups.label` saat baca,
+ * tidak pernah dibekukan di snapshot. `null` = booking tanpa rombongan (tampilan lama, tanpa subjudul).
+ */
+export function groupView(groups: ReadonlyArray<{ id: string; label: string | null; position: number }>): GroupView | null {
+  if (groups.length === 0) return null
+  const sorted = [...groups].sort((a, b) => a.position - b.position)
+  const index = new Map(sorted.map((g, i) => [g.id, i]))
+  return {
+    name: id => { const i = id ? index.get(id) : undefined; return i === undefined ? ALL_PILGRIMS_LABEL : groupLabel(sorted[i]!.label, i) },
+    rank: id => { const i = id ? index.get(id) : undefined; return i === undefined ? 0 : i + 1 },
+  }
+}

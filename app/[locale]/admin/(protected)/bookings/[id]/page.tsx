@@ -26,6 +26,7 @@ import { DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/li
 import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
 import { formatRupiah } from '@/lib/utils'
+import { groupView } from '@/lib/booking/groups'
 
 type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ periksa?: string }> }
 
@@ -49,6 +50,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
       pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
       payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] },
       invoice:    true,
+      groups:     { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true, plannedTravelDate: true } },
     },
   })
   if (!booking) notFound()
@@ -65,8 +67,12 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
   const nextEmpty = slots.find(x => !x.filled)
   // Visa per jamaah diringkas: produk + harga satuan sama → satu baris "3 jamaah × Rp … = Rp …" (lib/booking/orderSummary.ts), harga = jual beku berlaku.
   const sells = await itemSellTotals(prisma, booking.id)
+  // Rombongan (§10.8, 11d-2b): nama dirender dari label hidup; booking tanpa rombongan = tampilan lama (tanpa label).
+  const gv = groupView(booking.groups)
+  const pilgrimGroup = new Map(booking.pilgrims.map(p => [p.id, p.groupId]))
+  const tag = (groupId: string | null) => (gv ? <span className="admin-badge-gray ml-2 align-middle">{gv.name(groupId)}</span> : null)
   const visaRows = collapseRows(booking.pilgrims.flatMap(p => p.visaApplication
-    ? [{ group: 'visa', name: p.visaApplication.visaProduct?.name ?? 'Visa', detail: p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', unit: 'jamaah', amount: sells.get(`visa:${p.visaApplication.id}`) ?? 0 }]
+    ? [{ groupId: p.groupId, group: `visa|${p.groupId ?? ''}`, name: p.visaApplication.visaProduct?.name ?? 'Visa', detail: p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', unit: 'jamaah', amount: sells.get(`visa:${p.visaApplication.id}`) ?? 0 }]
     : []))
 
   const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
@@ -149,12 +155,27 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
 
         <InvoiceBox bookingId={booking.id} bill={bill} noBank={noBank} invoice={booking.invoice && { ...booking.invoice, taxLines: booking.invoice.taxLines as TaxLine[] }} />
 
+        {gv && (
+          <div className="admin-card p-4 space-y-2 md:col-span-2">
+            <p className="admin-section">Rombongan</p>
+            {booking.groups.map(g => (
+              <p key={g.id} className="text-[13px] text-admin-ink/80">
+                <span className="font-medium text-admin-ink">{gv.name(g.id)}</span>
+                <span className="text-admin-muted ml-2 text-[12px]">
+                  {booking.pilgrims.filter(p => p.groupId === g.id).length} jamaah
+                  {g.plannedTravelDate && ` · rencana berangkat ${formatCalendarDate(g.plannedTravelDate, DATE_NUMERIC)}`}
+                </span>
+              </p>
+            ))}
+          </div>
+        )}
+
         {booking.hotels.length > 0 && (
           <div className="admin-card p-4 space-y-2">
             <p className="admin-section">Hotel</p>
             {booking.hotels.map(h => (
               <p key={h.id} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{h.hotelRoomSchedule.period.hotel.name}</span>
+                <span className="font-medium text-admin-ink">{h.hotelRoomSchedule.period.hotel.name}</span>{tag(h.groupId)}
                 {' — '}
                 <span className="capitalize">{h.hotelRoomSchedule.period.hotel.city}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">{h.nights} mlm</span>
@@ -168,7 +189,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             <p className="admin-section">Paket Umroh</p>
             {booking.packages.map(bp => (
               <p key={bp.id} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{bp.package.name}</span>
+                <span className="font-medium text-admin-ink">{bp.package.name}</span>{tag(bp.groupId)}
                 {' — '}
                 <span>{formatCalendarDate(bp.departureDate, DATE_NUMERIC)} – {formatCalendarDate(bp.returnDate, DATE_NUMERIC)}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">{bp.numPeople} orang</span>
@@ -182,7 +203,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             <p className="admin-section">Tiket Pesawat</p>
             {booking.flights.map(bf => (
               <p key={bf.id} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</span>
+                <span className="font-medium text-admin-ink">{bf.flightSchedule.route.origin} → {bf.flightSchedule.route.destination}</span>{tag(bf.groupId)}
                 {' — '}
                 <span>{formatCalendarDate(bf.departureDate, DATE_NUMERIC)}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">{bf.numPassengers} penumpang</span>
@@ -196,7 +217,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             <p className="admin-section">Paket Ziarah</p>
             {booking.tourPackages.map(tp => (
               <p key={tp.id} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{tp.tourPackage.name}</span>
+                <span className="font-medium text-admin-ink">{tp.tourPackage.name}</span>{tag(tp.groupId)}
                 {' — '}
                 <span>{formatCalendarDate(tp.tourDate, DATE_NUMERIC)}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">
@@ -213,7 +234,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             {booking.transports.map(bt => (
               <div key={bt.id} className="space-y-0.5">
                 <p className="text-[13px] text-admin-ink/80">
-                  <span className="font-medium text-admin-ink">{bt.transportQuota.pricing.trip.name}</span>
+                  <span className="font-medium text-admin-ink">{bt.transportQuota.pricing.trip.name}</span>{tag(bt.groupId)}
                   {' — '}
                   <span>{formatCalendarDate(bt.travelDate, DATE_NUMERIC)}</span>
                   <span className="text-admin-muted ml-2 text-[12px]">{bt.transportQuota.pricing.vehicle.name} · {bt.numPassengers} penumpang</span>
@@ -231,7 +252,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             <p className="admin-section">Katering</p>
             {booking.catering.map(bc => (
               <p key={bc.id} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{bc.cateringOption.name}</span>
+                <span className="font-medium text-admin-ink">{bc.cateringOption.name}</span>{tag(bc.groupId)}
                 {' — '}
                 <span>{formatCalendarDate(bc.startDate, DATE_NUMERIC)} – {formatCalendarDate(bc.endDate, DATE_NUMERIC)}</span>
                 <span className="text-admin-muted ml-2 text-[12px]">{bc.numDays} hari × {bc.numPeople} orang</span>
@@ -245,7 +266,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             <p className="admin-section">Haji</p>
             {booking.haji.map(bh => (
               <p key={bh.id} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{bh.hajiProduct.name}</span>
+                <span className="font-medium text-admin-ink">{bh.hajiProduct.name}</span>{tag(bh.groupId)}
                 <span className="text-admin-muted ml-2 text-[12px]">{bh.numPersons} orang</span>
               </p>
             ))}
@@ -257,7 +278,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
             <p className="admin-section">Visa</p>
             {visaRows.map(r => (
               <p key={r.key} className="text-[13px] text-admin-ink/80">
-                <span className="font-medium text-admin-ink">{r.name}</span>
+                <span className="font-medium text-admin-ink">{r.name}</span>{tag(r.first.groupId)}
                 {r.detail && <span className="text-admin-muted ml-2 text-[12px]">{r.detail}</span>}
                 <span className="block text-[12px] text-admin-muted tabular-nums">
                   {formulaOf(r, formatRupiah) ?? `1 ${r.unit}`} = <span className="font-semibold text-admin-ink">{formatRupiah(r.amount)}</span>
@@ -274,7 +295,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
               <div key={bm.id} className="space-y-2">
                 <p className="text-[13px] text-admin-ink/80">
                   {formatCalendarDate(bm.startDate, DATE_NUMERIC)} – {formatCalendarDate(bm.endDate, DATE_NUMERIC)}
-                  <span className="text-admin-muted ml-2 text-[12px]">{bm.numDays} hari × {bm.numPeople} orang</span>
+                  <span className="text-admin-muted ml-2 text-[12px]">{bm.numDays} hari × {bm.numPeople} orang</span>{tag(bm.groupId)}
                 </p>
                 {bm.muthowif ? (
                   <p className="text-[13px] text-admin-ink">
@@ -284,7 +305,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
                     </span>
                   </p>
                 ) : (
-                  <MuthowifAssignPanel bookingId={id} />
+                  <MuthowifAssignPanel bookingId={id} bookingMuthowifId={bm.id} />
                 )}
               </div>
             ))}
@@ -305,7 +326,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
         <div className="p-5">
           <PilgrimSlotsTable
             total={slots.length}
-            slots={slots.map(x => ({ ...x, editHref: manageHref(x.id), viewHref: `/${locale}/admin/bookings/${id}?periksa=${x.id}#periksa` }))}
+            slots={slots.map(x => ({ ...x, ...(gv && { group: gv.name(pilgrimGroup.get(x.id)) }), editHref: manageHref(x.id), viewHref: `/${locale}/admin/bookings/${id}?periksa=${x.id}#periksa` }))}
             addHref={booking.status === 'active' && nextEmpty ? manageHref(nextEmpty.id) : null}
             deleteEndpoint={booking.status === 'active' ? `/api/v1/admin/bookings/${id}/pilgrims/{id}` : null}
           />

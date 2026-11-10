@@ -6,6 +6,7 @@ import { getObjectBuffer } from '@/lib/storage/minio'
 import { err } from '@/lib/validators'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { authFailureResponse } from '@/lib/admin/errors'
+import { groupView } from '@/lib/booking/groups'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,7 +26,8 @@ export async function GET(req: NextRequest, { params }: Params) {
     select: {
       bookingCode: true,
       status: true,
-      pilgrims: { select: { id: true, fieldValues: true, savedPilgrimId: true, visaApplication: { select: { visaProductId: true } } } },
+      pilgrims: { select: { id: true, groupId: true, fieldValues: true, savedPilgrimId: true, visaApplication: { select: { visaProductId: true } } } },
+      groups:   { select: { id: true, label: true, position: true } },
     },
   })
 
@@ -50,7 +52,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     const fields = p.visaApplication?.visaProductId ? fieldsByProduct.get(p.visaApplication.visaProductId) ?? [] : []
     const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
     const pilgrimName = typeof name === 'string' && name ? name : p.id
-    return cardDocs.filter(d => d.savedPilgrimId === p.savedPilgrimId).map(d => ({ ...d, pilgrimName, pilgrimId: p.id }))
+    return cardDocs.filter(d => d.savedPilgrimId === p.savedPilgrimId).map(d => ({ ...d, pilgrimName, pilgrimId: p.id, groupId: p.groupId }))
   })
 
   if (allDocs.length === 0) {
@@ -60,10 +62,13 @@ export async function GET(req: NextRequest, { params }: Params) {
   // Nama berkas di ZIP = label katalog jenis dokumen (kunci bila kosong), dibersihkan — label diatur admin, jangan jadi path.
   // Path unik ditetapkan sebelum unduhan paralel (SEC-187): nama jamaah sama, label sama, atau label kosong setelah disaring tak boleh saling
   // menimpa entri ZIP — folder diberi awalan id jamaah, nama berkas ganda diberi sufiks -2, -3, …
+  // Booking berrombongan (§10.8, 11d-2b): folder rombongan di atas folder jamaah — nama dari label hidup, disaring seperti nama jamaah (nomor urut menjaga unik).
+  const gv = groupView(booking.groups)
+  const groupFolder = (groupId: string | null) => (gv ? `${gv.rank(groupId)}-${gv.name(groupId).replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'rombongan'}/` : '')
   const used = new Set<string>()
   const entries = allDocs.map(doc => {
     const label  = (doc.documentType.label || doc.documentType.key).replace(/[^a-zA-Z0-9 ()-]/g, '').trim() || 'dokumen'
-    const folder = `${doc.pilgrimName.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'jamaah'}-${doc.pilgrimId.slice(0, 8)}`
+    const folder = `${groupFolder(doc.groupId)}${doc.pilgrimName.replace(/[^a-zA-Z0-9 ]/g, '').trim() || 'jamaah'}-${doc.pilgrimId.slice(0, 8)}`
     const ext    = doc.mimeType === 'application/pdf' ? 'pdf' : 'webp' // berkas tersimpan selalu WebP atau PDF (lib/documents/file.ts)
     let path = `${folder}/${label}.${ext}`
     for (let n = 2; used.has(path); n++) path = `${folder}/${label}-${n}.${ext}`
