@@ -2,7 +2,8 @@ import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError, tagItem } from './errors'
 import { sealNewPilgrim } from '@/lib/pilgrims/bookingLink'
 import { packageLines, type PackageResolved } from './packageItem'
-import { assignMembers, memberProblem } from './members'
+import { assignMembers, memberProblem, type MemberAssignment, type MemberPilgrim } from './members'
+import { isGrouped, targetSize } from './groups'
 import { calendarDateOf, dbDateOf } from '@/lib/time'
 import type { BookingItemInput } from '@/lib/validators/booking'
 import type { BookingInput } from './create'
@@ -44,10 +45,21 @@ export async function writeBookingItems(
   let tourIdx = 0
   let packageIdx = 0
   // Baris paket/haji yang ditulis — anggotanya dibagi `assignMembers` (lib/booking/members.ts); visa paket ikut ke anggota, harganya sudah di baris paket (§10.2).
-  const packageRows: Array<{ key: string; numPeople: number; visaProductId: string | null; name: string }> = []
-  const hajiRows: Array<{ key: string; numPeople: number }> = []
-  // Rencana tanggal berangkat visa (D1): bawaan = tiket pergi paling awal di booking ini (tiket mandiri atau paket bertiket).
-  const flightDates: string[] = []
+  const packageRows: Array<{ key: string; numPeople: number; visaProductId: string | null; name: string; group?: number }> = []
+  const hajiRows: Array<{ key: string; numPeople: number; group?: number }> = []
+  // Rencana tanggal berangkat visa (D1): bawaan = tiket pergi paling awal di booking ini (tiket mandiri atau paket bertiket) — per rombongan bila berrombongan (§10.8).
+  const flightDates: Array<{ date: string; group?: number }> = []
+
+  // Rombongan (§10.8): baris rombongan ditulis dulu; item dan jamaah menunjuknya (FK komposit menjamin booking yang sama). Tanpa rombongan → semua NULL.
+  const grouped = isGrouped(data)
+  const groupIds: string[] = []
+  for (const [i, g] of (data.groups ?? []).entries()) {
+    const row = await tx.bookingGroup.create({
+      data: { bookingId, position: i + 1, label: g.label ?? null, plannedTravelDate: g.plannedTravelDate ? dbDateOf(g.plannedTravelDate) : null }, select: { id: true },
+    })
+    groupIds.push(row.id)
+  }
+  const gid = (x: { group?: number }): string | null => (x.group === undefined ? null : (groupIds[x.group] ?? null))
 
   for (const [itemIndex, item] of data.items.entries()) {
     try {
@@ -68,9 +80,9 @@ export async function writeBookingItems(
           const line = lineFromPoint(point, { description: label, qty: item.nights * item.numRooms, unit: 'room_night' })
           const row = await tx.bookingHotel.create({
             data: {
-              bookingId, hotelRoomScheduleId: item.hotelRoomScheduleId,
+              bookingId, groupId: gid(item), hotelRoomScheduleId: item.hotelRoomScheduleId,
               checkIn: new Date(item.checkIn), checkOut: new Date(item.checkOut),
-              nights: item.nights, numRooms: item.numRooms, numGuests: data.totalPilgrims ?? data.pilgrims.length,
+              nights: item.nights, numRooms: item.numRooms, numGuests: grouped ? targetSize(data, item.group) : (data.totalPilgrims ?? data.pilgrims.length),
               pricePerNight: point.sellIdr, totalPrice: lineTotalSell(line),
             },
           })
@@ -87,7 +99,7 @@ export async function writeBookingItems(
           const line = lineFromPoint(point, { description: label, qty: 1, unit: 'vehicle' })
           const row = await tx.bookingTransport.create({
             data: {
-              bookingId, transportQuotaId: item.transportQuotaId,
+              bookingId, groupId: gid(item), transportQuotaId: item.transportQuotaId,
               travelDate: quota.travelDate,
               numPassengers: item.numPassengers,
               unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
@@ -105,7 +117,7 @@ export async function writeBookingItems(
           const line = lineFromPoint(point, { description: 'Layanan Muthowif', qty: item.numDays * item.numPeople, unit: 'person_day' })
           const row = await tx.bookingMuthowif.create({
             data: {
-              bookingId, muthowifId: null,
+              bookingId, groupId: gid(item), muthowifId: null,
               startDate: new Date(item.startDate), endDate: new Date(item.endDate),
               numDays: item.numDays, numPeople: item.numPeople, totalPrice: lineTotalSell(line),
             },
@@ -122,7 +134,7 @@ export async function writeBookingItems(
           const line = lineFromPoint(point, { description: option.name, qty: item.numDays * item.numPeople, unit: 'person_day' })
           const row = await tx.bookingCatering.create({
             data: {
-              bookingId, cateringOptionId: item.cateringOptionId,
+              bookingId, groupId: gid(item), cateringOptionId: item.cateringOptionId,
               startDate: new Date(item.startDate), endDate: new Date(item.endDate),
               numDays: item.numDays, numPeople: item.numPeople, totalPrice: lineTotalSell(line),
             },
@@ -146,7 +158,7 @@ export async function writeBookingItems(
           }
           const row = await tx.bookingTourPackage.create({
             data: {
-              bookingId, tourPackageId: item.tourPackageId, transportQuotaId,
+              bookingId, groupId: gid(item), tourPackageId: item.tourPackageId, transportQuotaId,
               tourDate, numPeople: item.numPeople, totalPrice,
               // hanya bermakna (dan hanya menahan kuota) pada mode user_choice — selain itu null, supaya release/confirm kuota tak menyentuh kuota yang tak pernah ditahan
               chosenHotelRoomScheduleId: breakdown.hotelMode === 'user_choice' ? item.chosenHotelRoomScheduleId ?? null : null,
@@ -162,9 +174,9 @@ export async function writeBookingItems(
           const totalPrice = sumSell(lines)
           if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga produk haji belum ditetapkan')
           const row = await tx.bookingHaji.create({
-            data: { bookingId, hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
+            data: { bookingId, groupId: gid(item), hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
           })
-          hajiRows.push({ key: row.id, numPeople: item.numPersons })
+          hajiRows.push({ key: row.id, numPeople: item.numPersons, group: item.group })
           add({ itemType: 'haji', itemId: row.id, label: haji.name, detail: `${item.numPersons} orang`, qty: item.numPersons }, lines)
           break
         }
@@ -179,12 +191,12 @@ export async function writeBookingItems(
             throw new ItemNotBookableError(`Tanggal terbang di luar periode jadwal tiket (${day(sch.departureFrom)} – ${day(sch.departureTo)})`)
           }
           const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'tiket pesawat')
-          flightDates.push(item.departureDate)
+          flightDates.push({ date: item.departureDate, group: item.group })
           const label = `Tiket ${sch.route.origin} → ${sch.route.destination}`
           const line = lineFromPoint(point, { description: label, qty: item.numPassengers, unit: 'person' })
           const row = await tx.bookingFlight.create({
             data: {
-              bookingId, flightScheduleId: item.flightScheduleId, departureDate: dbDateOf(item.departureDate),
+              bookingId, groupId: gid(item), flightScheduleId: item.flightScheduleId, departureDate: dbDateOf(item.departureDate),
               numPassengers: item.numPassengers, unitPrice: point.sellIdr, totalPrice: lineTotalSell(line),
             },
           })
@@ -198,12 +210,12 @@ export async function writeBookingItems(
           if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket umroh belum ditetapkan')
           const row = await tx.bookingPackage.create({
             data: {
-              bookingId, packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
+              bookingId, groupId: gid(item), packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
               numPeople: item.numPeople, flightScheduleId: r.flightScheduleId, choices: r.choices as Prisma.InputJsonValue, totalPrice,
             },
           })
-          packageRows.push({ key: row.id, numPeople: item.numPeople, visaProductId: r.visaProductId, name: r.name })
-          if (r.flightScheduleId) flightDates.push(r.departureDate)
+          packageRows.push({ key: row.id, numPeople: item.numPeople, visaProductId: r.visaProductId, name: r.name, group: item.group })
+          if (r.flightScheduleId) flightDates.push({ date: r.departureDate, group: item.group })
           add({ itemType: 'package', itemId: row.id, label: r.name, detail: `${day(r.departureDate)} – ${day(r.returnDate)} · ${item.numPeople} orang`, qty: item.numPeople }, lines)
           break
         }
@@ -216,20 +228,22 @@ export async function writeBookingItems(
   // ── Pilgrims + Visa applications ───────────────────────────────────────────────────────────────────────────────────
   // visaProductId opsional per jamaah (docs/arsitektur-booking.md §6 Step 6a): tanpa visa = tanpa VisaApplication dan tanpa sumbangan harga. Harga visa = tier
   // titik harga yang memuat lama tinggal (harga manual menang); modal/jejak kurs-vendor beku ada di `price_snapshots`.
-  const travel = flightDates.length > 0 ? [...flightDates].sort()[0]! : data.plannedTravelDate
-  const plannedTravelDate = travel ? dbDateOf(travel) : null
+  // Rencana berangkat visa per jamaah: tiket paling awal yang berlaku untuknya (rombongannya atau untuk semua), selain itu rencana rombongan / booking.
+  const plannedTravelOf = (group: number | undefined): Date | null => {
+    const dates = flightDates.filter(f => group === undefined || f.group === undefined || f.group === group).map(f => f.date).sort()
+    const travel = dates[0] ?? (group !== undefined ? data.groups?.[group]?.plannedTravelDate : undefined) ?? data.plannedTravelDate
+    return travel ? dbDateOf(travel) : null
+  }
   const assign = opts.assignMembers ?? true
-  const members = assign
-    ? assignMembers(packageRows, hajiRows, data.pilgrims.map(p => ({ key: '', ownVisa: !!p.visaProductId, packageVisa: null, currentPackage: null, currentHaji: null })))
-    : null
-  if (members && !members.ok) throw new ItemNotBookableError(memberProblem(members, k => packageRows.find(r => r.key === k)?.name ?? 'paket'))
+  const members = assign ? assignByGroup(data, packageRows, hajiRows, grouped) : null
   for (const [i, p] of data.pilgrims.entries()) {
-    const member = members?.ok ? members.members[i] : undefined
+    const member = members ? members[i] : undefined
+    const plannedTravelDate = plannedTravelOf(p.group)
     const fromPackage = (member?.package && packageRows.find(r => r.key === member.package)?.visaProductId) || undefined
     // Revisi: jamaah yang sudah ada hanya mendapat visa baru (data pribadinya tak disentuh). Jamaah baru: NIK/paspor disegel (docs/arsitektur-jamaah.md §5.3).
     const pilgrim = p.pilgrimId
       ? { id: p.pilgrimId }
-      : await createPilgrim(tx, bookingId, p.visaProductId ?? fromPackage ?? null, p.fieldValues ?? {}, { bookingPackageId: member?.package ?? null, bookingHajiId: member?.haji ?? null })
+      : await createPilgrim(tx, bookingId, p.visaProductId ?? fromPackage ?? null, p.fieldValues ?? {}, { bookingPackageId: member?.package ?? null, bookingHajiId: member?.haji ?? null, groupId: gid(p) })
     if (!p.visaProductId) {
       if (fromPackage) {
         const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
@@ -266,10 +280,36 @@ export async function writeBookingItems(
  * Baris satu paket ziarah: harga dasar = titik harga paket (komponen + bagian `included` + penyesuaian), ditambah pilihan pilgrim (mode `user_choice`) yang
  * harganya dibaca dari titik harga sub-modul. Pilihan di luar daftar opsi paket ditolak (dulu diam-diam bernilai 0 padahal kuotanya ikut tertahan).
  */
+const blankMember = (p: BookingInput['pilgrims'][number]): MemberPilgrim => ({ key: '', ownVisa: !!p.visaProductId, packageVisa: null, currentPackage: null, currentHaji: null })
+
+/**
+ * Anggota Paket Umroh/Haji (lib/booking/members.ts). Tanpa rombongan, atau semua paket/haji untuk SEMUA jamaah → dibagi atas seluruh jamaah (perilaku lama).
+ * Paket/haji per rombongan → dibagi di dalam rombongannya sendiri. Campuran "semua" + "per rombongan" ditolak (satu jamaah tak dapat memegang dua paket).
+ */
+function assignByGroup(
+  data: BookingInput, packageRows: ReadonlyArray<{ key: string; numPeople: number; visaProductId: string | null; name: string; group?: number }>,
+  hajiRows: ReadonlyArray<{ key: string; numPeople: number; group?: number }>, grouped: boolean,
+): MemberAssignment[] {
+  const check = (r: ReturnType<typeof assignMembers>): MemberAssignment[] => {
+    if (!r.ok) throw new ItemNotBookableError(memberProblem(r, k => packageRows.find(x => x.key === k)?.name ?? 'paket'))
+    return r.members
+  }
+  const rows = [...packageRows, ...hajiRows]
+  if (!grouped || rows.every(r => r.group === undefined)) return check(assignMembers(packageRows, hajiRows, data.pilgrims.map(blankMember)))
+  if (rows.some(r => r.group === undefined)) throw new ItemNotBookableError('Paket Umroh/Haji untuk semua jamaah tidak dapat digabung dengan paket per rombongan — pilih rombongan untuk setiap paket')
+  const out: MemberAssignment[] = data.pilgrims.map(() => ({ package: null, haji: null }))
+  for (let g = 0; g < (data.groups?.length ?? 0); g++) {
+    const idx = data.pilgrims.flatMap((p, i) => (p.group === g ? [i] : []))
+    const got = check(assignMembers(packageRows.filter(r => r.group === g), hajiRows.filter(r => r.group === g), idx.map(i => blankMember(data.pilgrims[i]!))))
+    idx.forEach((pi, k) => { out[pi] = got[k]! })
+  }
+  return out
+}
+
 /** Jamaah booking baru: NIK/paspor (peran `nik`/`passport_number`) DISEGEL — `fieldValues` hanya menyimpan samaran. Isian tak valid → 422. */
 async function createPilgrim(
   tx: Prisma.TransactionClient, bookingId: string, visaProductId: string | null, values: Record<string, unknown>,
-  links: { bookingPackageId: string | null; bookingHajiId: string | null },
+  links: { bookingPackageId: string | null; bookingHajiId: string | null; groupId: string | null },
 ) {
   const sealed = await sealNewPilgrim(tx, visaProductId, values)
   if (!sealed.ok) throw new ItemNotBookableError(Object.values(sealed.errors)[0] ?? 'Data jamaah tidak valid')

@@ -911,7 +911,10 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] 11a++++++++ — tabel jamaah bersama (jamaah + admin): progres bersegmen n/total lengkap, Tambah jamaah = isi slot berikutnya, aksi ikon + tooltip (Lihat/Edit/Hapus = kosongkan slot `clearSlot`), halaman isi per jamaah sisi jamaah `bookings/[id]/jamaah/[pilgrimId]`; tooltip ikon aksi di kit tabel menggantikan `title` — selesai 2026-11-10
   - [x] 11b — Hotel, Muthowif, Katering, Paket Ziarah, Tiket pesawat di halaman checkout yang sama (rancangan §10.6 DISETUJUI 2026-11-10; **11b-1 Hotel + Paket Ziarah SELESAI 2026-11-10**; **11b-2 Muthowif + Katering + Tiket pesawat (pulang opsional) SELESAI 2026-11-10**)
   - [x] 11c — keranjang campur (Visa plus dari front-end) — 2026-11-10, `docs/arsitektur-booking-engine-v2.md` §10.7 "Hasil eksekusi": satu `checkoutCartSchema` di kedua route, keranjang perangkat `lib/checkout/cartStore.ts`, halaman `/{locale}/keranjang`, ikon header; satu rombongan, Haji sendiri, satu visa
-  - [ ] 11d — beberapa rombongan dalam satu booking (rombongan bernama, item per rombongan) — dirancang terpisah
+  - [ ] 11d — beberapa rombongan dalam satu booking — RANCANGAN `docs/arsitektur-booking-engine-v2.md` §10.8 (2026-11-10), keputusan pemilik K11d-1..5 sudah diambil
+    - [x] 11d-1 — skema `booking_groups` + `groupId` (FK komposit) + mesin per rombongan (`lib/booking/groups.ts`) — 2026-11-10
+    - [ ] 11d-2 — form draf/revisi admin + tampilan rombongan (detail, invoice, manifest/muthowif)
+    - [ ] 11d-3 — keranjang pelanggan berrombongan
   - [ ] SEC-221 — batas penahanan kuota tanpa bayar per akun — **DITUNDA SENGAJA ke akhir Fase 11 (pemilik 2026-11-10: "agar saya bisa coba-coba dulu sepuasnya")**; WAJIB dikerjakan sebelum go-live (M15), angka batas ditanyakan ke pemilik saat itu
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)

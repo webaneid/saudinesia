@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import type { BookingItemInput } from '@/lib/validators/booking'
+import type { BookingGroupInput, BookingItemInput } from '@/lib/validators/booking'
+import { normalizeGroups } from './groups'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import { reserveFlightQuota } from '@/lib/quota'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
@@ -19,11 +20,16 @@ import { ItemNotBookableError, tagItem } from './errors'
 export type BookingInput = {
   items: BookingItemInput[]
   /** `pilgrimId` = jamaah yang SUDAH ada (revisi: ganti visa) — tak dibuat ulang, hanya visanya yang ditulis. */
-  pilgrims: Array<{ fieldValues?: Record<string, unknown>; visaProductId?: string; selectedDurationDays?: number; pilgrimId?: string }>
+  pilgrims: Array<{ fieldValues?: Record<string, unknown>; visaProductId?: string; selectedDurationDays?: number; pilgrimId?: string; /** Rombongan (§10.8) — indeks ke `groups`. */ group?: number }>
   departureDate?: string
   totalPilgrims?: number
   /** Rencana tanggal berangkat visa bila item yang ditulis tak memuat tiket (revisi: tiket sudah ada di booking). */
   plannedTravelDate?: string
+  /**
+   * Rombongan (docs/arsitektur-booking-engine-v2.md §10.8): ≥ 2 → setiap jamaah menunjuk satu rombongan, item menunjuk rombongan atau kosong (= semua).
+   * Jumlah orang item DITURUNKAN dari ukuran sasarannya (`normalizeGroups`, lib/booking/groups.ts) — bukan dari masukan.
+   */
+  groups?: BookingGroupInput[]
 }
 
 export type PreparedBooking = {
@@ -40,7 +46,9 @@ export class RuleViolationError extends Error {
  * Resolusi di LUAR transaksi (bacaan saja): kendaraan Paket Ziarah, isi Paket Umroh, aturan visa (dari produk visa, sama untuk setiap pelanggan).
  * Melempar `RuleViolationError` (komponen wajib visa tak ada) atau `ItemNotBookableError` (item tak dapat dijual).
  */
-export async function prepareBooking(data: BookingInput, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
+export async function prepareBooking(input: BookingInput, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
+  // Rombongan: bentuk diperiksa ulang (masukan bisa datang dari jalur mana pun) dan jumlah orang item diturunkan dari ukuran sasarannya SEBELUM kuota/harga.
+  const data = normalizeGroups(input)
   // Kendaraan Paket Ziarah: mode included → kuota kendaraan dicari dari tanggal tur; user_choice → kuota yang dikirim (docs/arsitektur-ziarah.md §12.6).
   const tours = await Promise.all(data.items.flatMap((i, index) => (i.itemType === 'tourPackage' ? [{ tp: i, index }] : [])).map(async ({ tp, index }) => { try {
     const breakdown = await computeTourPackageBreakdown(tp.tourPackageId)

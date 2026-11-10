@@ -552,6 +552,50 @@ Tujuan: pelanggan memesan BEBERAPA produk dalam satu booking (satu invoice, satu
 - **Dua visa berbeda / pembagian berurutan (butir 1, 2)**: tidak dibuat — satu rombongan memuat paling banyak satu visa (keputusan K11c-2); rombongan ganda = 11d.
 - **Bukti**: `scripts/test-checkout.ts` — skema keranjang (kosong, > 20, kunci liar, Haji + lain, dua visa, orang berbeda), tanggal lampau di entri mana pun, Visa Plus + Tiket + Hotel = satu booking + satu invoice dengan angka pratinjau = pesanan, Visa Plus tanpa tiket = 422 `missing: flight` tanpa booking, `safeNextPath` keranjang persis, penjaga sumber (urutan gerbang kedua route, keranjang tanpa harga/PII, ikon hanya pelanggan, Haji tanpa tombol keranjang).
 
+### 10.8 Fase 11d — Beberapa rombongan dalam satu booking (RANCANGAN 2026-11-10; DISETUJUI pemilik 2026-11-10 — K11d-1 = a, K11d-2 = a, K11d-3 = tanpa batas sendiri, K11d-4 = nama bebas, K11d-5 = ya; 11d-1 DIEKSEKUSI 2026-11-10)
+
+Tujuan (pemilik 2026-11-10): satu pesanan memuat lebih dari satu rombongan dengan perjalanan berbeda — mis. rombongan A 10 orang via Makkah tgl 5, rombongan B 6 orang via Madinah tgl 8, lalu bertemu di hotel Madinah yang sama — tetap SATU booking, SATU invoice, SATU pembayaran. 11c membatasi keranjang pada satu rombongan (semua entri N orang, satu visa).
+
+**Recheck kode (SOP langkah 1, 2026-11-10):**
+
+| # | Temuan | Bukti |
+|---|--------|-------|
+| D1 | Item booking menyimpan jumlah orangnya sendiri (`numPassengers`, `numPeople`, `numRooms`) tanpa kaitan ke jamaah. Satu-satunya kaitan jamaah↔item: `BookingPilgrim.bookingPackageId` / `bookingHajiId` (dibagi `assignMembers`). | `prisma/schema.prisma` model `Booking*`, `BookingPilgrim`; `lib/booking/members.ts` |
+| D2 | Tamu hotel DIPAKSA = jumlah jamaah booking (`numGuests: data.totalPilgrims ?? pilgrims.length`) — dua rombongan di dua hotel berbeda akan tercatat salah. | `lib/booking/lineItems.ts:73` |
+| D3 | Rencana berangkat visa = tanggal tiket PALING AWAL di seluruh booking, dipakai untuk SEMUA visa — rombongan B (tgl 8) akan tercatat berangkat tgl 5. | `lib/booking/lineItems.ts:219` |
+| D4 | Aturan Visa Plus dinilai atas cakupan SELURUH booking (`bookingCoverage`) — tiket milik rombongan A ikut "memenuhi" Visa Plus rombongan B. | `lib/booking/ruleContext.ts`, `rules.ts` |
+| D5 | Form draf admin dan revisi sudah mengizinkan jumlah orang per item bebas dan visa per jamaah berbeda — jadi dua rombongan sudah bisa "dititipkan" lewat admin, tetapi tanpa catatan siapa ikut item mana (manifest, muthowif, transport tak tahu). | `lib/validators/booking.ts` (`bookingDraftSchema`), `drafts/[id]/ItemRows.tsx`, `lib/booking/revise.ts` |
+| D6 | Tabel `groups`/`group_members` (Group Booking lama) sudah dihapus 2026-10-30 — tidak ada konsep rombongan di skema. | `CLAUDE.md` folder structure |
+
+**Rancangan:**
+
+1. **Skema** (migrasi aditif, booking lama tak berubah): tabel baru `BookingGroup` (`booking_groups`: `id`, `bookingId` FK cascade, `position` 1..n unik per booking, `label`, `createdAt timestamptz`). `BookingPilgrim.groupId` dan `groupId` pada setiap tabel item berorang (`booking_hotels`, `booking_transports`, `booking_flights`, `booking_muthowif`, `booking_catering`, `booking_tour_packages`, `booking_packages`) — nullable, FK ke rombongan **booking yang sama** (dijaga CHECK/trigger, bukan hanya aplikasi). **`groupId` NULL = "semua jamaah"**; booking tanpa baris rombongan = booking satu rombongan seperti sekarang (tak ada migrasi data).
+2. **Jumlah orang diturunkan, tidak diisi bebas**: item untuk rombongan G = ukuran G; item "semua" = N. Tamu hotel = ukuran sasaran (menutup D2). Jumlah kamar tetap bebas.
+3. **Jamaah dibagi ke rombongan saat terbit**: slot jamaah dibuat per rombongan sesuai ukurannya; visa (paling banyak satu per rombongan) melekat ke jamaah rombongannya. Paket Umroh/Haji: `assignMembers` dijalankan per rombongan.
+4. **Visa per rombongan**: rencana berangkat = tiket paling awal dari item rombongan itu ∪ item "semua", selain itu tanggal rencana visa rombongan (menutup D3). Aturan Visa Plus dinilai per rombongan atas cakupan (item rombongan ∪ item "semua") — lihat K11d-1 (menutup D4).
+5. **Satu mesin**: `BookingInput` mendapat `groups?: { size }[]` + `group?: index` per item dan per jamaah; `lineItems.ts`, `ruleContext.ts`, `members.ts`, `revise.ts`, `drafts.ts` memakainya. Kuota/adapter/snapshot tidak berubah (jumlah per item sudah ada). Invoice: baris dikelompokkan per rombongan; nama rombongan ditempel saat render dari `booking_groups.label`, snapshot hanya menyimpan id/posisi rombongan (K11d-4).
+6. **Tampilan**: detail booking admin dan jamaah mengelompokkan jamaah dan item per rombongan; panel muthowif, transport, dan unduhan dokumen membaca rombongan item. Pemindahan jamaah antar-rombongan setelah terbit = revisi (`reviseBooking`), berlog.
+7. **Keranjang pelanggan**: `checkoutCartSchema` mendapat `groups: [{ size }]` (1..maks) dan `group` per entri (indeks atau "semua"); halaman keranjang: tombol "Tambah rombongan", ukuran per rombongan, pilih rombongan untuk setiap produk. Satu rombongan = perilaku 11c persis (tak ada isian tambahan).
+8. **Tahapan eksekusi** (satu PR per tahap): **11d-1** skema + mesin + tes (API admin & checkout menerima rombongan); **11d-2** form draf/revisi admin + tampilan detail admin/jamaah + manifest/muthowif; **11d-3** keranjang pelanggan.
+
+**Keputusan yang diminta dari pemilik:**
+**Keputusan pemilik (2026-11-10):** K11d-1 = (a) per rombongan. K11d-2 = (a) satu rombongan atau semua. **K11d-3 = tanpa batas sendiri** ("kenapa dibatasi? bebas aja"): jumlah rombongan hanya dibatasi jumlah jamaah (setiap rombongan ≥ 1 orang → ≤ `CHECKOUT_MAX_PEOPLE` = 100 di checkout, ≤ 2000 di form admin); batas teknis larik tetap ada sebesar itu (SEC-211, `scripts/test-zod-bounds.ts`). **K11d-4 = nama bebas dari pelanggan**, dengan cara yang tidak melanggar larangan data pribadi di snapshot beku: nama disimpan di `booking_groups.label` (tabel hidup, bisa diubah lewat revisi, dibersihkan `lib/account/deletion.ts` saat akun dihapus — wajib, dijaga `scripts/test-deletion.ts`), `price_snapshots` hanya menyimpan rombongan sebagai id/posisi, dan nama ditempel saat invoice/halaman DIRENDER (sama dengan nama jamaah); nama kosong → "Rombongan A/B/C". Rancangan butir 5 disesuaikan. Batas panjang nama 60 karakter, teks polos. K11d-5 = Haji tetap selalu sendirian.
+
+**Usulan awal (riwayat):**
+- **K11d-1 Aturan Visa Plus**: (a) dinilai per rombongan — Visa Plus rombongan B wajib punya tiketnya sendiri atau tiket "semua"; (b) dinilai per booking seperti sekarang. *Usul: (a)*, supaya visa tidak lolos karena tiket rombongan lain.
+- **K11d-2 Sasaran item**: (a) satu rombongan ATAU semua; (b) boleh beberapa rombongan sekaligus (mis. A+B dari tiga). *Usul: (a)* — (b) bisa ditambah kelak tanpa mengubah data lama.
+- **K11d-3 Batas**: berapa rombongan maksimal per booking? *Usul: 5 untuk pelanggan, 20 untuk admin.*
+- **K11d-4 Nama rombongan**: (a) otomatis "Rombongan A/B/C" (aman di invoice); (b) nama bebas dari pelanggan (tampil di invoice beku — risiko data pribadi). *Usul: (a)*, dengan catatan internal opsional yang tidak masuk invoice.
+- **K11d-5 Haji**: tetap selalu sendirian (K11c-3)? *Usul: ya.*
+
+**Hasil eksekusi 11d-1 (2026-11-10, skema + mesin):**
+- **Skema** (migrasi `20261121090000_booking_groups`, aditif): `BookingGroup` (`booking_groups`: posisi ≥ 1 unik per booking, `label` 1–60 tanpa karakter kontrol — CHECK DB, `plannedTravelDate`); `groupId` nullable di `booking_pilgrims` + 8 tabel item (hotel, transport, tiket, muthowif, katering, ziarah, haji, paket) dengan **FK komposit** (`groupId`, `bookingId`) → (`id`, `bookingId`) — rombongan booking lain ditolak DB, bukan hanya aplikasi.
+- **Masukan**: `BookingInput.groups` (≥ 2; satu rombongan = tanpa `groups`), `pilgrims[].group`, `items[].group` (kosong = semua). Skema draf admin (`bookingDraftSchema.groups`, `checkGroups`) menerima bentuk yang sama; revisi menolak rujukan rombongan.
+- **Mesin** — satu modul murni `lib/booking/groups.ts`: `normalizeGroups` (dipanggil `prepareBooking` paling awal: bentuk diperiksa ulang, jumlah orang item DITIMPA ukuran sasaran sebelum kuota/harga), `targetSize`, `groupLabel` (nama, selain itu "Rombongan A/B/…"), `scopeToGroup`. `lineItems.ts`: baris rombongan ditulis dulu, `groupId` di setiap item dan jamaah, tamu hotel = ukuran sasaran, rencana berangkat visa = tiket paling awal yang berlaku untuk rombongan itu (miliknya ∪ untuk semua), selain itu rencana rombongan; anggota Paket/Haji dibagi per rombongan (`assignByGroup`; campuran paket "semua" + "per rombongan" → 422). `ruleContext.ts`: Visa Plus dinilai per rombongan (pesan diawali nama rombongan).
+- **Ditunda ke 11d-2**: revisi booking berrombongan (`reviseBooking`/`previewRevision` → 409 "belum dapat direvisi"), tampilan rombongan di detail/invoice/manifest, form draf admin. Kode lain (kuota, adapter, snapshot, invoice) tidak berubah.
+- **Hapus akun**: `booking_groups.label` dikosongkan (`lib/account/deletion.ts`, diuji `scripts/test-deletion.ts`).
+- **Bukti**: `scripts/test-booking-groups.ts` (didaftarkan di `bun run test`) — normalisasi dan bentuk tak sah (murni + skema), dua rombongan = pratinjau sama dengan pesanan, jumlah orang dari ukuran rombongan (masukan diabaikan), hotel untuk semua 5 tamu, visa rombongan B memakai rencananya sendiri bukan tiket A, kursi tertahan = ukuran rombongan, Visa Plus per rombongan (422 hanya rombongan B; tiket untuk semua memenuhi keduanya), booking tanpa rombongan tak berubah, FK komposit + CHECK di DB, anggota paket per rombongan, revisi 409.
+
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 

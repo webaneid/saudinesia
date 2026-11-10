@@ -26,8 +26,9 @@ const EMPTY: BookingDraft = { items: [], pilgrims: [{}] }
 /** Isi draf → masukan mesin pesan. Data jamaah kosong (diisi setelah terbit, D3). */
 export const draftInput = (d: BookingDraft): BookingInput => ({
   items: d.items,
-  pilgrims: d.pilgrims.map(p => ({ fieldValues: {}, visaProductId: p.visaProductId, selectedDurationDays: p.selectedDurationDays })),
+  pilgrims: d.pilgrims.map(p => ({ fieldValues: {}, visaProductId: p.visaProductId, selectedDurationDays: p.selectedDurationDays, group: p.group })),
   totalPilgrims: d.pilgrims.length,
+  ...(d.groups && d.groups.length > 0 ? { groups: d.groups } : {}),
 })
 
 /** Baca isi draf tersimpan; data rusak/kosong → draf kosong (draf tak pernah membawa angka harga, jadi tak ada yang bisa "lolos" lewat sini). */

@@ -3,6 +3,7 @@ import type { BookingInput } from './create'
 import type { PackageResolved } from './packageItem'
 import type { TourPackageResolved } from './lineItems'
 import { evaluateVisaRules, type BookingCoverage, type RuleViolation } from './rules'
+import { groupLabel, isGrouped, scopeToGroup } from './groups'
 
 // Pemuat konteks untuk lib/booking/rules.ts (fungsi aturannya sendiri murni). Komponen booking = item mandiri + isi Paket Umroh + isi Paket Ziarah yang ditagih.
 
@@ -58,6 +59,18 @@ export async function bookingCoverage(data: BookingInput, packages: readonly Pac
  * Aturan sepenuhnya dari produk visa — tak ada pelonggaran per pelanggan (docs/rencana-visa-produk.md §2.3).
  */
 export async function visaRuleViolations(data: BookingInput, packages: readonly PackageResolved[], tours: readonly TourPackageResolved[]): Promise<RuleViolation[]> {
+  if (!isGrouped(data)) return violationsIn(data, packages, tours)
+  // Berrombongan (§10.8, K11d-1 = a): setiap rombongan dinilai atas itemnya sendiri + item untuk semua — tiket rombongan A tak memenuhi Visa Plus rombongan B.
+  const out: RuleViolation[] = []
+  for (const [g, group] of (data.groups ?? []).entries()) {
+    const scoped = scopeToGroup(data, packages, tours, g)
+    const name = groupLabel(group.label, g)
+    for (const v of await violationsIn(scoped.data, scoped.packages, scoped.tours)) out.push({ ...v, message: `${name}: ${v.message}` })
+  }
+  return out
+}
+
+async function violationsIn(data: BookingInput, packages: readonly PackageResolved[], tours: readonly TourPackageResolved[]): Promise<RuleViolation[]> {
   const ids = [...new Set([...data.pilgrims.flatMap(p => (p.visaProductId ? [p.visaProductId] : [])), ...packages.flatMap(p => (p.choices.visaProductId ? [p.choices.visaProductId] : []))])]
   if (ids.length === 0) return []
   const [visas, coverage] = await Promise.all([
