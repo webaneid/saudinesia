@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { ArrowRight, Landmark, MapPin, Route as RouteIcon, Tag } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { getFeaturedCards, getFeaturedCardUrls } from '@/lib/media/urls'
 import { withSellPrice } from '@/lib/pricing/engine/read'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
@@ -122,9 +123,12 @@ export default async function ToursPage({ params }: Props) {
 
                   <div className="mt-auto space-y-3 border-t pt-4">
                     <PriceTag price={Number(p.price)} label={t('card.priceFrom')} note={addOns} />
-                    <Link href={`/${locale}/register`} className="btn-brand-solid w-full">
-                      {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
-                    </Link>
+                    {/* Checkout Paket Ziarah (docs/arsitektur-booking-engine-v2.md §10.6); paket belum berharga tak dapat dipesan. */}
+                    {Number(p.price) > 0 && (
+                      <Link href={checkoutPath(locale, 'tour', p.id)} className="btn-brand-solid w-full">
+                        {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
+                      </Link>
+                    )}
                   </div>
                 </div>
               </article>

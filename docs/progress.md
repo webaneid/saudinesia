@@ -909,7 +909,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] 11a++++++ — dokumen yang bisa diunggah jamaah = dokumen yang diperiksa petugas: jenis perjalanan dibatasi ke syarat produk (`tripUploadableTypes`, unggah jenis tak diminta → 400 di server), berkas lama tak diminta bertanda "Tidak diperlukan", popup dokumen pribadi di booking hanya syarat produk — selesai 2026-11-10
   - [x] 11a+++++++ — admin: halaman booking hanya memeriksa (Kelengkapan dokumen + formulir data dihapus dari sana); ubah kartu/data/dokumen di halaman Kelola jamaah per orang `admin/bookings/[id]/pilgrims/[pilgrimId]` — selesai 2026-11-10
   - [x] 11a++++++++ — tabel jamaah bersama (jamaah + admin): progres bersegmen n/total lengkap, Tambah jamaah = isi slot berikutnya, aksi ikon + tooltip (Lihat/Edit/Hapus = kosongkan slot `clearSlot`), halaman isi per jamaah sisi jamaah `bookings/[id]/jamaah/[pilgrimId]`; tooltip ikon aksi di kit tabel menggantikan `title` — selesai 2026-11-10
-  - [ ] 11b — Hotel, Muthowif, Katering, Paket Ziarah, Tiket pesawat di halaman checkout yang sama
+  - [ ] 11b — Hotel, Muthowif, Katering, Paket Ziarah, Tiket pesawat di halaman checkout yang sama (rancangan §10.6 DISETUJUI 2026-11-10; **11b-1 Hotel + Paket Ziarah SELESAI 2026-11-10**; 11b-2 Muthowif + Katering + Tiket menyusul)
   - [ ] 11c — keranjang campur (Visa plus dari front-end)
   - [ ] SEC-221 — batas penahanan kuota tanpa bayar per akun (menunggu angka dari pemilik)
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)

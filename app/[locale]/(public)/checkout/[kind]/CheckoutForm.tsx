@@ -9,6 +9,8 @@ import { PackageFields } from './PackageFields'
 import { VisaFields } from './VisaFields'
 import { TransportFields } from './TransportFields'
 import { HajiFields } from './HajiFields'
+import { HotelFields } from './HotelFields'
+import { TourFields } from './TourFields'
 import { useCheckoutPreview } from './useCheckoutPreview'
 
 type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode }
@@ -53,6 +55,8 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props
         {product.kind === 'visa' && <VisaFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'transport' && <TransportFields product={product} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'haji' && <HajiFields product={product} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'hotel' && <HotelFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'tour' && <TourFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
       </div>
       <aside className="min-w-0">
         <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit} />

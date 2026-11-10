@@ -15,6 +15,7 @@ import { buildListHref, buildPageMeta, parseListParams } from '@/lib/table/pagin
 import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
 import { Pagination } from '@/components/shared/data-table/Pagination'
 import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
+import { checkoutPath } from '@/lib/checkout/kinds'
 
 type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
 
@@ -94,9 +95,12 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
                 <a href={mapsLink.value.url} target="_blank" rel="noopener noreferrer"><ExternalLink className="h-4 w-4" /> Lihat di Google Maps</a>
               </Button>
             )}
-            <Button asChild>
-              <Link href={`/${locale}/register`}>Pesan Sekarang</Link>
-            </Button>
+            {/* Checkout Hotel (docs/arsitektur-booking-engine-v2.md §10.6); hotel tanpa kamar berharga tak dapat dipesan (tak pernah gratis). */}
+            {hotel.pricePeriods.some(p => p.schedules.some(x => x.price > 0)) && (
+              <Button asChild>
+                <Link href={checkoutPath(locale, 'hotel', hotel.id)}>Pesan Sekarang</Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>

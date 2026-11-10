@@ -436,6 +436,64 @@ Security review (subagent `security-auditor`): 0 Critical/High; diperbaiki: cek 
 
 **Selesai bila (11a):** build hijau; `scripts/test-checkout.ts` di DB sekali pakai — pratinjau = hasil terbit (angka sama persis), produk nonaktif/belum berharga/Visa plus/pilihan di luar opsi → 422, kuota habis → 409, kolom liar ditolak, staf ditolak, booking tanpa data jamaah terbit dengan invoice; matriks `safeNextPath` (termasuk yang DITOLAK: `//evil`, `/\evil`, `https:`, `/id/admin`, percent-encoding) + penjaga sumber (tak ada `push('/dashboard')` yang mengabaikan `next`); tes lama disesuaikan hijau; e2e browser di artefak produksi dengan akun uji: belum login → login → kembali ke checkout → pratinjau → pesan → detail booking → pilih jamaah → unggah bukti (Paket, Visa, Transport, Haji; desktop + 375 px); security review (auth/redirect + pembuatan booking) + `bun audit`.
 
+### 10.6 Fase 11b — Checkout lima produk lain (RANCANGAN 2026-11-10; DISETUJUI pemilik 2026-11-10 — K11b-1 = b, K11b-2 = a, K11b-3 = ya, K11b-4 = b)
+
+Tujuan: Hotel, Paket Ziarah, Muthowif, Katering, dan Tiket pesawat dapat dipesan pelanggan lewat **halaman checkout yang sama** dengan 11a (`/{locale}/checkout/[jenis]?id=`) — mesin pesan, pratinjau, invoice, dan halaman sesudah pesan TIDAK berubah. Satu jenis = entri `CHECKOUT_KINDS` + cabang `checkoutSchema`/`checkoutInput` + `case` `loadCheckoutProduct` + komponen isian + tombol katalog.
+
+**Recheck kode (SOP langkah 1, 2026-11-10):**
+
+| # | Temuan | Bukti |
+|---|--------|-------|
+| B1 | Mesin **sudah menerima** kelima jenis (skema item, `writeBookingItems`, adapter kuota, snapshot, invoice) dan form admin memakainya; tidak ada perubahan mesin yang dibutuhkan. | `lib/validators/booking.ts:15-88`, `lib/booking/lineItems.ts:55-193`, `lib/quota/adapters/` |
+| B2 | Jumlah malam/hari di item mesin dikirim klien lalu dicocokkan dengan tanggal (`checkItemQuantities`). `checkoutSchema` 11a tidak memanggilnya (jenisnya tak berjumlah malam/hari). | `lib/validators/booking.ts:199-212`, `lib/validators/checkout.ts` |
+| B3 | Tombol katalog: Hotel detail, Muthowif detail, Paket Ziarah → `/${locale}/register` (masalah R1 11a yang sama — produk hilang sesudah login); Katering dan Tiket pesawat **tanpa tombol pesan**. | `(public)/hotels/[id]/page.tsx:98`, `muthowif/[id]/page.tsx:80`, `tours/page.tsx:125`, `catering/page.tsx`, `flight/page.tsx` |
+| B4 | **Muthowif tidak punya produk per orang**: satu layanan (`MuthowifServicePrice`, harga per orang per hari), petugas ditentukan admin; kapasitas = pool per tanggal (`reserveMuthowifPool`). | `lineItems.ts:101-115`, `lib/quota/adapters/muthowif.ts:13-35`, `docs/arsitektur-muthowif.md` §9 |
+| B5 | Katering **tanpa kuota** (adapter no-op disengaja); harga per orang per hari menurut **musim tanggal mulai**. | `lib/quota/adapters/catering.ts`, `lib/pricing/computeCateringPrice.ts:26-37` |
+| B6 | Hotel: kuota per jadwal kamar (periode × tipe kamar); satu menginap harus di dalam SATU periode harga; pemilih periode murni sudah ada (`resolveHotelSchedule`, dipakai form admin). Tidak ada aturan kamar vs jumlah tamu. | `lineItems.ts:55-79`, `lib/booking/hotelPick.ts`, `lib/booking/catalog.ts:34-46` |
+| B7 | Paket Ziarah: kendaraan `included` dicari otomatis dari tanggal (tak ada kuota di tanggal itu → 422); `user_choice` kendaraan/hotel divalidasi terhadap opsi paket. Tanggal tur = tanggal kuota kendaraan bila ada. | `lib/booking/create.ts:45-60`, `lineItems.ts:133-158, 301-318` |
+| B8 | Tiket pesawat: satu item = satu arah; tanggal terbang harus di periode jadwal; kursi ditahan `flightAdapter`. | `lineItems.ts:171-193` |
+
+Tidak ada drift yang menggugurkan rencana; B2 dan B3 adalah alasan butir 2 dan 5 di bawah.
+
+**Rancangan:**
+
+1. **Jenis baru** `hotel`, `tourPackage`, `muthowif`, `catering`, `flight` di `CHECKOUT_KINDS` (otomatis ikut daftar putih `safeNextPath`). `id` = produk yang dipilih di katalog:
+   | Jenis | `id` | Isian checkout | Jamaah (slot) |
+   |---|---|---|---|
+   | Hotel | hotel | tipe kamar (`ChoiceSelect`), check-in, check-out, jumlah kamar, jumlah tamu; periode/jadwal kamar dipilih otomatis dari tanggal (`resolveHotelSchedule`), di luar periode → pesan "tersedia …" | jumlah tamu |
+   | Paket Ziarah | paket | tanggal tur (included: hanya tanggal yang punya kuota kendaraan paket; user_choice: kendaraan + tanggal dari kuota), hotel pilihan + jumlah kamar bila `user_choice`, jumlah orang | jumlah orang |
+   | Muthowif | layanan (`MuthowifServicePrice`) — tombol di setiap profil muthowif menuju layanan yang sama, teks "petugas ditentukan tim kami" tetap | tanggal mulai, tanggal selesai, jumlah orang | jumlah orang |
+   | Katering | opsi katering | tanggal mulai, tanggal selesai, jumlah orang; harga musim tampil dari pratinjau | jumlah orang |
+   | Tiket pesawat | jadwal tiket | tanggal terbang (dibatasi periode jadwal ∩ ≥ hari ini), jumlah penumpang | jumlah penumpang |
+2. **Jumlah malam/hari TIDAK dikirim klien**: `checkoutSchema` hanya membawa tanggal; `checkoutInput` menghitung `nights`/`numDays` dengan `daysBetween` (`lib/time`) dan menolak rentang terbalik/kosong di skema (`superRefine`), plus batas panjang wajar (hotel ≤ 60 malam, muthowif/katering ≤ 60 hari). Semua tanggal ≥ hari ini lewat `checkoutDateRefusal` (diperluas ke tanggal check-in/mulai/terbang/tur).
+3. **Opsi produk** (`lib/checkout/options.ts`, harga JUAL saja, tak ada/nonaktif → 404): Hotel = jadwal kamar aktif berperiode belum lewat (bentuk sama dengan `bookingCatalog('hotel')` tetapi untuk satu hotel) + sisa kamar; Paket Ziarah = `computeTourPackageBreakdown` + kuota kendaraan ≥ hari ini; Muthowif = harga per orang per hari; Katering = harga per musim (`cateringSeasonPrices`); Tiket = periode + sisa kursi. Tanpa harga → tanpa tombol pesan dan halaman checkout menampilkan "belum dapat dipesan" (bukan Rp 0).
+4. **Isian** = satu komponen per jenis di `checkout/[kind]/` (`HotelFields`, `TourFields`, `MuthowifFields`, `CateringFields`, `FlightFields`) memakai `DateField`/`ChoiceSelect`/`PeopleStepper` yang ada; ringkasan harga tetap HANYA dari pratinjau server (`useCheckoutPreview`).
+5. **Tombol katalog** → `checkoutPath(...)`: Hotel detail "Pesan Sekarang", Muthowif detail, kartu Paket Ziarah, kartu Katering (baru), baris jadwal Tiket (baru). Halaman katalog tetap Server Component; tombol hanya tampil bila produk berharga.
+6. **Tidak berubah**: mesin (`create.ts`/`lineItems.ts`/adapter), pratinjau `simulateBooking`, `placeCheckout`, halaman sesudah pesan (tabel jamaah, pembayaran), form admin.
+
+**Keputusan pemilik (DISETUJUI semua usulan, 2026-11-10):**
+- **K11b-1 Tiket pesawat pulang-pergi**: (a) satu arah saja di 11b — pulang-pergi = dua pesanan atau menunggu keranjang 11c; (b) checkout tiket boleh menambah jadwal pulang opsional (dua item tiket dalam satu booking). *Usul: (b)* — kebutuhan umum jamaah, mesin sudah mendukung dua item.
+- **K11b-2 Kamar vs tamu hotel**: (a) bebas, hanya peringatan bila kamar × kapasitas < tamu; (b) ditolak server. *Usul: (a)* — sesuai arahan "tugas kita mengingatkan saja"; extra bed/anak tak selalu terhitung kapasitas.
+- **K11b-3 Muthowif**: checkout satu layanan umum (tanpa memilih orang, sesuai §9 muthowif) — *usul: ya*; profil muthowif hanya etalase.
+- **K11b-4 Urutan PR**: (a) satu PR untuk kelima jenis; (b) dua PR — 11b-1 Hotel + Paket Ziarah (pemilihan periode/kuota lebih rumit), 11b-2 Muthowif + Katering + Tiket. *Usul: (b).*
+
+**As-built 11b-1 (2026-11-10) — Hotel + Paket Ziarah** (beda dari rancangan ditandai *):
+
+| Bagian | Letak | Catatan |
+|--------|-------|---------|
+| Jenis | `CHECKOUT_KINDS` + `hotel`, *`tour` (bukan `tourPackage` — alamat lebih bersih; `checkoutInput` memetakan ke item mesin `tourPackage`) | ikut daftar putih `safeNextPath` otomatis |
+| Skema | `checkoutSchema` cabang `hotel` (`hotelRoomScheduleId`, `checkIn`, `checkOut`, `numRooms` ≤ `CHECKOUT_MAX_ROOMS` = 50, `numGuests`) dan `tour` (`tourPackageId`, `tourDate`, `numPeople`, opsional `transportQuotaId`, `chosenHotelRoomScheduleId` + `chosenHotelNumRooms` berpasangan) | `superRefine` di union: malam 1..`CHECKOUT_MAX_NIGHTS` (60); `nights` dari klien = kolom liar (ditolak); `checkoutInput` menghitung `nights` dengan `daysBetween` |
+| Tanggal | `checkoutDateRefusal` | check-in & tanggal tur ≥ hari ini; *tur dengan kendaraan pilihan: tanggal tur WAJIB = tanggal kuota kendaraan (400) — mesin memakai tanggal kuota, jadi yang dipesan = yang dilihat |
+| Opsi | `loadHotel` (jadwal kamar aktif berperiode belum lewat, berharga, bentuk `HotelScheduleOpt`), `loadTour` (`computeTourPackageBreakdown` + kuota kendaraan ≥ hari ini; hotel pilihan + sisa kamar; `blocked` bila belum berharga / kendaraan termasuk tanpa jadwal) | harga JUAL saja; *harga Paket Ziarah = **per paket** (mesin: `compositeLines` multiplier 1), ditampilkan "/paket" |
+| Isian | `HotelFields` (tipe kamar → tanggal → periode otomatis lewat `resolveHotelSchedule` → kamar & tamu; peringatan bila kamar × kapasitas < tamu, K11b-2 = a), `TourFields` (termasuk: tanggal dari kuota kendaraan paket; pilihan: tanggal bebas lalu kendaraan di tanggal itu, opsional; hotel pilihan opsional) | ringkasan harga tetap dari pratinjau server |
+| Tombol | Hotel detail "Pesan Sekarang" dan kartu Paket Ziarah → `checkoutPath`, hanya bila berharga | penjaga di `test-checkout.ts` (bukan `/register`) |
+
+Verifikasi: `scripts/test-checkout.ts` diperluas (skema hotel/tur, pemuat, pratinjau = pesanan untuk hotel + ziarah termasuk + ziarah pilihan, kuota kamar/kendaraan/hotel pilihan tertahan, malam dihitung server, di luar periode 422, kamar habis 409, tanpa kendaraan paket di tanggal itu 422, hotel di luar opsi 422, paket belum berharga 422, tanggal lampau / tanggal tur ≠ kendaraan 400, penjaga tombol). Halaman checkout Hotel & Paket Ziarah dibuka di browser (dev, sesi staf: kartu produk + harga mulai). *Belum: alur isi-dan-pesan di browser dengan akun jamaah (butuh sesi jamaah uji).
+
+**Risiko yang diketahui:** penahanan kuota tanpa bayar (SEC-221, Medium) kini juga mengenai kamar hotel dan kursi tiket — angka batas tetap keputusan pemilik; dicatat ulang saat security review fase ini.
+
+**Selesai bila (11b):** build hijau; `scripts/test-checkout.ts` diperluas per jenis — pratinjau = hasil terbit (angka sama persis), malam/hari dihitung server (kolom `nights`/`numDays` dari klien ditolak sebagai kolom liar), rentang terbalik/terlalu panjang/tanggal lampau → 400, hotel di luar periode/jadwal tiket di luar periode/kendaraan atau hotel di luar opsi paket ziarah → 422, kuota habis → 409, produk nonaktif/belum berharga → 404/422; matriks `safeNextPath` jenis baru; penjaga sumber (tombol katalog lima jenis memakai `checkoutPath`, bukan `/register`); e2e browser di artefak produksi (desktop + 375 px) per jenis: belum login → login → kembali → pratinjau → pesan → detail booking; security review + `bun audit`.
+
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 

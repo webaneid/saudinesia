@@ -1,12 +1,18 @@
 import { z } from 'zod'
 import type { BookingInput } from '@/lib/booking/create'
 import type { BookingItemInput } from '@/lib/validators/booking'
+import { daysBetween } from '@/lib/time'
 
 // Checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5): SATU produk per pesanan, hanya pilihan + jumlah orang. Tanpa harga/total/tanggal booking/data
 // jamaah — harga dihitung server (mesin pesan), tanggal booking diturunkan dari item (D1), data jamaah diisi SESUDAH terbit (D3). `.strict()` di setiap tingkat.
 
 const uuid = z.string().uuid('Pilihan tidak valid')
 const date = z.string().date('Tanggal tidak valid')
+/** Batas lama menginap hotel lewat checkout (malam). Lebih panjang = beberapa pesanan/admin. */
+export const CHECKOUT_MAX_NIGHTS = 60
+/** Batas jumlah kamar per pesanan hotel lewat checkout. */
+export const CHECKOUT_MAX_ROOMS = 50
+
 /** Batas jumlah orang lewat checkout. Rombongan lebih besar lewat admin (mesin menerima sampai 2000). */
 export const CHECKOUT_MAX_PEOPLE = 100
 const people = z.number().int().min(1, 'Minimal 1 orang').max(CHECKOUT_MAX_PEOPLE, `Maksimal ${CHECKOUT_MAX_PEOPLE} orang per pesanan`)
@@ -47,13 +53,48 @@ export const checkoutSchema = z.discriminatedUnion('kind', [
     hajiProductId: uuid,
     numPeople: people,
   }).strict(),
-])
+  // Hotel (§10.6): jadwal kamar dipilih halaman dari tanggal (lib/booking/hotelPick.ts); jumlah malam DIHITUNG server dari tanggal (tak pernah dari klien).
+  // Kamar vs tamu tidak dipaksakan (K11b-2 = a, hanya diingatkan di halaman).
+  z.object({
+    kind: z.literal('hotel'),
+    hotelRoomScheduleId: uuid,
+    checkIn: date,
+    checkOut: date,
+    numRooms: z.number().int().min(1, 'Minimal 1 kamar').max(CHECKOUT_MAX_ROOMS, `Maksimal ${CHECKOUT_MAX_ROOMS} kamar per pesanan`),
+    numGuests: people,
+  }).strict(),
+  // Paket Ziarah (§10.6): tanggal tur; kendaraan/hotel HANYA bila paketnya memberi pilihan (`user_choice`, divalidasi mesin terhadap opsi paket).
+  z.object({
+    kind: z.literal('tour'),
+    tourPackageId: uuid,
+    tourDate: date,
+    numPeople: people,
+    transportQuotaId: uuid.optional(),
+    chosenHotelRoomScheduleId: uuid.optional(),
+    chosenHotelNumRooms: z.number().int().min(1).max(CHECKOUT_MAX_ROOMS).optional(),
+  }).strict(),
+]).superRefine((c, ctx) => {
+  if (c.kind === 'hotel') {
+    const nights = daysBetween(c.checkIn, c.checkOut)
+    if (nights < 1) ctx.addIssue({ code: 'custom', message: 'Tanggal check-out harus setelah check-in', path: ['checkOut'] })
+    else if (nights > CHECKOUT_MAX_NIGHTS) ctx.addIssue({ code: 'custom', message: `Maksimal ${CHECKOUT_MAX_NIGHTS} malam per pesanan`, path: ['checkOut'] })
+  }
+  if (c.kind === 'tour' && !!c.chosenHotelRoomScheduleId !== !!c.chosenHotelNumRooms) {
+    ctx.addIssue({ code: 'custom', message: 'Pilih hotel beserta jumlah kamarnya', path: ['chosenHotelNumRooms'] })
+  }
+})
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>
 
 /** Tanggal yang dipilih pelanggan (untuk penolakan tanggal lampau di route). */
 export function checkoutDate(c: CheckoutInput): string | null {
-  return c.kind === 'package' ? c.departureDate : c.kind === 'visa' ? c.plannedTravelDate : null
+  switch (c.kind) {
+    case 'package': return c.departureDate
+    case 'visa': return c.plannedTravelDate
+    case 'hotel': return c.checkIn
+    case 'tour': return c.tourDate
+    default: return null
+  }
 }
 
 /**
@@ -80,6 +121,18 @@ export function checkoutInput(c: CheckoutInput): BookingInput {
     }
     case 'haji': {
       const item: BookingItemInput = { itemType: 'haji', hajiProductId: c.hajiProductId, numPersons: c.numPeople }
+      return { items: [item], pilgrims: blank(c.numPeople), totalPilgrims: c.numPeople }
+    }
+    case 'hotel': {
+      const item: BookingItemInput = { itemType: 'hotel', hotelRoomScheduleId: c.hotelRoomScheduleId, checkIn: c.checkIn, checkOut: c.checkOut, nights: daysBetween(c.checkIn, c.checkOut), numRooms: c.numRooms }
+      return { items: [item], pilgrims: blank(c.numGuests), totalPilgrims: c.numGuests }
+    }
+    case 'tour': {
+      const item: BookingItemInput = {
+        itemType: 'tourPackage', tourPackageId: c.tourPackageId, tourDate: c.tourDate, numPeople: c.numPeople,
+        ...(c.transportQuotaId ? { transportQuotaId: c.transportQuotaId } : {}),
+        ...(c.chosenHotelRoomScheduleId && c.chosenHotelNumRooms ? { chosenHotelRoomScheduleId: c.chosenHotelRoomScheduleId, chosenHotelNumRooms: c.chosenHotelNumRooms } : {}),
+      }
       return { items: [item], pilgrims: blank(c.numPeople), totalPilgrims: c.numPeople }
     }
   }
