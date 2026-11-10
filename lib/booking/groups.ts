@@ -8,16 +8,28 @@ import { ItemNotBookableError } from './errors'
 
 export const isGrouped = (data: Pick<BookingInput, 'groups'>): boolean => (data.groups?.length ?? 0) > 0
 
-/** Ukuran setiap rombongan (jumlah jamaah yang menunjuknya). */
-export function groupSizes(data: Pick<BookingInput, 'groups' | 'pilgrims'>): number[] {
+/** Ukuran setiap rombongan (jumlah jamaah yang menunjuknya), atau `groupSizes` bila `pilgrims` hanya sebagian (revisi menulis subset). */
+export function groupSizes(data: Pick<BookingInput, 'groups' | 'pilgrims' | 'groupSizes'>): number[] {
+  if (data.groupSizes) return data.groupSizes
   const sizes = Array.from({ length: data.groups?.length ?? 0 }, () => 0)
   for (const p of data.pilgrims) if (p.group !== undefined && p.group < sizes.length) sizes[p.group]!++
   return sizes
 }
 
-/** Jumlah orang sasaran item: rombongannya, atau seluruh jamaah bila item untuk semua. */
-export function targetSize(data: Pick<BookingInput, 'groups' | 'pilgrims'>, group: number | undefined): number {
-  return group === undefined ? data.pilgrims.length : (groupSizes(data)[group] ?? 0)
+/** Jumlah orang sasaran item: rombongannya, atau seluruh jamaah (`totalPilgrims` bila `pilgrims` sebagian) bila item untuk semua. */
+export function targetSize(data: Pick<BookingInput, 'groups' | 'pilgrims' | 'groupSizes' | 'totalPilgrims'>, group: number | undefined): number {
+  return group === undefined ? (data.totalPilgrims ?? data.pilgrims.length) : (groupSizes(data)[group] ?? 0)
+}
+
+/**
+ * Rencana berangkat visa untuk jamaah rombongan `group` (§10.8 butir 4): tiket paling awal yang berlaku untuknya (tiket rombongannya ∪ tiket untuk semua),
+ * selain itu rencana rombongan, selain itu rencana booking. Satu aturan untuk pesan baru (lib/booking/lineItems.ts) dan revisi (lib/booking/revise.ts).
+ */
+export function plannedTravelFor(
+  flights: ReadonlyArray<{ date: string; group?: number }>, group: number | undefined, groups: BookingInput['groups'], fallback: string | undefined,
+): string | undefined {
+  const dates = flights.filter(f => group === undefined || f.group === undefined || f.group === group).map(f => f.date).sort()
+  return dates[0] ?? (group !== undefined ? groups?.[group]?.plannedTravelDate : undefined) ?? fallback
 }
 
 /** Nama tampilan rombongan: nama dari pemesan, selain itu "Rombongan A/B/…" (posisi 0 → A; lewat Z → nomor). */
@@ -48,10 +60,11 @@ export function normalizeGroups(data: BookingInput): BookingInput {
   if (n < 2) throw new ItemNotBookableError('Rombongan dipakai bila lebih dari satu')
   if (data.pilgrims.some(p => p.group === undefined || p.group < 0 || p.group >= n)) throw new ItemNotBookableError('Setiap jamaah harus masuk satu rombongan')
   if (data.items.some(i => i.group !== undefined && (i.group < 0 || i.group >= n))) throw new ItemNotBookableError('Rombongan item tidak dikenal')
-  const sizes = groupSizes(data)
+  const full = { ...data, totalPilgrims: data.pilgrims.length, groupSizes: undefined } // ukuran dihitung dari jamaah LENGKAP, bukan masukan
+  const sizes = groupSizes(full)
   const empty = sizes.findIndex(s => s === 0)
   if (empty >= 0) throw new ItemNotBookableError(`${groupLabel(data.groups![empty]!.label, empty)} belum punya jamaah`)
-  return { ...data, totalPilgrims: data.pilgrims.length, items: data.items.map(i => setPeople(i, targetSize(data, i.group))) }
+  return { ...full, items: data.items.map(i => setPeople(i, targetSize(full, i.group))) }
 }
 
 /**

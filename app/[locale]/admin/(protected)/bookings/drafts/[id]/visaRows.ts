@@ -13,6 +13,8 @@ export type VisaSlot = {
   /** Revisi: visa berasal dari Paket Umroh — diatur lewat baris paket, bukan baris Visa. */
   visaFromPackage?: boolean
   row?: string
+  /** Rombongan jamaah (indeks; §10.8). Baris Visa berrombongan hanya mengambil slot rombongannya. */
+  group?: number
 }
 
 let seq = 0
@@ -21,12 +23,13 @@ const num = (v: string) => Math.max(0, Math.trunc(Number(v) || 0))
 const daysOf = (row: ItemRow) => (num(row.f.extra.days ?? '') || undefined)
 const untag = <T extends VisaSlot>(s: T): T => ({ ...s, row: undefined, visaProductId: undefined, selectedDurationDays: undefined })
 const free = (s: VisaSlot) => !s.row && !s.visaProductId && !s.visaFromPackage && !s.locked
+const inGroup = (s: VisaSlot, row: ItemRow) => row.group === undefined || s.group === row.group
 
 /** Baris Visa yang dikunci sebagian (revisi): jumlah anggota terkunci = batas bawah jumlah orang; produk/lama tinggal tak boleh diganti. */
 export const lockedMembers = (slots: readonly VisaSlot[], rowKey: string) => slots.filter(s => s.row === rowKey && s.locked).length
 
 /**
- * Slot → baris Visa: jamaah bervisa sendiri dikelompokkan per (produk, lama tinggal), urut kemunculan pertama. Mengembalikan baris dan slot yang sudah ditandai
+ * Slot → baris Visa: jamaah bervisa sendiri dikelompokkan per (produk, lama tinggal, rombongan), urut kemunculan pertama. Mengembalikan baris dan slot yang sudah ditandai
  * pemiliknya. Visa paket tidak menjadi baris (sudah ada di baris paket).
  */
 export function visaRowsFromSlots<T extends VisaSlot>(slots: readonly T[]): { rows: ItemRow[]; slots: T[] } {
@@ -34,12 +37,12 @@ export function visaRowsFromSlots<T extends VisaSlot>(slots: readonly T[]): { ro
   const rows: ItemRow[] = []
   const tagged = slots.map(s => {
     if (!s.visaProductId || s.visaFromPackage) return { ...s, row: undefined }
-    const group = `${s.visaProductId}|${s.selectedDurationDays ?? ''}`
+    const group = `${s.visaProductId}|${s.selectedDurationDays ?? ''}|${s.group ?? ''}`
     let key = keyOf.get(group)
     if (!key) {
       key = newVisaRowKey()
       keyOf.set(group, key)
-      rows.push({ key, module: 'visa', f: { pick: s.visaProductId, start: '', end: '', people: '0', rooms: '1', extra: s.selectedDurationDays ? { days: String(s.selectedDurationDays) } : {} } })
+      rows.push({ key, module: 'visa', ...(s.group !== undefined && { group: s.group }), f: { pick: s.visaProductId, start: '', end: '', people: '0', rooms: '1', extra: s.selectedDurationDays ? { days: String(s.selectedDurationDays) } : {} } })
     }
     return { ...s, row: key }
   })
@@ -58,14 +61,16 @@ export function applyVisaRows<T extends VisaSlot>(slots: readonly T[], rows: rea
   for (const row of visa) {
     const v = row.f.pick || undefined
     const d = daysOf(row)
+    // Rombongan baris diganti → anggota (tak terkunci) di luar rombongan baru dilepas lebih dulu.
+    for (const [i, s] of next.entries()) if (s.row === row.key && !s.locked && !inGroup(s, row)) next[i] = untag(s)
     const members = next.flatMap((s, i) => (s.row === row.key ? [i] : []))
     const want = Math.max(num(row.f.people), members.filter(i => next[i]!.locked).length)
     for (const i of members) if (!next[i]!.locked) next[i] = { ...next[i]!, visaProductId: v, selectedDurationDays: d }
     let have = members.length
     for (let i = 0; i < next.length && have < want; i++) {
-      if (free(next[i]!)) { next[i] = { ...next[i]!, row: row.key, visaProductId: v, selectedDurationDays: d }; have++ }
+      if (free(next[i]!) && inGroup(next[i]!, row)) { next[i] = { ...next[i]!, row: row.key, visaProductId: v, selectedDurationDays: d }; have++ }
     }
-    while (have < want) { next.push({ ...make(), row: row.key, visaProductId: v, selectedDurationDays: d }); have++ }
+    while (have < want) { next.push({ ...make(), row: row.key, visaProductId: v, selectedDurationDays: d, ...(row.group !== undefined && { group: row.group }) }); have++ }
     for (let j = members.length - 1; j >= 0 && have > want; j--) {
       const i = members[j]!
       if (!next[i]!.locked) { next[i] = untag(next[i]!); have-- }

@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client'
 // Dipakai revisi isi (lib/booking/revise.ts) dan atur total (lib/booking/adjustments.ts). `summary` TANPA data pribadi: label produk, jumlah, "Jamaah ke-N".
 
 export type RevisionChange = {
-  kind: 'add' | 'remove' | 'replace' | 'price' | 'pilgrim_add' | 'pilgrim_remove' | 'visa_change' | 'dates' | 'total'
+  kind: 'add' | 'remove' | 'replace' | 'price' | 'pilgrim_add' | 'pilgrim_remove' | 'visa_change' | 'dates' | 'total' | 'groups' | 'group_move'
   label: string
   detail?: string
 }

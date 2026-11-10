@@ -9,6 +9,7 @@ import { daysBetween, formatCalendarDate, type CalendarDate } from '@/lib/time'
 import { hotelsOf, noPeriodMessage, resolveHotelSchedule, roomsOf } from '@/lib/booking/hotelPick'
 import { parseRequiredComponents, REQUIRED_COMPONENT_LABEL, REQUIRED_COMPONENT_TYPES, visaSalesModel, type RequiredComponentType } from '@/lib/validators/visa'
 import { MODULE_LABEL, type Catalog, type DraftItem, type ModuleKey, type VisaOpt } from './catalog'
+import { groupChoices, groupFromValue, groupValue, type Grouping } from './groupRows'
 
 // Editor BARIS produk (docs/arsitektur-booking-engine-v2.md §10.4, arahan pemilik 2026-11-01 — gaya baris invoice): satu baris per item, semua kolom langsung dapat diubah,
 // subtotal baris & total dihitung SERVER (pratinjau otomatis oleh induk). Dipakai form draf dan editor revisi. Harga satuan tidak diketik; di revisi ada kolom harga khusus (R4).
@@ -23,6 +24,8 @@ export type ItemRow = {
   label?: string
   customSellIdr?: number | null
   priceNote?: string
+  /** Rombongan sasaran (indeks; §10.8) — kosong = semua jamaah. Jumlah orang baris berrombongan diturunkan dari ukurannya (server menimpanya juga). */
+  group?: number
 }
 
 // Visa paling depan: visa adalah produk utama yang kita jual (docs/rencana-visa-produk.md §0). Barisnya dipetakan ke slot jamaah oleh ./visaRows.ts.
@@ -65,7 +68,7 @@ export function rowForMissing(people: number, missing: string): { row: ItemRow; 
 /** Baris dari item yang sudah ada (draf tersimpan / isi booking saat revisi). */
 export function rowFromItem(it: DraftItem, extra: Partial<ItemRow> = {}): ItemRow {
   const r = (module: ModuleKey, pick: string, o: Partial<RowFields> = {}): ItemRow => ({
-    key: newRowKey(), module, ...extra,
+    key: newRowKey(), module, ...(it.group !== undefined && { group: it.group }), ...extra,
     f: { pick, start: o.start ?? '', end: o.end ?? '', people: o.people ?? '1', rooms: o.rooms ?? '1', extra: Object.fromEntries(Object.entries(o.extra ?? {}).filter(([, v]) => !!v)) },
   })
   switch (it.itemType) {
@@ -83,8 +86,24 @@ export function rowFromItem(it: DraftItem, extra: Partial<ItemRow> = {}): ItemRo
   }
 }
 
-/** Baris → item masukan pesan; `error` = alasan baris belum lengkap (ditampilkan di baris, menahan simpan/terbit). Baris Visa bukan item: `visa` (disimpan per jamaah). */
-export function rowToItem(row: ItemRow, catalog: Catalog): { item: DraftItem } | { visa: true } | { error: string } {
+/** Jumlah orang baris berrombongan = ukuran sasarannya (rombongan atau semua jamaah); `null` = isian baris (tanpa rombongan, hotel, visa). */
+export function groupedPeople(row: ItemRow, g: Grouping | null): number | null {
+  if (!g || row.module === 'visa' || row.module === 'hotel' || !row.module) return null
+  return row.group === undefined ? g.total : (g.sizes[row.group] ?? 0)
+}
+
+/**
+ * Baris → item masukan pesan; `error` = alasan baris belum lengkap (ditampilkan di baris, menahan simpan/terbit). Baris Visa bukan item: `visa` (disimpan per jamaah).
+ * Berrombongan: item membawa rombongannya dan jumlah orangnya = ukuran sasaran.
+ */
+export function rowToItem(row: ItemRow, catalog: Catalog, g: Grouping | null = null): { item: DraftItem } | { visa: true } | { error: string } {
+  const people = groupedPeople(row, g)
+  const r = rowToItemBase(people === null ? row : { ...row, f: { ...row.f, people: String(people) } }, catalog)
+  if (people === 0) return { error: 'Rombongan ini belum punya jamaah' }
+  return 'item' in r && g && row.group !== undefined ? { item: { ...r.item, group: row.group } } : r
+}
+
+function rowToItemBase(row: ItemRow, catalog: Catalog): { item: DraftItem } | { visa: true } | { error: string } {
   const { module, f } = row
   const n = num(f.people)
   if (!module) return { error: 'Pilih jenis produk' }
@@ -165,6 +184,8 @@ type Props = {
   defaultVisaPeople?: number
   /** Revisi: jumlah anggota TERKUNCI per baris Visa (R3) — produk/lama tinggal terkunci, jumlah tak boleh di bawahnya, baris tak bisa dihapus. */
   visaLocks?: Record<string, number>
+  /** Rombongan (≥ 2) — kolom pilih rombongan di setiap baris; jumlah orang baris = ukuran sasaran (tak diketik). */
+  grouping?: Grouping | null
 }
 
 /**
@@ -204,7 +225,7 @@ function Field({ label, children, className = '' }: { label: string; children: R
   return <label className={`block space-y-0.5 ${className}`}><span className="block text-[11px] text-admin-muted">{label}</span>{children}</label>
 }
 
-export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice, rowError, defaultVisaPeople, visaLocks }: Props) {
+export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals, computing, customPrice, rowError, defaultVisaPeople, visaLocks, grouping = null }: Props) {
   const modulesInUse = [...new Set(rows.map(r => r.module).filter((m): m is ModuleKey => m !== ''))]
   useEffect(() => { for (const m of modulesInUse) void load(m) }, [modulesInUse.join(','), load]) // eslint-disable-line react-hooks/exhaustive-deps
   const needsTransport = rows.some(r => r.module === 'tourPackage' && catalog.tourPackage?.find(t => t.id === r.f.pick)?.transportMode === 'user_choice')
@@ -251,7 +272,8 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
       )}
       {rows.map((row, i) => {
         const { f } = row
-        const check = rowToItem(row, catalog)
+        const check = rowToItem(row, catalog, grouping)
+        const derived = groupedPeople(row, grouping)
         const flight = row.module === 'flight' ? catalog.flight?.find(x => x.id === f.pick) : undefined
         const hotel = row.module === 'hotel' ? catalog.hotel?.find(x => x.id === f.pick) : undefined
         const transport = row.module === 'transport' ? catalog.transport?.find(x => x.id === f.pick) : undefined
@@ -279,7 +301,11 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
               {/* 1. Produk: jenis + produk */}
               <div className="col-span-2 space-y-1.5 xl:col-span-1">
                 <ChoiceSelect size="sm" ariaLabel={`Jenis produk baris ${i + 1}`} value={row.module} clearable={false} disabled={!!row.ref || visaLocked > 0} placeholder="— pilih jenis —"
-                  options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(v === 'visa' ? Math.max(1, defaultVisaPeople ?? defaultPeople) : defaultPeople), label: undefined })} />
+                  options={ROW_MODULES.map(m => ({ id: m, label: MODULE_LABEL[m] }))} onChange={v => set(i, { module: v as ModuleKey, f: empty(v === 'visa' ? Math.max(1, defaultVisaPeople ?? defaultPeople) : defaultPeople), label: undefined, ...(grouping && v === 'visa' && row.group === undefined && { group: 0 }) })} />
+                {grouping && row.module && (
+                  <ChoiceSelect size="sm" ariaLabel={`Rombongan baris ${i + 1}`} value={groupValue(row.group)} clearable={false} disabled={visaLocked > 0}
+                    options={groupChoices(grouping.names, row.module !== 'visa')} onChange={v => set(i, { group: groupFromValue(v) })} />
+                )}
                 {hsel ? <>
                   <ChoiceSelect size="sm" ariaLabel={`Hotel baris ${i + 1}`} value={hsel.hotel} clearable={false}
                     options={hotelsOf(catalog.hotel ?? []).filter(h => !f.extra.city || h.city === f.extra.city).map(h => ({ id: h.id, label: h.name, hint: [h.city, h.stars ? `bintang ${h.stars}` : ''].filter(Boolean).join(' · ') }))}
@@ -320,6 +346,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
               <div className="space-y-1.5">
                 {row.module === 'visa' ? <Field label="Orang"><input type="number" min={Math.max(1, visaLocked)} className="admin-inp-xs" aria-label={`Orang baris ${i + 1}`} value={f.people} onChange={e => setF(i, { people: e.target.value })} /></Field>
                   : row.module === 'hotel' ? count('Kamar', 'rooms')
+                  : derived !== null ? <Field label={row.module === 'flight' || row.module === 'transport' ? 'Penumpang' : 'Orang'}><span className="block py-1 text-sm tabular-nums text-admin-ink" title="Mengikuti jumlah jamaah rombongan">{derived}</span></Field>
                   : row.module === 'flight' || row.module === 'transport' ? count('Penumpang', 'people')
                   : row.module ? count('Orang', 'people') : null}
               </div>
