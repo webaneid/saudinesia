@@ -12,6 +12,8 @@ const date = z.string().date('Tanggal tidak valid')
 export const CHECKOUT_MAX_NIGHTS = 60
 /** Batas jumlah kamar per pesanan hotel lewat checkout. */
 export const CHECKOUT_MAX_ROOMS = 50
+/** Batas lama layanan muthowif / katering lewat checkout (hari, termasuk hari mulai dan selesai). */
+export const CHECKOUT_MAX_DAYS = 60
 
 /** Batas jumlah orang lewat checkout. Rombongan lebih besar lewat admin (mesin menerima sampai 2000). */
 export const CHECKOUT_MAX_PEOPLE = 100
@@ -73,11 +75,45 @@ export const checkoutSchema = z.discriminatedUnion('kind', [
     chosenHotelRoomScheduleId: uuid.optional(),
     chosenHotelNumRooms: z.number().int().min(1).max(CHECKOUT_MAX_ROOMS).optional(),
   }).strict(),
+  // Muthowif (§10.6, K11b-3): SATU layanan umum — tanpa memilih orang (petugas ditentukan admin). Jumlah hari DIHITUNG server dari tanggal.
+  z.object({
+    kind: z.literal('muthowif'),
+    startDate: date,
+    endDate: date,
+    numPeople: people,
+  }).strict(),
+  // Katering (§10.6): harga per orang per hari menurut musim TANGGAL MULAI (mesin); jumlah hari dihitung server.
+  z.object({
+    kind: z.literal('catering'),
+    cateringOptionId: uuid,
+    startDate: date,
+    endDate: date,
+    numPeople: people,
+  }).strict(),
+  // Tiket pesawat (§10.6, K11b-1 = b): satu arah + jadwal pulang OPSIONAL (dua item tiket dalam satu booking). Jadwal pulang harus rute kebalikan
+  // (diperiksa server, lib/checkout/dates.ts); tanggal di luar periode jadwal → 422 dari mesin.
+  z.object({
+    kind: z.literal('flight'),
+    flightScheduleId: uuid,
+    departureDate: date,
+    numPassengers: people,
+    returnScheduleId: uuid.optional(),
+    returnDate: date.optional(),
+  }).strict(),
 ]).superRefine((c, ctx) => {
   if (c.kind === 'hotel') {
     const nights = daysBetween(c.checkIn, c.checkOut)
     if (nights < 1) ctx.addIssue({ code: 'custom', message: 'Tanggal check-out harus setelah check-in', path: ['checkOut'] })
     else if (nights > CHECKOUT_MAX_NIGHTS) ctx.addIssue({ code: 'custom', message: `Maksimal ${CHECKOUT_MAX_NIGHTS} malam per pesanan`, path: ['checkOut'] })
+  }
+  if (c.kind === 'muthowif' || c.kind === 'catering') {
+    const days = daysBetween(c.startDate, c.endDate) + 1
+    if (days < 1) ctx.addIssue({ code: 'custom', message: 'Tanggal selesai tidak boleh sebelum tanggal mulai', path: ['endDate'] })
+    else if (days > CHECKOUT_MAX_DAYS) ctx.addIssue({ code: 'custom', message: `Maksimal ${CHECKOUT_MAX_DAYS} hari per pesanan`, path: ['endDate'] })
+  }
+  if (c.kind === 'flight') {
+    if (!!c.returnScheduleId !== !!c.returnDate) ctx.addIssue({ code: 'custom', message: 'Pilih jadwal pulang beserta tanggalnya', path: ['returnDate'] })
+    else if (c.returnDate && c.returnDate < c.departureDate) ctx.addIssue({ code: 'custom', message: 'Tanggal pulang tidak boleh sebelum tanggal berangkat', path: ['returnDate'] })
   }
   if (c.kind === 'tour' && !!c.chosenHotelRoomScheduleId !== !!c.chosenHotelNumRooms) {
     ctx.addIssue({ code: 'custom', message: 'Pilih hotel beserta jumlah kamarnya', path: ['chosenHotelNumRooms'] })
@@ -93,6 +129,9 @@ export function checkoutDate(c: CheckoutInput): string | null {
     case 'visa': return c.plannedTravelDate
     case 'hotel': return c.checkIn
     case 'tour': return c.tourDate
+    case 'muthowif': return c.startDate
+    case 'catering': return c.startDate
+    case 'flight': return c.departureDate
     default: return null
   }
 }
@@ -134,6 +173,19 @@ export function checkoutInput(c: CheckoutInput): BookingInput {
         ...(c.chosenHotelRoomScheduleId && c.chosenHotelNumRooms ? { chosenHotelRoomScheduleId: c.chosenHotelRoomScheduleId, chosenHotelNumRooms: c.chosenHotelNumRooms } : {}),
       }
       return { items: [item], pilgrims: blank(c.numPeople), totalPilgrims: c.numPeople }
+    }
+    case 'muthowif': {
+      const item: BookingItemInput = { itemType: 'muthowif', startDate: c.startDate, endDate: c.endDate, numDays: daysBetween(c.startDate, c.endDate) + 1, numPeople: c.numPeople }
+      return { items: [item], pilgrims: blank(c.numPeople), totalPilgrims: c.numPeople }
+    }
+    case 'catering': {
+      const item: BookingItemInput = { itemType: 'catering', cateringOptionId: c.cateringOptionId, startDate: c.startDate, endDate: c.endDate, numDays: daysBetween(c.startDate, c.endDate) + 1, numPeople: c.numPeople }
+      return { items: [item], pilgrims: blank(c.numPeople), totalPilgrims: c.numPeople }
+    }
+    case 'flight': {
+      const items: BookingItemInput[] = [{ itemType: 'flight', flightScheduleId: c.flightScheduleId, departureDate: c.departureDate, numPassengers: c.numPassengers }]
+      if (c.returnScheduleId && c.returnDate) items.push({ itemType: 'flight', flightScheduleId: c.returnScheduleId, departureDate: c.returnDate, numPassengers: c.numPassengers })
+      return { items, pilgrims: blank(c.numPassengers), totalPilgrims: c.numPassengers }
     }
   }
 }

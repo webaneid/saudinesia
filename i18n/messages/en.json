@@ -479,7 +479,8 @@
         "route": "Route",
         "airline": "Airline",
         "period": "Departure period",
-        "price": "Price per person"
+        "price": "Price per person",
+        "order": "Book"
       },
       "cta": {
         "title": "Ready to plan your trip?",
@@ -525,7 +526,8 @@
           "hajj": "Hajj"
         },
         "priceLabel": "Price",
-        "perPersonDay": "per person per day"
+        "perPersonDay": "per person per day",
+        "order": "Order now"
       },
       "cta": {
         "title": "Ready to plan your trip?",

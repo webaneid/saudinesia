@@ -1,8 +1,10 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 import { Plane } from 'lucide-react'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
+import { checkoutPath } from '@/lib/checkout/kinds'
 import { formatRupiah } from '@/lib/utils'
 import { escapeLike } from '@/lib/utils/search'
 import { withSellPrice } from '@/lib/pricing/engine/read'
@@ -12,7 +14,7 @@ import { DataTable, type Column } from '@/components/shared/data-table/DataTable
 import { FilterBar } from '@/components/shared/data-table/FilterBar'
 import { Pagination } from '@/components/shared/data-table/Pagination'
 import { SearchForm } from '@/components/shared/data-table/SearchForm'
-import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
+import { DATE_SHORT_MONTH, calendarDateOf, formatCalendarDate, todayInApp } from '@/lib/time'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { catalogMetadata } from '@/lib/public-content/metadata'
 import { PageHero, type HeroFact } from '@/components/shared/public/PageHero'
@@ -69,6 +71,7 @@ export default async function FlightCatalogPage({ params, searchParams }: Props)
   }))
 
   const base = `/${locale}/flight`
+  const today = todayInApp()
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const columns: Column<Row>[] = [
     { key: 'route', header: t('table.route'), mobile: 'title', cell: r => <span className="text-sm font-semibold text-brand-dark">{r.origin} → {r.destination}</span> },
@@ -76,6 +79,12 @@ export default async function FlightCatalogPage({ params, searchParams }: Props)
     { key: 'period', header: t('table.period'), cell: r => <span className="text-sm text-muted-foreground">{formatDate(r.departureFrom)} – {formatDate(r.departureTo)}</span> },
     // Belum berharga = tanda pisah, tak pernah "Rp 0" (§6.7 R3).
     { key: 'price', header: t('table.price'), align: 'right', cell: r => <span className="text-sm font-bold tabular-nums text-brand">{r.price > 0 ? formatRupiah(r.price) : '—'}</span> },
+    // Checkout tiket (docs/arsitektur-booking-engine-v2.md §10.6) — hanya jadwal berharga yang periodenya belum lewat.
+    {
+      key: 'order', header: '', align: 'right', cell: r => r.price > 0 && calendarDateOf(r.departureTo) >= today
+        ? <Link href={checkoutPath(locale, 'flight', r.id)} className="text-sm font-semibold text-brand hover:underline">{t('table.order')}</Link>
+        : null,
+    },
   ]
   const facts: HeroFact[] = total > 0 ? [{ icon: Plane, label: t('facts.count', { count: total }) }] : []
 

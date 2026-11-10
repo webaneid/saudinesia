@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { formatRupiah } from '@/lib/utils'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { getMuthowifServicePrice } from '@/lib/pricing/engine/read'
+import { checkoutPath } from '@/lib/checkout/kinds'
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -76,9 +77,12 @@ export default async function MuthowifDetailPage({ params }: Props) {
             )}
             <p className="text-xs text-muted-foreground mt-0.5">Tim kami yang menentukan pembimbing bertugas — tidak selalu {guide.name}.</p>
           </div>
-          <Button asChild>
-            <Link href={`/${locale}/register`}>Pesan Layanan Muthowif</Link>
-          </Button>
+          {/* Checkout satu layanan umum (docs/arsitektur-booking-engine-v2.md §10.6, K11b-3) — profil ini hanya etalase; layanan belum berharga tak dapat dipesan. */}
+          {servicePrice && servicePrice.price > 0 && (
+            <Button asChild>
+              <Link href={checkoutPath(locale, 'muthowif', servicePrice.id)}>Pesan Layanan Muthowif</Link>
+            </Button>
+          )}
         </div>
       </div>
     </div>

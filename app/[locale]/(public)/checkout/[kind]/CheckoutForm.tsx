@@ -11,6 +11,9 @@ import { TransportFields } from './TransportFields'
 import { HajiFields } from './HajiFields'
 import { HotelFields } from './HotelFields'
 import { TourFields } from './TourFields'
+import { MuthowifFields } from './MuthowifFields'
+import { CateringFields } from './CateringFields'
+import { FlightFields } from './FlightFields'
 import { useCheckoutPreview } from './useCheckoutPreview'
 
 type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode }
@@ -57,6 +60,9 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props
         {product.kind === 'haji' && <HajiFields product={product} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'hotel' && <HotelFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'tour' && <TourFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'muthowif' && <MuthowifFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'catering' && <CateringFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'flight' && <FlightFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
       </div>
       <aside className="min-w-0">
         <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit} />
