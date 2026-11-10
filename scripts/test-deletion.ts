@@ -55,7 +55,7 @@ function fakeDeps(opts: { failKeys?: boolean } = {}) {
 type Seeded = {
   userId: string; email: string; number: string; googleSub: string; addressId: string
   bookingId: string; pilgrimId: string; cardId: string; docKeys: string[]; requestId: string
-  paymentId: string; refundId: string; adjustmentId: string; costActualId: string; vendorCostId: string; transportId: string; consentIds: string[]; crossPilgrimId: string
+  paymentId: string; refundId: string; adjustmentId: string; costActualId: string; vendorCostId: string; transportId: string; groupId: string; consentIds: string[]; crossPilgrimId: string
 }
 
 const createdUsers: string[] = []
@@ -114,6 +114,8 @@ async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 
   const adjustment = await prisma.bookingAdjustment.create({ data: { bookingId: booking.id, amountIdr: new Decimal(-100_000), label: 'Diskon', reason: 'nego dengan Budi Santoso 0812-RAHASIA', totalBefore: new Decimal(12_600_000), totalAfter: new Decimal(12_500_000), costKnownIdr: new Decimal(0), belowCost: false, byUserId: 'staf-uji' } })
   const vendorForCost = await prisma.vendor.create({ data: { name: `Vendor Hapus ${uniq()}`, nameKey: `vendor hapus ${uniq()}`, countryCode: 'SA' } })
   const costActual = await prisma.costActual.create({ data: { bookingId: booking.id, vendorId: vendorForCost.id, component: 'k', currency: 'IDR', amount: new Decimal(1000), amountIdr: new Decimal(1000), paidAt: new Date('2026-01-05'), varianceNote: 'dibayar tunai oleh Budi Santoso', voidReason: 'salah input — Budi', voidedAt: new Date(), voidedBy: 'staf-uji', recordedBy: 'staf-uji' } })
+  // Fase 11d: nama rombongan = teks bebas pemesan (bisa memuat nama orang) → dikosongkan.
+  const group = await prisma.bookingGroup.create({ data: { bookingId: booking.id, position: 1, label: 'Keluarga Budi Santoso' } })
   const transport = await prisma.bookingTransport.create({ data: { bookingId: booking.id, transportQuotaId: await quota(), travelDate: new Date('2026-01-10'), unitPrice: new Decimal(100), totalPrice: new Decimal(100), pickupDetail: 'Hotel Anjung kamar 1204, tel 0812-RAHASIA', dropoffDetail: 'Rumah Pak Haji' } })
 
   await prisma.notificationLog.createMany({ data: [
@@ -137,7 +139,7 @@ async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 
   const request = await prisma.accountDeletionRequest.create({ data: { userId: user.id, requestedAt: new Date(Date.now() - (opts.freshRequest ? 1 : MIN_WAIT_HOURS + 28) * 3_600_000) } })
   return {
     userId: user.id, email, number, googleSub, addressId: address.id, bookingId: booking.id, pilgrimId: pilgrim.id, cardId: card.id, docKeys, requestId: request.id,
-    paymentId: payment.id, refundId: refund.id, adjustmentId: adjustment.id, costActualId: costActual.id, vendorCostId: vendorForCost.id, transportId: transport.id, consentIds: user.consentLogs.map((c) => c.id), crossPilgrimId: otherBooking.pilgrims[0]!.id,
+    paymentId: payment.id, refundId: refund.id, adjustmentId: adjustment.id, costActualId: costActual.id, vendorCostId: vendorForCost.id, transportId: transport.id, groupId: group.id, consentIds: user.consentLogs.map((c) => c.id), crossPilgrimId: otherBooking.pilgrims[0]!.id,
   }
 }
 
@@ -229,6 +231,7 @@ await t('anonimisasi lengkap: tiap kolom PII hilang / diacak; ringkasan tercatat
   assert.deepEqual(ev, [{ note: null, toStatus: 'needs_revision' }], 'catatan pemeriksaan dikosongkan, riwayat tetap')
   // teks bebas pada baris yang dipertahankan (DEL-01)
   const tr = await prisma.bookingTransport.findUniqueOrThrow({ where: { id: s.transportId } })
+  assert.equal((await prisma.bookingGroup.findUniqueOrThrow({ where: { id: s.groupId } })).label, null, 'nama rombongan dikosongkan')
   assert.equal(tr.pickupDetail, null); assert.equal(tr.dropoffDetail, null)
   assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: s.paymentId } })).notes, null)
   assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: s.refundId } })).notes, null)

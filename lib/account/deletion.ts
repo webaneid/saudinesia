@@ -184,6 +184,8 @@ export async function executeDeletion(
       // Teks bebas yang bisa memuat nama/nomor/alamat (DEL-01). Refund.reason hanya berisi string sistem (lib/booking/cancel.ts) → dibiarkan.
       await tx.visaApplication.updateMany({ where: { pilgrim: { booking: { userId } } }, data: { notes: null, rejectionReason: null } })
       await tx.booking.updateMany({ where: { userId }, data: { notes: null } })
+      // Nama rombongan (Fase 11d, K11d-4) = teks bebas pemesan, bisa memuat nama keluarga/orang → dikosongkan (tampil kembali sebagai "Rombongan A/B").
+      await tx.bookingGroup.updateMany({ where: { booking: { userId } }, data: { label: null } })
       await tx.bookingTransport.updateMany({ where: { booking: { userId } }, data: { pickupDetail: null, dropoffDetail: null } })
       await tx.payment.updateMany({ where: { booking: { userId } }, data: { notes: null } })
       await tx.refund.updateMany({ where: { booking: { userId } }, data: { notes: null } })

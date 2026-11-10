@@ -357,6 +357,8 @@ model FlightSchedule {
 model BookingFlight {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId          String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed   Boolean  @default(false)
@@ -367,8 +369,10 @@ model BookingFlight {
   totalPrice       Decimal  @db.Decimal(14, 2)
 
   booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group          BookingGroup?  @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   flightSchedule FlightSchedule @relation(fields: [flightScheduleId], references: [id])
 
+  @@index([groupId])
   @@map("booking_flights")
 }
 
@@ -805,6 +809,7 @@ model Booking {
   user        User  @relation(fields: [userId], references: [id])
   confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
 
+  groups         BookingGroup[]
   pilgrims       BookingPilgrim[]
   tripDocuments  PilgrimDocument[]
   hotels         BookingHotel[]
@@ -851,9 +856,39 @@ enum BookingStatus {
 // komponen-kontak.md) juga ikut masuk fieldValues (fieldType='phone', shape {countryCode,
 // number}) — komponen Kontak SEBELUMNYA punya kolom baku sendiri, sekarang bagian dari manifest
 // yang sama seperti field lain, tidak ada perlakuan khusus lagi.
+/// Rombongan dalam satu booking (docs/arsitektur-booking-engine-v2.md §10.8, Fase 11d). Booking tanpa baris rombongan = satu rombongan (perilaku lama).
+/// Item dan jamaah menunjuk rombongan lewat `groupId` (NULL = semua jamaah); FK komposit (`groupId`, `bookingId`) menjamin rombongan milik booking yang sama.
+/// `label` = nama bebas dari pemesan — data hidup (TIDAK masuk `price_snapshots`), ditempel saat render, dibersihkan saat akun dihapus (lib/account/deletion.ts).
+model BookingGroup {
+  id                String    @id @default(uuid())
+  bookingId         String
+  position          Int
+  label             String?
+  /// Rencana berangkat visa rombongan bila itemnya tak memuat tiket.
+  plannedTravelDate DateTime? @db.Date
+  createdAt         DateTime  @default(now()) @db.Timestamptz(3)
+
+  booking      Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  pilgrims     BookingPilgrim[]
+  hotels       BookingHotel[]
+  transports   BookingTransport[]
+  flights      BookingFlight[]
+  muthowif     BookingMuthowif[]
+  catering     BookingCatering[]
+  tourPackages BookingTourPackage[]
+  haji         BookingHaji[]
+  packages     BookingPackage[]
+
+  @@unique([bookingId, position])
+  @@unique([id, bookingId])
+  @@map("booking_groups")
+}
+
 model BookingPilgrim {
   id        String  @id @default(uuid())
   bookingId String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId   String?
   userId    String? // link opsional ke akun kalau orang ini pembeli sendiri (prefill dari akun)
   isLeader  Boolean @default(false) // tetap flag struktural (peran grup), bukan form field admin
 
@@ -883,6 +918,7 @@ model BookingPilgrim {
   verifiedById String?
 
   booking         Booking                  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group           BookingGroup?            @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   user            User?                    @relation("BookingPilgrimUser", fields: [userId], references: [id], onDelete: SetNull)
   verifiedBy      User?                    @relation("BookingPilgrimVerifiedBy", fields: [verifiedById], references: [id], onDelete: SetNull)
   reviewEvents    PilgrimReviewEvent[]
@@ -902,6 +938,7 @@ model BookingPilgrim {
   @@index([bookingHajiId])
   @@index([reviewStatus, submittedAt]) // antrean Verifikasi Jamaah
   @@index([verifiedById])
+  @@index([groupId])
   @@map("booking_pilgrims")
 }
 
@@ -1229,6 +1266,8 @@ enum VisaStatus {
 model BookingHotel {
   id                  String   @id @default(uuid())
   bookingId           String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId             String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed      Boolean  @default(false)
@@ -1242,14 +1281,18 @@ model BookingHotel {
   totalPrice          Decimal  @db.Decimal(14, 2)
 
   booking           Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group             BookingGroup?     @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   hotelRoomSchedule HotelRoomSchedule @relation(fields: [hotelRoomScheduleId], references: [id])
 
+  @@index([groupId])
   @@map("booking_hotels")
 }
 
 model BookingTransport {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId          String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed   Boolean  @default(false)
@@ -1262,14 +1305,18 @@ model BookingTransport {
   dropoffDetail    String?
 
   booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group          BookingGroup?  @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   transportQuota TransportQuota @relation(fields: [transportQuotaId], references: [id])
 
+  @@index([groupId])
   @@map("booking_transports")
 }
 
 model BookingMuthowif {
   id             String    @id @default(uuid())
   bookingId      String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId        String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed Boolean   @default(false)
@@ -1281,15 +1328,19 @@ model BookingMuthowif {
   totalPrice     Decimal   @db.Decimal(14, 2)
   assignedAt     DateTime?
 
-  booking  Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  muthowif Muthowif? @relation(fields: [muthowifId], references: [id])
+  booking  Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group    BookingGroup? @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
+  muthowif Muthowif?     @relation(fields: [muthowifId], references: [id])
 
+  @@index([groupId])
   @@map("booking_muthowif")
 }
 
 model BookingCatering {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId          String?
   cateringOptionId String
   startDate        DateTime @db.Date
   endDate          DateTime @db.Date
@@ -1298,14 +1349,18 @@ model BookingCatering {
   totalPrice       Decimal  @db.Decimal(14, 2)
 
   booking        Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group          BookingGroup?  @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   cateringOption CateringOption @relation(fields: [cateringOptionId], references: [id])
 
+  @@index([groupId])
   @@map("booking_catering")
 }
 
 model BookingTourPackage {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId          String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed   Boolean  @default(false)
@@ -1324,10 +1379,12 @@ model BookingTourPackage {
   chosenHotelNumRooms       Int?
 
   booking                 Booking            @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group                   BookingGroup?      @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   tourPackage             TourPackage        @relation(fields: [tourPackageId], references: [id])
   transportQuota          TransportQuota?    @relation(fields: [transportQuotaId], references: [id])
   chosenHotelRoomSchedule HotelRoomSchedule? @relation(fields: [chosenHotelRoomScheduleId], references: [id])
 
+  @@index([groupId])
   @@map("booking_tour_packages")
 }
 
@@ -1348,6 +1405,8 @@ model BookingService {
 model BookingHaji {
   id             String  @id @default(uuid())
   bookingId      String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId        String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed Boolean @default(false)
@@ -1356,9 +1415,11 @@ model BookingHaji {
   totalPrice     Decimal @db.Decimal(14, 2)
 
   booking     Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group       BookingGroup?    @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   hajiProduct HajiProduct      @relation(fields: [hajiProductId], references: [id])
   members     BookingPilgrim[]
 
+  @@index([groupId])
   @@map("booking_haji")
 }
 
@@ -1367,6 +1428,8 @@ model BookingHaji {
 model BookingPackage {
   id               String   @id @default(uuid())
   bookingId        String
+  /// Rombongan (§10.8); NULL = semua jamaah booking.
+  groupId          String?
   /// Kuota baris ini sudah DIKONFIRMASI (`booked`), bukan sekadar ditahan (`pending`) — per baris, karena produk yang ditambahkan lewat revisi sesudah booking dikonfirmasi
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed   Boolean  @default(false)
@@ -1379,12 +1442,14 @@ model BookingPackage {
   totalPrice       Decimal  @db.Decimal(14, 2)
 
   booking        Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group          BookingGroup?    @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
   package        Package          @relation(fields: [packageId], references: [id])
   flightSchedule FlightSchedule?  @relation(fields: [flightScheduleId], references: [id], onDelete: Restrict)
   members        BookingPilgrim[]
 
   @@index([bookingId])
   @@index([packageId])
+  @@index([groupId])
   @@map("booking_packages")
 }
 

@@ -37,10 +37,14 @@ const stateInclude = {
   hotels: true, transports: true, muthowif: true, catering: true, tourPackages: true, flights: true, packages: true, haji: { select: { id: true, numPersons: true } },
   pilgrims: { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, bookingPackageId: true, bookingHajiId: true, visaApplication: true } }, // tanpa kolom NIK/paspor tersegel
   invoice: { select: { revision: true, invoiceDate: true, dueDate: true } },
+  groups: { select: { id: true } },
   payments: { where: { status: 'confirmed' }, select: { id: true } },
   priceSnapshots: { where: { voidedAt: null }, select: { itemType: true, itemId: true, lineKey: true, itemLabel: true, itemDetail: true, itemQty: true, totalSellIdr: true } },
 } satisfies Prisma.BookingInclude
 type State = Prisma.BookingGetPayload<{ include: typeof stateInclude }>
+
+/** Revisi booking berrombongan menyusul di Fase 11d-2 (docs/arsitektur-booking-engine-v2.md §10.8) — ditolak, bukan diam-diam kehilangan rombongan. */
+const GROUPED_REVISION = 'Booking berrombongan belum dapat direvisi — menyusul (Fase 11d-2)'
 
 const cal = (d: Date) => calendarDateOf(d)
 /** JSON stabil (kunci terurut, `undefined` dibuang) — dua item sama isinya ⇔ teks sama. */
@@ -250,6 +254,7 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   if (!b.invoice) throw new RevisionError(409, 'Booking ini belum punya invoice')
   if (b.invoice.revision !== input.expectedRevision) throw new RevisionError(409, 'Booking sudah diubah orang lain sejak halaman dibuka — muat ulang lalu ulangi')
   if (b.haji.length > 0) throw new RevisionError(409, 'Booking berisi Haji belum dapat diedit lewat form admin')
+  if (b.groups.length > 0) throw new RevisionError(409, GROUPED_REVISION)
   // Rencana dihitung ULANG atas keadaan terkunci; revisi sama ⇒ item sama, tetapi status visa/dokumen/konfirmasi bisa berubah tanpa revisi.
   const p = plan(b, input)
   if (canon(p.writes.map(w => w.item)) !== canon(planned.writes.map(w => w.item))) throw new RevisionError(409, 'Booking berubah saat disimpan — muat ulang lalu ulangi')
@@ -372,6 +377,7 @@ async function prepare(bookingId: string, input: BookingRevisionInput) {
   if (!b) throw new RevisionError(404, 'Booking tidak ditemukan')
   if (b.status !== 'active') throw new RevisionError(409, 'Hanya booking aktif yang dapat diedit (batal/hangus/selesai tidak)')
   if (b.invoice && b.invoice.revision !== input.expectedRevision) throw new RevisionError(409, 'Booking sudah diubah orang lain sejak halaman dibuka — muat ulang lalu ulangi')
+  if (b.groups.length > 0) throw new RevisionError(409, GROUPED_REVISION)
   const p = plan(b, input)
   const full = await prepareBooking(p.full)
   // Item yang ditulis = SUBSET masukan: nomor galatnya dipetakan kembali ke baris editor.

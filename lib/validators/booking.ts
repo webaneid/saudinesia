@@ -12,9 +12,13 @@ import { isEmptyValue } from '@/lib/manifest/values'
 // app/api/v1/bookings/route.ts dari referensi (id jadwal/kuota) yang dikirim, pola yang sama
 // persis dengan skema lama, cuma disatukan jadi satu discriminated union. Visa TETAP field
 // terpisah (bukan itemType) — lihat §3.3: visa selalu per-jamaah, bukan per-booking.
+/** Rombongan sasaran item/jamaah (docs/arsitektur-booking-engine-v2.md §10.8): indeks ke `groups`; kosong = semua jamaah. Batas = batas jamaah (setiap rombongan ≥ 1 orang). */
+const groupIndex = z.number().int().min(0).max(1999).optional()
+
 const bookingItemSchema = z.discriminatedUnion('itemType', [
   z.object({
     itemType: z.literal('hotel'),
+    group: groupIndex,
     hotelRoomScheduleId: z.string().uuid(),
     checkIn:             z.string().date(),
     checkOut:            z.string().date(),
@@ -23,6 +27,7 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   }),
   z.object({
     itemType: z.literal('transport'),
+    group: groupIndex,
     transportQuotaId: z.string().uuid(),
     numPassengers:    z.number().int().min(1),
     pickupDetail:     z.string().max(300).optional(),
@@ -30,6 +35,7 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   }),
   z.object({
     itemType: z.literal('muthowif'),
+    group: groupIndex,
     startDate: z.string().date(),
     endDate:   z.string().date(),
     numDays:   z.number().int().min(1),
@@ -37,6 +43,7 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   }),
   z.object({
     itemType: z.literal('catering'),
+    group: groupIndex,
     cateringOptionId: z.string().uuid(),
     startDate:        z.string().date(),
     endDate:          z.string().date(),
@@ -46,6 +53,7 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   }),
   z.object({
     itemType: z.literal('tourPackage'),
+    group: groupIndex,
     tourPackageId:             z.string().uuid(),
     // Tanggal tur (D1: tanggal menempel di item). Bila kosong, jalur jamaah memakai `departureDate` booking (perilaku lama).
     tourDate:                  z.string().date().optional(),
@@ -59,12 +67,14 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   // langsung — konsisten dengan pola "registry lengkap dulu, integrasi UI menyusul".
   z.object({
     itemType: z.literal('haji'),
+    group: groupIndex,
     hajiProductId: z.string().uuid(),
     numPersons:    z.number().int().min(1),
   }),
   // Tiket pesawat (docs/arsitektur-booking-engine-v2.md §10.2): tanggal = tanggal terbang sungguhan, harus di periode jadwal (diperiksa server). Pergi-pulang = dua item.
   z.object({
     itemType: z.literal('flight'),
+    group: groupIndex,
     flightScheduleId: z.string().uuid(),
     departureDate:    z.string().date(),
     numPassengers:    z.number().int().min(1).max(2000),
@@ -72,6 +82,7 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
   // Paket Umroh (§10.2): harga PER ORANG × numPeople; `choices` = pilihan untuk komponen `user_choice` (di luar daftar opsi paket → 422).
   z.object({
     itemType: z.literal('package'),
+    group: groupIndex,
     packageId:     z.string().uuid(),
     departureDate: z.string().date(),
     numPeople:     z.number().int().min(1).max(2000),
@@ -219,17 +230,44 @@ export type BookingItemInput = z.infer<typeof bookingItemSchema>
 // Isi draf = item + jamaah (jumlah dan visa per jamaah saja — data jamaah diisi SETELAH terbit, D3). Tanggal menempel di item (D1), jadi tak ada tanggal booking.
 // `.strict()` di setiap tingkat: kolom liar (harga, total, status) ditolak — draf tak pernah membawa angka harga.
 export const draftPilgrimSchema = z.object({
+  group:                groupIndex,
   visaProductId:        z.string().uuid().optional(),
   selectedDurationDays: z.number().int().min(1).max(365).optional(),
 }).strict()
 
+/** Rombongan (§10.8, K11d-4): nama bebas pemesan (teks polos ≤ 60, tanpa karakter kontrol — sama dengan CHECK DB) + rencana berangkat visa bila tanpa tiket. */
+export const bookingGroupSchema = z.object({
+  label: z.string().trim().min(1).max(60, 'Nama rombongan maksimal 60 karakter').regex(/^[^\p{Cc}]*$/u, 'Nama rombongan tidak boleh memuat karakter kontrol').optional(),
+  plannedTravelDate: z.string().date().optional(),
+}).strict()
+export type BookingGroupInput = z.infer<typeof bookingGroupSchema>
+
+/**
+ * Rombongan sah: tanpa `groups` → tak satu pun item/jamaah boleh menunjuk rombongan; dengan `groups` (≥ 2) → setiap jamaah menunjuk rombongan yang ada, setiap rombongan
+ * ≥ 1 jamaah, item menunjuk rombongan yang ada atau kosong (= semua). Dipakai skema draf; mesin memeriksa ulang (`checkGroupShape`, lib/booking/groups.ts).
+ */
+function checkGroups(groups: readonly unknown[] | undefined, items: ReadonlyArray<{ group?: number }>, pilgrims: ReadonlyArray<{ group?: number }>, ctx: z.RefinementCtx): void {
+  const n = groups?.length ?? 0
+  if (n === 0) {
+    items.forEach((it, i) => { if (it.group !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan item tidak dikenal', path: ['items', i, 'group'] }) })
+    pilgrims.forEach((p, i) => { if (p.group !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan jamaah tidak dikenal', path: ['pilgrims', i, 'group'] }) })
+    return
+  }
+  if (n < 2) { ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan dipakai bila lebih dari satu — satu rombongan tidak perlu diisi', path: ['groups'] }); return }
+  items.forEach((it, i) => { if (it.group !== undefined && it.group >= n) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan item tidak dikenal', path: ['items', i, 'group'] }) })
+  pilgrims.forEach((p, i) => { if (p.group === undefined || p.group >= n) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Setiap jamaah harus masuk satu rombongan', path: ['pilgrims', i, 'group'] }) })
+  for (let g = 0; g < n; g++) if (!pilgrims.some(p => p.group === g)) ctx.addIssue({ code: z.ZodIssueCode.custom, message: `Rombongan ke-${g + 1} belum punya jamaah`, path: ['groups', g] })
+}
+
 export const bookingDraftSchema = z.object({
   items:    z.array(bookingItemSchema).max(50).default([]),
   pilgrims: z.array(draftPilgrimSchema).min(1, 'Minimal 1 jamaah').max(2000),
+  groups:   z.array(bookingGroupSchema).max(2000).optional(),
   /** Jatuh tempo (hari dari terbit) — bawaan Pengaturan Invoice, dapat diedit (D4). */
   dueDays:  z.number().int().min(0).max(365).optional(),
 }).strict().superRefine((d, ctx) => {
   checkItemQuantities(d.items, ctx)
+  checkGroups(d.groups, d.items, d.pilgrims, ctx)
   // Haji di luar form admin (§10.3 butir 8; "Visa Haji" belum ada — CLAUDE.md): draf menolaknya, bukan diam-diam.
   d.items.forEach((it, i) => { if (it.itemType === 'haji') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Haji belum dapat dipesan lewat form booking admin', path: ['items', i] }) })
 })
@@ -261,6 +299,8 @@ export const bookingRevisionSchema = z.object({
   checkItemQuantities(d.items.map(i => i.item), ctx)
   d.items.forEach((it, i) => {
     if (it.item.itemType === 'haji') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Haji belum dapat diedit lewat form booking admin', path: ['items', i] })
+    // Revisi booking berrombongan menyusul di Fase 11d-2 (lib/booking/revise.ts menolak 409); rujukan rombongan di revisi ditolak di sini.
+    if (it.item.group !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan belum dapat diubah lewat revisi', path: ['items', i, 'group'] })
     if (it.ref && it.ref.itemType !== it.item.itemType) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jenis item tidak cocok dengan rujukannya', path: ['items', i, 'ref'] })
   })
   if (d.dueDate < d.invoiceDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jatuh tempo tidak boleh sebelum tanggal invoice', path: ['dueDate'] })
