@@ -20,12 +20,14 @@ type Props = { params: Promise<{ locale: string; kind: string }>; searchParams: 
 export const metadata: Metadata = { title: 'Checkout', robots: { index: false, follow: false } }
 
 /** Jenis checkout → layanan katalog (layanan tanpa produk aktif = 404, sama dengan halaman katalognya — §7 V3). */
-const CATALOG_OF: Record<CheckoutKind, CatalogKey> = { package: 'packages', visa: 'visa', transport: 'transport', haji: 'haji' }
+const CATALOG_OF: Record<CheckoutKind, CatalogKey> = { package: 'packages', visa: 'visa', transport: 'transport', haji: 'haji', hotel: 'hotels', tour: 'tours' }
 const BACK: Record<CheckoutKind, { href: string; label: string }> = {
   package: { href: 'packages', label: 'Kembali ke Paket Umroh' },
   visa: { href: 'visa', label: 'Kembali ke Visa' },
   transport: { href: 'transport', label: 'Kembali ke Transportasi' },
   haji: { href: 'haji', label: 'Kembali ke Haji' },
+  hotel: { href: 'hotels', label: 'Kembali ke Hotel' },
+  tour: { href: 'tours', label: 'Kembali ke Paket Ziarah' },
 }
 
 // Checkout pelanggan satu produk (docs/arsitektur-booking-engine-v2.md §10.5). Belum login → login/daftar lalu KEMBALI ke sini (jalur kembali daftar putih,

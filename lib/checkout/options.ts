@@ -1,5 +1,7 @@
 import { prisma } from '@/lib/db'
 import { computePackageBreakdown } from '@/lib/pricing/computePackagePrice'
+import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
+import type { HotelScheduleOpt } from '@/lib/booking/hotelPick'
 import { sellPrices, visaFeeRules } from '@/lib/pricing/engine/read'
 import { getFeaturedCards, getFeaturedCardUrls } from '@/lib/media/urls'
 import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
@@ -42,7 +44,29 @@ export type HajiCheckout = {
   kind: 'haji'; id: string; name: string; hajiType: string; year: number; description: string | null; cover: Cover; price: number
   departureDate: CalendarDate | null; returnDate: CalendarDate | null; durationDays: number | null; includes: string[]; seatsLeft: number
 }
-export type CheckoutProduct = PackageCheckout | VisaCheckout | TransportCheckout | HajiCheckout
+export type HotelCheckout = {
+  kind: 'hotel'; id: string; name: string; city: string; stars: number | null; description: string | null; cover: Cover
+  /** Jadwal kamar hotel ini (tipe kamar × periode) yang masih berlaku dan berharga — periode dipilih halaman dari tanggal (lib/booking/hotelPick.ts). */
+  schedules: HotelScheduleOpt[]
+}
+/** Satu kuota kendaraan Paket Ziarah pada satu tanggal. `price` 0 = kendaraan termasuk paket (tak ditagih terpisah). */
+export type TourSlot = { quotaId: string; date: CalendarDate; vehicle: string; capacity: number; seatsLeft: number; price: number }
+export type TourCheckout = {
+  kind: 'tour'; id: string; name: string; description: string | null; cover: Cover
+  /** Harga dasar PER PAKET (bukan per orang — mesin: `compositeLines` multiplier 1); pilihan kendaraan/hotel ditambahkan terpisah. */
+  price: number
+  /** Alasan paket tak dapat dipesan online, null = dapat. */
+  blocked: string | null
+  sites: string[]
+  transportMode: 'included' | 'user_choice' | 'none'
+  /** included: tanggal yang punya kuota kendaraan paket (dicari otomatis); user_choice: kendaraan pilihan per tanggal. */
+  slots: TourSlot[]
+  includedVehicle: string | null
+  hotelMode: 'included' | 'user_choice' | 'none'
+  includedHotels: string[]
+  hotelOptions: Array<{ id: string; label: string; nights: number; pricePerNight: number; roomsLeft: number }>
+}
+export type CheckoutProduct = PackageCheckout | VisaCheckout | TransportCheckout | HajiCheckout | HotelCheckout | TourCheckout
 
 /** Batas jumlah slot kuota transport yang ditampilkan (tanggal terdekat lebih dulu). */
 const TRANSPORT_SLOTS = 400
@@ -53,6 +77,8 @@ export async function loadCheckoutProduct(kind: CheckoutKind, id: string): Promi
     case 'visa': return loadVisa(id)
     case 'transport': return loadTransport(id)
     case 'haji': return loadHaji(id)
+    case 'hotel': return loadHotel(id)
+    case 'tour': return loadTour(id)
   }
 }
 
@@ -149,6 +175,72 @@ async function loadHaji(id: string): Promise<HajiCheckout | null> {
     departureDate: h.departureDate ? calendarDateOf(h.departureDate) : null, returnDate: h.returnDate ? calendarDateOf(h.returnDate) : null,
     durationDays: h.durationDays, includes: Array.isArray(h.includes) ? h.includes.filter((x): x is string => typeof x === 'string') : [],
     seatsLeft: h.totalQuota - h.pendingQuota - h.bookedQuota,
+  }
+}
+
+async function loadHotel(id: string): Promise<HotelCheckout | null> {
+  const h = await prisma.hotel.findUnique({ where: { id }, select: { id: true, name: true, city: true, stars: true, description: true, isActive: true } })
+  if (!h?.isActive) return null
+  const rows = await prisma.hotelRoomSchedule.findMany({
+    where: { isActive: true, period: { isActive: true, hotelId: id, periodEnd: { gte: dbDateOf(todayInApp()) } } },
+    orderBy: [{ period: { periodStart: 'asc' } }, { id: 'asc' }],
+    select: { id: true, totalQuota: true, pendingQuota: true, bookedQuota: true, roomTypeId: true, roomType: { select: { name: true, defaultCapacity: true } }, period: { select: { periodStart: true, periodEnd: true } } },
+  })
+  const [price, covers] = await Promise.all([sellPrices('hotel', rows.map(r => r.id)), getFeaturedCards('hotel', [id])])
+  return {
+    kind: 'hotel', id: h.id, name: h.name, city: h.city, stars: h.stars, description: h.description, cover: covers.get(id) ?? null,
+    schedules: rows
+      .map(r => ({
+        id: r.id, hotelId: h.id, hotelName: h.name, city: h.city, stars: h.stars, roomTypeId: r.roomTypeId, roomType: r.roomType.name, capacity: r.roomType.defaultCapacity,
+        from: calendarDateOf(r.period.periodStart), to: calendarDateOf(r.period.periodEnd), roomsLeft: r.totalQuota - r.pendingQuota - r.bookedQuota, price: price.get(r.id) ?? 0,
+      }))
+      .filter(r => r.price > 0), // kamar belum berharga tak ditawarkan (mesin juga menolaknya)
+  }
+}
+
+async function loadTour(id: string): Promise<TourCheckout | null> {
+  const tp = await prisma.tourPackage.findUnique({
+    where: { id },
+    select: { id: true, name: true, description: true, isActive: true, sites: { orderBy: [{ order: 'asc' }, { id: 'asc' }], select: { tourismSite: { select: { name: true } } } } },
+  })
+  if (!tp?.isActive) return null
+  const [b, price, covers] = await Promise.all([computeTourPackageBreakdown(id), sellPrices('tour_package', [id]), getFeaturedCards('tour_package', [id])])
+  const today = dbDateOf(todayInApp())
+
+  // Kendaraan: included → kuota kendaraan paket (harga sudah di paket); user_choice → kuota setiap opsi kendaraan (harga per kendaraan).
+  const pricingIds = b.transportMode === 'included' && b.includedTransportPricingId ? [b.includedTransportPricingId]
+    : b.transportMode === 'user_choice' ? b.vehicleOptions.map(v => v.transportPricingId) : []
+  const optionPrice = new Map(b.vehicleOptions.map(v => [v.transportPricingId, v.vehiclePrice]))
+  const quotas = pricingIds.length === 0 ? [] : await prisma.transportQuota.findMany({
+    where: { pricingId: { in: pricingIds }, travelDate: { gte: today }, pricing: { isActive: true } },
+    orderBy: [{ travelDate: 'asc' }, { id: 'asc' }], take: TRANSPORT_SLOTS,
+    select: { id: true, pricingId: true, travelDate: true, totalSeats: true, pendingSeats: true, bookedSeats: true, pricing: { select: { vehicle: { select: { name: true, capacity: true } } } } },
+  })
+  const slots: TourSlot[] = quotas
+    .map(q => ({
+      quotaId: q.id, date: calendarDateOf(q.travelDate), vehicle: q.pricing.vehicle.name, capacity: q.pricing.vehicle.capacity,
+      seatsLeft: q.totalSeats - q.pendingSeats - q.bookedSeats, price: b.transportMode === 'user_choice' ? (optionPrice.get(q.pricingId) ?? 0) : 0,
+    }))
+    .filter(x => b.transportMode !== 'user_choice' || x.price > 0)
+
+  const hotelIds = b.hotelMode === 'user_choice' ? b.hotelOptions.map(o => o.hotelRoomScheduleId) : []
+  const rooms = new Map((hotelIds.length === 0 ? [] : await prisma.hotelRoomSchedule.findMany({
+    where: { id: { in: hotelIds }, isActive: true, period: { isActive: true, hotel: { isActive: true } } },
+    select: { id: true, totalQuota: true, pendingQuota: true, bookedQuota: true },
+  })).map(r => [r.id, r.totalQuota - r.pendingQuota - r.bookedQuota]))
+
+  const sell = price.get(id) ?? 0
+  return {
+    kind: 'tour', id: tp.id, name: tp.name, description: tp.description, cover: covers.get(id) ?? null, price: sell,
+    blocked: !(sell > 0) ? 'Harga paket ini belum ditetapkan — belum dapat dipesan.'
+      : b.transportMode === 'included' && slots.length === 0 ? 'Belum ada jadwal kendaraan untuk paket ini — hubungi kami.' : null,
+    sites: tp.sites.map(x => x.tourismSite.name),
+    transportMode: b.transportMode, slots, includedVehicle: b.transportMode === 'included' ? b.includedVehicleName : null,
+    hotelMode: b.hotelMode,
+    includedHotels: b.hotelMode === 'included' ? b.hotels.map(h => `${h.hotelName} — ${h.roomTypeName} (${h.nights} malam)`) : [],
+    hotelOptions: b.hotelOptions
+      .filter(o => rooms.has(o.hotelRoomScheduleId) && o.pricePerNight > 0)
+      .map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName}`, nights: o.nights, pricePerNight: o.pricePerNight, roomsLeft: rooms.get(o.hotelRoomScheduleId) ?? 0 })),
   }
 }
 
