@@ -15,6 +15,8 @@ import type { BookingDraft } from '@/lib/validators/booking'
 import type { Catalog, ModuleKey } from './catalog'
 import { ItemRows, rowForMissing, rowFromItem, rowToItem, type ItemRow } from './ItemRows'
 import { applyVisaRows, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlots, type VisaSlot } from './visaRows'
+import { grouping, groupsInput, removeGroup, resizeGroup, startGroups, type GroupDraft } from './groupRows'
+import { GroupsBox } from './GroupsBox'
 
 // Editor draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): draf tersimpan di database (dapat dilanjutkan). Produk = editor BARIS inline (§10.4, arahan
 // pemilik 2026-11-01); subtotal baris, total, pajak, dan pelanggaran aturan dihitung SERVER otomatis sesaat setelah berhenti mengubah (pratinjau = simulasi terbit yang
@@ -34,6 +36,8 @@ export default function DraftEditorPage({ params }: Props) {
   const [rows, setRows] = useState<ItemRow[]>([])
   // Slot jamaah draf (visa per orang); baris Visa di editor produk adalah kelompok atas slot ini (./visaRows.ts).
   const [pilgrims, setPilgrims] = useState<VisaSlot[]>([{}])
+  // Rombongan (§10.8): ≥ 2 atau kosong; slot jamaah dan baris menunjuknya lewat indeks.
+  const [groups, setGroups] = useState<GroupDraft[]>([])
   const [dueDays, setDueDays] = useState<number | undefined>(undefined)
   const [snapshot, setSnapshot] = useState('')
   const [catalog, setCatalog] = useState<Catalog>({})
@@ -62,17 +66,19 @@ export default function DraftEditorPage({ params }: Props) {
       const d = j.data.draft
       const v = visaRowsFromSlots<VisaSlot>(d.pilgrims)
       setLoaded(j.data); setRows([...v.rows, ...d.items.map(it => rowFromItem(it))]); setPilgrims(v.slots); setDueDays(d.dueDays)
+      setGroups((d.groups ?? []).map(g => ({ label: g.label ?? '', plannedTravelDate: g.plannedTravelDate ?? '' })))
       setSnapshot(JSON.stringify(d))
       void load('visa')
     }).catch(() => setNotFound(true))
   }, [id, load])
 
   // Isi draf dari baris: baris belum lengkap tidak ikut, tetapi MENAHAN simpan/terbit (ditandai di barisnya).
-  const checked = useMemo(() => rows.map(r => rowToItem(r, catalog)), [rows, catalog])
+  const g = useMemo(() => grouping(groups, pilgrims), [groups, pilgrims])
+  const checked = useMemo(() => rows.map(r => rowToItem(r, catalog, g)), [rows, catalog, g])
   const incomplete = checked.findIndex(c => 'error' in c)
   const draft: BookingDraft = useMemo(() => ({
-    items: checked.flatMap(c => ('item' in c ? [c.item] : [])), pilgrims: pilgrims.map(stripRow), ...(dueDays !== undefined && { dueDays }),
-  }), [checked, pilgrims, dueDays])
+    items: checked.flatMap(c => ('item' in c ? [c.item] : [])), pilgrims: pilgrims.map(stripRow), ...(groups.length >= 2 && { groups: groupsInput(groups) }), ...(dueDays !== undefined && { dueDays }),
+  }), [checked, pilgrims, groups, dueDays])
   const draftJson = JSON.stringify(draft)
   const dirty = !!loaded && (draftJson !== snapshot || incomplete >= 0)
   const hasProducts = draft.items.length > 0 || draft.pilgrims.some(p => p.visaProductId)
@@ -122,6 +128,10 @@ export default function DraftEditorPage({ params }: Props) {
     const next = applyVisaRows(pilgrims, r, () => ({}))
     setPilgrims(next); setRows(syncVisaCounts(r, next))
   }
+  const applyGroups = (x: { groups: GroupDraft[]; slots: VisaSlot[]; rows: ItemRow[] }) => {
+    touched(); setGroups(x.groups); setPilgrims(x.slots); setRows(syncVisaCounts(x.rows, x.slots))
+  }
+  const groupSizes = groups.map((_, i) => pilgrims.filter(p => p.group === i).length)
   const blockIncomplete = () => {
     if (incomplete < 0) return false
     setProblem({ message: `Baris produk ke-${incomplete + 1} belum lengkap — lengkapi atau hapus barisnya.`, violations: [] })
@@ -186,16 +196,24 @@ export default function DraftEditorPage({ params }: Props) {
   const main = (
     <>
       <MetaBox title="Produk" icon={Package} collapsible={false} description="Ubah langsung di baris. Subtotal dan total dihitung server otomatis.">
-        <ItemRows rows={rows} onChange={changeRows} catalog={catalog} load={load} defaultPeople={people} defaultVisaPeople={people - withVisa} totals={rowTotals} computing={previewing}
+        <ItemRows rows={rows} onChange={changeRows} catalog={catalog} load={load} defaultPeople={people} defaultVisaPeople={people - withVisa} totals={rowTotals} computing={previewing} grouping={g}
           rowError={errorRow !== undefined && problem ? { index: errorRow, message: problem.message } : undefined} />
       </MetaBox>
 
+      <GroupsBox groups={groups} sizes={groupSizes} onChange={gs => { touched(); setGroups(gs) }}
+        onStart={() => applyGroups(startGroups(pilgrims, rows, [{}]))}
+        onAdd={() => applyGroups({ groups: [...groups, { label: '', plannedTravelDate: '' }], slots: [...pilgrims, { group: groups.length }], rows })}
+        onRemove={i => applyGroups(removeGroup(groups, pilgrims, rows, i, true))}
+        resize={{ min: groups.map((_, i) => pilgrims.filter(p => p.group === i && p.row).length), set: (i, n) => applyGroups({ groups, slots: resizeGroup(pilgrims, i, n, () => ({})), rows }) }} />
+
       <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Jumlah orang dalam booking ini. Data jamaah (nama, paspor, …) diisi setelah booking terbit.">
         <div className="space-y-2">
-          <label className="flex items-center gap-2 text-sm text-admin-ink">
-            Jumlah jamaah
-            <input type="number" min={Math.max(1, withVisa)} max={2000} className="admin-inp w-24" value={people} onChange={e => setPeople(Number(e.target.value) || 1)} />
-          </label>
+          {g ? <p className="m-0 text-sm text-admin-ink">Jumlah jamaah: <b>{people}</b> <span className="text-admin-muted">(jumlah semua rombongan — ubah di kotak Rombongan)</span></p> : (
+            <label className="flex items-center gap-2 text-sm text-admin-ink">
+              Jumlah jamaah
+              <input type="number" min={Math.max(1, withVisa)} max={2000} className="admin-inp w-24" value={people} onChange={e => setPeople(Number(e.target.value) || 1)} />
+            </label>
+          )}
           <p className="m-0 text-xs text-admin-muted">
             {withVisa > 0 ? <>{withVisa} dari {people} jamaah memegang visa dari baris Visa di atas.</> : <>Belum ada visa — tambahkan baris Visa di Produk bila booking ini menjual visa.</>}
           </p>

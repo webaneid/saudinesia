@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
-import { assignMembers, memberProblem, type MemberPilgrim, type MemberSlot } from '../lib/booking/members'
+import { assignInGroups, assignMembers, memberProblem, type MemberPilgrim, type MemberSlot } from '../lib/booking/members'
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -77,12 +77,23 @@ await t('PAKET TANPA VISA mendahulukan jamaah tanpa visa paket (visa paket orang
   assert.deepEqual(m, [{ package: 'p', haji: 'h' }, { package: null, haji: 'h' }])
 })
 
-await t('PENJAGA: kolom anggota (`bookingPackageId`/`bookingHajiId`) ditulis HANYA lib/booking/lineItems.ts dan lib/booking/revise.ts — keduanya lewat assignMembers', () => {
+await t('PENJAGA: kolom anggota (`bookingPackageId`/`bookingHajiId`) ditulis HANYA lib/booking/lineItems.ts dan lib/booking/revise.ts — keduanya lewat assignInGroups (aturan tunggal di atas assignMembers)', () => {
   const root = new URL('..', import.meta.url).pathname
   const walk = (d: string): string[] => readdirSync(join(root, d)).flatMap(f => { const p = join(d, f); return statSync(join(root, p)).isDirectory() ? walk(p) : /\.tsx?$/.test(f) ? [p] : [] })
   const writers = ['app', 'lib', 'components'].flatMap(walk).filter(f => /booking(Package|Haji)Id\s*:\s*(?!true\b)/.test(readFileSync(join(root, f), 'utf8')))
   assert.deepEqual(writers.sort(), ['lib/booking/lineItems.ts', 'lib/booking/revise.ts'])
-  for (const f of writers) assert.match(readFileSync(join(root, f), 'utf8'), /assignMembers\(/, f)
+  for (const f of writers) assert.match(readFileSync(join(root, f), 'utf8'), /assignInGroups\(/, f)
+})
+
+await t('assignInGroups: paket per rombongan dibagi di dalam rombongannya; nomor jamaah di galat K4 = nomor di booking; campuran "semua" + per rombongan → mixed_groups', () => {
+  const g = (group: number, ownVisa = false) => ({ ...fresh(ownVisa), group })
+  const r = assignInGroups([{ key: 'pA', numPeople: 1, visaProductId: null, group: 0 }, { key: 'pB', numPeople: 2, visaProductId: null, group: 1 }], [], [g(1), g(0), g(1)], 2)
+  assert.deepEqual(ok(r as ReturnType<typeof assignMembers>).map(m => m.package), ['pB', 'pA', 'pB'])
+  const dv = assignInGroups([{ key: 'pB', numPeople: 1, visaProductId: 'A', group: 1 }], [], [g(0), g(1, true)], 2)
+  assert.ok(!dv.ok && dv.reason === 'double_visa' && dv.pilgrimIndex === 1)
+  const mixed = assignInGroups([{ key: 'all', numPeople: 1, visaProductId: null }, { key: 'pB', numPeople: 1, visaProductId: null, group: 1 }], [], [g(0), g(1)], 2)
+  assert.ok(!mixed.ok && mixed.reason === 'mixed_groups'); assert.match(memberProblem(mixed, () => 'x'), /tidak dapat digabung/)
+  assert.deepEqual(assignInGroups([{ key: 'p', numPeople: 2, visaProductId: null }], [], [fresh(false), fresh(false)], 0), assignMembers([{ key: 'p', numPeople: 2, visaProductId: null }], [], [fresh(false), fresh(false)]), 'tanpa rombongan = assignMembers')
 })
 
 if (failed) { console.log(`\n${failed} GAGAL`); process.exit(1) }

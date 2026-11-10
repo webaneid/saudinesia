@@ -1,19 +1,21 @@
 // Rombongan dalam satu booking (docs/arsitektur-booking-engine-v2.md §10.8, Fase 11d-1) terhadap DATABASE SUNGGUHAN:
 // bentuk rombongan (skema draf + mesin), jumlah orang item DITURUNKAN dari ukuran sasaran (masukan diabaikan), tamu hotel = ukuran sasaran, rencana berangkat
 // visa per rombongan, aturan Visa Plus per rombongan (K11d-1 = a), anggota paket per rombongan, FK komposit (rombongan booking lain ditolak DB), CHECK nama,
-// revisi booking berrombongan ditolak (menyusul 11d-2), dan booking tanpa rombongan tidak berubah.
+// revisi booking berrombongan (11d-2a: pindah jamaah, rombongan baru/ganti nama/ditiadakan, Visa Plus per rombongan), dan booking tanpa rombongan tidak berubah.
 //
 // PENGAMAN: menulis data sementara → menolak jalan kecuali nama database memuat "test", "ci" atau "tmp".
 import assert from 'node:assert/strict'
 import { prisma } from '@/lib/db'
 import { repriceOwner, sweepOrphanPricePoints } from '@/lib/pricing/engine'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
-import { prepareBooking, writeBooking, type BookingInput } from '@/lib/booking/create'
+import { prepareBooking, RuleViolationError, writeBooking, type BookingInput } from '@/lib/booking/create'
 import { groupLabel, normalizeGroups, scopeToGroup } from '@/lib/booking/groups'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
-import { previewRevision, RevisionError } from '@/lib/booking/revise'
+import { previewRevision, reviseBooking, revisionEditorState, RevisionError } from '@/lib/booking/revise'
+import { createDraft, publishDraft, saveDraft } from '@/lib/booking/drafts'
+import { bookingSnapshotTotals } from '@/lib/pricing/engine/snapshot'
 import { withBookingCode } from '@/lib/utils/bookingCode'
-import { bookingDraftSchema } from '@/lib/validators/booking'
+import { bookingDraftSchema, bookingRevisionSchema, type BookingDraft, type BookingRevisionInput } from '@/lib/validators/booking'
 import { calendarDateOf } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -24,6 +26,7 @@ async function t(name: string, fn: () => Promise<void> | void) {
   try { await fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
 }
 const tag = `grp${Date.now()}`
+const cents = (x: number) => Math.round(x * 100)
 const U = '00000000-0000-4000-8000-000000000001'
 
 // ── murni ────────────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -228,12 +231,117 @@ await t('anggota Paket per rombongan: paket rombongan A → hanya jamaah A anggo
   assert.equal(f.status, 422); assert.match(f.message, /untuk semua jamaah tidak dapat digabung/)
 })
 
-await t('revisi booking berrombongan ditolak 409 (menyusul 11d-2) — tidak diam-diam kehilangan rombongan', async () => {
-  const inv = await prisma.invoice.findUnique({ where: { bookingId }, select: { revision: true } })
-  await assert.rejects(
-    previewRevision(bookingId, { expectedRevision: inv?.revision ?? 1, items: [], pilgrims: [{}], invoiceDate: '2090-01-01', dueDate: '2090-01-02' }, user.id),
-    (e: unknown) => e instanceof RevisionError && e.status === 409 && /berrombongan/.test(e.message),
-  )
+// ── Revisi booking berrombongan (11d-2a) ─────────────────────────────────────────────────────────────────────────────
+// Booking terbit lewat draf admin (mesin yang sama + invoice) — revisi mensyaratkan invoice.
+const draft = await createDraft(user.id); assert.ok(draft.ok)
+const draftBody: BookingDraft = {
+  groups: [{ label: 'Keluarga Pak Ahmad' }, { plannedTravelDate: '2090-06-20' }],
+  pilgrims: [{ group: 0, visaProductId: visa.id }, { group: 0, visaProductId: visa.id }, { group: 1, visaProductId: visa.id }, { group: 1, visaProductId: visa.id }],
+  items: [
+    { itemType: 'flight', flightScheduleId: flight.id, departureDate: '2090-06-05', numPassengers: 2, group: 0 },
+    { itemType: 'transport', transportQuotaId: quota.id, numPassengers: 2, group: 1 },
+    { itemType: 'hotel', hotelRoomScheduleId: room.id, checkIn: '2090-06-10', checkOut: '2090-06-12', nights: 2, numRooms: 1 },
+  ],
+}
+assert.ok((await saveDraft(draft.id, draftBody)).ok)
+const pub = await publishDraft(draft.id, { byUserId: user.id }); assert.ok(pub.ok, JSON.stringify(pub))
+const rid = draft.id
+const seats = async () => ({
+  flight: (await prisma.flightSchedule.findUniqueOrThrow({ where: { id: flight.id } })).pendingSeats,
+  transport: (await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id } })).pendingSeats,
+})
+/** Masukan revisi dari keadaan editor (isi sekarang, tanpa perubahan) — diubah per uji. */
+async function current(): Promise<BookingRevisionInput> {
+  const st = (await revisionEditorState(rid))!
+  return {
+    expectedRevision: st.revision, invoiceDate: st.invoiceDate, dueDate: st.dueDate,
+    items: st.items.map(i => ({ ref: i.ref, item: i.item })),
+    pilgrims: st.pilgrims.map(p => ({ pilgrimId: p.pilgrimId, group: p.group, ...(p.visaProductId && !p.visaFromPackage && { visaProductId: p.visaProductId }) })),
+    groups: st.groups.map(g => ({ id: g.id, ...(g.label && { label: g.label }), ...(g.plannedTravelDate && { plannedTravelDate: g.plannedTravelDate }) })),
+  }
+}
+
+await t('revisi: editor memuat rombongan (urut posisi) + rombongan item/jamaah; dikirim ulang tanpa ubahan = tidak ada perubahan; skema menerima bentuk itu', async () => {
+  const st = (await revisionEditorState(rid))!
+  assert.deepEqual(st.groups.map(g => [g.label, g.plannedTravelDate]), [['Keluarga Pak Ahmad', null], [null, '2090-06-20']])
+  assert.deepEqual(st.items.map(i => [i.item.itemType, i.item.group]), [['hotel', undefined], ['transport', 1], ['flight', 0]])
+  assert.deepEqual(st.pilgrims.map(p => p.group).sort(), [0, 0, 1, 1])
+  const input = await current()
+  assert.ok(bookingRevisionSchema.safeParse(input).success)
+  const pv = await previewRevision(rid, input, user.id, { allowNoChange: true })
+  assert.deepEqual(pv.changes, [])
+  await assert.rejects(reviseBooking(rid, input, user.id), (e: unknown) => e instanceof RevisionError && e.status === 422 && /Tidak ada perubahan/.test(e.message))
+})
+
+await t('revisi: pindah jamaah B→A + jamaah baru di B → tiket A ditulis ulang 3 orang (kuota ikut), transport B tetap (ukuran sama), hotel tetap, visa jamaah baru = rencana B; riwayat tanpa nama rombongan', async () => {
+  const before = await seats()
+  const input = await current()
+  const moved = input.pilgrims.find(p => p.group === 1)!
+  moved.group = 0
+  input.pilgrims.push({ group: 1, visaProductId: visa.id })
+  const ids = await prisma.booking.findUniqueOrThrow({ where: { id: rid }, select: { hotels: { select: { id: true } }, transports: { select: { id: true } }, flights: { select: { id: true } } } })
+  const r = await reviseBooking(rid, input, user.id)
+  assert.deepEqual(r.changes.map(c => c.kind).sort(), ['group_move', 'pilgrim_add', 'replace'])
+  const b = await prisma.booking.findUniqueOrThrow({
+    where: { id: rid },
+    select: {
+      groups: { orderBy: { position: 'asc' }, select: { id: true } },
+      flights: { select: { id: true, numPassengers: true, groupId: true } }, transports: { select: { id: true, numPassengers: true } }, hotels: { select: { id: true, numGuests: true } },
+      pilgrims: { select: { id: true, groupId: true, visaApplication: { select: { plannedTravelDate: true } } } },
+    },
+  })
+  const [a, bb] = b.groups
+  assert.equal(b.flights[0]!.numPassengers, 3); assert.equal(b.flights[0]!.groupId, a!.id); assert.notEqual(b.flights[0]!.id, ids.flights[0]!.id, 'tiket ditulis ulang')
+  assert.equal(b.transports[0]!.id, ids.transports[0]!.id, 'transport B dipertahankan'); assert.equal(b.transports[0]!.numPassengers, 2)
+  assert.equal(b.hotels[0]!.id, ids.hotels[0]!.id); assert.equal(b.hotels[0]!.numGuests, 5, 'tamu hotel = semua jamaah sesudah revisi')
+  assert.equal(b.pilgrims.find(p => p.id === moved.pilgrimId)!.groupId, a!.id)
+  const fresh = b.pilgrims.filter(p => !input.pilgrims.some(x => x.pilgrimId === p.id))
+  assert.equal(fresh.length, 1); assert.equal(fresh[0]!.groupId, bb!.id); assert.equal(calendarDateOf(fresh[0]!.visaApplication!.plannedTravelDate!), '2090-06-20', 'visa jamaah baru B = rencana B, bukan tiket A')
+  const after = await seats()
+  assert.equal(after.flight - before.flight, 1, 'kursi tiket +1 (2 dilepas, 3 ditahan)'); assert.equal(after.transport, before.transport)
+  const log = await prisma.bookingRevision.findFirstOrThrow({ where: { bookingId: rid }, orderBy: { revision: 'desc' }, select: { summary: true } })
+  assert.ok(!JSON.stringify(log.summary).includes('Ahmad'), 'nama rombongan tidak masuk riwayat')
+})
+
+await t('revisi: ganti nama + rombongan baru C (jamaah dipindah dari A) → baris rombongan diperbarui/dibuat, riwayat "Rombongan" tanpa nama', async () => {
+  const input = await current()
+  input.groups![0] = { ...input.groups![0]!, label: 'Keluarga Bu Siti' }
+  input.groups!.push({ label: 'Rombongan Kantor' })
+  input.pilgrims.find(p => p.group === 0)!.group = 2
+  const r = await reviseBooking(rid, input, user.id)
+  assert.ok(r.changes.some(c => c.kind === 'groups'))
+  assert.ok(!JSON.stringify(r.changes).match(/Siti|Kantor/), 'nama tidak masuk ringkasan')
+  const gs = await prisma.bookingGroup.findMany({ where: { bookingId: rid }, orderBy: { position: 'asc' }, select: { position: true, label: true, _count: { select: { pilgrims: true } } } })
+  assert.deepEqual(gs.map(g => [g.position, g.label, g._count.pilgrims]), [[1, 'Keluarga Bu Siti', 2], [2, null, 2], [3, 'Rombongan Kantor', 1]])
+  assert.equal((await prisma.bookingFlight.findFirstOrThrow({ where: { bookingId: rid } })).numPassengers, 2, 'tiket A mengikuti ukuran A')
+})
+
+await t('revisi: Visa Plus per rombongan juga di revisi (422 berlabel rombongan); rombongan booking lain → 422; rombongan kosong → 422; semuanya tanpa perubahan tersimpan', async () => {
+  const rev = (await revisionEditorState(rid))!.revision
+  const plus = await current()
+  plus.pilgrims.find(p => p.group === 1)!.visaProductId = visaPlus.id
+  await assert.rejects(previewRevision(rid, plus, user.id), (e: unknown) => e instanceof RuleViolationError && /^Rombongan B: /.test(e.violations[0]?.message ?? ''))
+  const foreign = await current()
+  const other = await prisma.bookingGroup.findFirstOrThrow({ where: { bookingId: { not: rid } } })
+  foreign.groups![1] = { id: other.id }
+  await assert.rejects(previewRevision(rid, foreign, user.id), (e: unknown) => e instanceof RevisionError && e.status === 422)
+  const empty = await current()
+  for (const p of empty.pilgrims) if (p.group === 2) p.group = 0
+  assert.equal(bookingRevisionSchema.safeParse(empty).success, false, 'skema menolak rombongan tanpa jamaah')
+  await assert.rejects(previewRevision(rid, empty, user.id), /belum punya jamaah/)
+  assert.equal((await revisionEditorState(rid))!.revision, rev)
+})
+
+await t('revisi: rombongan ditiadakan → semua baris rombongan terhapus, item/jamaah tanpa rombongan, kuota tetap konsisten', async () => {
+  const input = await current()
+  input.groups = []
+  for (const p of input.pilgrims) delete p.group
+  input.items = input.items.map(i => ({ ...i, item: { ...i.item, group: undefined } }))
+  const r = await reviseBooking(rid, input, user.id)
+  assert.ok(r.changes.some(c => c.kind === 'groups' && c.detail === 'rombongan ditiadakan'))
+  const b = await prisma.booking.findUniqueOrThrow({ where: { id: rid }, select: { groups: true, pilgrims: { select: { groupId: true } }, flights: { select: { groupId: true } }, transports: { select: { groupId: true } } } })
+  assert.deepEqual(b.groups, []); assert.ok([...b.pilgrims, ...b.flights, ...b.transports].every(x => x.groupId === null))
+  assert.equal(cents((await bookingSnapshotTotals(prisma, rid)).sellIdr), cents(Number((await prisma.booking.findUniqueOrThrow({ where: { id: rid } })).totalAmount)), 'I4')
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────

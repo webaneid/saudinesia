@@ -15,6 +15,9 @@ import type { RevisionEditorState } from '@/lib/booking/revise'
 import type { Catalog, ModuleKey } from '../../drafts/[id]/catalog'
 import { ItemRows, rowForMissing, rowFromItem, rowToItem, type ItemRow } from '../../drafts/[id]/ItemRows'
 import { applyVisaRows, lockedMembers, syncVisaCounts, visaRowTotal, visaRowsFromSlots } from '../../drafts/[id]/visaRows'
+import { grouping, groupChoices, groupsInput, moveSlot, removeGroup, startGroups, type GroupDraft } from '../../drafts/[id]/groupRows'
+import { GroupsBox } from '../../drafts/[id]/GroupsBox'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 // Editor REVISI booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, R1): isi booking sekarang dimuat, beberapa perubahan sekaligus → pratinjau (mesin yang sama,
 // di-rollback) → Simpan revisi = SATU revisi invoice + SATU catatan riwayat. Jamaah tampil sebagai "Jamaah ke-N" (data pribadi tetap di form data jamaah).
@@ -31,10 +34,13 @@ type Preview = {
 
 const PREVIEW_DELAY_MS = 800
 /** Sidik isi editor (tanpa kunci baris acak) — penanda belum-disimpan. */
-const fingerprint = (rows: ItemRow[], ps: Pilgrim[], invoiceDate: string, dueDate: string) =>
-  JSON.stringify({ r: rows.map(r => [r.ref?.itemId ?? null, r.module, r.f, r.customSellIdr ?? null, r.priceNote ?? '']), p: ps.map(p => [p.pilgrimId ?? null, p.visaProductId ?? null, p.selectedDurationDays ?? null]), d: [invoiceDate, dueDate] })
+const fingerprint = (rows: ItemRow[], ps: Pilgrim[], groups: GroupDraft[], invoiceDate: string, dueDate: string) =>
+  JSON.stringify({
+    r: rows.map(r => [r.ref?.itemId ?? null, r.module, r.f, r.customSellIdr ?? null, r.priceNote ?? '', r.group ?? null]), p: ps.map(p => [p.pilgrimId ?? null, p.visaProductId ?? null, p.selectedDurationDays ?? null, p.group ?? null]),
+    g: groupsInput(groups), d: [invoiceDate, dueDate],
+  })
 const CHANGE_LABEL: Record<string, string> = {
-  add: 'Ditambah', remove: 'Dihapus', replace: 'Diubah', price: 'Harga khusus', pilgrim_add: 'Jamaah', pilgrim_remove: 'Jamaah dihapus', visa_change: 'Visa', dates: 'Tanggal', total: 'Total',
+  add: 'Ditambah', remove: 'Dihapus', replace: 'Diubah', price: 'Harga khusus', pilgrim_add: 'Jamaah', pilgrim_remove: 'Jamaah dihapus', visa_change: 'Visa', dates: 'Tanggal', total: 'Total', groups: 'Rombongan', group_move: 'Pindah rombongan',
 }
 
 export default function BookingRevisionPage({ params }: Props) {
@@ -43,6 +49,7 @@ export default function BookingRevisionPage({ params }: Props) {
   const [state, setState] = useState<RevisionEditorState | null>(null)
   const [rows, setRows] = useState<ItemRow[]>([])
   const [pilgrims, setPilgrims] = useState<Pilgrim[]>([])
+  const [groups, setGroups] = useState<GroupDraft[]>([])
   const [invoiceDate, setInvoiceDate] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [reason, setReason] = useState('')
@@ -70,28 +77,31 @@ export default function BookingRevisionPage({ params }: Props) {
       if (!s) { setNotFound(true); return }
       const rs = s.items.map(i => rowFromItem(i.item, { ref: i.ref, label: i.label, customSellIdr: i.customSellIdr }))
       const ps: Pilgrim[] = s.pilgrims.map(p => ({
-        pilgrimId: p.pilgrimId, visaProductId: p.visaFromPackage ? undefined : p.visaProductId ?? undefined, selectedDurationDays: p.visaFromPackage ? undefined : p.selectedDurationDays ?? undefined,
+        pilgrimId: p.pilgrimId, group: p.group, visaProductId: p.visaFromPackage ? undefined : p.visaProductId ?? undefined, selectedDurationDays: p.visaFromPackage ? undefined : p.selectedDurationDays ?? undefined,
         position: p.position, locked: p.locked, lockReason: p.lockReason, visaFromPackage: p.visaFromPackage, visaPriceIdr: p.visaPriceIdr,
       }))
       const v = visaRowsFromSlots(ps)
       const all = [...v.rows, ...rs]
-      setState(s); setRows(all); setPilgrims(v.slots); setInvoiceDate(s.invoiceDate); setDueDate(s.dueDate)
-      setBaseline(fingerprint(all, v.slots, s.invoiceDate, s.dueDate))
+      const gs = s.groups.map(g => ({ id: g.id, label: g.label ?? '', plannedTravelDate: g.plannedTravelDate ?? '' }))
+      setState(s); setRows(all); setPilgrims(v.slots); setGroups(gs); setInvoiceDate(s.invoiceDate); setDueDate(s.dueDate)
+      setBaseline(fingerprint(all, v.slots, gs, s.invoiceDate, s.dueDate))
       void load('visa')
     }).catch(() => setNotFound(true))
   }, [id, load])
 
-  const checked = useMemo(() => rows.map(r => rowToItem(r, catalog)), [rows, catalog])
+  const g = useMemo(() => grouping(groups, pilgrims), [groups, pilgrims])
+  const checked = useMemo(() => rows.map(r => rowToItem(r, catalog, g)), [rows, catalog, g])
   const incomplete = checked.findIndex(c => 'error' in c)
-  const dirty = !!state && fingerprint(rows, pilgrims, invoiceDate, dueDate) !== baseline
+  const dirty = !!state && fingerprint(rows, pilgrims, groups, invoiceDate, dueDate) !== baseline
   const body = useMemo((): BookingRevisionInput | null => {
     if (!state || incomplete >= 0) return null
     return {
       expectedRevision: state.revision, invoiceDate, dueDate, reason: reason.trim() || undefined,
       items: rows.flatMap((r, i) => { const c = checked[i]!; return 'item' in c ? [{ ...(r.ref && { ref: r.ref }), item: c.item, ...(r.customSellIdr != null && { customSellIdr: r.customSellIdr, priceNote: r.priceNote }) }] : [] }), // baris Visa → `pilgrims`
-      pilgrims: pilgrims.map(({ pilgrimId, visaProductId, selectedDurationDays }) => ({ ...(pilgrimId && { pilgrimId }), ...(visaProductId && { visaProductId, ...(selectedDurationDays && { selectedDurationDays }) }) })),
+      pilgrims: pilgrims.map(({ pilgrimId, visaProductId, selectedDurationDays, group }) => ({ ...(pilgrimId && { pilgrimId }), ...(groups.length >= 2 && group !== undefined && { group }), ...(visaProductId && { visaProductId, ...(selectedDurationDays && { selectedDurationDays }) }) })),
+      groups: groups.length >= 2 ? groupsInput(groups) : [],
     }
-  }, [state, incomplete, invoiceDate, dueDate, reason, rows, checked, pilgrims])
+  }, [state, incomplete, invoiceDate, dueDate, reason, rows, checked, pilgrims, groups])
   const previewJson = body && dirty ? JSON.stringify({ ...body, reason: undefined }) : ''
   useUnsavedGuard(dirty && !saving)
 
@@ -126,13 +136,15 @@ export default function BookingRevisionPage({ params }: Props) {
       const res = await fetch(`/api/v1/admin/bookings/${id}/revision`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const json = await res.json().catch(() => null)
       if (!res.ok) { setError({ message: json?.error ?? 'Revisi gagal disimpan.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }); return }
-      setBaseline(fingerprint(rows, pilgrims, invoiceDate, dueDate))
+      setBaseline(fingerprint(rows, pilgrims, groups, invoiceDate, dueDate))
       router.push(`/${locale}/admin/bookings/${id}`)
     } catch { setError({ message: 'Tidak dapat menghubungi server.', violations: [] }) } finally { setSaving(false) }
   }
 
   const changeRows = (r: ItemRow[]) => { const next = applyVisaRows(pilgrims, r, () => ({})); setPilgrims(next); setRows(syncVisaCounts(r, next)) }
   const removePilgrim = (i: number) => { const next = pilgrims.filter((_, j) => j !== i); setPilgrims(next); setRows(rs => syncVisaCounts(rs, next)) }
+  const applyGroups = (x: { groups: GroupDraft[]; slots: Pilgrim[]; rows: ItemRow[] }) => { setGroups(x.groups); setPilgrims(x.slots); setRows(syncVisaCounts(x.rows, x.slots)) }
+  const move = (i: number, group: number) => { const x = moveSlot(pilgrims, rows, i, group); setPilgrims(x.slots); setRows(syncVisaCounts(x.rows, x.slots)) }
   const visaName = (id?: string) => catalog.visa?.find(v => v.id === id)?.name ?? 'Visa'
   const visaLocks = Object.fromEntries(rows.filter(r => r.module === 'visa').map(r => [r.key, lockedMembers(pilgrims, r.key)]))
   const freeSlots = pilgrims.filter(p => !p.row && !p.visaProductId && !p.visaFromPackage && !p.locked).length
@@ -150,9 +162,14 @@ export default function BookingRevisionPage({ params }: Props) {
     <>
       <MetaBox title="Produk" icon={Package} collapsible={false}
         description="Ubah langsung di baris. Mengubah/menghapus produk melepas kuotanya; produk baru ditahan (pending) saat revisi disimpan.">
-        <ItemRows rows={rows} onChange={changeRows} catalog={catalog} load={load} defaultPeople={pilgrims.length} defaultVisaPeople={freeSlots} visaLocks={visaLocks} totals={rowTotals} computing={previewing} customPrice
+        <ItemRows rows={rows} onChange={changeRows} catalog={catalog} load={load} defaultPeople={pilgrims.length} defaultVisaPeople={freeSlots} visaLocks={visaLocks} totals={rowTotals} computing={previewing} customPrice grouping={g}
           rowError={errorRow !== undefined && error ? { index: errorRow, message: error.message } : undefined} />
       </MetaBox>
+
+      <GroupsBox groups={groups} sizes={groups.map((_, i) => pilgrims.filter(p => p.group === i).length)} onChange={setGroups}
+        onStart={() => applyGroups(startGroups(pilgrims, rows, []))}
+        onAdd={() => setGroups([...groups, { label: '', plannedTravelDate: '' }])}
+        onRemove={i => applyGroups(removeGroup(groups, pilgrims, rows, i, false))} />
 
       <MetaBox title="Jamaah" icon={Users} collapsible={false} description="Tambah jamaah kapan saja. Visa diatur di baris Visa (Produk); jamaah yang visanya sudah diproses atau memakai data tersimpan tidak bisa dihapus.">
         <ul className="m-0 list-none space-y-2 p-0">
@@ -160,18 +177,19 @@ export default function BookingRevisionPage({ params }: Props) {
             const name = p.pilgrimId ? `Jamaah ke-${p.position}` : 'Jamaah baru'
             const visa = p.visaFromPackage ? 'Visa dari paket' : p.visaProductId ? `${visaName(p.visaProductId)}${p.selectedDurationDays ? ` · ${p.selectedDurationDays} hari` : ''}` : 'Tanpa visa'
             return (
-              <li key={p.pilgrimId ?? `baru-${i}`} className="grid grid-cols-[minmax(0,1fr)_2rem] items-center gap-x-2 gap-y-0.5">
+              <li key={p.pilgrimId ?? `baru-${i}`} className={`grid items-center gap-x-2 gap-y-0.5 ${g ? 'grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem]' : 'grid-cols-[minmax(0,1fr)_2rem]'}`}>
                 <span className="min-w-0"><span className="block text-xs font-semibold text-admin-ink">{name}</span><span className="block text-xs text-admin-muted">{visa}</span></span>
+                {g && <ChoiceSelect size="sm" ariaLabel={`Rombongan ${name}`} value={String(p.group ?? 0)} clearable={false} options={groupChoices(g.names, false)} onChange={v => move(i, Number(v))} />}
                 <button type="button" aria-label={`Hapus ${name}`} title={p.lockReason ?? undefined} disabled={!!p.locked || pilgrims.length <= 1}
                   onClick={() => removePilgrim(i)} className="rounded p-1 text-admin-muted hover:text-admin-danger disabled:opacity-40">
                   <Trash2 className="size-4" />
                 </button>
-                {p.locked && <span className="col-span-2 text-[11px] text-admin-muted">{p.lockReason} — urus lewat modul Visa.</span>}
+                {p.locked && <span className="col-span-full text-[11px] text-admin-muted">{p.lockReason} — urus lewat modul Visa.</span>}
               </li>
             )
           })}
         </ul>
-        <Button size="sm" variant="outline" className="mt-3" onClick={() => setPilgrims(ps => [...ps, {}])}><Plus className="size-4" /> Tambah jamaah</Button>
+        <Button size="sm" variant="outline" className="mt-3" onClick={() => setPilgrims(ps => [...ps, groups.length >= 2 ? { group: 0 } : {}])}><Plus className="size-4" /> Tambah jamaah</Button>
       </MetaBox>
 
       <MetaBox title="Ringkasan revisi" icon={Eye} collapsible={false} aside={previewing ? <span className="flex items-center gap-1 text-xs text-admin-muted"><Loader2 className="size-3.5 animate-spin" /> menghitung…</span> : undefined}

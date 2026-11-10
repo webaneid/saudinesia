@@ -65,8 +65,33 @@ export function assignMembers(packages: readonly MemberSlot[], haji: readonly Me
   return { ok: true, members: pilgrims.map((_, i) => ({ package: pkg[i] ?? null, haji: hj[i] ?? null })) }
 }
 
+export type GroupedMemberResult = MemberResult | { ok: false; reason: 'mixed_groups' }
+
+/**
+ * Pembagian anggota untuk booking berrombongan (docs/arsitektur-booking-engine-v2.md §10.8 butir 3). Tanpa rombongan, atau semua paket/haji untuk SEMUA jamaah →
+ * `assignMembers` atas seluruh jamaah (perilaku lama). Paket/haji per rombongan → dibagi di dalam rombongannya sendiri (nomor jamaah di galat = nomor di booking).
+ * Campuran "semua" + "per rombongan" ditolak — satu jamaah tak dapat memegang dua paket. Satu aturan untuk pesan baru dan revisi.
+ */
+export function assignInGroups(
+  packages: ReadonlyArray<MemberSlot & { group?: number }>, haji: ReadonlyArray<MemberHaji & { group?: number }>,
+  pilgrims: ReadonlyArray<MemberPilgrim & { group?: number }>, groupCount: number,
+): GroupedMemberResult {
+  const rows = [...packages, ...haji]
+  if (groupCount === 0 || rows.every(r => r.group === undefined)) return assignMembers(packages, haji, pilgrims)
+  if (rows.some(r => r.group === undefined)) return { ok: false, reason: 'mixed_groups' }
+  const out: MemberAssignment[] = pilgrims.map(() => ({ package: null, haji: null }))
+  for (let g = 0; g < groupCount; g++) {
+    const idx = pilgrims.flatMap((p, i) => (p.group === g ? [i] : []))
+    const r = assignMembers(packages.filter(x => x.group === g), haji.filter(x => x.group === g), idx.map(i => pilgrims[i]!))
+    if (!r.ok) return r.reason === 'double_visa' ? { ...r, pilgrimIndex: idx[r.pilgrimIndex]! } : r
+    idx.forEach((pi, k) => { out[pi] = r.members[k]! })
+  }
+  return { ok: true, members: out }
+}
+
 /** Pesan galat untuk pengguna (Jamaah ke-N dihitung dari 1). */
-export function memberProblem(r: Exclude<MemberResult, { ok: true }>, packageName: (key: string) => string): string {
+export function memberProblem(r: Exclude<GroupedMemberResult, { ok: true }>, packageName: (key: string) => string): string {
+  if (r.reason === 'mixed_groups') return 'Paket Umroh/Haji untuk semua jamaah tidak dapat digabung dengan paket per rombongan — pilih rombongan untuk setiap paket'
   if (r.reason === 'too_few_pilgrims') {
     return `Jumlah jamaah (${r.pilgrims}) kurang dari jumlah orang di ${r.what === 'package' ? 'Paket Umroh' : 'Haji'} (${r.needed}) — tambah jamaah atau kurangi jumlah orangnya`
   }

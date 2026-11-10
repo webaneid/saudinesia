@@ -289,18 +289,23 @@ export const bookingRevisionSchema = z.object({
   items:    z.array(revisionItemSchema).max(50),
   pilgrims: z.array(z.object({
     pilgrimId: z.string().uuid().optional(),
+    /** Rombongan jamaah sesudah revisi (indeks ke `groups`) — pindah rombongan = revisi berlog (§10.8). */
+    group: groupIndex,
     visaProductId: z.string().uuid().optional(),
     selectedDurationDays: z.number().int().min(1).max(365).optional(),
   }).strict()).min(1, 'Minimal 1 jamaah').max(2000),
+  /** Daftar rombongan LENGKAP sesudah revisi (0 atau ≥ 2); `id` = rombongan yang sudah ada, tanpa `id` = rombongan baru. */
+  groups: z.array(bookingGroupSchema.extend({ id: z.string().uuid().optional() }).strict()).max(2000).optional(),
   invoiceDate: z.string().date(),
   dueDate:     z.string().date(),
   reason:      z.string().trim().max(1000).optional(),
 }).strict().superRefine((d, ctx) => {
   checkItemQuantities(d.items.map(i => i.item), ctx)
+  checkGroups(d.groups, d.items.map(i => i.item), d.pilgrims, ctx)
+  const gids = (d.groups ?? []).flatMap(g => (g.id ? [g.id] : []))
+  if (new Set(gids).size !== gids.length) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan yang sama dikirim dua kali', path: ['groups'] })
   d.items.forEach((it, i) => {
     if (it.item.itemType === 'haji') ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Haji belum dapat diedit lewat form booking admin', path: ['items', i] })
-    // Revisi booking berrombongan menyusul di Fase 11d-2 (lib/booking/revise.ts menolak 409); rujukan rombongan di revisi ditolak di sini.
-    if (it.item.group !== undefined) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Rombongan belum dapat diubah lewat revisi', path: ['items', i, 'group'] })
     if (it.ref && it.ref.itemType !== it.item.itemType) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jenis item tidak cocok dengan rujukannya', path: ['items', i, 'ref'] })
   })
   if (d.dueDate < d.invoiceDate) ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'Jatuh tempo tidak boleh sebelum tanggal invoice', path: ['dueDate'] })

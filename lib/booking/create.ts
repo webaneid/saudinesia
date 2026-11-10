@@ -30,6 +30,8 @@ export type BookingInput = {
    * Jumlah orang item DITURUNKAN dari ukuran sasarannya (`normalizeGroups`, lib/booking/groups.ts) — bukan dari masukan.
    */
   groups?: BookingGroupInput[]
+  /** Ukuran setiap rombongan bila `pilgrims` hanya sebagian jamaah booking (revisi menulis subset) — tamu hotel = ukuran sasaran. */
+  groupSizes?: number[]
 }
 
 export type PreparedBooking = {
@@ -46,9 +48,9 @@ export class RuleViolationError extends Error {
  * Resolusi di LUAR transaksi (bacaan saja): kendaraan Paket Ziarah, isi Paket Umroh, aturan visa (dari produk visa, sama untuk setiap pelanggan).
  * Melempar `RuleViolationError` (komponen wajib visa tak ada) atau `ItemNotBookableError` (item tak dapat dijual).
  */
-export async function prepareBooking(input: BookingInput, opts: { rules?: boolean } = {}): Promise<PreparedBooking> {
+export async function prepareBooking(input: BookingInput, opts: { rules?: boolean; /** Revisi: subset item yang SUDAH dinormalisasi atas isi lengkap. */ normalize?: boolean } = {}): Promise<PreparedBooking> {
   // Rombongan: bentuk diperiksa ulang (masukan bisa datang dari jalur mana pun) dan jumlah orang item diturunkan dari ukuran sasarannya SEBELUM kuota/harga.
-  const data = normalizeGroups(input)
+  const data = opts.normalize === false ? input : normalizeGroups(input)
   // Kendaraan Paket Ziarah: mode included → kuota kendaraan dicari dari tanggal tur; user_choice → kuota yang dikirim (docs/arsitektur-ziarah.md §12.6).
   const tours = await Promise.all(data.items.flatMap((i, index) => (i.itemType === 'tourPackage' ? [{ tp: i, index }] : [])).map(async ({ tp, index }) => { try {
     const breakdown = await computeTourPackageBreakdown(tp.tourPackageId)
