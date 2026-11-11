@@ -1,4 +1,5 @@
 import type { Prisma } from '@prisma/client'
+import { visaTierTextOfKey } from './visaDuration'
 import { ItemNotBookableError, tagItem } from './errors'
 import { sealNewPilgrim } from '@/lib/pilgrims/bookingLink'
 import { packageLines, type PackageResolved } from './packageItem'
@@ -273,7 +274,7 @@ export async function writeBookingItems(
         plannedTravelDate,
       },
     })
-    add({ itemType: 'visa', itemId: application.id, label, detail: p.selectedDurationDays ? `${p.selectedDurationDays} hari` : '', qty: 1 }, [line])
+    add({ itemType: 'visa', itemId: application.id, label, detail: p.selectedDurationDays ? (visaTierTextOfKey(point.variantKey) ?? `${p.selectedDurationDays} hari`) : '', qty: 1 }, [line])
   }
 
   if (written) written.push(...pending.map(x => x.meta))

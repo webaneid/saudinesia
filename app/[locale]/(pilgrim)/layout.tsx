@@ -43,6 +43,7 @@ export default async function PilgrimLayout({ children, params }: Props) {
           </Link>
         ))}
         <form action={`/api/v1/auth/logout`} method="POST" className="ml-auto">
+          <input type="hidden" name="locale" value={locale} />
           <button type="submit" className="text-xs text-muted-foreground hover:text-destructive transition-colors">
             Keluar
           </button>

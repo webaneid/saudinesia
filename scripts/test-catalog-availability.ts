@@ -32,7 +32,7 @@ await t('setiap halaman katalog = 404 bila layanannya tanpa produk (requireCatal
 })
 
 await t('menu, footer, beranda, sitemap, dan tombol hero/CTA memakai satu sumber', () => {
-  for (const f of ['app/[locale]/(public)/_home/HomeSteps.tsx', 'components/shared/Header.tsx', 'components/shared/PublicFooter.tsx', 'app/[locale]/(public)/_home/HomeServices.tsx', 'app/sitemap.ts', 'lib/public-content/content.ts']) {
+  for (const f of ['components/shared/Header.tsx', 'components/shared/PublicFooter.tsx', 'app/[locale]/(public)/_home/HomeServices.tsx', 'app/sitemap.ts', 'lib/public-content/content.ts']) {
     assert.match(read(f), /availableCatalogs\(\)/, `${f}: tidak memakai availableCatalogs`)
   }
   assert.match(read('lib/public-content/content.ts'), /targetAvailable\(target, available\)/)

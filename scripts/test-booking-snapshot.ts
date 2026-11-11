@@ -286,7 +286,7 @@ await t('Visa per tier: durasi 10 hari → tier 1-14 (1.200.000); 20 hari → ti
   const b = await book([], [{ fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 10 }, { fieldValues: {}, visaProductId: visa.id, selectedDurationDays: 20 }])
   const rows = await snaps(b.id)
   assert.deepEqual(rows.map(r => [r.variantKey, n(r.unitSellIdr), n(r.unitCostIdr), r.itemType, r.itemDetail]).sort(), [
-    ['days:1-14', 1_200_000, 1_000_000, 'visa', '10 hari'], ['days:15-30', 2_400_000, 2_000_000, 'visa', '20 hari'],
+    ['days:1-14', 1_200_000, 1_000_000, 'visa', '1–14 hari'], ['days:15-30', 2_400_000, 2_000_000, 'visa', '15–30 hari'], // teks JENJANG yang dipilih, bukan hari awal (audit front-end 2026-11-11)
   ])
   assert.equal(b.total, 3_600_000)
   const apps = await prisma.visaApplication.findMany({ where: { pilgrim: { bookingId: b.id } } })

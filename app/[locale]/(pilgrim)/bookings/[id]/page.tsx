@@ -10,7 +10,7 @@ import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
 import { payableBanks } from '@/lib/invoice/banks'
-import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
+import { itemSellTotals, visaTierTexts } from '@/lib/pricing/engine/snapshot'
 import type { BankSnapshot } from '@/lib/invoice/issue'
 import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, Landmark, Package, Plane, Stamp, UserRound, UtensilsCrossed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
@@ -54,7 +54,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts). Status lunas/sisa tetap mengikuti alur v1 sampai Fase 7.
   const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice })
   // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.
-  const sells = await itemSellTotals(prisma, booking.id)
+  const [sells, tiers] = await Promise.all([itemSellTotals(prisma, booking.id), visaTierTexts(prisma, booking.id)])
   const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
   // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF; lib/invoice/banks.ts); setelan env lama hanya cadangan untuk booking tanpa invoice.
   const payTo = booking.invoice
@@ -86,7 +86,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
     { icon: UserRound, title: 'Muthowif', rows: collapseRows(booking.muthowif.map(bm => one('Muthowif', bm.muthowif?.name ?? 'Layanan Muthowif', `${day(bm.startDate)} – ${day(bm.endDate)} · ${bm.numDays} hari · ${bm.numPeople} orang`, sellOf('muthowif', bm.id), undefined, bm.groupId))) },
     { icon: UtensilsCrossed, title: 'Katering', rows: collapseRows(booking.catering.map(bc => one('Katering', bc.cateringOption.name, `${day(bc.startDate)} – ${day(bc.endDate)} · ${bc.numDays} hari · ${bc.numPeople} orang`, sellOf('catering', bc.id), undefined, bc.groupId))) },
     { icon: Building2, title: 'Paket Ziarah', rows: collapseRows(booking.tourPackages.map(tp => one('Paket Ziarah', tp.tourPackage.name, `${day(tp.tourDate)} · ${tp.numPeople} orang${tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}`, sellOf('tourPackage', tp.id), undefined, tp.groupId))) },
-    { icon: Stamp, title: 'Visa', rows: collapseRows(booking.pilgrims.flatMap(p => p.visaApplication ? [one('Visa', p.visaApplication.visaProduct?.name ?? 'Visa', p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', sellOf('visa', p.visaApplication.id), 'jamaah', p.groupId)] : [])) },
+    { icon: Stamp, title: 'Visa', rows: collapseRows(booking.pilgrims.flatMap(p => p.visaApplication ? [one('Visa', p.visaApplication.visaProduct?.name ?? 'Visa', p.visaApplication.selectedDurationDays ? (tiers.get(p.visaApplication.id) ?? `${p.visaApplication.selectedDurationDays} hari`) : '', sellOf('visa', p.visaApplication.id), 'jamaah', p.groupId)] : [])) },
   ]
   // Diskon/biaya tambahan di total pesanan tidak menempel pada satu layanan: tampil terpisah supaya rincian di atas tetap menjumlah ke tagihan.
   const shownCents = sections.reduce((sum, c) => sum + c.rows.reduce((n, r) => n + Math.round(r.amount * 100), 0), 0)

@@ -159,10 +159,7 @@
       "verify": {
         "title": "Our team verifies",
         "description": "Our staff review your payment and documents."
-      },
-      "availability": "Visa and Transport can currently be booked online by yourself. Online booking for other services is being prepared.",
-      "availabilityVisa": "Visa can currently be booked online by yourself. Online booking for other services is being prepared.",
-      "availabilityTransport": "Transport can currently be booked online by yourself. Online booking for other services is being prepared."
+      }
     },
     "cta": {
       "title": "Start by creating an account",
@@ -326,6 +323,22 @@
         "roomTypes": "{count, plural, one {# room type available} other {# room types available}}",
         "details": "View hotel"
       },
+      "detail": {
+        "back": "Back to hotels",
+        "mapsLink": "View on Google Maps",
+        "order": "Book now",
+        "photoAlt": "{name} photo {number}",
+        "morePhotos": "+{count} photos",
+        "about": "About the hotel",
+        "facilities": "Facilities",
+        "distanceMakkah": "{distance} from Masjid al-Haram",
+        "distanceMadinah": "{distance} from the Prophet's Mosque",
+        "ratesTitle": "Rates by period",
+        "ratesDescription": "Price per room per night. Choose your dates when you book.",
+        "ratesEmpty": "No rate periods for this hotel yet.",
+        "ratesPeriod": "Period",
+        "services": "Hotel services"
+      },
       "cta": {
         "title": "Ready to plan your trip?",
         "description": "Create an account to keep pilgrim data and track your orders in one place.",
@@ -405,6 +418,15 @@
       "card": {
         "details": "View profile"
       },
+      "detail": {
+        "back": "Back to muthowif",
+        "languages": "Languages",
+        "capacity": "Daily capacity",
+        "capacityValue": "{count, plural, one {# pilgrim} other {# pilgrims}}",
+        "price": "Muthowif service price per day",
+        "assignment": "Our team assigns the guide on duty, not necessarily {name}.",
+        "order": "Book muthowif service"
+      },
       "cta": {
         "title": "Ready to plan your trip?",
         "description": "Create an account to keep pilgrim data and track your orders in one place.",
@@ -445,7 +467,7 @@
         "addOnsTransport": "+ vehicle of your choice",
         "addOnsHotel": "+ hotel of your choice",
         "addOnsBoth": "+ vehicle and hotel of your choice",
-        "order": "Add to package"
+        "order": "Book now"
       },
       "cta": {
         "title": "Ready to plan your trip?",

@@ -23,7 +23,7 @@ import { canRecordCost } from '@/lib/pricing/policy'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
 import { DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
-import { itemSellTotals } from '@/lib/pricing/engine/snapshot'
+import { itemSellTotals, visaTierTexts } from '@/lib/pricing/engine/snapshot'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
 import { formatRupiah } from '@/lib/utils'
 import { groupView } from '@/lib/booking/groups'
@@ -66,13 +66,13 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
   const manageHref = (pid: string) => `/${locale}/admin/bookings/${id}/pilgrims/${pid}`
   const nextEmpty = slots.find(x => !x.filled)
   // Visa per jamaah diringkas: produk + harga satuan sama → satu baris "3 jamaah × Rp … = Rp …" (lib/booking/orderSummary.ts), harga = jual beku berlaku.
-  const sells = await itemSellTotals(prisma, booking.id)
+  const [sells, tiers] = await Promise.all([itemSellTotals(prisma, booking.id), visaTierTexts(prisma, booking.id)])
   // Rombongan (§10.8, 11d-2b): nama dirender dari label hidup; booking tanpa rombongan = tampilan lama (tanpa label).
   const gv = groupView(booking.groups)
   const pilgrimGroup = new Map(booking.pilgrims.map(p => [p.id, p.groupId]))
   const tag = (groupId: string | null) => (gv ? <span className="admin-badge-gray ml-2 align-middle">{gv.name(groupId)}</span> : null)
   const visaRows = collapseRows(booking.pilgrims.flatMap(p => p.visaApplication
-    ? [{ groupId: p.groupId, group: `visa|${p.groupId ?? ''}`, name: p.visaApplication.visaProduct?.name ?? 'Visa', detail: p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', unit: 'jamaah', amount: sells.get(`visa:${p.visaApplication.id}`) ?? 0 }]
+    ? [{ groupId: p.groupId, group: `visa|${p.groupId ?? ''}`, name: p.visaApplication.visaProduct?.name ?? 'Visa', detail: p.visaApplication.selectedDurationDays ? (tiers.get(p.visaApplication.id) ?? `${p.visaApplication.selectedDurationDays} hari`) : '', unit: 'jamaah', amount: sells.get(`visa:${p.visaApplication.id}`) ?? 0 }]
     : []))
 
   const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })

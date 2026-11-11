@@ -8,6 +8,7 @@ import { getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
 import { completeness, validateFieldValues } from '@/lib/manifest/values'
 import { dbDateOf } from '@/lib/time'
+import { recomputeBookingDates } from '@/lib/booking/dates'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { clearSlot, passportCountryOf, sealManualPii } from '@/lib/pilgrims/bookingLink'
@@ -75,6 +76,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       await tx.bookingPilgrim.update({ where: { id: pilgrimId }, data: { fieldValues: merged as Prisma.InputJsonValue, ...sealed.columns }, select: { id: true } })
       if (parsed.data.plannedTravelDate !== undefined && pilgrim.visaApplication) {
         await tx.visaApplication.update({ where: { id: pilgrim.visaApplication.id }, data: { plannedTravelDate: parsed.data.plannedTravelDate ? dbDateOf(parsed.data.plannedTravelDate) : null } })
+        await recomputeBookingDates(tx, id) // booking visa saja: tanggal berangkat acuan = rencana berangkat paling awal
       }
       return merged
     })

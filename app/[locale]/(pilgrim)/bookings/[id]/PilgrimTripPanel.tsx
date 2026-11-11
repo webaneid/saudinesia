@@ -122,7 +122,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
             {missingFields.some(f => f.fromCard) && !locked && (
               <Button size="sm" variant="outline" onClick={() => { setNotice(null); setCreating('edit') }} disabled={busy}><Pencil className="h-4 w-4" /> Lengkapi sekarang</Button>
             )}
-            {missingFields.some(f => !f.fromCard) && <p className="text-xs">Kolom selain data jamaah diisi petugas — hubungi kami bila perlu.</p>}
+            {missingFields.some(f => !f.fromCard) && <p className="text-xs">Kolom lain diisi di bagian &ldquo;Data tambahan&rdquo; di bawah.</p>}
           </div>
         </div>
       )}

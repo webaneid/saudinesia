@@ -159,10 +159,7 @@
       "verify": {
         "title": "Tim kami memverifikasi",
         "description": "Pembayaran dan dokumen diperiksa oleh petugas kami."
-      },
-      "availability": "Saat ini Visa dan Transport bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan.",
-      "availabilityVisa": "Saat ini Visa bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan.",
-      "availabilityTransport": "Saat ini Transport bisa dipesan sendiri secara online. Pemesanan online untuk layanan lain sedang kami siapkan."
+      }
     },
     "cta": {
       "title": "Mulai dengan membuat akun",
@@ -326,6 +323,22 @@
         "roomTypes": "{count, plural, other {# tipe kamar tersedia}}",
         "details": "Lihat hotel"
       },
+      "detail": {
+        "back": "Kembali ke daftar hotel",
+        "mapsLink": "Lihat di Google Maps",
+        "order": "Pesan sekarang",
+        "photoAlt": "{name} foto {number}",
+        "morePhotos": "+{count} foto",
+        "about": "Tentang hotel",
+        "facilities": "Fasilitas",
+        "distanceMakkah": "{distance} dari Masjidil Haram",
+        "distanceMadinah": "{distance} dari Masjid Nabawi",
+        "ratesTitle": "Harga per periode",
+        "ratesDescription": "Harga per kamar per malam. Pilih tanggal yang sesuai saat memesan.",
+        "ratesEmpty": "Belum ada periode harga untuk hotel ini.",
+        "ratesPeriod": "Periode",
+        "services": "Layanan hotel"
+      },
       "cta": {
         "title": "Siap merencanakan perjalanan?",
         "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
@@ -405,6 +418,15 @@
       "card": {
         "details": "Lihat profil"
       },
+      "detail": {
+        "back": "Kembali ke daftar muthowif",
+        "languages": "Bahasa",
+        "capacity": "Kapasitas harian",
+        "capacityValue": "{count, plural, other {# jamaah}}",
+        "price": "Harga layanan muthowif per hari",
+        "assignment": "Tim kami yang menentukan pembimbing bertugas, tidak selalu {name}.",
+        "order": "Pesan layanan muthowif"
+      },
       "cta": {
         "title": "Siap merencanakan perjalanan?",
         "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
@@ -445,7 +467,7 @@
         "addOnsTransport": "+ kendaraan sesuai pilihan",
         "addOnsHotel": "+ hotel sesuai pilihan",
         "addOnsBoth": "+ kendaraan dan hotel sesuai pilihan",
-        "order": "Tambah ke paket"
+        "order": "Pesan sekarang"
       },
       "cta": {
         "title": "Siap merencanakan perjalanan?",
