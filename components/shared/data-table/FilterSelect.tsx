@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Check, ChevronDown, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { filterHref, filterOptions, type FilterOption } from '@/lib/table/filter'
@@ -16,7 +17,8 @@ type Props = Common & (
 )
 
 export function FilterSelect(props: Props) {
-  const { label, options, value, allLabel = 'Semua' } = props
+  const t = useTranslations('shared.table')
+  const { label, options, value, allLabel = t('all') } = props
   const router = useRouter()
   const uid = useId()
   const rootRef = useRef<HTMLDivElement>(null)
@@ -75,14 +77,14 @@ export function FilterSelect(props: Props) {
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-admin-muted" />
             <input
-              ref={inputRef} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={`Cari ${label}`}
+              ref={inputRef} role="combobox" aria-expanded="true" aria-controls={listId} aria-autocomplete="list" aria-label={t('searchIn', { label })}
               aria-activedescendant={shown[cursor] ? `${uid}-o${cursor}` : undefined}
-              value={query} onChange={e => setQuery(e.target.value)} onKeyDown={onKeyDown} placeholder="Ketik untuk mencari…"
+              value={query} onChange={e => setQuery(e.target.value)} onKeyDown={onKeyDown} placeholder={t('typeToSearch')}
               className="admin-inp w-full pl-8"
             />
           </div>
           <ul id={listId} role="listbox" aria-label={label} className="m-0 mt-2 max-h-60 list-none overflow-y-auto p-0">
-            {shown.length === 1 && shown[0]!.value === '' && query.trim() && <li className="px-3 py-2 text-sm text-admin-muted">Tidak ada hasil.</li>}
+            {shown.length === 1 && shown[0]!.value === '' && query.trim() && <li className="px-3 py-2 text-sm text-admin-muted">{t('noResults')}</li>}
             {shown.map((o, i) => (
               <li
                 key={o.value || 'all'} id={`${uid}-o${i}`} role="option" aria-selected={o.value === value}

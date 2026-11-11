@@ -46,10 +46,7 @@ export function canUpload(type: DocumentTypeOption, d: UploadDraft, file: File |
   return true
 }
 
-export const STATUS_TEXT: Record<PilgrimDocumentView['status'], string> = { pending: 'Menunggu pemeriksaan', accepted: 'Diterima', rejected: 'Ditolak' }
-export const REJECT_TEXT: Record<NonNullable<PilgrimDocumentView['rejectReason']>, string> = {
-  not_matching: 'tidak sesuai', expired: 'sudah kedaluwarsa', unreadable: 'tidak terbaca', other: 'lainnya',
-}
+// Teks status/alasan tolak dokumen ada di pesan `shared.documents.status|reject.*` (docs/arsitektur-i18n-frontend.md §6.4).
 
 export function formatBytes(n: number): string {
   return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`

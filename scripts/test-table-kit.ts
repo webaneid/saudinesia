@@ -4,7 +4,10 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
+import { renderToStaticMarkup as renderBare } from 'react-dom/server'
+import { NextIntlClientProvider } from 'next-intl'
+import idMessages from '../i18n/messages/id.json'
+
 import { Pagination, pageWindow } from '@/components/admin/data-table/Pagination'
 import { DataTable } from '@/components/admin/data-table/DataTable'
 import { ACTION_ICONS, ACTION_LABELS, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
@@ -12,6 +15,9 @@ import { filterHref, filterOptions } from '@/lib/admin/filter'
 import { matchPreset, periodPresets } from '@/lib/admin/period'
 import { dateInApp } from '@/lib/time'
 import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
+
+// Kit tabel memakai pesan (docs/arsitektur-i18n-frontend.md §6.4): render nyata di dalam penyedia pesan `id`, seperti halaman admin.
+const renderToStaticMarkup = (el: Parameters<typeof renderBare>[0]) => renderBare(createElement(NextIntlClientProvider, { locale: 'id', messages: idMessages, timeZone: 'Asia/Jakarta', children: el }))
 
 let failed = 0
 const pending: Promise<void>[] = []

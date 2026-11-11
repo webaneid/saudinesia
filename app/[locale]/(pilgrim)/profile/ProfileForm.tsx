@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -40,6 +41,7 @@ function toAddressValue(a: AddressRecord): AddressValue {
 
 export function ProfileForm({ locale, needsConsent, initialData, initialAddress }: ProfileFormProps) {
   const router = useRouter()
+  const t = useTranslations('pilgrimArea.profile')
   const [fullName, setFullName] = useState(initialData.fullName)
   const [address,  setAddress]  = useState<AddressValue>(toAddressValue(initialAddress))
   const [contact,  setContact]  = useState<ContactValue>(() => contactFromStored(initialData.phone, initialData.whatsapp))
@@ -60,11 +62,11 @@ export function ProfileForm({ locale, needsConsent, initialData, initialAddress 
         body: JSON.stringify(body),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? 'Gagal menyimpan.'); return }
+      if (!json.success) { setError(json.error ?? t('saveFailed')); return }
 
       const phone = e164FromCountry(contact.phoneCountryCode, contact.phone)
       const whatsapp = e164FromCountry(contact.whatsappCountryCode, contact.whatsapp)
-      if (!phone || !whatsapp) { setError('Isi nomor telepon dan nomor WhatsApp.'); return }
+      if (!phone || !whatsapp) { setError(t('phoneRequired')); return }
       // Kirim ulang hanya bila nomor diubah: menyimpan nama/alamat tidak boleh menulis ulang nomor (mis. nomor lama berkode panggilan di luar
       // daftar negara, atau menghabiskan batas ubah-nomor) — dan tidak memicu email "nomor diubah".
       if (phone === initialData.phone && whatsapp === initialData.whatsapp) { setSuccess(true); return }
@@ -73,11 +75,11 @@ export function ProfileForm({ locale, needsConsent, initialData, initialAddress 
         body: JSON.stringify({ phone, whatsapp, ...(needsConsent ? { whatsappConsent: consent } : {}) }),
       })
       const cj = await c.json()
-      if (!cj.success) { setError(cj.error ?? 'Gagal menyimpan nomor.'); return }
+      if (!cj.success) { setError(cj.error ?? t('phoneFailed')); return }
       setSuccess(true)
       router.refresh() // status verifikasi WhatsApp bergantung pada nomor yang baru disimpan
     } catch {
-      setError('Terjadi kesalahan.')
+      setError(t('error'))
     } finally {
       setLoading(false)
     }
@@ -87,32 +89,32 @@ export function ProfileForm({ locale, needsConsent, initialData, initialAddress 
     <div className="rounded-xl border bg-card p-6 space-y-5">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">
-          <Label>Nama Lengkap</Label>
+          <Label>{t('fullName')}</Label>
           <Input value={fullName} onChange={e => setFullName(e.target.value)} required />
         </div>
         <div className="space-y-2">
-          <Label>Email</Label>
+          <Label>{t('email')}</Label>
           <Input value={initialData.email} disabled className="opacity-60" />
-          <p className="text-xs text-muted-foreground">Email tidak dapat diubah dari profil</p>
+          <p className="text-xs text-muted-foreground">{t('emailFixed')}</p>
         </div>
         <ContactPicker value={contact} onChange={setContact} showEmail={false} />
-        <p className="text-xs text-muted-foreground">Notifikasi pembayaran dan pembaruan pesanan dikirim ke nomor WhatsApp ini, selain lewat email.</p>
+        <p className="text-xs text-muted-foreground">{t('waNote')}</p>
         {needsConsent && (
           <label className="flex items-start gap-2 text-xs text-muted-foreground">
             <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 rounded border-input" required />
-            <span>Saya setuju Saudinesia mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas.</span>
+            <span>{t('consent')}</span>
           </label>
         )}
 
         <div className="space-y-2 pt-2 border-t">
-          <Label>Alamat</Label>
+          <Label>{t('address')}</Label>
           <AddressPicker value={address} onChange={setAddress} />
         </div>
 
         {error   && <p className="text-sm text-destructive">{error}</p>}
-        {success && <p className="text-sm text-green-600">Profil berhasil disimpan.</p>}
+        {success && <p className="text-sm text-green-600">{t('saved')}</p>}
 
-        <Button type="submit" disabled={loading || !consent}>{loading ? 'Menyimpan...' : 'Simpan Perubahan'}</Button>
+        <Button type="submit" disabled={loading || !consent}>{loading ? t('saving') : t('save')}</Button>
       </form>
     </div>
   )

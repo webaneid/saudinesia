@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { Modal } from '@/components/shared/Modal'
 
 // Melihat berkas pribadi (dokumen jamaah, bukti transfer) DI DALAM aplikasi — permintaan pemilik 2026-11-10: membuka berkas di tab baru
@@ -20,6 +21,7 @@ type Props = {
 type Source = { url: string; mimeType: string }
 
 export function FileViewerDialog({ title, endpoint, onClose, children, footer }: Props) {
+  const t = useTranslations('shared.documents.viewer')
   const [source, setSource] = useState<Source | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,11 +32,11 @@ export function FileViewerDialog({ title, endpoint, onClose, children, footer }:
       .then(({ ok, json }) => {
         if (!alive) return
         if (ok && json?.data?.url) setSource({ url: json.data.url, mimeType: json.data.mimeType ?? '' })
-        else setError(json?.error ?? 'Berkas tidak dapat dibuka.')
+        else setError(json?.error ?? t('loadFailed'))
       })
-      .catch(() => alive && setError('Tidak dapat menghubungi server.'))
+      .catch(() => alive && setError(t('network')))
     return () => { alive = false }
-  }, [endpoint])
+  }, [endpoint, t])
 
   return (
     <Modal open title={title} onClose={onClose} footer={footer} size="wide">
@@ -43,7 +45,7 @@ export function FileViewerDialog({ title, endpoint, onClose, children, footer }:
         {error ? (
           <p role="alert" className="text-sm text-destructive">{error}</p>
         ) : !source ? (
-          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Memuat berkas…</p>
+          <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> {t('loading')}</p>
         ) : source.mimeType.startsWith('image/') ? (
           <div className="flex justify-center rounded-lg border bg-muted/40 p-2">
             {/* eslint-disable-next-line @next/next/no-img-element -- URL presigned MinIO berumur pendek (bucket private); tak lewat optimizer */}

@@ -10,6 +10,10 @@ import { join } from 'node:path'
 import ts from 'typescript'
 import { routing } from '@/i18n/routing'
 import { switchLocalePath } from '@/lib/i18n/switch'
+import { BOOKING_STATUS } from '@/lib/constants/booking'
+import { REVIEW_LABEL } from '@/lib/pilgrims/reviewState'
+import { WARNING_TEXT } from '@/components/shared/pilgrims/warningText'
+import { ACTION_LABELS } from '@/components/shared/data-table/RowActions'
 
 let failed = 0
 function t(name: string, fn: () => void) {
@@ -185,6 +189,47 @@ t('checkout/keranjang tak menyimpan teks antarmuka di lib (alasan & isi = kunci,
   assert.ok(WORDS.test('Periode jadwal tiket ini sudah lewat.'), 'kasus kontrol')
 })
 
+/** Anggota `enum Nama { … }` di skema Prisma. */
+function prismaEnum(name: string): string[] {
+  const m = new RegExp(`enum ${name} \\{([^}]*)\\}`).exec(read('prisma/schema.prisma'))
+  assert.ok(m?.[1], `enum ${name} tak ditemukan — penjaga basi`)
+  return m[1].split('\n').map(l => l.trim()).filter(l => /^[a-z_]+$/.test(l))
+}
+
+t('area jamaah (I4): kunci yang dirangkai dari nilai ada di semua locale (dibaca dari sumber nilainya)', () => {
+  const B = 'app/[locale]/(pilgrim)/bookings/[id]'
+  const groups: Array<[string, string[]]> = [
+    ['shared.bookingStatus', unionOf('lib/booking/lifecycle.ts', /type DisplayStatus\s*=([^\n]+)/)],
+    ['shared.review', prismaEnum('PilgrimReviewStatus')],
+    ['pilgrimArea.trip.hint', prismaEnum('PilgrimReviewStatus')],
+    ['shared.documents.status', prismaEnum('DocumentReviewStatus')],
+    ['shared.documents.reject', prismaEnum('DocumentRejectReason')],
+    ['shared.pilgrims.warning', Object.keys(WARNING_TEXT)],
+    ['shared.table.action', unionOf('components/shared/data-table/RowActions.tsx', /type ActionKind\s*=([^\n]+)/)],
+    ['pilgrimArea.booking.seasons', listOf(`${B}/page.tsx`, 'SEASONS')],
+    ['pilgrimArea.summary.formula', unionOf(`${B}/OrderSummaryCard.tsx`, /type SummaryUnit\s*=([^\n]+)/)],
+    // Status dokumen di popup ringkasan jamaah (PilgrimSlotsTable): empat keadaan yang dirangkai di satu ekspresi berkas itu.
+    ['shared.pilgrims.slots.docState', quoted(/t\(`docState\.\$\{([^`]+)\}`\)/.exec(code(read('components/shared/pilgrims/PilgrimSlotsTable.tsx')))?.[1] ?? '')],
+  ]
+  const problems: string[] = []
+  for (const [ns, values] of groups) {
+    assert.ok(values.length > 0, `${ns}: daftar nilai kosong — penjaga basi`)
+    for (const l of routing.locales) for (const v of values) if (typeof nodeAt(MESSAGES[l]!, `${ns}.${v}`) !== 'string') problems.push(`${l}: ${ns}.${v}`)
+  }
+  assert.deepEqual(problems, [])
+})
+
+t('area jamaah (I4): teks Indonesia di pesan = teks peta lib yang masih dipakai admin (satu kalimat, tak bercabang)', () => {
+  const pairs: Array<[string, Record<string, string>]> = [
+    ['shared.bookingStatus', Object.fromEntries(Object.entries(BOOKING_STATUS).map(([k, v]) => [k, v.label]))],
+    ['shared.review', REVIEW_LABEL],
+    ['shared.pilgrims.warning', WARNING_TEXT],
+    ['shared.table.action', ACTION_LABELS],
+  ]
+  const problems = pairs.flatMap(([ns, map]) => Object.entries(map).filter(([k, v]) => nodeAt(MESSAGES.id!, `${ns}.${k}`) !== v).map(([k, v]) => `${ns}.${k}: pesan "${String(nodeAt(MESSAGES.id!, `${ns}.${k}`))}" ≠ lib "${v}"`))
+  assert.deepEqual(problems, [])
+})
+
 // ── 3. area yang sudah dimigrasi tanpa teks JSX langsung ────────────────────────────────────────────────────────────
 // Bertambah per fase (I2 auth, I3 checkout, I4 jamaah, I5 komponen bersama). Awalan path; berkas `.tsx` di bawahnya diperiksa.
 const MIGRATED_AREAS = [
@@ -202,12 +247,24 @@ const MIGRATED_AREAS = [
   'app/[locale]/(public)/checkout',
   'app/[locale]/(public)/keranjang',
   'components/shared/CartButton.tsx',
+  // I4 (2026-11-11): area jamaah + komponen bersama yang tampil di sana (kit tabel, Modal, AddressPicker dimajukan dari I5).
+  'app/[locale]/(pilgrim)',
+  'components/shared/pilgrims',
+  'components/shared/documents',
+  'components/shared/data-table',
+  'components/shared/Modal.tsx',
+  'components/shared/AddressPicker.tsx',
+  'components/shared/WhatsappVerifyCard.tsx',
+  'components/booking/ManifestFieldsForm.tsx',
 ]
 // Teks yang memang sama di semua bahasa (nama merek, kode). Berkas → teks → alasan.
 const ALLOWED_TEXT: Record<string, Record<string, string>> = {
   'components/shared/Header.tsx': { Saudinesia: 'nama merek', S: 'monogram logo' },
   'components/shared/PublicFooter.tsx': { Saudinesia: 'nama merek', '©': 'simbol hak cipta', 'Saudinesia.': 'nama merek + titik sebelum teks pesan hak cipta' },
   'components/shared/ContactPicker.tsx': { '8xx xxxx xxxx': 'contoh format nomor, sama di semua bahasa', 'email@example.com': 'contoh format email, sama di semua bahasa' },
+  'components/booking/ManifestFieldsForm.tsx': { '8xx xxxx xxxx': 'contoh format nomor, sama di semua bahasa', 'email@example.com': 'contoh format email, sama di semua bahasa' },
+  'components/shared/AddressPicker.tsx': { 'https://maps.app.goo.gl/…': 'contoh format tautan, sama di semua bahasa' },
+  'components/shared/WhatsappVerifyCard.tsx': { VERIF: 'kata kunci yang dikirim pengguna dan dibaca webhook — harus persis sama di semua bahasa' },
 }
 // Pemindai berbasis parser TypeScript (bukan regex): setiap node `JsxText` berisi huruf, dan atribut teks literal yang tampil ke pengguna.
 const TEXT_ATTRS = new Set(['placeholder', 'aria-label', 'title', 'alt', 'label'])

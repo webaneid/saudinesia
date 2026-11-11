@@ -1,6 +1,6 @@
 # Arsitektur — Bahasa (id/en) di seluruh front-end pelanggan
 
-> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, dan I3 SELESAI 2026-11-11 (§6); I4–I6 belum.**
+> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11 (§6); I5–I6 belum.**
 > Pemicu: audit front-end 2026-11-11 (`docs/arsitektur-frontend-publik.md` §8.2 butir 1) dan arahan pemilik:
 > *"kita seriusi dulu bahasa ya di front-end.. default-nya bahasa Indonesia bro.. kita blm bikin select bahasa di menu.."*
 
@@ -64,7 +64,7 @@ Totalnya sekitar **±85 berkas, ±7.000 baris**. Admin **tidak** termasuk: staf 
 | **I2** | Auth: masuk, daftar, lupa/atur ulang password, aktivasi, lengkapi data, Google; pengalih di layout auth | Alur daftar → aktivasi → masuk utuh di `/en` (browser) |
 | **I3** | Checkout (9 jenis) + keranjang + ringkasan + label `lib/checkout` | Pesan tiap jenis di `/en` sampai terbit (browser), pratinjau = total terbit |
 | **I4** | Area jamaah: dasbor, daftar & detail booking, bayar/unggah bukti, jamaah per booking (termasuk "Data tambahan"), Jamaah Saya + formulir kartu + dokumen, profil; pengalih di layout jamaah | Simulasi audit §8 diulang penuh di `/en` |
-| **I5** | Komponen bersama sisanya (kit tabel, `AddressPicker`, `DateTimeField`; `AutocompleteSelect`/`ContactPicker`/`CountryCodeSelect` sudah di I2) + invoice publik + fasilitas hotel (`HOTEL_FACILITIES`) + label visa plus | Penjaga §3.6 tanpa pengecualian di area pelanggan |
+| **I5** | Komponen bersama sisanya (`DateTimeField`; `AutocompleteSelect`/`ContactPicker`/`CountryCodeSelect` sudah di I2; kit tabel, `Modal`, `AddressPicker` dimajukan ke I4) + invoice publik + fasilitas hotel (`HOTEL_FACILITIES`) + label visa plus | Penjaga §3.6 tanpa pengecualian di area pelanggan |
 | **I6** | Pesan galat server jalur pelanggan → kode + terjemahan klien (K4a) | Galat checkout/jamaah/auth tampil berbahasa Inggris di `/en` |
 
 I1 kecil (±10 berkas) dan langsung memperbaiki "bawaan Indonesia" + pengalih. I2–I5 masing-masing ±15–40 berkas. Setiap fase: build 0 galat, security review, `bun audit`, simulasi browser di `/id` **dan** `/en`, 375 px.
@@ -153,3 +153,48 @@ Admin (tetap Indonesia), terjemahan data produk (R9), email/WA/PDF per bahasa (K
 - Baris ringkasan pesanan (label/deskripsi item, mis. "1–30 hari", "5 hari · 1 orang") berasal dari snapshot server — tetap Indonesia sampai I6 (K4/K5, sama dengan invoice).
 - Pesan galat pratinjau/pemesanan dari server (aturan visa, kuota) tetap Indonesia sampai I6.
 - Halaman detail booking sesudah memesan masih Indonesia (I4).
+
+### 6.4 I4 (2026-11-11) — rencana rinci lalu as-built
+
+Recheck kode area jamaah (SOP langkah 1) menemukan hal yang belum tertulis di §4:
+
+- Layout jamaah **tidak** punya header publik (Header hanya di `(public)/layout.tsx`), jadi pengalih harus dipasang di nav jamaah sendiri.
+- Halaman jamaah memakai kit tabel (`DataTable`, `FilterBar`, `FilterSelect`, `SearchForm`, `Pagination`, `RowActions`), `Modal`, dan `AddressPicker` yang masih Indonesia. Tanpa itu, kriteria "simulasi §8 penuh di `/en`" tidak tercapai. Ketiganya **dimajukan dari I5 ke I4** (pola sama dengan I2). I5 tinggal `DateTimeField`, invoice publik, fasilitas hotel, label visa plus.
+- Teks yang dibangun di `lib/` dan tampil ke jamaah: status booking (`BOOKING_STATUS`), status pemeriksaan (`REVIEW_LABEL`), peringatan NIK (`WARNING_TEXT`), status/alasan tolak dokumen (`STATUS_TEXT`/`REJECT_TEXT`), jenjang visa "1–30 hari" (`visaTierTexts`), nama rombongan bawaan "Rombongan A"/"Semua jamaah" (`groupView`), tanggal di ringkasan data jamaah (`fieldRows`), musim (`booking.season` mentah).
+
+| Bagian | Rencana |
+|---|---|
+| Pesan | `pilgrimArea.*` (`nav`, `dashboard`, `bookings`, `booking`, `summary`, `payment`, `pilgrim`, `trip`, `extra`, `jamaah`, `editor`, `profile`, `deletion`) dan `shared.*` (`bookingStatus`, `review`, `pilgrims`, `documents`, `table`, `modal`, `address`, `whatsapp`). |
+| Label `lib/` | Komponen area jamaah dan komponen bersama menerjemahkan **kunci** (`shared.bookingStatus.<status>`, `shared.review.<status>`, `shared.pilgrims.warning.<kode>`, `shared.documents.status/reject.<kode>`). Peta di `lib/` tetap untuk halaman khusus admin (bahasa admin). Penjaga memastikan teks `id.json` = teks peta `lib/` (satu kalimat, tak bercabang) dan setiap kunci peta punya pesan. |
+| Jenjang visa | `visaTierRangeOfKey` (murni, `{min,max}`) + pembaca `visaTierRanges` di `snapshot.ts`; halaman merangkai teks lewat pesan jamak. `visaTierTexts` tetap untuk admin. |
+| Rombongan & tanggal | `groupView(groups, names?)` menerima teks bawaan yang sudah diterjemahkan; `fieldRows(fields, values, locale?)` memformat tanggal sesuai bahasa. Pemanggil lama tak berubah. |
+| Ringkasan pesanan | Detail item (orang, penumpang, malam, kamar, hari) dan satuan rumus dari pesan jamak; musim lewat `pilgrimArea.booking.season.<s>`. |
+| Pengalih | `LocaleSwitcher` di nav layout jamaah. |
+| Tetap Indonesia (sesuai K4/K5/R9) | Pesan galat dan pesan sukses yang datang dari server (I6); data yang diisi admin (nama produk, label jenis dokumen, label kolom data jamaah, nama rombongan yang diberi admin); invoice PDF dan email. |
+| Penjaga | `MIGRATED_AREAS` + `app/[locale]/(pilgrim)`, `components/shared/{pilgrims,documents,data-table}`, `Modal`, `AddressPicker`, `WhatsappVerifyCard`, `components/booking/ManifestFieldsForm.tsx`. |
+
+**As-built (berbeda/tambahan dari rencana di atas):**
+
+| Bagian | Isi | Lokasi |
+|---|---|---|
+| Halaman | Dasbor, daftar & detail booking, jamaah per booking, Jamaah Saya (daftar, baru, ubah), profil memakai `getTranslations({ locale, namespace })` (halaman async) atau `useTranslations` (komponen klien dan komponen kit non-async). Setiap halaman punya `generateMetadata` (penerjemah metadata dinamai `tm` supaya penjaga tidak bingung dua `t` beda namespace). Halaman ubah kartu jamaah sebelumnya tanpa judul tab; kini "Ubah Jamaah"/"Edit Pilgrim" — **generik, tanpa nama jamaah** (data pribadi tak masuk judul tab/riwayat browser). | `app/[locale]/(pilgrim)/**` |
+| Layout | Pengalih + tombol keluar diletakkan DI LUAR `<nav>` menu (menu `display: contents` di dalam satu baris `flex-wrap`) — `LocaleSwitcher` adalah landmark `nav` sendiri, jadi tidak bersarang. | `app/[locale]/(pilgrim)/layout.tsx` |
+| Ringkasan pesanan | `OrderSummaryCard` menerima satuan rumus sebagai kunci (`SummaryUnit = 'order' \| 'pilgrim'`), rumus hanya bila jumlah > 1. Musim lewat daftar `SEASONS` + `isSeason` (nilai asing → tanpa label, bukan kunci mentah). | `bookings/[id]/OrderSummaryCard.tsx`, `bookings/[id]/page.tsx` |
+| Kit bersama | `RowActions` (`ActionLink`/`KindButton` memakai `shared.table.action.<kind>`; `ACTION_LABELS` tetap diekspor untuk `ApiAction` admin), `DataTable` (`empty` bawaan), `Pagination` (`showing` dengan `<b>`), `FilterBar`/`SearchForm` (placeholder opsional)/`FilterSelect`, `Modal`, `AddressPicker` (termasuk kolom peta), `SavedPilgrimFields`, `PilgrimCardDialog` (`saveLabel` opsional), `PilgrimSlotsTable`, `DocumentRepeater`, `DocumentChecklist`, `FileViewerDialog`, `WhatsappVerifyCard` (`t.rich`). Admin yang memakai kit ini memperoleh teks Indonesia yang sama (pesan `id`). `documentRows.ts`: `STATUS_TEXT`/`REJECT_TEXT` mati dihapus. | `components/shared/**` |
+| `lib/` | `visaTierRangeOfKey` + `visaTierRanges` (teks tetap lewat `visaTierTexts` untuk admin); `groupView(groups, names?)` + `groupMark`; `formatFieldValue`/`fieldRows(…, locale?)`; `bookingPilgrimSlots(…, locale?)`. Pemanggil admin tidak berubah. | `lib/booking/{visaDuration,groups}.ts`, `lib/pricing/engine/snapshot.ts`, `lib/manifest/display.ts`, `lib/pilgrims/slots.ts` |
+| Penjaga | Uji baru "area jamaah (I4)": setiap kunci yang dirangkai dari nilai (`bookingStatus` atas enum Prisma + `DisplayStatus`, `review`, `trip.hint`, `documents.status/reject`, `warning`, `table.action`, musim, satuan rumus, `slots.docState`) diperiksa terhadap SUMBER nilainya. Uji "teks Indonesia di pesan = teks peta `lib`" (status booking, review, peringatan, label aksi) — admin dan jamaah tak bisa berbeda kata. `ALLOWED_TEXT` beralasan: contoh format di `ManifestFieldsForm`, URL peta di `AddressPicker`, kata kunci `VERIF` (harus sama di semua bahasa — dicocokkan webhook). `test-table-kit` merender di dalam `NextIntlClientProvider` (`timeZone` + `children` sebagai prop). | `scripts/test-i18n-coverage.ts`, `scripts/test-table-kit.ts` |
+
+**Bukti:**
+- `tsc` dan `bun run build` tanpa galat.
+- Uji `i18n-coverage` (14), `table-kit`, `table-consistency`, `combobox`, `time-guard`, `routes`, `i18n-routing`, `public-home`, `checkout`, `pilgrim-documents`, `session` lulus. `site-content` gagal hanya di DB audit bekas pakai (sisa jejak audit dari uji sebelumnya; `lib/public-content` tidak berubah di I4).
+- Mutasi penjaga semua merah: kunci en dihapus; nilai `DisplayStatus` baru tanpa pesan; teks `id.json` berbeda dari peta `lib`; teks JSX langsung.
+- Simulasi §8 di server uji terpisah (DB klon, port 6270), akun uji, `/en`:
+  - dasbor ("Needs action", "Pay Rp 6.550.000", "Complete data for 1 pilgrim"), daftar booking (filter, kolom, "Showing 1–1 of 1"), detail booking (tenggat "Sunday, 15 November 2026 at 23:59", musim "Regular", "1–30 days", total, tabel jamaah);
+  - unggah bukti transfer → "Awaiting Verification" + "Transfer receipt uploaded, awaiting confirmation.";
+  - jamaah per booking: dialog "Add a new pilgrim" lengkap (identitas, paspor, kontak, alamat berjenjang) → simpan & tautkan; "Additional data" → "Additional data saved."; unggah dokumen paspor → "Document saved.", "Valid until 1 Jan 2031", penampil berkas; daftar periksa "1 of 3 uploaded";
+  - Jamaah Saya (daftar "12 May 1990", "NIK saved"), formulir kartu, profil, hapus akun, verifikasi WhatsApp;
+  - 375 px: tanpa geser samping, tabel jadi kartu; pengalih "Bahasa Indonesia" membuka `/id/…` di path yang sama dan seluruh halaman kembali Indonesia (regresi `/id` bersih).
+
+**Diketahui (sesuai rencana):** pesan dari server (mis. "Data incomplete: …" berisi label kolom admin) dan data isian admin (nama produk, label dokumen/kolom, "Diminta oleh <produk>") tetap Indonesia; tanggal di baris ringkasan item ("20/12/2026 – 24/12/2026") berasal dari snapshot server — I6.
+
+**Insiden uji (bukan bug produk):** menjalankan skrip uji DB di DB audit menulis nilai cek kunci PII dengan kunci uji, sehingga server audit (kunci `.env.local`) menolak menyimpan jamaah — `ensurePiiKeysMatch` gagal-tertutup sesuai SEC-168. Dibereskan dengan mengosongkan `pii_key_checks` di DB sekali pakai itu saja. Pelajaran: DB untuk simulasi browser dan DB untuk skrip uji jangan sama.

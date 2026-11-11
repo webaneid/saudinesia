@@ -19,6 +19,7 @@ import { FilterSelect } from '@/components/shared/data-table/FilterSelect'
 import { Pagination } from '@/components/shared/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/shared/data-table/RowActions'
 import { formatCalendarDate } from '@/lib/time'
+import { getTranslations } from 'next-intl/server'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -26,6 +27,11 @@ type Props = {
 }
 
 type BookingRow = Prisma.BookingGetPayload<{ include: { _count: { select: { pilgrims: true } }; payments: { select: { id: true } }; invoice: { select: { taxAddedIdr: true; taxIncludedIdr: true } } } }>
+
+export async function generateMetadata({ params }: Pick<Props, 'params'>) {
+  const tm = await getTranslations({ locale: safeLocale((await params).locale), namespace: 'pilgrimArea.bookings' })
+  return { title: tm('metaTitle') }
+}
 
 // Draf adalah urusan admin (belum diterbitkan) — tak pernah tampil ke jamaah, juga bukan pilihan filter.
 const PILGRIM_STATUS_FILTERS = STATUS_FILTERS.filter(s => s !== 'draft')
@@ -55,31 +61,34 @@ export default async function MyBookingsPage({ params, searchParams }: Props) {
   )
 
   const base = `/${locale}/bookings`
+  const lang = safeLocale(locale)
+  const t = await getTranslations({ locale: lang, namespace: 'pilgrimArea' })
+  const ts = await getTranslations({ locale: lang, namespace: 'shared.bookingStatus' })
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const columns: Column<BookingRow>[] = [
-    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
-    { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[13px] text-muted-foreground">{b.departureDate ? formatCalendarDate(b.departureDate) : '-'}</span> },
-    { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{b._count.pilgrims} jamaah</span> },
-    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
+    { key: 'code', header: t('bookings.code'), mobile: 'title', cell: b => <Link href={`/${locale}/bookings/${b.id}`} className="font-mono text-[13px] font-bold text-primary hover:underline">{b.bookingCode}</Link> },
+    { key: 'departure', header: t('bookings.departure'), cell: b => <span className="text-[13px] text-muted-foreground">{b.departureDate ? formatCalendarDate(b.departureDate, undefined, lang) : '-'}</span> },
+    { key: 'pilgrims', header: t('bookings.pilgrims'), hideBelowLg: true, cell: b => <span className="text-[13px] text-muted-foreground">{t('bookings.pilgrimCount', { count: b._count.pilgrims })}</span> },
+    { key: 'total', header: t('bookings.total'), align: 'right', cell: b => <span className="text-[13px] font-bold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
     {
-      key: 'status', header: 'Status',
+      key: 'status', header: t('bookings.status'),
       cell: b => {
-        const cfg = BOOKING_STATUS[displayStatusOf(b)]
-        return <Badge variant={cfg.badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>{cfg.label}</Badge>
+        const st = displayStatusOf(b)
+        return <Badge variant={BOOKING_STATUS[st].badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>{ts(st)}</Badge>
       },
     },
-    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/bookings/${b.id}`} label={t('bookings.view', { code: b.bookingCode })} /></RowActions> },
   ]
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Booking Saya</h1>
-          <p className="text-muted-foreground">Buka booking untuk melengkapi data jamaah, mengunggah dokumen, dan membayar.</p>
+          <h1 className="text-2xl font-bold">{t('bookings.title')}</h1>
+          <p className="text-muted-foreground">{t('bookings.intro')}</p>
         </div>
         <Button asChild>
-          <Link href={`/${locale}`}><Plus className="mr-2 h-4 w-4" /> Buat Booking Baru</Link>
+          <Link href={`/${locale}`}><Plus className="mr-2 h-4 w-4" /> {t('newBooking')}</Link>
         </Button>
       </div>
 
@@ -90,20 +99,20 @@ export default async function MyBookingsPage({ params, searchParams }: Props) {
             <FileText className="h-7 w-7 text-muted-foreground" />
           </div>
           <div>
-            <p className="font-semibold">Belum ada booking</p>
-            <p className="text-sm text-muted-foreground mt-1">Mulai rencanakan perjalanan umrah Anda</p>
+            <p className="font-semibold">{t('empty.title')}</p>
+            <p className="text-sm text-muted-foreground mt-1">{t('empty.text')}</p>
           </div>
           <Button asChild>
-          <Link href={`/${locale}`}>Buat Booking Pertama</Link>
+          <Link href={`/${locale}`}>{t('empty.cta')}</Link>
           </Button>
         </div>
       ) : (
         <div className="space-y-3">
           <FilterBar active={Boolean(status)} resetHref={buildListHref(base, { limit: limitParam })}>
-            <FilterSelect label="Status" value={status ?? ''} options={Object.entries(BOOKING_STATUS).filter(([value]) => value !== 'draft').map(([value, v]) => ({ value, label: v.label }))} nav={{ base, param: 'status', query: { limit: limitParam } }} />
+            <FilterSelect label={t('bookings.status')} value={status ?? ''} options={PILGRIM_STATUS_FILTERS.map(value => ({ value, label: ts(value) }))} nav={{ base, param: 'status', query: { limit: limitParam } }} />
           </FilterBar>
           <DataTable
-            columns={columns} rows={bookings} getRowId={b => b.id} empty="Tidak ada booking dengan status ini."
+            columns={columns} rows={bookings} getRowId={b => b.id} empty={t('bookings.noneWithStatus')}
             footer={meta.total > 0 ? <Pagination {...meta} hrefFor={page => buildListHref(base, { status, limit: limitParam, page })} /> : undefined}
           />
         </div>

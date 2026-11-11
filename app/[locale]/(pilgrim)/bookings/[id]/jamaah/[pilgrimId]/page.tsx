@@ -9,7 +9,8 @@ import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
 import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
 import { reviewHistoryOf } from '@/lib/pilgrims/review'
 import { cardIdSchema } from '@/lib/pilgrims/http'
-import { REVIEW_LABEL, REVIEW_TONE } from '@/lib/pilgrims/reviewState'
+import { REVIEW_TONE } from '@/lib/pilgrims/reviewState'
+import { getTranslations } from 'next-intl/server'
 import { cardBoundKeys } from '@/lib/manifest/roles'
 import { isEmptyValue } from '@/lib/manifest/values'
 import { PilgrimTripPanel } from '../../PilgrimTripPanel'
@@ -20,6 +21,11 @@ import { isReviewLocked } from '@/lib/pilgrims/reviewState'
 // sama dengan sebelumnya (PilgrimTripPanel: pilih dari Jamaah Saya / tambah baru / diri sendiri, kelengkapan + unggah dokumen, ajukan).
 
 type Props = { params: Promise<{ locale: string; id: string; pilgrimId: string }> }
+
+export async function generateMetadata({ params }: Props) {
+  const tm = await getTranslations({ locale: safeLocale((await params).locale), namespace: 'pilgrimArea.pilgrim' })
+  return { title: tm('metaTitle') }
+}
 
 export default async function BookingPilgrimPage({ params }: Props) {
   const { locale, id, pilgrimId } = await params
@@ -39,7 +45,10 @@ export default async function BookingPilgrimPage({ params }: Props) {
   const p = booking.pilgrims[index]
   if (!p) notFound()
 
-  const { slots, checklists, fieldsByPilgrim } = await bookingPilgrimSlots(booking.id, booking.departureDate, booking.pilgrims)
+  const lang = safeLocale(locale)
+  const t = await getTranslations({ locale: lang, namespace: 'pilgrimArea.pilgrim' })
+  const tr = await getTranslations({ locale: lang, namespace: 'shared.review' })
+  const { slots, checklists, fieldsByPilgrim } = await bookingPilgrimSlots(booking.id, booking.departureDate, booking.pilgrims, lang)
   const slot = slots[index]!
   const check = checklists.get(p.id)
   const fields = fieldsByPilgrim.get(p.id) ?? []
@@ -72,21 +81,21 @@ export default async function BookingPilgrimPage({ params }: Props) {
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       <div className="space-y-3">
         <Link href={`/${locale}/bookings/${booking.id}#data-jamaah`} className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-3.5 w-3.5" /> Kembali ke booking {booking.bookingCode}
+          <ArrowLeft className="h-3.5 w-3.5" /> {t('back', { code: booking.bookingCode })}
         </Link>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Jamaah {index + 1} dari {booking.pilgrims.length}</p>
-            <h1 className="text-2xl font-bold">{slot.name ?? `Jamaah ${index + 1}`}</h1>
+            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('position', { index: index + 1, total: booking.pilgrims.length })}</p>
+            <h1 className="text-2xl font-bold">{slot.name ?? t('fallbackName', { no: index + 1 })}</h1>
             {p.visaApplication?.visaProduct && <p className="text-sm text-muted-foreground">{p.visaApplication.visaProduct.name}</p>}
           </div>
-          <Badge variant={REVIEW_TONE[p.reviewStatus]}>{REVIEW_LABEL[p.reviewStatus]}</Badge>
+          <Badge variant={REVIEW_TONE[p.reviewStatus]}>{tr(p.reviewStatus)}</Badge>
         </div>
       </div>
 
       <div className="rounded-xl border bg-card p-5">
         <PilgrimTripPanel
-          locale={safeLocale(locale)} bookingId={booking.id} pilgrimId={p.id}
+          locale={lang} bookingId={booking.id} pilgrimId={p.id}
           linked={check?.card ?? null}
           checklist={(check?.items ?? []).map(i => ({ key: i.key, documentTypeId: i.documentTypeId, label: i.label, required: i.required, state: i.state, sources: i.sources ?? [], reusable: i.reusable, validUntilNeeded: i.validUntilNeeded }))}
           review={{
@@ -109,12 +118,12 @@ export default async function BookingPilgrimPage({ params }: Props) {
         />
       )}
 
-      <nav aria-label="Jamaah lain" className="flex items-center justify-between gap-3 text-sm">
+      <nav aria-label={t('others')} className="flex items-center justify-between gap-3 text-sm">
         {prev
-          ? <Link href={href(prev.id)} className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><ChevronLeft className="h-4 w-4" /> {slots[index - 1]?.name ?? `Jamaah ${index}`}</Link>
+          ? <Link href={href(prev.id)} className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"><ChevronLeft className="h-4 w-4" /> {slots[index - 1]?.name ?? t('fallbackName', { no: index })}</Link>
           : <span />}
         {next && (
-          <Link href={href(next.id)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">{slots[index + 1]?.name ?? `Jamaah ${index + 2}`} <ChevronRight className="h-4 w-4" /></Link>
+          <Link href={href(next.id)} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">{slots[index + 1]?.name ?? t('fallbackName', { no: index + 2 })} <ChevronRight className="h-4 w-4" /></Link>
         )}
       </nav>
     </div>

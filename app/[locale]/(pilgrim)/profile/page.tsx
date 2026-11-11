@@ -5,8 +5,14 @@ import { prisma } from '@/lib/db'
 import { ProfileForm } from './ProfileForm'
 import { DeletionRequestCard } from './DeletionRequestCard'
 import { WhatsappVerifyCard } from '@/components/shared/WhatsappVerifyCard'
+import { getTranslations } from 'next-intl/server'
 
 type Props = { params: Promise<{ locale: string }> }
+
+export async function generateMetadata({ params }: Props) {
+  const tm = await getTranslations({ locale: safeLocale((await params).locale), namespace: 'pilgrimArea.profile' })
+  return { title: tm('metaTitle') }
+}
 
 export default async function ProfilePage({ params }: Props) {
   const { locale } = await params
@@ -21,11 +27,12 @@ export default async function ProfilePage({ params }: Props) {
     },
   })
   if (!user) redirect(`/${safeLocale(locale)}/login`)
+  const t = await getTranslations({ locale: safeLocale(locale), namespace: 'pilgrimArea.profile' })
   const consented = await prisma.consentLog.findFirst({ where: { userId: session.userId, type: 'whatsapp_notifications' }, select: { id: true } })
 
   return (
     <div className="max-w-lg space-y-6">
-      <h1 className="text-2xl font-bold">Profil Saya</h1>
+      <h1 className="text-2xl font-bold">{t('title')}</h1>
       <ProfileForm
         locale={locale}
         needsConsent={!consented}

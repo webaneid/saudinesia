@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Search, X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 type SearchFormProps = {
   /** Path halaman list (tanpa query), mis. `/id/admin/bookings`. */
@@ -13,18 +14,19 @@ type SearchFormProps = {
 }
 
 /** Form GET biasa — jalan tanpa JavaScript, hasilnya bisa di-bookmark. */
-export function SearchForm({ action, q, placeholder = 'Cari…', preserve = {}, clearHref = action }: SearchFormProps) {
+export function SearchForm({ action, q, placeholder, preserve = {}, clearHref = action }: SearchFormProps) {
+  const t = useTranslations('shared.table')
   return (
     <form action={action} method="get" role="search" className="flex w-full max-w-md items-center gap-2">
       {Object.entries(preserve).map(([k, v]) => v ? <input key={k} type="hidden" name={k} value={v} /> : null)}
       <div className="relative flex-1">
         <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-admin-muted" />
-        <input name="q" defaultValue={q} placeholder={placeholder} aria-label="Cari" className="admin-input pl-9" />
+        <input name="q" defaultValue={q} placeholder={placeholder ?? t('search')} aria-label={t('searchLabel')} className="admin-input pl-9" />
       </div>
       {q && (
         <Link
           href={clearHref}
-          aria-label="Hapus pencarian"
+          aria-label={t('clearSearch')}
           className="inline-flex size-11 shrink-0 items-center justify-center rounded-xl border border-admin-line bg-white text-admin-muted hover:text-admin-ink"
         >
           <X className="size-4" />

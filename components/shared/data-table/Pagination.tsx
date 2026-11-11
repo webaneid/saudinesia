@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 import type { PageMeta } from '@/lib/table/pagination'
 
@@ -56,6 +57,7 @@ function Cell({ target, label, active, disabled, hrefFor, onPageChange, children
 }
 
 export function Pagination({ page, limit, total, totalPages, hrefFor, onPageChange }: PaginationProps) {
+  const t = useTranslations('shared.table')
   if (total === 0) return null
 
   const from = (page - 1) * limit + 1
@@ -65,19 +67,19 @@ export function Pagination({ page, limit, total, totalPages, hrefFor, onPageChan
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="m-0 text-xs text-admin-muted">
-        Menampilkan <span className="font-semibold text-admin-ink">{from}–{to}</span> dari <span className="font-semibold text-admin-ink">{total}</span>
+        {t.rich('showing', { from, to, total, b: c => <span className="font-semibold text-admin-ink">{c}</span> })}
       </p>
       {totalPages > 1 && (
-        <nav aria-label="Paginasi" className="flex items-center gap-1.5">
-          <Cell {...nav} target={page - 1} label="Halaman sebelumnya" disabled={page <= 1}><ChevronLeft className="size-4" /></Cell>
+        <nav aria-label={t('pagination')} className="flex items-center gap-1.5">
+          <Cell {...nav} target={page - 1} label={t('prev')} disabled={page <= 1}><ChevronLeft className="size-4" /></Cell>
           {/* HP: ringkas "5 / 22"; layar ≥ sm: deretan angka */}
           <span className="px-2 text-sm font-semibold tabular-nums text-admin-ink sm:hidden">{page} / {totalPages}</span>
           {pageWindow(page, totalPages).map((p, i) =>
             p === 'gap'
               ? <span key={`gap-${i}`} className="hidden px-1 text-admin-muted sm:inline">…</span>
-              : <span key={p} className="hidden sm:inline-flex"><Cell {...nav} target={p} label={`Halaman ${p}`} active={p === page}>{p}</Cell></span>,
+              : <span key={p} className="hidden sm:inline-flex"><Cell {...nav} target={p} label={t('page', { page: p })} active={p === page}>{p}</Cell></span>,
           )}
-          <Cell {...nav} target={page + 1} label="Halaman berikutnya" disabled={page >= totalPages}><ChevronRight className="size-4" /></Cell>
+          <Cell {...nav} target={page + 1} label={t('next')} disabled={page >= totalPages}><ChevronRight className="size-4" /></Cell>
         </nav>
       )}
     </div>

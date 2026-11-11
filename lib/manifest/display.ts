@@ -17,7 +17,7 @@ function optionLabel(options: unknown, value: string): string {
 }
 
 /** Satu nilai sebagai teks (null = kosong). */
-export function formatFieldValue(field: Pick<Field, 'fieldType' | 'options'>, value: unknown): string | null {
+export function formatFieldValue(field: Pick<Field, 'fieldType' | 'options'>, value: unknown, locale?: string): string | null {
   if (isEmptyValue(value)) return null
   if (typeof value === 'object' && value !== null) {
     if ('number' in value) {
@@ -29,15 +29,15 @@ export function formatFieldValue(field: Pick<Field, 'fieldType' | 'options'>, va
     return null
   }
   const s = String(value)
-  if (field.fieldType === 'date' && isCalendarDate(s)) return formatCalendarDate(s, DATE_LONG)
+  if (field.fieldType === 'date' && isCalendarDate(s)) return formatCalendarDate(s, DATE_LONG, locale)
   if (field.fieldType === 'select') return optionLabel(field.options, s)
   return s
 }
 
-/** Semua kolom (urutan pemanggil) dengan nilai tampil dan penanda wajib-kosong. */
-export function fieldRows(fields: readonly Field[], values: Record<string, unknown>): FieldRow[] {
+/** Semua kolom (urutan pemanggil) dengan nilai tampil dan penanda wajib-kosong. `locale` = bahasa halaman untuk tanggal (bawaan Indonesia). */
+export function fieldRows(fields: readonly Field[], values: Record<string, unknown>, locale?: string): FieldRow[] {
   return fields.map(f => {
-    const value = formatFieldValue(f, values[f.fieldKey])
+    const value = formatFieldValue(f, values[f.fieldKey], locale)
     return { key: f.fieldKey, label: f.label, value, required: f.required, missing: f.required && isEmptyValue(values[f.fieldKey]) }
   })
 }

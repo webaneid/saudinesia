@@ -33,10 +33,16 @@ export function plannedTravelFor(
 }
 
 /** Nama tampilan rombongan: nama dari pemesan, selain itu "Rombongan A/B/…" (posisi 0 → A; lewat Z → nomor). */
-export function groupLabel(label: string | null | undefined, index: number): string {
+export function groupLabel(label: string | null | undefined, index: number, unnamed: (mark: string) => string = m => `Rombongan ${m}`): string {
   if (label) return label
-  return index < 26 ? `Rombongan ${String.fromCharCode(65 + index)}` : `Rombongan ${index + 1}`
+  return unnamed(groupMark(index))
 }
+
+/** Penanda rombongan tanpa nama: posisi 0 → "A" … 25 → "Z", sesudahnya nomor. */
+export const groupMark = (index: number): string => (index < 26 ? String.fromCharCode(65 + index) : String(index + 1))
+
+/** Teks bawaan dalam bahasa halaman (halaman jamaah); tanpa ini = Indonesia (admin, invoice, ZIP). Nama yang diberi pemesan tak diterjemahkan. */
+export type GroupNames = { all: string; unnamed: (mark: string) => string }
 
 function setPeople(item: BookingItemInput, n: number): BookingItemInput {
   switch (item.itemType) {
@@ -100,12 +106,12 @@ export type GroupView = {
  * Pembaca nama rombongan untuk TAMPILAN (detail booking, invoice, ZIP dokumen — §10.8, 11d-2b). Nama selalu dirender dari `booking_groups.label` saat baca,
  * tidak pernah dibekukan di snapshot. `null` = booking tanpa rombongan (tampilan lama, tanpa subjudul).
  */
-export function groupView(groups: ReadonlyArray<{ id: string; label: string | null; position: number }>): GroupView | null {
+export function groupView(groups: ReadonlyArray<{ id: string; label: string | null; position: number }>, names?: GroupNames): GroupView | null {
   if (groups.length === 0) return null
   const sorted = [...groups].sort((a, b) => a.position - b.position)
   const index = new Map(sorted.map((g, i) => [g.id, i]))
   return {
-    name: id => { const i = id ? index.get(id) : undefined; return i === undefined ? ALL_PILGRIMS_LABEL : groupLabel(sorted[i]!.label, i) },
+    name: id => { const i = id ? index.get(id) : undefined; return i === undefined ? (names?.all ?? ALL_PILGRIMS_LABEL) : groupLabel(sorted[i]!.label, i, names?.unnamed) },
     rank: id => { const i = id ? index.get(id) : undefined; return i === undefined ? 0 : i + 1 },
   }
 }

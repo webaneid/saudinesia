@@ -5,8 +5,14 @@
 /** "30 hari" atau "1–30 hari". */
 export const visaTierText = (minDays: number, maxDays: number): string => (minDays === maxDays ? `${minDays} hari` : `${minDays}–${maxDays} hari`)
 
-/** Teks jenjang dari kunci varian visa; `null` bila bukan kunci jenjang hari. */
-export function visaTierTextOfKey(variantKey: string): string | null {
+/** Rentang jenjang dari kunci varian visa; `null` bila bukan kunci jenjang hari. Halaman berbahasa merangkai teksnya sendiri lewat pesan. */
+export function visaTierRangeOfKey(variantKey: string): { min: number; max: number } | null {
   const m = /^days:(\d+)-(\d+)$/.exec(variantKey)
-  return m ? visaTierText(Number(m[1]), Number(m[2])) : null
+  return m ? { min: Number(m[1]), max: Number(m[2]) } : null
+}
+
+/** Teks jenjang (Indonesia — admin, invoice) dari kunci varian visa; `null` bila bukan kunci jenjang hari. */
+export function visaTierTextOfKey(variantKey: string): string | null {
+  const r = visaTierRangeOfKey(variantKey)
+  return r ? visaTierText(r.min, r.max) : null
 }
