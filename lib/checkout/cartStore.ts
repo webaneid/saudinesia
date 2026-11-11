@@ -3,7 +3,7 @@ import { CART_MAX_ITEMS, checkoutSchema, entryPeople, withPeople, type CheckoutC
 import { CHECKOUT_KINDS, type CheckoutKind } from './kinds'
 
 // Keranjang pelanggan DI PERANGKAT (docs/arsitektur-booking-engine-v2.md §10.7, K11c-1 = a): `localStorage` kunci `snd-cart`. Isinya hanya pilihan
-// produk (masukan checkout yang sama dengan halaman produk) + label tampilan — TANPA harga (harga selalu dari pratinjau server) dan TANPA data pribadi.
+// produk (masukan checkout yang sama dengan halaman produk) + nama produk — TANPA harga (harga selalu dari pratinjau server) dan TANPA data pribadi.
 // Dibaca dengan Zod (isi rusak / versi lain dibuang); setiap akses dibungkus try/catch (mode privat, penyimpanan diblokir). Satu rombongan (K11c-2):
 // `people` = jumlah jamaah keranjang, diterapkan ke setiap entri saat dikirim.
 
@@ -15,7 +15,8 @@ const entrySchema = z.object({
   kind: z.enum(CHECKOUT_KINDS),
   productId: z.string().uuid(),
   title: z.string().max(200),
-  summary: z.string().max(400),
+  /** Ringkasan teks lama (sebelum I3) — tak lagi ditulis; ringkasan kini dibangun halaman dari `input` dalam bahasa halaman. Dibiarkan opsional supaya keranjang lama tetap terbaca. */
+  summary: z.string().max(400).optional(),
   input: checkoutSchema,
 }).strict()
 const cartSchema = z.object({
@@ -64,17 +65,21 @@ export function subscribeCart(onChange: () => void): () => void {
 
 export const serverCart = (): DeviceCart => EMPTY
 
+/** Alasan entri tak dapat ditambahkan — kunci `checkout.cartRefusal.*` (argumen `max` = CART_MAX_ITEMS). */
+export type CartRefusal = 'full' | 'hajiAlone' | 'cartHasHaji' | 'oneVisa'
+export const CART_REFUSALS: readonly CartRefusal[] = ['full', 'hajiAlone', 'cartHasHaji', 'oneVisa']
+
 /** Alasan entri tak dapat ditambahkan (aturan keranjang yang sama dengan server), null = boleh. */
-export function addRefusal(cart: DeviceCart, input: CheckoutInput): string | null {
-  if (cart.entries.length >= CART_MAX_ITEMS) return `Keranjang penuh (maksimal ${CART_MAX_ITEMS} produk)`
-  if (input.kind === 'haji') return 'Haji dipesan tersendiri — gunakan "Pesan sekarang"'
-  if (cart.entries.some(e => e.kind === 'haji')) return 'Keranjang berisi Haji — Haji dipesan tersendiri'
-  if (input.kind === 'visa' && cart.entries.some(e => e.kind === 'visa')) return 'Keranjang sudah berisi visa — satu pesanan satu jenis visa (hapus yang lama dulu)'
+export function addRefusal(cart: DeviceCart, input: CheckoutInput): CartRefusal | null {
+  if (cart.entries.length >= CART_MAX_ITEMS) return 'full'
+  if (input.kind === 'haji') return 'hajiAlone'
+  if (cart.entries.some(e => e.kind === 'haji')) return 'cartHasHaji'
+  if (input.kind === 'visa' && cart.entries.some(e => e.kind === 'visa')) return 'oneVisa'
   return null
 }
 
 /** Tambah entri; jumlah jamaah keranjang = yang terbanyak (satu rombongan). */
-export function addToCart(e: { kind: CheckoutKind; productId: string; title: string; summary: string; input: CheckoutInput }): string | null {
+export function addToCart(e: { kind: CheckoutKind; productId: string; title: string; input: CheckoutInput }): CartRefusal | null {
   const cart = readCart()
   const refusal = addRefusal(cart, e.input)
   if (refusal) return refusal

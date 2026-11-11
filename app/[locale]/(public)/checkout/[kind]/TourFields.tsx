@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import { Bus, CalendarDays, CheckCircle2, Hotel, Landmark, UsersRound } from 'lucide-react'
 import type { TourCheckout } from '@/lib/checkout/options'
 import { DATE_LONG, formatCalendarDate, type CalendarDate } from '@/lib/time'
@@ -14,6 +15,8 @@ import { priceHint, type FieldsChange } from './fields'
 // kuota kendaraan paket (dicari otomatis oleh mesin); `user_choice` → tanggal bebas lalu kendaraan pilihan di tanggal itu (opsional, ditagih terpisah);
 // hotel `user_choice` → hotel + jumlah kamar (opsional). Tanggal tur = tanggal kuota kendaraan bila ada.
 export function TourFields({ product, today, maxPeople, onChange }: { product: TourCheckout; today: string; maxPeople: number; onChange: FieldsChange }) {
+  const t = useTranslations('checkout')
+  const locale = useLocale()
   const included = product.transportMode === 'included'
   const dates = useMemo(() => [...new Set(product.slots.filter(s => s.seatsLeft > 0).map(s => s.date))], [product])
   const [date, setDate] = useState(included && dates.length === 1 ? dates[0]! : '')
@@ -29,30 +32,30 @@ export function TourFields({ product, today, maxPeople, onChange }: { product: T
   const roomCap = hotel ? Math.max(0, Math.min(CHECKOUT_MAX_ROOMS, hotel.roomsLeft)) : CHECKOUT_MAX_ROOMS
 
   useEffect(() => {
-    if (product.blocked) { onChange(null, product.blocked); return }
-    if (!date) { onChange(null, 'Pilih tanggal tur'); return }
-    if (date < today) { onChange(null, 'Tanggal tur tidak boleh sebelum hari ini'); return }
-    if (included && !chosen) { onChange(null, 'Kendaraan paket tidak tersedia di tanggal itu'); return }
-    if (cap < 1) { onChange(null, 'Kursi kendaraan sudah penuh di tanggal itu'); return }
-    if (hotel && roomCap < 1) { onChange(null, 'Kamar hotel pilihan sudah penuh'); return }
+    if (product.blocked) { onChange(null, t(`blocked.${product.blocked}`)); return }
+    if (!date) { onChange(null, t('tour.missing.pickDate')); return }
+    if (date < today) { onChange(null, t('tour.missing.datePast')); return }
+    if (included && !chosen) { onChange(null, t('tour.missing.noVehicle')); return }
+    if (cap < 1) { onChange(null, t('tour.missing.seatsFull')); return }
+    if (hotel && roomCap < 1) { onChange(null, t('tour.missing.hotelFull')); return }
     onChange({
       kind: 'tour', tourPackageId: product.id, tourDate: date, numPeople: Math.min(people, cap),
       ...(!included && chosen ? { transportQuotaId: chosen.quotaId } : {}),
       ...(hotel ? { chosenHotelRoomScheduleId: hotel.id, chosenHotelNumRooms: Math.min(hotelRooms, roomCap) } : {}),
     }, null)
-  }, [product, included, date, today, chosen, cap, people, hotel, hotelRooms, roomCap, onChange])
+  }, [product, included, date, today, chosen, cap, people, hotel, hotelRooms, roomCap, onChange, t])
 
   const includes = [
     ...product.sites.map(s => ({ icon: Landmark, text: s })),
-    ...(product.includedVehicle ? [{ icon: Bus, text: `Kendaraan: ${product.includedVehicle}` }] : []),
-    ...product.includedHotels.map(h => ({ icon: Hotel, text: h })),
+    ...(product.includedVehicle ? [{ icon: Bus, text: t('tour.vehicleIncluded', { vehicle: product.includedVehicle }) }] : []),
+    ...product.includedHotels.map(h => ({ icon: Hotel, text: t('common.withNights', { label: h.label, nights: h.nights }) })),
   ]
 
   return (
     <div className="space-y-5">
       {includes.length > 0 && (
         <div className="checkout-panel">
-          <h2 className="text-base font-bold text-brand-dark">Sudah termasuk</h2>
+          <h2 className="text-base font-bold text-brand-dark">{t('tour.included')}</h2>
           <ul className="grid gap-2 sm:grid-cols-2">
             {includes.map(x => <li key={x.text} className="flex items-center gap-2 text-sm"><CheckCircle2 className="h-4 w-4 shrink-0 text-brand" aria-hidden /> {x.text}</li>)}
           </ul>
@@ -60,31 +63,31 @@ export function TourFields({ product, today, maxPeople, onChange }: { product: T
       )}
 
       <div className="checkout-panel">
-        <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><CalendarDays className="h-4 w-4 text-brand" aria-hidden /> Jadwal & jumlah orang</h2>
+        <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><CalendarDays className="h-4 w-4 text-brand" aria-hidden /> {t('tour.schedule')}</h2>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <label htmlFor="tour-date" className="checkout-label">Tanggal tur</label>
+            <label htmlFor="tour-date" className="checkout-label">{t('tour.date')}</label>
             {included
-              ? <ChoiceSelect ariaLabel="Tanggal tur" value={date} onChange={setDate} placeholder="Pilih tanggal" clearable={false}
-                  options={dates.map(d => ({ id: d, label: formatCalendarDate(d as CalendarDate, DATE_LONG) }))} />
+              ? <ChoiceSelect ariaLabel={t('tour.date')} value={date} onChange={setDate} placeholder={t('common.pickDate')} clearable={false}
+                  options={dates.map(d => ({ id: d, label: formatCalendarDate(d as CalendarDate, DATE_LONG, locale) }))} />
               : <input id="tour-date" type="date" className="checkout-input" value={date} min={today} onChange={e => { setDate(e.target.value); setQuotaId('') }} />}
           </div>
           <div className="space-y-1.5">
-            <label htmlFor="people" className="checkout-label flex items-center gap-1.5"><UsersRound className="h-4 w-4 text-brand" aria-hidden /> Jumlah orang</label>
+            <label htmlFor="people" className="checkout-label flex items-center gap-1.5"><UsersRound className="h-4 w-4 text-brand" aria-hidden /> {t('tour.people')}</label>
             <PeopleStepper id="people" value={Math.min(people, Math.max(cap, 1))} onChange={setPeople} max={Math.max(cap, 1)} />
           </div>
         </div>
-        <p className="text-xs text-muted-foreground">Harga paket berlaku per rombongan{chosen && included ? ` · sisa ${chosen.seatsLeft} kursi` : ''}.</p>
+        <p className="text-xs text-muted-foreground">{chosen && included ? t('tour.perGroupSeats', { count: chosen.seatsLeft }) : t('tour.perGroup')}</p>
       </div>
 
       {product.transportMode === 'user_choice' && date && (
         <div className="checkout-panel">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><Bus className="h-4 w-4 text-brand" aria-hidden /> Kendaraan <span className="font-normal text-muted-foreground">(opsional)</span></h2>
-            <p className="text-sm text-muted-foreground">Ditagih per kendaraan, terpisah dari harga paket.</p>
+            <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><Bus className="h-4 w-4 text-brand" aria-hidden /> {t('tour.vehicle')} <span className="font-normal text-muted-foreground">{t('common.optional')}</span></h2>
+            <p className="text-sm text-muted-foreground">{t('tour.vehicleBilled')}</p>
           </div>
           {daySlots.length > 0 ? (
-            <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="Kendaraan">
+            <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t('tour.vehicle')}>
               {daySlots.map(s => {
                 const full = s.seatsLeft < 1
                 const active = s.quotaId === quotaId
@@ -94,32 +97,32 @@ export function TourFields({ product, today, maxPeople, onChange }: { product: T
                     <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brand-light"><Bus className="h-5 w-5 text-brand" aria-hidden /></span>
                     <span className="min-w-0 flex-1">
                       <span className="block font-semibold">{s.vehicle}</span>
-                      <span className="block text-xs text-muted-foreground">Maks. {s.capacity} orang · {full ? 'penuh' : `sisa ${s.seatsLeft} kursi`}</span>
-                      <span className="mt-1 block font-bold text-brand">{formatRupiah(s.price)} <span className="text-xs font-normal text-muted-foreground">/ kendaraan</span></span>
+                      <span className="block text-xs text-muted-foreground">{t('common.capacity', { capacity: s.capacity })} · {full ? t('common.full') : t('common.seatsLeft', { count: s.seatsLeft })}</span>
+                      <span className="mt-1 block font-bold text-brand">{formatRupiah(s.price)} <span className="text-xs font-normal text-muted-foreground">{t('common.perVehicle')}</span></span>
                     </span>
                   </button>
                 )
               })}
             </div>
-          ) : <p className="text-sm text-muted-foreground">Tidak ada kendaraan terjadwal di tanggal ini — paket tetap dapat dipesan tanpa kendaraan.</p>}
+          ) : <p className="text-sm text-muted-foreground">{t('tour.noVehicle')}</p>}
         </div>
       )}
 
       {product.hotelOptions.length > 0 && (
         <div className="checkout-panel">
           <div>
-            <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><Hotel className="h-4 w-4 text-brand" aria-hidden /> Hotel <span className="font-normal text-muted-foreground">(opsional)</span></h2>
-            <p className="text-sm text-muted-foreground">Ditagih per kamar per malam, terpisah dari harga paket.</p>
+            <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><Hotel className="h-4 w-4 text-brand" aria-hidden /> {t('tour.hotel')} <span className="font-normal text-muted-foreground">{t('common.optional')}</span></h2>
+            <p className="text-sm text-muted-foreground">{t('tour.hotelBilled')}</p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className="checkout-label">Hotel pilihan</label>
-              <ChoiceSelect ariaLabel="Hotel pilihan" value={hotelId} onChange={setHotelId} placeholder="Tanpa hotel"
-                options={product.hotelOptions.map(h => ({ id: h.id, label: `${h.label} (${h.nights} malam)`, hint: priceHint(h.pricePerNight, '/malam') }))} />
+              <label className="checkout-label">{t('tour.hotelPick')}</label>
+              <ChoiceSelect ariaLabel={t('tour.hotelPick')} value={hotelId} onChange={setHotelId} placeholder={t('tour.noHotel')}
+                options={product.hotelOptions.map(h => ({ id: h.id, label: t('common.withNights', { label: h.label, nights: h.nights }), hint: priceHint(h.pricePerNight, t('common.perNight')) }))} />
             </div>
             {hotel && (
               <div className="space-y-1.5">
-                <label htmlFor="hotel-rooms" className="checkout-label">Jumlah kamar</label>
+                <label htmlFor="hotel-rooms" className="checkout-label">{t('tour.rooms')}</label>
                 <PeopleStepper id="hotel-rooms" value={Math.min(hotelRooms, Math.max(roomCap, 1))} onChange={setHotelRooms} max={Math.max(roomCap, 1)} />
               </div>
             )}

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { UserRound, MailCheck } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,8 @@ type Step = 'form' | 'sent'
 interface RegisterFormProps { locale: string; next?: string | null; googleEnabled?: boolean }
 
 export function RegisterForm({ locale, next = null, googleEnabled = false }: RegisterFormProps) {
+  const t = useTranslations('authPages.register')
+  const c = useTranslations('authPages.common')
   const [step, setStep] = useState<Step>('form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -30,7 +33,7 @@ export function RegisterForm({ locale, next = null, googleEnabled = false }: Reg
     setError('')
     const phone = e164FromCountry(contact.phoneCountryCode, contact.phone)
     const whatsapp = e164FromCountry(contact.whatsappCountryCode, contact.whatsapp)
-    if (!phone || !whatsapp) { setError('Isi nomor telepon dan nomor WhatsApp.'); return false }
+    if (!phone || !whatsapp) { setError(t('contactRequired')); return false }
 
     setLoading(true)
     try {
@@ -40,11 +43,11 @@ export function RegisterForm({ locale, next = null, googleEnabled = false }: Reg
         body: JSON.stringify({ fullName, email, phone, whatsapp, locale, ...(next ? { next } : {}) }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? 'Pendaftaran gagal.'); return false }
+      if (!json.success) { setError(json.error ?? t('failed')); return false }
       startCooldown()
       return true
     } catch {
-      setError('Terjadi kesalahan. Periksa koneksi internet.')
+      setError(c('networkError'))
       return false
     } finally {
       setLoading(false)
@@ -62,59 +65,55 @@ export function RegisterForm({ locale, next = null, googleEnabled = false }: Reg
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           {step === 'form' ? <UserRound className="h-6 w-6 text-primary" /> : <MailCheck className="h-6 w-6 text-primary" />}
         </div>
-        <CardTitle>{step === 'form' ? 'Buat Akun' : 'Cek Email Anda'}</CardTitle>
+        <CardTitle>{step === 'form' ? t('title') : t('sentTitle')}</CardTitle>
         <CardDescription>
           {step === 'form'
-            ? 'Daftar dan mulai rencanakan perjalanan ibadah Anda'
-            : <>Kami mengirim tautan ke <strong>{email}</strong>. Klik tautan itu untuk membuat password dan mengaktifkan akun.</>}
+            ? t('description')
+            : t.rich('sentDescription', { email, strong: chunks => <strong>{chunks}</strong> })}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {step === 'form' && googleEnabled && (
           <>
-            <GoogleButton locale={locale} next={next} label="Daftar dengan Google" />
+            <GoogleButton locale={locale} next={next} label={t('google')} />
             <OrDivider />
           </>
         )}
         {step === 'form' && (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="fullName">Nama Lengkap</Label>
-              <Input id="fullName" placeholder="Sesuai paspor" value={fullName} onChange={(e) => setFullName(e.target.value)} required autoFocus />
+              <Label htmlFor="fullName">{c('fullName')}</Label>
+              <Input id="fullName" placeholder={c('fullNamePlaceholder')} value={fullName} onChange={(e) => setFullName(e.target.value)} required autoFocus />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input id="email" type="email" placeholder="nama@email.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-              <p className="text-xs text-muted-foreground">Tautan aktivasi dan pemulihan akun dikirim ke email ini.</p>
+              <Label htmlFor="email">{c('email')}</Label>
+              <Input id="email" type="email" placeholder={c('emailPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)} required />
+              <p className="text-xs text-muted-foreground">{t('emailHint')}</p>
             </div>
 
             <ContactPicker value={contact} onChange={setContact} showEmail={false} />
 
-            <p className="text-xs text-muted-foreground">
-              Kami mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas, selain lewat email. Persetujuan Anda diminta di langkah berikutnya, setelah email Anda terverifikasi.
-            </p>
+            <p className="text-xs text-muted-foreground">{t('whatsappNote')}</p>
 
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Mengirim...' : 'Daftar'}
+              {loading ? c('sending') : t('submit')}
             </Button>
             <p className="text-center text-sm text-muted-foreground">
-              Sudah punya akun? <a href={next ? `/${locale}/login?next=${encodeURIComponent(next)}` : `/${locale}/login`} className="text-primary hover:underline">Masuk</a>
+              {t('haveAccount')} <a href={next ? `/${locale}/login?next=${encodeURIComponent(next)}` : `/${locale}/login`} className="text-primary hover:underline">{c('login')}</a>
             </p>
           </form>
         )}
 
         {step === 'sent' && (
           <div className="space-y-4">
-            <p className="text-sm text-muted-foreground">
-              Tidak menerima email? Periksa folder spam, atau kirim ulang. Tautan berlaku 24 jam.
-            </p>
+            <p className="text-sm text-muted-foreground">{t('notReceived')}</p>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button variant="outline" className="w-full" disabled={loading || seconds > 0} onClick={() => void submit()}>
-              {seconds > 0 ? `Kirim ulang dalam ${seconds} detik` : loading ? 'Mengirim...' : 'Kirim ulang email'}
+              {seconds > 0 ? c('resendIn', { seconds }) : loading ? c('sending') : c('resend')}
             </Button>
             <Button variant="ghost" className="w-full text-sm" onClick={() => { setStep('form'); setError('') }}>
-              Ubah data pendaftaran
+              {t('editData')}
             </Button>
           </div>
         )}

@@ -210,6 +210,18 @@ t('SEC-110: zona aplikasi hidup di globalThis — instans modul KEDUA (Next dapa
   for (const good of ['Asia/Jakarta', 'UTC', 'America/Los_Angeles']) assert.equal(isCanonicalTimezone(good), true, good)
 })
 
+t('bahasa tampilan (K6): en → en-GB, bawaan & nilai asing → Indonesia; zona TIDAK ikut bahasa', () => {
+  const d = calendarDateOf(new Date(Date.UTC(2026, 11, 15)))
+  assert.equal(formatCalendarDate(d, DATE_LONG, 'en'), '15 December 2026')
+  assert.equal(formatCalendarDate(d, DATE_LONG, 'id'), '15 Desember 2026')
+  assert.equal(formatCalendarDate(d, DATE_LONG), '15 Desember 2026')
+  assert.equal(formatCalendarDate(d, DATE_LONG, 'xx'), '15 Desember 2026')
+  // 16:30 UTC = 23:30 WIB 15 Des, bukan 16 Des; dan dalam bahasa Inggris tetap tanggal WIB.
+  const at = new Date('2026-12-15T16:30:00Z')
+  assert.equal(formatInstant(at, DATE_LONG, 'Asia/Jakarta', 'en'), '15 December 2026')
+  assert.equal(formatInstant(new Date('2026-12-15T17:30:00Z'), DATE_LONG, 'Asia/Jakarta', 'en'), '16 December 2026')
+})
+
 await Promise.all(pending)
 console.log(failed ? `\n[${tzEnv}] ${failed} GAGAL` : `\n[${tzEnv}] SEMUA LULUS`)
 process.exit(failed ? 1 : 0)

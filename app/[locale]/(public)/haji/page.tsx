@@ -99,7 +99,7 @@ export default async function HajiCatalogPage({ params }: Props) {
                         {p.departureDate && (
                           <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
                             <Calendar className="h-4 w-4 text-brand" aria-hidden />
-                            {formatCalendarDate(p.departureDate, DATE_LONG)}
+                            {formatCalendarDate(p.departureDate, DATE_LONG, locale)}
                             {p.durationDays ? <span>· {t('card.days', { days: p.durationDays })}</span> : null}
                           </p>
                         )}

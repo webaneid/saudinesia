@@ -14,43 +14,6 @@
     "edit": "Edit",
     "view": "View"
   },
-  "auth": {
-    "login": "Login",
-    "register": "Register",
-    "phone": "WhatsApp Number",
-    "logout": "Logout",
-    "name": "Full Name",
-    "email": "Email"
-  },
-  "booking": {
-    "new": "New Booking",
-    "dates": "Travel Dates",
-    "hotel": "Select Hotel",
-    "transport": "Select Transport",
-    "muthowif": "Select Muthowif",
-    "addons": "Add-ons",
-    "pilgrims": "Pilgrim Data",
-    "payment": "Payment",
-    "summary": "Summary",
-    "status": {
-      "awaiting_payment": "Awaiting Payment",
-      "payment_review": "Payment Under Review",
-      "confirmed": "Confirmed",
-      "active": "Active",
-      "completed": "Completed",
-      "cancelled": "Cancelled"
-    }
-  },
-  "visa": {
-    "status": {
-      "pending_documents": "Pending Documents",
-      "documents_complete": "Documents Complete",
-      "submitted_to_syarikah": "Submitted to Syarikah",
-      "in_review": "In Review",
-      "issued": "Issued",
-      "rejected": "Rejected"
-    }
-  },
   "nav": {
     "home": "Home",
     "hotels": "Hotels",
@@ -70,7 +33,10 @@
     "register": "Sign up",
     "openMenu": "Open menu",
     "closeMenu": "Close menu",
-    "mainMenu": "Main menu"
+    "mainMenu": "Main menu",
+    "language": "Language",
+    "cart": "Cart",
+    "cartCount": "Cart, {count, plural, one {# product} other {# products}}"
   },
   "footer": {
     "tagline": "Umrah and Hajj services for Indonesian pilgrims.",
@@ -556,6 +522,496 @@
         "description": "Create an account to keep pilgrim data and track your orders in one place.",
         "button": "Create Account"
       }
+    }
+  },
+  "authPages": {
+    "common": {
+      "email": "Email",
+      "emailPlaceholder": "name@email.com",
+      "password": "Password",
+      "fullName": "Full Name",
+      "fullNamePlaceholder": "As in passport",
+      "networkError": "Something went wrong. Check your internet connection.",
+      "sending": "Sending...",
+      "saving": "Saving...",
+      "resend": "Resend email",
+      "resendIn": "Resend in {seconds} seconds",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
+      "privacyAgree": "I have read and agree to the Saudinesia <link>Privacy Policy</link>.",
+      "whatsappConsent": "I agree that Saudinesia may send payment notifications and order updates to the WhatsApp number above, in addition to email.",
+      "login": "Sign in",
+      "register": "Sign up"
+    },
+    "passwordHints": {
+      "minLength": "At least 8 characters",
+      "letter": "Contains a letter",
+      "digit": "Contains a number",
+      "special": "Contains a special character"
+    },
+    "login": {
+      "metaTitle": "Sign in",
+      "title": "Sign in",
+      "description": "Sign in to your Saudinesia account",
+      "google": "Sign in with Google",
+      "forgot": "Forgot password?",
+      "submit": "Sign in",
+      "submitting": "Verifying...",
+      "failed": "Sign-in failed.",
+      "noAccount": "Don't have an account?",
+      "errors": {
+        "googleUnavailable": "Google sign-in is not available yet. Use your email and password.",
+        "googleDenied": "Google sign-in was cancelled.",
+        "googleFailed": "Google sign-in failed. Please try again.",
+        "googleExpired": "Your Google sign-up session has expired. Please start again.",
+        "googleUnverified": "Your Google account email has not been verified by Google.",
+        "googleStaff": "Staff accounts sign in with email and password on the admin page.",
+        "googleInactive": "This account has been deactivated. Contact us for help.",
+        "googleRatelimited": "Too many attempts. Try again in a few minutes.",
+        "googleConflict": "This email is already linked to a different Google account. Contact us for help."
+      }
+    },
+    "register": {
+      "metaTitle": "Sign up",
+      "title": "Create an Account",
+      "description": "Sign up and start planning your pilgrimage",
+      "sentTitle": "Check Your Email",
+      "sentDescription": "We sent a link to <strong>{email}</strong>. Click it to create your password and activate your account.",
+      "google": "Sign up with Google",
+      "emailHint": "Activation and account recovery links are sent to this email.",
+      "whatsappNote": "We send payment notifications and order updates to the WhatsApp number above, in addition to email. We ask for your consent in the next step, after your email is verified.",
+      "contactRequired": "Enter your phone number and WhatsApp number.",
+      "failed": "Sign-up failed.",
+      "submit": "Sign up",
+      "haveAccount": "Already have an account?",
+      "notReceived": "Didn't get the email? Check your spam folder, or resend it. The link is valid for 24 hours.",
+      "editData": "Edit sign-up details"
+    },
+    "complete": {
+      "metaTitle": "Activate Account",
+      "title": "Create a Password",
+      "description": "One more step to activate your account",
+      "invalidTitle": "Link no longer valid",
+      "invalidDescription": "This link has already been used or has expired (valid for 24 hours).",
+      "registerAgain": "Sign up again",
+      "checking": "Checking link...",
+      "name": "Name",
+      "phone": "Phone",
+      "whatsapp": "WhatsApp",
+      "notYou": "Didn't sign up? Close this page — no account will be created.",
+      "failed": "Could not activate your account.",
+      "submit": "Activate account",
+      "submitting": "Activating..."
+    },
+    "google": {
+      "metaTitle": "Complete Sign-up",
+      "title": "Complete Sign-up",
+      "description": "Google has verified your email. One more step to create your account.",
+      "emailLabel": "Email (from Google)",
+      "failed": "Could not create your account.",
+      "submit": "Create account",
+      "submitting": "Creating account...",
+      "contactLater": "You will add your phone and WhatsApp numbers after the account is created."
+    },
+    "forgot": {
+      "metaTitle": "Forgot Password",
+      "title": "Forgot Password",
+      "description": "Enter your account email and we will send you a link to choose a new password",
+      "sentTitle": "Check Your Email",
+      "sentDescription": "If <strong>{email}</strong> is registered, we have sent a link to choose a new password. The link is valid for 30 minutes.",
+      "failed": "Failed.",
+      "submit": "Send reset link",
+      "remember": "Remember your password?",
+      "notReceived": "Didn't get the email? Check your spam folder, or resend it.",
+      "changeEmail": "Use a different email"
+    },
+    "reset": {
+      "metaTitle": "New Password",
+      "title": "Create a New Password",
+      "description": "Choose a strong new password",
+      "invalidTitle": "Invalid link",
+      "invalidDescription": "Request a new password reset link.",
+      "requestNew": "Request a new link",
+      "newPassword": "New Password",
+      "failed": "Could not change your password.",
+      "submit": "Save New Password"
+    },
+    "contactData": {
+      "metaTitle": "Complete Your Details",
+      "title": "Complete Your Details",
+      "description": "Hi {name}, enter your phone and WhatsApp numbers to continue.",
+      "contactRequired": "Enter your phone number and WhatsApp number.",
+      "whatsappNote": "We send payment notifications and order updates to this WhatsApp number, in addition to email. The number is not verified — make sure it is correct.",
+      "whatsappConsent": "I agree that Saudinesia may send payment notifications and order updates to the WhatsApp number above.",
+      "failed": "Could not save.",
+      "submit": "Save & continue"
+    }
+  },
+  "shared": {
+    "google": {
+      "or": "or"
+    },
+    "contact": {
+      "phone": "Phone Number",
+      "whatsapp": "WhatsApp Number",
+      "sameAsPhone": "Same as phone number",
+      "email": "Email"
+    },
+    "countryCode": {
+      "placeholder": "Country code",
+      "search": "Search country or code…"
+    },
+    "select": {
+      "placeholder": "Select…",
+      "search": "Type to search…",
+      "clear": "Clear selection",
+      "loading": "Loading…",
+      "empty": "No results."
+    }
+  },
+  "checkout": {
+    "page": {
+      "metaTitle": "Checkout",
+      "back": {
+        "package": "Back to Umrah Packages",
+        "visa": "Back to Visa",
+        "transport": "Back to Transport",
+        "haji": "Back to Hajj",
+        "hotel": "Back to Hotels",
+        "tour": "Back to Ziyarah Tours",
+        "muthowif": "Back to Muthowif",
+        "catering": "Back to Catering",
+        "flight": "Back to Flight Tickets"
+      },
+      "recalculated": "Prices are recalculated by the system when you order",
+      "staffNote": "You are signed in as staff. Orders for customers are created with the <link>admin booking form</link>."
+    },
+    "kinds": {
+      "package": "Umrah Package",
+      "visa": "Visa",
+      "transport": "Transport",
+      "haji": "Hajj",
+      "hotel": "Hotel",
+      "tour": "Ziyarah Tour",
+      "muthowif": "Muthowif",
+      "catering": "Catering",
+      "flight": "Flight Ticket"
+    },
+    "components": {
+      "flight": "Flight ticket",
+      "hotel_makkah": "Makkah hotel",
+      "hotel_madinah": "Madinah hotel",
+      "transport": "Transport",
+      "muthowif": "Muthowif",
+      "tour": "Sightseeing (Ziyarah Tour)",
+      "catering": "Catering"
+    },
+    "common": {
+      "optional": "(optional)",
+      "pickDate": "Select a date",
+      "perPersonShort": "/pax",
+      "perNight": "/night",
+      "perVehicle": "/ vehicle",
+      "perPassenger": "/passenger",
+      "capacity": "Up to {capacity, plural, one {# person} other {# people}}",
+      "full": "full",
+      "seatsLeft": "{count, plural, one {# seat} other {# seats}} left",
+      "nights": "{nights, plural, one {# night} other {# nights}}",
+      "withNights": "{label} ({nights, plural, one {# night} other {# nights}})",
+      "withDays": "{label} ({days, plural, one {# day} other {# days}})",
+      "muthowifService": "Muthowif Service",
+      "flightFallback": "Flight ticket"
+    },
+    "intro": {
+      "nights": "{nights, plural, one {# night} other {# nights}}",
+      "process": "Processing ± {days, plural, one {# day} other {# days}}",
+      "haji": "Hajj {type} {year}",
+      "stars": "{stars}-star",
+      "sites": "{count, plural, one {# site} other {# sites}}",
+      "guide": "Guide assigned by our team",
+      "from": "From",
+      "unit": {
+        "person": "/person",
+        "vehicle": "/vehicle",
+        "roomNight": "/room/night",
+        "package": "/package",
+        "personDay": "/person/day",
+        "passenger": "/passenger"
+      },
+      "menu": {
+        "asian": "Asian menu",
+        "arabic": "Arabic menu",
+        "western": "Western menu"
+      },
+      "board": {
+        "full_board": "Three meals a day",
+        "half_board": "Two meals a day"
+      }
+    },
+    "form": {
+      "completeChoices": "Complete your order choices",
+      "addToCart": "Add to cart",
+      "added": "Added to cart",
+      "viewCart": "View cart",
+      "orderFailed": "The order could not be created — try again",
+      "network": "Could not reach the server — check your internet connection"
+    },
+    "cartRefusal": {
+      "full": "Cart is full (maximum {max} products)",
+      "hajiAlone": "Hajj is ordered on its own — use \"Order now\"",
+      "cartHasHaji": "The cart contains Hajj — Hajj is ordered on its own",
+      "oneVisa": "The cart already contains a visa — one visa type per order (remove the old one first)"
+    },
+    "summary": {
+      "title": "Order summary",
+      "calculating": "Calculating price…",
+      "previewFailed": "The price cannot be calculated yet",
+      "subtotal": "Subtotal",
+      "taxIncluded": "(included)",
+      "total": "Total",
+      "dueDays": "Payment is due {days, plural, one {# day} other {# days}} after the invoice is issued.",
+      "processing": "Processing…",
+      "submit": "Order & issue invoice",
+      "afterTitle": "After ordering",
+      "afterPilgrims": "Fill in pilgrim details — choose from My Pilgrims or add a new one.",
+      "afterPay": "Pay according to the invoice and upload the transfer receipt. The order is confirmed once the payment is verified."
+    },
+    "stepper": {
+      "decrease": "Decrease",
+      "increase": "Increase"
+    },
+    "days": {
+      "title": "Service dates",
+      "start": "Start",
+      "end": "End",
+      "count": "{days, plural, one {# day} other {# days}} (including start and end days)",
+      "hint": "Select a start date, then an end date.",
+      "pickDates": "Select start and end dates",
+      "startPast": "The start date cannot be before today",
+      "endBeforeStart": "The end date cannot be before the start date",
+      "tooLong": "Maximum {max, plural, one {# day} other {# days}} per order"
+    },
+    "entry": {
+      "package": "Departs {date} · {people, plural, one {# person} other {# people}}",
+      "visa": "Planned departure {date} · {people, plural, one {# person} other {# people}}",
+      "visaDuration": "Planned departure {date} · {days}+ days · {people, plural, one {# person} other {# people}}",
+      "people": "{people, plural, one {# person} other {# people}}",
+      "hotel": "{checkIn} – {checkOut} · {rooms, plural, one {# room} other {# rooms}} · {people, plural, one {# person} other {# people}}",
+      "tour": "{date} · {people, plural, one {# person} other {# people}}",
+      "range": "{start} – {end} · {people, plural, one {# person} other {# people}}",
+      "flight": "Outbound {date} · {people, plural, one {# person} other {# people}}",
+      "flightReturn": "Outbound {date} · return {returnDate} · {people, plural, one {# person} other {# people}}"
+    },
+    "blocked": {
+      "packageMuthowifChoice": "This package uses a chosen muthowif — it cannot be ordered online yet, please contact us.",
+      "packageFlightPast": "This package's flight schedule has passed — it cannot be ordered.",
+      "tourUnpriced": "This package has no price yet — it cannot be ordered.",
+      "tourNoVehicle": "There is no vehicle schedule for this package yet — please contact us.",
+      "flightUnpriced": "This ticket has no price yet — it cannot be ordered.",
+      "flightPast": "This flight schedule period has passed.",
+      "flightSoldOut": "This schedule is sold out."
+    },
+    "package": {
+      "included": "Included",
+      "includedItem": {
+        "flight": "Flight ticket",
+        "hotelMakkah": "Makkah hotel, {nights, plural, one {# night} other {# nights}}",
+        "hotelMadinah": "Madinah hotel, {nights, plural, one {# night} other {# nights}}",
+        "visa": "Visa",
+        "transport": "Transport",
+        "muthowif": "Muthowif",
+        "catering": "Catering"
+      },
+      "schedule": "Schedule & number of pilgrims",
+      "flight": "Flight ticket",
+      "pickFlight": "Select a flight schedule",
+      "departure": "Departure date",
+      "available": "Available {from} – {to}",
+      "fromToday": "Select a date from today",
+      "people": "Number of pilgrims",
+      "choices": "Package options",
+      "choicesHint": "Choose what you need; leave empty if not needed. Prices shown are estimates per person (vehicles: per unit).",
+      "slot": {
+        "hotelMakkah": "Makkah hotel",
+        "hotelMadinah": "Madinah hotel",
+        "transport": "Vehicle",
+        "visa": "Visa",
+        "catering": "Catering"
+      },
+      "slotNone": {
+        "hotelMakkah": "No Makkah hotel",
+        "hotelMadinah": "No Madinah hotel",
+        "transport": "No vehicle",
+        "visa": "No visa",
+        "catering": "No catering"
+      },
+      "missing": {
+        "pickFlight": "Select a flight schedule",
+        "pickDate": "Select a departure date",
+        "outOfPeriod": "The departure date is outside the available period"
+      }
+    },
+    "visa": {
+      "bundled": "This visa is only sold together with <strong>{items}</strong> in the same order. Fill in your travel plan, <strong>add it to the cart</strong>, then add those products before ordering.",
+      "title": "Travel plan",
+      "travelDate": "Planned departure date",
+      "processNote": "Visa processing takes ± {days, plural, one {# working day} other {# working days}} — order well before departure.",
+      "people": "Number of pilgrims",
+      "stay": "Length of stay",
+      "pickStay": "Select length of stay",
+      "dayRange": "{min}–{max} days",
+      "dayExact": "{days, plural, one {# day} other {# days}}",
+      "missing": {
+        "unpriced": "This visa has no price yet",
+        "pickDate": "Select a planned departure date",
+        "datePast": "The departure date cannot be before today",
+        "pickStay": "Select length of stay"
+      }
+    },
+    "transport": {
+      "date": "Travel date",
+      "noSchedule": "No schedule yet — contact us for other dates.",
+      "vehicleTitle": "Choose a vehicle",
+      "vehicleGroup": "Vehicle",
+      "passengers": "Number of passengers",
+      "pickup": "Pick-up details",
+      "pickupPlaceholder": "E.g. flight number / hotel name",
+      "dropoff": "Drop-off details",
+      "dropoffPlaceholder": "E.g. destination hotel name",
+      "missing": {
+        "noSlots": "There is no vehicle schedule for this route yet",
+        "pickDate": "Select a travel date",
+        "pickVehicle": "Choose a vehicle",
+        "vehicleFull": "This vehicle is full on that date"
+      }
+    },
+    "haji": {
+      "schedule": "Schedule",
+      "depart": "Departure",
+      "season": "Hajj season {year}",
+      "return": "Return",
+      "duration": "Duration",
+      "durationDays": "{days, plural, one {# day} other {# days}}",
+      "people": "Number of pilgrims",
+      "full": "The quota is full.",
+      "seatsLeft": "{count, plural, one {# seat} other {# seats}} left.",
+      "missing": {
+        "unpriced": "This product has no price yet",
+        "soldOut": "This product's quota is full"
+      }
+    },
+    "hotel": {
+      "room": "Room",
+      "roomType": "Room type",
+      "pickRoom": "Select a room type",
+      "roomOption": "{name} · up to {capacity, plural, one {# person} other {# people}}",
+      "noRooms": "No rooms can be booked yet — please contact us.",
+      "stay": "Stay dates",
+      "checkIn": "Check-in",
+      "checkOut": "Check-out",
+      "scheduleInfo": "{nights, plural, one {# night} other {# nights}} · {price}/room/night · {rooms, plural, one {# room} other {# rooms}} left",
+      "periods": "Available periods: {list}",
+      "rooms": "Number of rooms",
+      "guests": "Number of guests",
+      "shortOfBeds": "{rooms, plural, one {# {room} room sleeps} other {# {room} rooms sleep}} {beds, plural, one {# person} other {# people}}, but there {guests, plural, one {is # guest} other {are # guests}}. Make sure you have enough rooms — the order can still be placed.",
+      "missing": {
+        "noRooms": "No rooms can be booked at this hotel yet",
+        "pickRoom": "Select a room type",
+        "pickDates": "Select check-in and check-out dates",
+        "checkInPast": "The check-in date cannot be before today",
+        "checkOutAfter": "The check-out date must be after check-in",
+        "tooLong": "Maximum {max, plural, one {# night} other {# nights}} per order",
+        "noPrice": "This room has no price yet",
+        "noPeriod": "This room has no price for those dates (all nights must fall in one period). Available periods: {list}",
+        "full": "This room is fully booked for that period"
+      }
+    },
+    "tour": {
+      "included": "Included",
+      "vehicleIncluded": "Vehicle: {vehicle}",
+      "schedule": "Schedule & number of people",
+      "date": "Tour date",
+      "people": "Number of people",
+      "perGroup": "The package price applies per group.",
+      "perGroupSeats": "The package price applies per group · {count, plural, one {# seat} other {# seats}} left.",
+      "vehicle": "Vehicle",
+      "vehicleBilled": "Charged per vehicle, separately from the package price.",
+      "noVehicle": "No vehicles are scheduled on this date — the package can still be ordered without a vehicle.",
+      "hotel": "Hotel",
+      "hotelBilled": "Charged per room per night, separately from the package price.",
+      "hotelPick": "Chosen hotel",
+      "noHotel": "No hotel",
+      "rooms": "Number of rooms",
+      "missing": {
+        "pickDate": "Select a tour date",
+        "datePast": "The tour date cannot be before today",
+        "noVehicle": "The package vehicle is not available on that date",
+        "seatsFull": "Vehicle seats are full on that date",
+        "hotelFull": "The chosen hotel is fully booked"
+      }
+    },
+    "muthowif": {
+      "price": "Price {price}/person/day.",
+      "people": "Number of pilgrims",
+      "guideNote": "Our team assigns the guide on duty and lets you know before departure.",
+      "missing": {
+        "unpriced": "The muthowif service has no price yet"
+      }
+    },
+    "catering": {
+      "seasonNote": "The price follows the season of the start date.",
+      "priceTitle": "Price per person per day",
+      "season": {
+        "regular": "Regular",
+        "ramadan": "Ramadan",
+        "hajj": "Hajj season"
+      },
+      "people": "Number of people",
+      "missing": {
+        "unpriced": "This catering has no price yet"
+      }
+    },
+    "flight": {
+      "depart": "Outbound · {route}",
+      "flyDate": "Flight date",
+      "periodInfo": "Schedule period {period} · {price}/passenger · {seats, plural, one {# seat} other {# seats}} left",
+      "returnTitle": "Return ticket (optional)",
+      "returnSchedule": "Return schedule",
+      "noReturn": "No return ticket",
+      "returnDate": "Return date",
+      "noReturns": "There is no return schedule for this route yet — book the return ticket separately once available.",
+      "passengers": "Number of passengers",
+      "soldOut": "Sold out.",
+      "missing": {
+        "pickDate": "Select a flight date",
+        "outOfPeriod": "The flight date must be within {period}",
+        "pickReturn": "Select a return date",
+        "returnOutOfPeriod": "The return date must be within {period}",
+        "soldOut": "Sold out"
+      }
+    }
+  },
+  "cart": {
+    "metaTitle": "Cart",
+    "title": "Cart",
+    "emptyTitle": "Your cart is empty",
+    "emptyHint": "Choose products from the catalog, then press “Add to cart” to order several services at once.",
+    "browse": "Browse services",
+    "people": "Number of pilgrims (one group)",
+    "peopleHint": "Applies to every product in the cart. The number of hotel rooms does not change — adjust it if needed.",
+    "remove": "Remove {title} from the cart",
+    "completeTitle": "Complete your cart",
+    "requires": "The visa in your cart requires: {items}.",
+    "catalogs": {
+      "packages": "Umrah Packages",
+      "haji": "Hajj",
+      "visa": "Visa",
+      "flight": "Flight Tickets",
+      "hotels": "Hotels",
+      "transport": "Transport",
+      "muthowif": "Muthowif",
+      "tours": "Ziyarah Tours",
+      "catering": "Catering"
     }
   }
 }

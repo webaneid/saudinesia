@@ -275,7 +275,7 @@ jobs:
             r = await get('/google/start?locale=id'); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('error=google_unavailable')) fail('google/start tanpa kredensial: ' + r.status + ' ' + r.headers.get('location'))
             r = await get('/google/callback?code=x&state=y'); if (r.status !== 307 || !(r.headers.get('location') ?? '').includes('error=google_failed')) fail('google/callback tanpa cookie state: ' + r.status + ' ' + r.headers.get('location'))
             r = await post('/google/complete', { fullName: 'Uji CI', privacyConsent: true }); if (r.status !== 401) fail('google/complete tanpa cookie harus 401: ' + r.status)
-            r = await fetch('http://localhost:3000/id/login'); const html = await r.text(); if (html.includes('Masuk dengan Google')) fail('tombol Google tampil tanpa kredensial')
+            r = await fetch('http://localhost:3000/id/login'); const html = await r.text(); if (html.includes('href=\"/api/v1/auth/google/start')) fail('tombol Google tampil tanpa kredensial')
             r = await fetch(base + '/contact', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phone: '628111222333', whatsapp: '628111222333', whatsappConsent: true }) })
             if (r.status !== 401) fail('PUT /auth/contact tanpa sesi harus 401: ' + r.status)
             r = await fetch('http://localhost:3000/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })

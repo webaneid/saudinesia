@@ -156,15 +156,19 @@ await t('localeCookie:false — tak ada set-cookie NEXT_LOCALE (/, /id, /en, /id
   for (const p of ['/', '/id', '/en', '/id/hotels', '/hotels']) assert.doesNotMatch((await run(p)).setCookie, /NEXT_LOCALE/, p)
   // cookie NEXT_LOCALE yang disodorkan klien tak boleh memengaruhi hasil
   const r = await middleware(new NextRequest(ORIGIN + '/', { headers: { cookie: 'NEXT_LOCALE=en', 'accept-language': 'id' } }))
-  assert.equal(new URL(r.headers.get('location')!, ORIGIN).pathname, '/id', 'cookie klien diabaikan; Accept-Language menang')
+  assert.equal(new URL(r.headers.get('location')!, ORIGIN).pathname, '/id', 'cookie klien diabaikan')
 })
 
-await t('Accept-Language: en → /en; id → /id; aneh/kosong/`*` → /id; header tak pernah masuk ke Location', async () => {
-  for (const [al, want] of [['en', '/en'], ['en-US,en;q=0.9', '/en'], ['id', '/id'], ['id-ID', '/id'], ['*', '/id'], ['', '/id'], ['xx-YY', '/id'], ['en;q=abc', '/id']] as const) {
+// Bawaan SELALU Indonesia (docs/arsitektur-i18n-frontend.md K1): bahasa browser tak pernah memilih bahasa; Inggris hanya lewat pengalih (URL /en).
+await t('localeDetection:false — Accept-Language APA PUN (termasuk en) → /id; header tak pernah masuk ke Location; /en tetap /en', async () => {
+  assert.equal(routing.localeDetection, false)
+  for (const [al, want] of [['en', '/id'], ['en-US,en;q=0.9', '/id'], ['id', '/id'], ['id-ID', '/id'], ['*', '/id'], ['', '/id'], ['xx-YY', '/id'], ['en;q=abc', '/id']] as const) {
     const r = await run('/', undefined, al ? { 'accept-language': al } : undefined)
     assert.equal(r.redirect?.pathname, want, JSON.stringify(al))
     assert.equal(r.redirect?.origin, ORIGIN)
   }
+  const en = await run('/en/hotels', undefined, { 'accept-language': 'id' })
+  assert.equal(en.redirect, null, 'URL /en dihormati apa pun bahasa browser')
 })
 
 console.log('== matcher ==')

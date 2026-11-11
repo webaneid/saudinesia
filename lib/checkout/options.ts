@@ -6,36 +6,41 @@ import { cateringSeasonPrices, sellPrices, visaFeeRules } from '@/lib/pricing/en
 import { flightAirlines } from '@/lib/catalog/flight'
 import { isReturnRoute } from './flight'
 import { getFeaturedCards, getFeaturedCardUrls } from '@/lib/media/urls'
-import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
+import { parseRequiredComponents, REQUIRED_COMPONENT_TYPES, type RequiredComponentType } from '@/lib/validators/visa'
 import { addDays, calendarDateOf, dbDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import type { CheckoutKind } from './kinds'
 
 // Data halaman checkout satu produk (docs/arsitektur-booking-engine-v2.md §10.5). HANYA harga JUAL dari titik harga (pembaca resmi `lib/pricing/engine/read`) — angka di sini
 // hanya petunjuk tampilan; yang mengikat adalah pratinjau server (`POST /bookings/preview`). Produk nonaktif/tak ada → null (halaman 404).
-// Jadwal/kuota yang sudah lewat tidak ditawarkan (zona aplikasi).
+// Jadwal/kuota yang sudah lewat tidak ditawarkan (zona aplikasi). TANPA teks antarmuka: alasan/isi/satuan dikembalikan sebagai KUNCI + angka, diterjemahkan
+// halaman (`checkout.*` di i18n/messages, docs/arsitektur-i18n-frontend.md §6.3); teks di sini hanya data produk (nama hotel, kendaraan, rute).
 
 export type Cover = { src: string; alt: string | null } | null
 /** Satu opsi pilihan. `hint` = harga jual untuk ditampilkan di samping label (per orang / per kendaraan), 0 = tanpa angka. */
-export type Choice = { id: string; label: string; hint: number }
+export type Choice = { id: string; label: string; hint: number; nights?: number; days?: number }
+/** Alasan produk tak dapat dipesan online — kunci `checkout.blocked.*`. */
+export type BlockedReason = 'packageMuthowifChoice' | 'packageFlightPast' | 'tourUnpriced' | 'tourNoVehicle' | 'flightUnpriced' | 'flightPast' | 'flightSoldOut'
+/** Isi paket yang sudah termasuk — kunci `checkout.package.includedItem.*` (+ malam untuk hotel). */
+export type IncludedItem = { key: 'flight' | 'hotelMakkah' | 'hotelMadinah' | 'visa' | 'transport' | 'muthowif' | 'catering'; nights?: number }
 
 export type PackageCheckout = {
   kind: 'package'; id: string; name: string; description: string | null; cover: Cover; pricePerPerson: number
   /** Alasan paket tak dapat dipesan online (mis. muthowif pilihan), null = dapat. */
-  blocked: string | null
+  blocked: BlockedReason | null
   nights: number
-  /** Periode tiket yang menentukan tanggal berangkat: tiket `included`, atau per opsi tiket (`user_choice`). */
-  includedFlight: { label: string; from: CalendarDate; to: CalendarDate } | null
+  /** Periode tiket yang menentukan tanggal berangkat: tiket `included`, atau per opsi tiket (`user_choice`). Label null = tanpa nama (halaman memakai teks umum). */
+  includedFlight: { label: string | null; from: CalendarDate; to: CalendarDate } | null
   choices: {
     hotelMakkah: Choice[]; hotelMadinah: Choice[]; transport: Choice[]; visa: Choice[]; catering: Choice[]
     flight: Array<Choice & { from: CalendarDate; to: CalendarDate }>
   }
-  /** Komponen yang sudah termasuk (label untuk ringkasan isi). */
-  included: string[]
+  /** Komponen yang sudah termasuk (kunci untuk ringkasan isi). */
+  included: IncludedItem[]
 }
 export type VisaCheckout = {
   kind: 'visa'; id: string; name: string; country: string; visaType: string; description: string | null; cover: Cover; processDays: number
   /** Visa plus: wajib dibeli bersama komponen lain — tak dapat dipesan sendirian lewat checkout satu produk. */
-  bundledWith: string[]
+  bundledWith: RequiredComponentType[]
   tiers: Array<{ minDays: number; maxDays: number; fee: number }>
 }
 export type TransportCheckout = {
@@ -58,14 +63,14 @@ export type TourCheckout = {
   /** Harga dasar PER PAKET (bukan per orang — mesin: `compositeLines` multiplier 1); pilihan kendaraan/hotel ditambahkan terpisah. */
   price: number
   /** Alasan paket tak dapat dipesan online, null = dapat. */
-  blocked: string | null
+  blocked: BlockedReason | null
   sites: string[]
   transportMode: 'included' | 'user_choice' | 'none'
   /** included: tanggal yang punya kuota kendaraan paket (dicari otomatis); user_choice: kendaraan pilihan per tanggal. */
   slots: TourSlot[]
   includedVehicle: string | null
   hotelMode: 'included' | 'user_choice' | 'none'
-  includedHotels: string[]
+  includedHotels: Array<{ label: string; nights: number }>
   hotelOptions: Array<{ id: string; label: string; nights: number; pricePerNight: number; roomsLeft: number }>
 }
 /** Layanan muthowif — satu layanan umum (K11b-3); petugas ditentukan tim. `id` = baris layanan (`MuthowifServicePrice`). */
@@ -87,7 +92,7 @@ export type FlightCheckout = {
   kind: 'flight'; id: string; name: string; origin: string; destination: string; description: string | null
   schedule: FlightOpt
   /** Alasan jadwal ini tak dapat dipesan online, null = dapat. */
-  blocked: string | null
+  blocked: BlockedReason | null
   /** Jadwal pulang (rute kebalikan, berharga, periode belum lewat) — opsional (K11b-1 = b). */
   returns: FlightOpt[]
 }
@@ -131,30 +136,28 @@ async function loadPackage(id: string): Promise<PackageCheckout | null> {
 
   const makkahNights = b.hotelMakkahMode === 'included' ? (b.hotelMakkah?.nights ?? 0) : 0
   const madinahNights = b.hotelMadinahMode === 'included' ? (b.hotelMadinah?.nights ?? 0) : 0
-  const included = [
-    b.flightMode === 'included' && 'Tiket pesawat',
-    b.hotelMakkahMode === 'included' && b.hotelMakkah && `Hotel Makkah ${b.hotelMakkah.nights} malam`,
-    b.hotelMadinahMode === 'included' && b.hotelMadinah && `Hotel Madinah ${b.hotelMadinah.nights} malam`,
-    b.visaMode === 'included' && 'Visa',
-    b.transportMode === 'included' && 'Transportasi',
-    b.muthowifMode === 'included' && 'Muthowif',
-    b.cateringMode === 'included' && 'Katering',
-  ].filter((x): x is string => typeof x === 'string')
+  const included: IncludedItem[] = []
+  if (b.flightMode === 'included') included.push({ key: 'flight' })
+  if (b.hotelMakkahMode === 'included' && b.hotelMakkah) included.push({ key: 'hotelMakkah', nights: b.hotelMakkah.nights })
+  if (b.hotelMadinahMode === 'included' && b.hotelMadinah) included.push({ key: 'hotelMadinah', nights: b.hotelMadinah.nights })
+  if (b.visaMode === 'included') included.push({ key: 'visa' })
+  if (b.transportMode === 'included') included.push({ key: 'transport' })
+  if (b.muthowifMode === 'included') included.push({ key: 'muthowif' })
+  if (b.cateringMode === 'included') included.push({ key: 'catering' })
 
   const inc = b.flightMode === 'included' ? window(b.includedFlightScheduleId) : null
   return {
     kind: 'package', id: pkg.id, name: pkg.name, description: pkg.description, cover: covers.get(id) ?? null, pricePerPerson: price.get(id) ?? 0,
-    blocked: b.muthowifMode === 'user_choice' ? 'Paket ini memakai muthowif pilihan — belum dapat dipesan online, hubungi kami.'
-      : b.flightMode === 'included' && !inc ? 'Jadwal tiket paket ini sudah lewat — belum dapat dipesan.' : null,
+    blocked: b.muthowifMode === 'user_choice' ? 'packageMuthowifChoice' : b.flightMode === 'included' && !inc ? 'packageFlightPast' : null,
     nights: makkahNights + madinahNights,
-    includedFlight: inc && b.includedFlightLabel ? { label: b.includedFlightLabel, ...inc } : inc ? { label: 'Tiket pesawat', ...inc } : null,
+    includedFlight: inc ? { label: b.includedFlightLabel || null, ...inc } : null,
     included,
     choices: {
-      hotelMakkah: b.hotelMakkahMode === 'user_choice' ? b.hotelMakkahOptions.map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName} (${o.nights} malam)`, hint: o.perPersonPrice })) : [],
-      hotelMadinah: b.hotelMadinahMode === 'user_choice' ? b.hotelMadinahOptions.map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName} (${o.nights} malam)`, hint: o.perPersonPrice })) : [],
+      hotelMakkah: b.hotelMakkahMode === 'user_choice' ? b.hotelMakkahOptions.map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName}`, nights: o.nights, hint: o.perPersonPrice })) : [],
+      hotelMadinah: b.hotelMadinahMode === 'user_choice' ? b.hotelMadinahOptions.map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName}`, nights: o.nights, hint: o.perPersonPrice })) : [],
       transport: b.transportMode === 'user_choice' ? b.vehicleOptions.map(o => ({ id: o.transportPricingId, label: o.vehicleName, hint: o.vehiclePrice })) : [],
       visa: b.visaMode === 'user_choice' ? b.visaOptions.map(o => ({ id: o.visaProductId, label: o.name, hint: o.price })) : [],
-      catering: b.cateringMode === 'user_choice' ? b.cateringOptions.map(o => ({ id: o.cateringOptionId, label: `${o.name} (${o.numDays} hari)`, hint: o.price })) : [],
+      catering: b.cateringMode === 'user_choice' ? b.cateringOptions.map(o => ({ id: o.cateringOptionId, label: o.name, days: o.numDays, hint: o.price })) : [],
       flight: b.flightMode === 'user_choice'
         ? b.flightOptions.flatMap(o => { const w = window(o.flightScheduleId); return w ? [{ id: o.flightScheduleId, label: o.label, hint: o.price, ...w }] : [] })
         : [],
@@ -166,10 +169,10 @@ async function loadVisa(id: string): Promise<VisaCheckout | null> {
   const v = await prisma.visaProduct.findUnique({ where: { id }, select: { id: true, name: true, country: true, visaType: true, description: true, processDays: true, isActive: true, requiredComponents: true } })
   if (!v?.isActive) return null
   const [tiers, covers] = await Promise.all([visaFeeRules([id]), getFeaturedCards('visa', [id])])
-  const model = visaSalesModel(parseRequiredComponents(v.requiredComponents).components)
+  const required = parseRequiredComponents(v.requiredComponents).components
   return {
     kind: 'visa', id: v.id, name: v.name, country: v.country, visaType: v.visaType, description: v.description, cover: covers.get(id) ?? null,
-    processDays: v.processDays, bundledWith: model.plus ? model.parts : [], tiers: (tiers.get(id) ?? []).filter(t => t.fee > 0),
+    processDays: v.processDays, bundledWith: REQUIRED_COMPONENT_TYPES.filter(t => required.some(c => c.type === t)), tiers: (tiers.get(id) ?? []).filter(t => t.fee > 0),
   }
 }
 
@@ -262,12 +265,11 @@ async function loadTour(id: string): Promise<TourCheckout | null> {
   const sell = price.get(id) ?? 0
   return {
     kind: 'tour', id: tp.id, name: tp.name, description: tp.description, cover: covers.get(id) ?? null, price: sell,
-    blocked: !(sell > 0) ? 'Harga paket ini belum ditetapkan — belum dapat dipesan.'
-      : b.transportMode === 'included' && slots.length === 0 ? 'Belum ada jadwal kendaraan untuk paket ini — hubungi kami.' : null,
+    blocked: !(sell > 0) ? 'tourUnpriced' : b.transportMode === 'included' && slots.length === 0 ? 'tourNoVehicle' : null,
     sites: tp.sites.map(x => x.tourismSite.name),
     transportMode: b.transportMode, slots, includedVehicle: b.transportMode === 'included' ? b.includedVehicleName : null,
     hotelMode: b.hotelMode,
-    includedHotels: b.hotelMode === 'included' ? b.hotels.map(h => `${h.hotelName} — ${h.roomTypeName} (${h.nights} malam)`) : [],
+    includedHotels: b.hotelMode === 'included' ? b.hotels.map(h => ({ label: `${h.hotelName} — ${h.roomTypeName}`, nights: h.nights })) : [],
     hotelOptions: b.hotelOptions
       .filter(o => rooms.has(o.hotelRoomScheduleId) && o.pricePerNight > 0)
       .map(o => ({ id: o.hotelRoomScheduleId, label: `${o.hotelName} — ${o.roomTypeName}`, nights: o.nights, pricePerNight: o.pricePerNight, roomsLeft: rooms.get(o.hotelRoomScheduleId) ?? 0 })),
@@ -278,6 +280,7 @@ async function loadMuthowif(id: string): Promise<MuthowifCheckout | null> {
   const svc = await prisma.muthowifServicePrice.findUnique({ where: { id }, select: { id: true } })
   if (!svc) return null
   const [price, guides] = await Promise.all([sellPrices('muthowif', [id]), prisma.muthowif.count({ where: { isActive: true } })])
+  // Nama tampil diterjemahkan halaman (`checkout.common.muthowifService`); nilai ini hanya cadangan untuk konsumen tanpa terjemahan.
   return { kind: 'muthowif', id, name: 'Layanan Muthowif', description: null, pricePerPersonDay: price.get(id) ?? 0, guides }
 }
 
@@ -313,9 +316,7 @@ async function loadFlight(id: string): Promise<FlightCheckout | null> {
   const schedule = opt(s)
   return {
     kind: 'flight', id: s.id, name: schedule.label, origin: s.route.origin, destination: s.route.destination, description: null, schedule,
-    blocked: !(schedule.price > 0) ? 'Harga tiket ini belum ditetapkan — belum dapat dipesan.'
-      : schedule.to < today ? 'Periode jadwal tiket ini sudah lewat.'
-      : schedule.seatsLeft < 1 ? 'Kursi jadwal ini sudah habis.' : null,
+    blocked: !(schedule.price > 0) ? 'flightUnpriced' : schedule.to < today ? 'flightPast' : schedule.seatsLeft < 1 ? 'flightSoldOut' : null,
     returns: candidates.map(opt).filter(r => r.price > 0 && r.seatsLeft > 0), // belum berharga / penuh tak ditawarkan (mesin juga menolak)
   }
 }

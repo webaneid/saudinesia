@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Check, ChevronsUpDown, Loader2, Search, X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 import { Flag } from '@/components/shared/Flag'
 import { matchOptions, type ComboOption } from '@/lib/ui/combobox'
@@ -47,7 +48,11 @@ type Placement = { top?: number; bottom?: number; left: number; minWidth: number
 // sehingga tidak pernah terpotong kartu/panel `overflow-hidden` induknya; selalu selebar isinya (min selebar kotak), membuka ke atas bila
 // ruang di bawah sempit (tinggi daftar menyesuaikan sisa ruang), dan bergeser ke kiri bila meluap layar. Warna merek admin dibawa lewat `brand-scope`. Dua mode: filter lokal atau
 // pencarian server-side (`onSearch`). Navigasi keyboard penuh (panah/Home/End/Enter/Esc/Tab) dengan pola ARIA combobox + listbox.
-export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pilih…', disabled, loading, clearable = true, searchPlaceholder = 'Ketik untuk mencari…', className, ariaLabel, searchable, size = 'md', onSearch }: Props) {
+export function AutocompleteSelect({ options, value, onChange, placeholder: placeholderProp, disabled, loading, clearable = true, searchPlaceholder: searchPlaceholderProp, className, ariaLabel, searchable, size = 'md', onSearch }: Props) {
+  // Teks bawaan ikut bahasa halaman (docs/arsitektur-i18n-frontend.md); pemanggil admin tetap memberi teksnya sendiri.
+  const t = useTranslations('shared.select')
+  const placeholder = placeholderProp ?? t('placeholder')
+  const searchPlaceholder = searchPlaceholderProp ?? t('search')
   const uid = useId()
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
@@ -164,7 +169,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
         {loading && <Loader2 aria-hidden className="size-3.5 shrink-0 animate-spin text-muted-foreground" />}
         {showClear && (
           <span
-            role="button" tabIndex={-1} aria-label="Hapus pilihan"
+            role="button" tabIndex={-1} aria-label={t('clear')}
             onMouseDown={e => { e.preventDefault(); e.stopPropagation() }}
             onClick={e => { e.stopPropagation(); onChange(null) }}
             className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
@@ -199,7 +204,7 @@ export function AutocompleteSelect({ options, value, onChange, placeholder = 'Pi
             tabIndex={hasSearch ? undefined : -1} onKeyDown={hasSearch ? undefined : onInputKey} aria-activedescendant={!hasSearch && shown[cursor] ? `${uid}-o${cursor}` : undefined}
             className="m-0 list-none overflow-y-auto p-1 outline-none"
           >
-            {shown.length === 0 && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted-foreground">{loading ? 'Memuat…' : 'Tidak ada hasil.'}</li>}
+            {shown.length === 0 && <li role="presentation" className="px-3 py-6 text-center text-sm text-muted-foreground">{loading ? t('loading') : t('empty')}</li>}
             {shown.map((o, i) => (
               <li
                 key={o.id} id={`${uid}-o${i}`} data-index={i} role="option" aria-selected={o.id === value}

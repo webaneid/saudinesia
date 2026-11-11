@@ -3,6 +3,7 @@ import { getTranslations } from 'next-intl/server'
 import { yearInApp } from '@/lib/time'
 import { availableCatalogs } from '@/lib/catalog/availability'
 import { PUBLIC_NAV } from './publicNav'
+import { LocaleSwitcher } from './LocaleSwitcher'
 
 // Kontak dan identitas badan usaha ditambahkan setelah pemilik memberi datanya (docs/arsitektur-frontend-publik.md §5) — tidak ada data karangan.
 export async function PublicFooter({ locale }: { locale: string }) {
@@ -46,7 +47,10 @@ export async function PublicFooter({ locale }: { locale: string }) {
         </div>
       </div>
       <div className="border-t border-brand-light/15">
-        <p className="mx-auto max-w-7xl px-4 py-4 text-xs text-brand-light/60">© {yearInApp()} Saudinesia. {t('rights')}</p>
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-4">
+          <p className="text-xs text-brand-light/60">© {yearInApp()} Saudinesia. {t('rights')}</p>
+          <LocaleSwitcher tone="onDark" />
+        </div>
       </div>
     </footer>
   )

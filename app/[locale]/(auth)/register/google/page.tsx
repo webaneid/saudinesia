@@ -4,7 +4,10 @@ import { getSession } from '@/lib/auth/session'
 import { readSignupCookie, readSignupNext } from '@/lib/auth/google'
 import { afterAuthPath } from '@/lib/auth/nextPath'
 import { readSignupCookieValue } from '@/lib/auth/googleCookies'
+import { authMetadata } from '../../metadata'
 import { GoogleSignupForm } from './GoogleSignupForm'
+
+export const generateMetadata = ({ params }: { params: Promise<{ locale: string }> }) => authMetadata(params, 'google')
 
 // Langkah terakhir pendaftaran Google: identitas SUDAH terverifikasi Google (cookie bertanda tangan); di sini pengguna menyetujui
 // kebijakan privasi sebelum akun dibuat (UU PDP).

@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { AlertCircle, ArrowRight, FileText, Loader2, UsersRound, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
@@ -18,15 +19,16 @@ type Props = {
 
 // Ringkasan pesanan dari PRATINJAU SERVER (harga jual saja). Tombol pesan hanya aktif bila pratinjau berhasil — angka yang dilihat = angka di invoice.
 export function CheckoutSummary({ preview, missing, submitting, submitError, onSubmit, children }: Props) {
+  const t = useTranslations('checkout.summary')
   const ready = preview.status === 'ok' && !missing
   return (
     <div className="checkout-panel lg:sticky lg:top-24">
-      <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><FileText className="h-4 w-4 text-brand" aria-hidden /> Ringkasan pesanan</h2>
+      <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><FileText className="h-4 w-4 text-brand" aria-hidden /> {t('title')}</h2>
 
       {missing ? (
         <p className="rounded-xl bg-brand-light px-3 py-2.5 text-sm text-brand-dark">{missing}</p>
       ) : preview.status === 'loading' || preview.status === 'idle' ? (
-        <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Menghitung harga…</p>
+        <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t('calculating')}</p>
       ) : preview.status === 'error' ? (
         <div className="space-y-1.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive" role="alert">
           <p className="flex items-start gap-2 font-semibold"><AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {preview.message}</p>
@@ -57,33 +59,33 @@ export function CheckoutSummary({ preview, missing, submitting, submitError, onS
             })}
           </ul>
           <dl className="space-y-1.5 border-t pt-3 text-sm">
-            <div className="flex justify-between"><dt className="text-muted-foreground">Subtotal</dt><dd className="tabular-nums">{formatRupiah(preview.data.total)}</dd></div>
-            {preview.data.tax.filter(t => t.amountIdr > 0).map(t => (
-              <div key={t.name} className="flex justify-between">
-                <dt className="text-muted-foreground">{t.name} {t.ratePercent}%{t.mode === 'included' ? ' (sudah termasuk)' : ''}</dt>
-                <dd className="tabular-nums">{t.mode === 'included' ? '' : formatRupiah(t.amountIdr)}</dd>
+            <div className="flex justify-between"><dt className="text-muted-foreground">{t('subtotal')}</dt><dd className="tabular-nums">{formatRupiah(preview.data.total)}</dd></div>
+            {preview.data.tax.filter(x => x.amountIdr > 0).map(x => (
+              <div key={x.name} className="flex justify-between">
+                <dt className="text-muted-foreground">{x.name} {x.ratePercent}%{x.mode === 'included' ? ` ${t('taxIncluded')}` : ''}</dt>
+                <dd className="tabular-nums">{x.mode === 'included' ? '' : formatRupiah(x.amountIdr)}</dd>
               </div>
             ))}
             <div className="flex items-baseline justify-between border-t pt-2">
-              <dt className="font-bold text-brand-dark">Total</dt>
+              <dt className="font-bold text-brand-dark">{t('total')}</dt>
               <dd className="text-xl font-extrabold tabular-nums text-brand">{formatRupiah(preview.data.grandTotal)}</dd>
             </div>
           </dl>
-          <p className="text-xs text-muted-foreground">Jatuh tempo pembayaran {preview.data.dueDays} hari setelah invoice terbit.</p>
+          <p className="text-xs text-muted-foreground">{t('dueDays', { days: preview.data.dueDays })}</p>
         </div>
       )}
 
       {submitError && <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive" role="alert">{submitError}</p>}
 
       <button type="button" onClick={onSubmit} disabled={!ready || submitting} className="btn-brand-solid w-full disabled:opacity-50">
-        {submitting ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Memproses…</> : <>Pesan &amp; terbitkan invoice <ArrowRight className="h-4 w-4" aria-hidden /></>}
+        {submitting ? <><Loader2 className="h-4 w-4 animate-spin" aria-hidden /> {t('processing')}</> : <>{t('submit')} <ArrowRight className="h-4 w-4" aria-hidden /></>}
       </button>
       {children}
 
       <div className="space-y-2 rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground">
-        <p className="font-semibold text-foreground">Setelah memesan</p>
-        <p className="flex gap-2"><UsersRound className="h-4 w-4 shrink-0 text-brand" aria-hidden /> Isi data jamaah — pilih dari Jamaah Saya atau tambah baru.</p>
-        <p className="flex gap-2"><Wallet className="h-4 w-4 shrink-0 text-brand" aria-hidden /> Bayar sesuai invoice dan unggah bukti transfer. Pesanan dikonfirmasi setelah pembayaran diverifikasi.</p>
+        <p className="font-semibold text-foreground">{t('afterTitle')}</p>
+        <p className="flex gap-2"><UsersRound className="h-4 w-4 shrink-0 text-brand" aria-hidden /> {t('afterPilgrims')}</p>
+        <p className="flex gap-2"><Wallet className="h-4 w-4 shrink-0 text-brand" aria-hidden /> {t('afterPay')}</p>
       </div>
     </div>
   )

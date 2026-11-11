@@ -2,17 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { ShieldCheck, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { PasswordHints, passwordMeetsHints } from '../../PasswordHints'
 
 type Preview = { email: string; fullName: string; phone: string; whatsapp: string; next: string | null }
 
 // Menampilkan isian pendaftaran dari token (hanya baca) lalu meminta password. Token baru dikonsumsi saat tombol ditekan —
 // membuka halaman ini (juga oleh pemindai tautan email) tidak menghanguskan tautan.
 export function CompleteRegistrationForm({ locale, token }: { locale: string; token: string }) {
+  const t = useTranslations('authPages.complete')
+  const c = useTranslations('authPages.common')
   const router = useRouter()
   const [preview, setPreview] = useState<Preview | null>(null)
   const [invalid, setInvalid] = useState(false)
@@ -33,13 +37,6 @@ export function CompleteRegistrationForm({ locale, token }: { locale: string; to
       .catch(() => setInvalid(true))
   }, [token])
 
-  const hints = [
-    { ok: password.length >= 8, text: 'Minimal 8 karakter' },
-    { ok: /[a-zA-Z]/.test(password), text: 'Ada huruf' },
-    { ok: /[0-9]/.test(password), text: 'Ada angka' },
-    { ok: /[^a-zA-Z0-9]/.test(password), text: 'Ada karakter spesial' },
-  ]
-
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
@@ -49,10 +46,10 @@ export function CompleteRegistrationForm({ locale, token }: { locale: string; to
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password, privacyConsent, whatsappConsent }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? 'Gagal mengaktifkan akun.'); return }
+      if (!json.success) { setError(json.error ?? t('failed')); return }
       router.push(preview?.next ?? `/${locale}/dashboard`) // jalur kembali sudah disaring server (lib/auth/nextPath.ts)
     } catch {
-      setError('Terjadi kesalahan. Periksa koneksi internet.')
+      setError(c('networkError'))
     } finally {
       setLoading(false)
     }
@@ -62,11 +59,11 @@ export function CompleteRegistrationForm({ locale, token }: { locale: string; to
     return (
       <Card className="w-full max-w-sm">
         <CardHeader className="text-center">
-          <CardTitle>Tautan tidak berlaku</CardTitle>
-          <CardDescription>Tautan sudah dipakai atau kedaluwarsa (berlaku 24 jam).</CardDescription>
+          <CardTitle>{t('invalidTitle')}</CardTitle>
+          <CardDescription>{t('invalidDescription')}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Button className="w-full" onClick={() => router.push(`/${locale}/register`)}>Daftar ulang</Button>
+          <Button className="w-full" onClick={() => router.push(`/${locale}/register`)}>{t('registerAgain')}</Button>
         </CardContent>
       </Card>
     )
@@ -78,56 +75,47 @@ export function CompleteRegistrationForm({ locale, token }: { locale: string; to
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           <ShieldCheck className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle>Buat Password</CardTitle>
-        <CardDescription>Satu langkah lagi untuk mengaktifkan akun Anda</CardDescription>
+        <CardTitle>{t('title')}</CardTitle>
+        <CardDescription>{t('description')}</CardDescription>
       </CardHeader>
       <CardContent>
         {!preview ? (
-          <p className="text-center text-sm text-muted-foreground">Memeriksa tautan...</p>
+          <p className="text-center text-sm text-muted-foreground">{t('checking')}</p>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <dl className="space-y-1 rounded-md border bg-muted/40 p-3 text-sm">
-              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Nama</dt><dd className="text-right font-medium">{preview.fullName}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Email</dt><dd className="text-right font-medium break-all">{preview.email}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">Telepon</dt><dd className="text-right font-medium">+{preview.phone}</dd></div>
-              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">WhatsApp</dt><dd className="text-right font-medium">+{preview.whatsapp}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t('name')}</dt><dd className="text-right font-medium">{preview.fullName}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{c('email')}</dt><dd className="text-right font-medium break-all">{preview.email}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t('phone')}</dt><dd className="text-right font-medium">+{preview.phone}</dd></div>
+              <div className="flex justify-between gap-3"><dt className="text-muted-foreground">{t('whatsapp')}</dt><dd className="text-right font-medium">+{preview.whatsapp}</dd></div>
             </dl>
-            <p className="text-xs text-muted-foreground">Bukan Anda yang mendaftar? Tutup halaman ini — tidak ada akun yang dibuat.</p>
+            <p className="text-xs text-muted-foreground">{t('notYou')}</p>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{c('password')}</Label>
               <div className="relative">
                 <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="••••••••" value={password}
                   onChange={(e) => setPassword(e.target.value)} className="pr-10" required autoFocus autoComplete="new-password" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Sembunyikan password' : 'Tampilkan password'}
+                <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? c('hidePassword') : c('showPassword')}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
-              {password && (
-                <div className="grid grid-cols-2 gap-1 pt-1">
-                  {hints.map((h) => (
-                    <p key={h.text} className={`text-xs ${h.ok ? 'text-green-600' : 'text-muted-foreground'}`}>{h.ok ? '✓' : '○'} {h.text}</p>
-                  ))}
-                </div>
-              )}
+              <PasswordHints password={password} />
             </div>
             <label className="flex items-start gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={whatsappConsent} onChange={(e) => setWhatsappConsent(e.target.checked)}
                 className="mt-0.5 h-3.5 w-3.5 rounded border-input" required />
-              <span>Saya setuju Saudinesia mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas, selain lewat email.</span>
+              <span>{c('whatsappConsent')}</span>
             </label>
             <label className="flex items-start gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={privacyConsent} onChange={(e) => setPrivacyConsent(e.target.checked)}
                 className="mt-0.5 h-3.5 w-3.5 rounded border-input" required />
-              <span>
-                Saya telah membaca dan menyetujui{' '}
-                <a href={`/${locale}/privacy`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Kebijakan Privasi</a>
-              </span>
+              <span>{c.rich('privacyAgree', { link: chunks => <a href={`/${locale}/privacy`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{chunks}</a> })}</span>
             </label>
             {error && <p className="text-sm text-destructive">{error}</p>}
-            <Button type="submit" className="w-full" disabled={loading || !privacyConsent || !whatsappConsent || hints.some((h) => !h.ok)}>
-              {loading ? 'Mengaktifkan...' : 'Aktifkan akun'}
+            <Button type="submit" className="w-full" disabled={loading || !privacyConsent || !whatsappConsent || !passwordMeetsHints(password)}>
+              {loading ? t('submitting') : t('submit')}
             </Button>
           </form>
         )}

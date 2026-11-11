@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { PhoneCall } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,6 +13,8 @@ import { e164FromCountry } from '@/lib/utils/phone'
 interface Props { locale: string; next?: string | null; name: string; phone: string; whatsapp: string; needsConsent: boolean; needsPrivacy: boolean }
 
 export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, needsConsent, needsPrivacy }: Props) {
+  const t = useTranslations('authPages.contactData')
+  const c = useTranslations('authPages.common')
   const router = useRouter()
   const [contact, setContact] = useState<ContactValue>(() => contactFromStored(phone, whatsapp))
   const [consent, setConsent] = useState(!needsConsent)
@@ -24,7 +27,7 @@ export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, n
     setError('')
     const p = e164FromCountry(contact.phoneCountryCode, contact.phone)
     const w = e164FromCountry(contact.whatsappCountryCode, contact.whatsapp)
-    if (!p || !w) { setError('Isi nomor telepon dan nomor WhatsApp.'); return }
+    if (!p || !w) { setError(t('contactRequired')); return }
 
     setLoading(true)
     try {
@@ -33,11 +36,11 @@ export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, n
         body: JSON.stringify({ phone: p, whatsapp: w, ...(needsConsent ? { whatsappConsent: consent } : {}), ...(needsPrivacy ? { privacyConsent: privacy } : {}) }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? 'Gagal menyimpan.'); return }
+      if (!json.success) { setError(json.error ?? t('failed')); return }
       router.push(next ?? `/${locale}/dashboard`)
       router.refresh()
     } catch {
-      setError('Terjadi kesalahan. Periksa koneksi internet.')
+      setError(c('networkError'))
     } finally {
       setLoading(false)
     }
@@ -49,29 +52,27 @@ export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, n
         <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
           <PhoneCall className="h-6 w-6 text-primary" />
         </div>
-        <CardTitle>Lengkapi Data</CardTitle>
-        <CardDescription>Halo {name.split(' ')[0]}, isi nomor telepon dan WhatsApp Anda untuk melanjutkan.</CardDescription>
+        <CardTitle>{t('title')}</CardTitle>
+        <CardDescription>{t('description', { name: name.split(' ')[0] ?? '' })}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <ContactPicker value={contact} onChange={setContact} showEmail={false} />
-          <p className="text-xs text-muted-foreground">
-            Kami mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp ini, selain lewat email. Nomor tidak diverifikasi — pastikan benar.
-          </p>
+          <p className="text-xs text-muted-foreground">{t('whatsappNote')}</p>
           {needsConsent && (
             <label className="flex items-start gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 rounded border-input" required />
-              <span>Saya setuju Saudinesia mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas.</span>
+              <span>{t('whatsappConsent')}</span>
             </label>
           )}
           {needsPrivacy && (
             <label className="flex items-start gap-2 text-xs text-muted-foreground">
               <input type="checkbox" checked={privacy} onChange={(e) => setPrivacy(e.target.checked)} className="mt-0.5 h-3.5 w-3.5 rounded border-input" required />
-              <span>Saya telah membaca dan menyetujui <a href={`/${locale}/privacy`} target="_blank" rel="noreferrer" className="underline">Kebijakan Privasi</a> Saudinesia.</span>
+              <span>{c.rich('privacyAgree', { link: chunks => <a href={`/${locale}/privacy`} target="_blank" rel="noreferrer" className="underline">{chunks}</a> })}</span>
             </label>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={loading || !consent || !privacy}>{loading ? 'Menyimpan...' : 'Simpan & lanjutkan'}</Button>
+          <Button type="submit" className="w-full" disabled={loading || !consent || !privacy}>{loading ? c('saving') : t('submit')}</Button>
         </form>
       </CardContent>
     </Card>

@@ -14,43 +14,6 @@
     "edit": "Edit",
     "view": "Lihat"
   },
-  "auth": {
-    "login": "Masuk",
-    "register": "Daftar",
-    "phone": "Nomor WhatsApp",
-    "logout": "Keluar",
-    "name": "Nama Lengkap",
-    "email": "Email"
-  },
-  "booking": {
-    "new": "Buat Booking",
-    "dates": "Tanggal Perjalanan",
-    "hotel": "Pilih Hotel",
-    "transport": "Pilih Transportasi",
-    "muthowif": "Pilih Muthowif",
-    "addons": "Layanan Tambahan",
-    "pilgrims": "Data Jamaah",
-    "payment": "Pembayaran",
-    "summary": "Ringkasan",
-    "status": {
-      "awaiting_payment": "Menunggu Pembayaran",
-      "payment_review": "Menunggu Verifikasi",
-      "confirmed": "Dikonfirmasi",
-      "active": "Dalam Perjalanan",
-      "completed": "Selesai",
-      "cancelled": "Dibatalkan"
-    }
-  },
-  "visa": {
-    "status": {
-      "pending_documents": "Menunggu Dokumen",
-      "documents_complete": "Dokumen Lengkap",
-      "submitted_to_syarikah": "Dikirim ke Syarikah",
-      "in_review": "Sedang Diproses",
-      "issued": "Visa Terbit",
-      "rejected": "Ditolak"
-    }
-  },
   "nav": {
     "home": "Beranda",
     "hotels": "Hotel",
@@ -70,7 +33,10 @@
     "register": "Daftar",
     "openMenu": "Buka menu",
     "closeMenu": "Tutup menu",
-    "mainMenu": "Menu utama"
+    "mainMenu": "Menu utama",
+    "language": "Bahasa",
+    "cart": "Keranjang",
+    "cartCount": "Keranjang, {count} produk"
   },
   "footer": {
     "tagline": "Layanan umroh dan haji untuk jamaah Indonesia.",
@@ -556,6 +522,496 @@
         "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
         "button": "Daftar Akun"
       }
+    }
+  },
+  "authPages": {
+    "common": {
+      "email": "Email",
+      "emailPlaceholder": "nama@email.com",
+      "password": "Password",
+      "fullName": "Nama Lengkap",
+      "fullNamePlaceholder": "Sesuai paspor",
+      "networkError": "Terjadi kesalahan. Periksa koneksi internet.",
+      "sending": "Mengirim...",
+      "saving": "Menyimpan...",
+      "resend": "Kirim ulang email",
+      "resendIn": "Kirim ulang dalam {seconds} detik",
+      "showPassword": "Tampilkan password",
+      "hidePassword": "Sembunyikan password",
+      "privacyAgree": "Saya telah membaca dan menyetujui <link>Kebijakan Privasi</link> Saudinesia.",
+      "whatsappConsent": "Saya setuju Saudinesia mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas, selain lewat email.",
+      "login": "Masuk",
+      "register": "Daftar"
+    },
+    "passwordHints": {
+      "minLength": "Minimal 8 karakter",
+      "letter": "Ada huruf",
+      "digit": "Ada angka",
+      "special": "Ada karakter spesial"
+    },
+    "login": {
+      "metaTitle": "Masuk",
+      "title": "Masuk",
+      "description": "Masuk ke akun Saudinesia Anda",
+      "google": "Masuk dengan Google",
+      "forgot": "Lupa password?",
+      "submit": "Masuk",
+      "submitting": "Memverifikasi...",
+      "failed": "Login gagal.",
+      "noAccount": "Belum punya akun?",
+      "errors": {
+        "googleUnavailable": "Masuk dengan Google belum tersedia. Gunakan email dan password.",
+        "googleDenied": "Masuk dengan Google dibatalkan.",
+        "googleFailed": "Masuk dengan Google gagal. Silakan coba lagi.",
+        "googleExpired": "Sesi pendaftaran Google berakhir. Silakan mulai lagi.",
+        "googleUnverified": "Email akun Google Anda belum terverifikasi oleh Google.",
+        "googleStaff": "Akun staf masuk dengan email dan password lewat halaman admin.",
+        "googleInactive": "Akun ini dinonaktifkan. Hubungi kami untuk bantuan.",
+        "googleRatelimited": "Terlalu banyak percobaan. Coba lagi beberapa menit lagi.",
+        "googleConflict": "Email ini sudah tersambung dengan akun Google lain. Hubungi kami untuk bantuan."
+      }
+    },
+    "register": {
+      "metaTitle": "Daftar",
+      "title": "Buat Akun",
+      "description": "Daftar dan mulai rencanakan perjalanan ibadah Anda",
+      "sentTitle": "Cek Email Anda",
+      "sentDescription": "Kami mengirim tautan ke <strong>{email}</strong>. Klik tautan itu untuk membuat password dan mengaktifkan akun.",
+      "google": "Daftar dengan Google",
+      "emailHint": "Tautan aktivasi dan pemulihan akun dikirim ke email ini.",
+      "whatsappNote": "Kami mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas, selain lewat email. Persetujuan Anda diminta di langkah berikutnya, setelah email Anda terverifikasi.",
+      "contactRequired": "Isi nomor telepon dan nomor WhatsApp.",
+      "failed": "Pendaftaran gagal.",
+      "submit": "Daftar",
+      "haveAccount": "Sudah punya akun?",
+      "notReceived": "Tidak menerima email? Periksa folder spam, atau kirim ulang. Tautan berlaku 24 jam.",
+      "editData": "Ubah data pendaftaran"
+    },
+    "complete": {
+      "metaTitle": "Aktifkan Akun",
+      "title": "Buat Password",
+      "description": "Satu langkah lagi untuk mengaktifkan akun Anda",
+      "invalidTitle": "Tautan tidak berlaku",
+      "invalidDescription": "Tautan sudah dipakai atau kedaluwarsa (berlaku 24 jam).",
+      "registerAgain": "Daftar ulang",
+      "checking": "Memeriksa tautan...",
+      "name": "Nama",
+      "phone": "Telepon",
+      "whatsapp": "WhatsApp",
+      "notYou": "Bukan Anda yang mendaftar? Tutup halaman ini — tidak ada akun yang dibuat.",
+      "failed": "Gagal mengaktifkan akun.",
+      "submit": "Aktifkan akun",
+      "submitting": "Mengaktifkan..."
+    },
+    "google": {
+      "metaTitle": "Lengkapi Pendaftaran",
+      "title": "Lengkapi Pendaftaran",
+      "description": "Email Anda sudah diverifikasi Google. Satu langkah lagi untuk membuat akun.",
+      "emailLabel": "Email (dari Google)",
+      "failed": "Gagal membuat akun.",
+      "submit": "Buat akun",
+      "submitting": "Membuat akun...",
+      "contactLater": "Nomor telepon dan WhatsApp dilengkapi setelah akun dibuat."
+    },
+    "forgot": {
+      "metaTitle": "Lupa Password",
+      "title": "Lupa Password",
+      "description": "Masukkan email akun Anda, kami kirim tautan untuk memilih password baru",
+      "sentTitle": "Cek Email Anda",
+      "sentDescription": "Jika <strong>{email}</strong> terdaftar, kami mengirim tautan untuk memilih password baru. Tautan berlaku 30 menit.",
+      "failed": "Gagal.",
+      "submit": "Kirim tautan reset",
+      "remember": "Ingat password?",
+      "notReceived": "Tidak menerima email? Periksa folder spam, atau kirim ulang.",
+      "changeEmail": "Ganti email"
+    },
+    "reset": {
+      "metaTitle": "Password Baru",
+      "title": "Buat Password Baru",
+      "description": "Pilih password baru yang kuat",
+      "invalidTitle": "Tautan tidak valid",
+      "invalidDescription": "Minta tautan reset password yang baru.",
+      "requestNew": "Minta tautan baru",
+      "newPassword": "Password Baru",
+      "failed": "Gagal mengubah password.",
+      "submit": "Simpan Password Baru"
+    },
+    "contactData": {
+      "metaTitle": "Lengkapi Data",
+      "title": "Lengkapi Data",
+      "description": "Halo {name}, isi nomor telepon dan WhatsApp Anda untuk melanjutkan.",
+      "contactRequired": "Isi nomor telepon dan nomor WhatsApp.",
+      "whatsappNote": "Kami mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp ini, selain lewat email. Nomor tidak diverifikasi — pastikan benar.",
+      "whatsappConsent": "Saya setuju Saudinesia mengirim notifikasi pembayaran dan pembaruan pesanan ke nomor WhatsApp di atas.",
+      "failed": "Gagal menyimpan.",
+      "submit": "Simpan & lanjutkan"
+    }
+  },
+  "shared": {
+    "google": {
+      "or": "atau"
+    },
+    "contact": {
+      "phone": "Nomor HP",
+      "whatsapp": "Nomor WhatsApp",
+      "sameAsPhone": "Sama dengan nomor HP",
+      "email": "Email"
+    },
+    "countryCode": {
+      "placeholder": "Kode negara",
+      "search": "Cari negara atau kode…"
+    },
+    "select": {
+      "placeholder": "Pilih…",
+      "search": "Ketik untuk mencari…",
+      "clear": "Hapus pilihan",
+      "loading": "Memuat…",
+      "empty": "Tidak ada hasil."
+    }
+  },
+  "checkout": {
+    "page": {
+      "metaTitle": "Checkout",
+      "back": {
+        "package": "Kembali ke Paket Umroh",
+        "visa": "Kembali ke Visa",
+        "transport": "Kembali ke Transportasi",
+        "haji": "Kembali ke Haji",
+        "hotel": "Kembali ke Hotel",
+        "tour": "Kembali ke Paket Ziarah",
+        "muthowif": "Kembali ke Muthowif",
+        "catering": "Kembali ke Katering",
+        "flight": "Kembali ke Tiket Pesawat"
+      },
+      "recalculated": "Harga dihitung ulang oleh sistem saat Anda memesan",
+      "staffNote": "Anda masuk sebagai staf. Pesanan untuk pelanggan dibuat lewat <link>form booking admin</link>."
+    },
+    "kinds": {
+      "package": "Paket Umroh",
+      "visa": "Visa",
+      "transport": "Transportasi",
+      "haji": "Haji",
+      "hotel": "Hotel",
+      "tour": "Paket Ziarah",
+      "muthowif": "Muthowif",
+      "catering": "Katering",
+      "flight": "Tiket Pesawat"
+    },
+    "components": {
+      "flight": "Tiket pesawat",
+      "hotel_makkah": "Hotel Makkah",
+      "hotel_madinah": "Hotel Madinah",
+      "transport": "Transportasi",
+      "muthowif": "Muthowif",
+      "tour": "Wisata (Paket Ziarah)",
+      "catering": "Katering"
+    },
+    "common": {
+      "optional": "(opsional)",
+      "pickDate": "Pilih tanggal",
+      "perPersonShort": "/org",
+      "perNight": "/malam",
+      "perVehicle": "/ kendaraan",
+      "perPassenger": "/penumpang",
+      "capacity": "Maks. {capacity} orang",
+      "full": "penuh",
+      "seatsLeft": "sisa {count} kursi",
+      "nights": "{nights} malam",
+      "withNights": "{label} ({nights} malam)",
+      "withDays": "{label} ({days} hari)",
+      "muthowifService": "Layanan Muthowif",
+      "flightFallback": "Tiket pesawat"
+    },
+    "intro": {
+      "nights": "{nights} malam",
+      "process": "Proses ± {days} hari",
+      "haji": "Haji {type} {year}",
+      "stars": "Bintang {stars}",
+      "sites": "{count} situs",
+      "guide": "Pembimbing ditentukan tim kami",
+      "from": "Mulai",
+      "unit": {
+        "person": "/orang",
+        "vehicle": "/kendaraan",
+        "roomNight": "/kamar/malam",
+        "package": "/paket",
+        "personDay": "/orang/hari",
+        "passenger": "/penumpang"
+      },
+      "menu": {
+        "asian": "Menu Asia",
+        "arabic": "Menu Arab",
+        "western": "Menu Barat"
+      },
+      "board": {
+        "full_board": "Tiga kali makan",
+        "half_board": "Dua kali makan"
+      }
+    },
+    "form": {
+      "completeChoices": "Lengkapi pilihan pesanan",
+      "addToCart": "Tambah ke keranjang",
+      "added": "Ditambahkan ke keranjang",
+      "viewCart": "Lihat keranjang",
+      "orderFailed": "Pesanan gagal dibuat — coba lagi",
+      "network": "Gagal menghubungi server — periksa koneksi internet"
+    },
+    "cartRefusal": {
+      "full": "Keranjang penuh (maksimal {max} produk)",
+      "hajiAlone": "Haji dipesan tersendiri — gunakan \"Pesan sekarang\"",
+      "cartHasHaji": "Keranjang berisi Haji — Haji dipesan tersendiri",
+      "oneVisa": "Keranjang sudah berisi visa — satu pesanan satu jenis visa (hapus yang lama dulu)"
+    },
+    "summary": {
+      "title": "Ringkasan pesanan",
+      "calculating": "Menghitung harga…",
+      "previewFailed": "Harga belum dapat dihitung",
+      "subtotal": "Subtotal",
+      "taxIncluded": "(sudah termasuk)",
+      "total": "Total",
+      "dueDays": "Jatuh tempo pembayaran {days} hari setelah invoice terbit.",
+      "processing": "Memproses…",
+      "submit": "Pesan & terbitkan invoice",
+      "afterTitle": "Setelah memesan",
+      "afterPilgrims": "Isi data jamaah — pilih dari Jamaah Saya atau tambah baru.",
+      "afterPay": "Bayar sesuai invoice dan unggah bukti transfer. Pesanan dikonfirmasi setelah pembayaran diverifikasi."
+    },
+    "stepper": {
+      "decrease": "Kurangi",
+      "increase": "Tambah"
+    },
+    "days": {
+      "title": "Tanggal layanan",
+      "start": "Mulai",
+      "end": "Selesai",
+      "count": "{days} hari (termasuk hari mulai dan selesai)",
+      "hint": "Pilih tanggal mulai, lalu tanggal selesai.",
+      "pickDates": "Pilih tanggal mulai dan selesai",
+      "startPast": "Tanggal mulai tidak boleh sebelum hari ini",
+      "endBeforeStart": "Tanggal selesai tidak boleh sebelum tanggal mulai",
+      "tooLong": "Maksimal {max} hari per pesanan"
+    },
+    "entry": {
+      "package": "Berangkat {date} · {people} orang",
+      "visa": "Rencana berangkat {date} · {people} orang",
+      "visaDuration": "Rencana berangkat {date} · {days}+ hari · {people} orang",
+      "people": "{people} orang",
+      "hotel": "{checkIn} – {checkOut} · {rooms} kamar · {people} orang",
+      "tour": "{date} · {people} orang",
+      "range": "{start} – {end} · {people} orang",
+      "flight": "Pergi {date} · {people} orang",
+      "flightReturn": "Pergi {date} · pulang {returnDate} · {people} orang"
+    },
+    "blocked": {
+      "packageMuthowifChoice": "Paket ini memakai muthowif pilihan — belum dapat dipesan online, hubungi kami.",
+      "packageFlightPast": "Jadwal tiket paket ini sudah lewat — belum dapat dipesan.",
+      "tourUnpriced": "Harga paket ini belum ditetapkan — belum dapat dipesan.",
+      "tourNoVehicle": "Belum ada jadwal kendaraan untuk paket ini — hubungi kami.",
+      "flightUnpriced": "Harga tiket ini belum ditetapkan — belum dapat dipesan.",
+      "flightPast": "Periode jadwal tiket ini sudah lewat.",
+      "flightSoldOut": "Kursi jadwal ini sudah habis."
+    },
+    "package": {
+      "included": "Sudah termasuk",
+      "includedItem": {
+        "flight": "Tiket pesawat",
+        "hotelMakkah": "Hotel Makkah {nights} malam",
+        "hotelMadinah": "Hotel Madinah {nights} malam",
+        "visa": "Visa",
+        "transport": "Transportasi",
+        "muthowif": "Muthowif",
+        "catering": "Katering"
+      },
+      "schedule": "Jadwal & jumlah jamaah",
+      "flight": "Tiket pesawat",
+      "pickFlight": "Pilih jadwal tiket",
+      "departure": "Tanggal berangkat",
+      "available": "Tersedia {from} – {to}",
+      "fromToday": "Pilih tanggal mulai hari ini",
+      "people": "Jumlah jamaah",
+      "choices": "Pilihan paket",
+      "choicesHint": "Pilih sesuai kebutuhan; kosongkan bila tidak perlu. Harga di samping adalah perkiraan per orang (kendaraan: per unit).",
+      "slot": {
+        "hotelMakkah": "Hotel Makkah",
+        "hotelMadinah": "Hotel Madinah",
+        "transport": "Kendaraan",
+        "visa": "Visa",
+        "catering": "Katering"
+      },
+      "slotNone": {
+        "hotelMakkah": "Tanpa hotel makkah",
+        "hotelMadinah": "Tanpa hotel madinah",
+        "transport": "Tanpa kendaraan",
+        "visa": "Tanpa visa",
+        "catering": "Tanpa katering"
+      },
+      "missing": {
+        "pickFlight": "Pilih jadwal tiket pesawat",
+        "pickDate": "Pilih tanggal berangkat",
+        "outOfPeriod": "Tanggal berangkat di luar periode yang tersedia"
+      }
+    },
+    "visa": {
+      "bundled": "Visa ini hanya dijual bersama <strong>{items}</strong> dalam pesanan yang sama. Isi rencana perjalanan, <strong>tambahkan ke keranjang</strong>, lalu tambahkan produk tersebut sebelum memesan.",
+      "title": "Rencana perjalanan",
+      "travelDate": "Rencana tanggal berangkat",
+      "processNote": "Proses visa ± {days} hari kerja — pesan jauh hari sebelum berangkat.",
+      "people": "Jumlah jamaah",
+      "stay": "Lama tinggal",
+      "pickStay": "Pilih lama tinggal",
+      "dayRange": "{min}–{max} hari",
+      "dayExact": "{days} hari",
+      "missing": {
+        "unpriced": "Harga visa ini belum tersedia",
+        "pickDate": "Pilih rencana tanggal berangkat",
+        "datePast": "Tanggal berangkat tidak boleh sebelum hari ini",
+        "pickStay": "Pilih lama tinggal"
+      }
+    },
+    "transport": {
+      "date": "Tanggal perjalanan",
+      "noSchedule": "Belum ada jadwal — hubungi kami untuk tanggal lain.",
+      "vehicleTitle": "Pilih kendaraan",
+      "vehicleGroup": "Kendaraan",
+      "passengers": "Jumlah penumpang",
+      "pickup": "Detail penjemputan",
+      "pickupPlaceholder": "Mis. nomor penerbangan / nama hotel",
+      "dropoff": "Detail pengantaran",
+      "dropoffPlaceholder": "Mis. nama hotel tujuan",
+      "missing": {
+        "noSlots": "Belum ada jadwal kendaraan untuk rute ini",
+        "pickDate": "Pilih tanggal perjalanan",
+        "pickVehicle": "Pilih kendaraan",
+        "vehicleFull": "Kendaraan ini sudah penuh di tanggal itu"
+      }
+    },
+    "haji": {
+      "schedule": "Jadwal",
+      "depart": "Berangkat",
+      "season": "Musim haji {year}",
+      "return": "Pulang",
+      "duration": "Durasi",
+      "durationDays": "{days} hari",
+      "people": "Jumlah jamaah",
+      "full": "Kuota sudah penuh.",
+      "seatsLeft": "Sisa {count} kursi.",
+      "missing": {
+        "unpriced": "Harga produk ini belum tersedia",
+        "soldOut": "Kuota produk ini sudah penuh"
+      }
+    },
+    "hotel": {
+      "room": "Kamar",
+      "roomType": "Tipe kamar",
+      "pickRoom": "Pilih tipe kamar",
+      "roomOption": "{name} · maks. {capacity} orang",
+      "noRooms": "Belum ada kamar yang dapat dipesan — hubungi kami.",
+      "stay": "Tanggal menginap",
+      "checkIn": "Check-in",
+      "checkOut": "Check-out",
+      "scheduleInfo": "{nights} malam · harga {price}/kamar/malam · sisa {rooms} kamar",
+      "periods": "Periode tersedia: {list}",
+      "rooms": "Jumlah kamar",
+      "guests": "Jumlah tamu",
+      "shortOfBeds": "{rooms} kamar {room} memuat {beds} orang, sedangkan tamu {guests} orang. Pastikan jumlah kamar cukup — pesanan tetap dapat dibuat.",
+      "missing": {
+        "noRooms": "Belum ada kamar yang dapat dipesan di hotel ini",
+        "pickRoom": "Pilih tipe kamar",
+        "pickDates": "Pilih tanggal check-in dan check-out",
+        "checkInPast": "Tanggal check-in tidak boleh sebelum hari ini",
+        "checkOutAfter": "Tanggal check-out harus setelah check-in",
+        "tooLong": "Maksimal {max} malam per pesanan",
+        "noPrice": "Belum ada harga untuk kamar ini",
+        "noPeriod": "Tidak ada harga kamar ini untuk tanggal tersebut (seluruh malam harus dalam satu periode). Periode tersedia: {list}",
+        "full": "Kamar ini sudah penuh untuk periode tersebut"
+      }
+    },
+    "tour": {
+      "included": "Sudah termasuk",
+      "vehicleIncluded": "Kendaraan: {vehicle}",
+      "schedule": "Jadwal & jumlah orang",
+      "date": "Tanggal tur",
+      "people": "Jumlah orang",
+      "perGroup": "Harga paket berlaku per rombongan.",
+      "perGroupSeats": "Harga paket berlaku per rombongan · sisa {count} kursi.",
+      "vehicle": "Kendaraan",
+      "vehicleBilled": "Ditagih per kendaraan, terpisah dari harga paket.",
+      "noVehicle": "Tidak ada kendaraan terjadwal di tanggal ini — paket tetap dapat dipesan tanpa kendaraan.",
+      "hotel": "Hotel",
+      "hotelBilled": "Ditagih per kamar per malam, terpisah dari harga paket.",
+      "hotelPick": "Hotel pilihan",
+      "noHotel": "Tanpa hotel",
+      "rooms": "Jumlah kamar",
+      "missing": {
+        "pickDate": "Pilih tanggal tur",
+        "datePast": "Tanggal tur tidak boleh sebelum hari ini",
+        "noVehicle": "Kendaraan paket tidak tersedia di tanggal itu",
+        "seatsFull": "Kursi kendaraan sudah penuh di tanggal itu",
+        "hotelFull": "Kamar hotel pilihan sudah penuh"
+      }
+    },
+    "muthowif": {
+      "price": "Harga {price}/orang/hari.",
+      "people": "Jumlah jamaah",
+      "guideNote": "Pembimbing yang bertugas ditentukan tim kami dan dikabarkan sebelum keberangkatan.",
+      "missing": {
+        "unpriced": "Harga layanan muthowif belum tersedia"
+      }
+    },
+    "catering": {
+      "seasonNote": "Harga mengikuti musim pada tanggal mulai.",
+      "priceTitle": "Harga per orang per hari",
+      "season": {
+        "regular": "Reguler",
+        "ramadan": "Ramadan",
+        "hajj": "Musim haji"
+      },
+      "people": "Jumlah orang",
+      "missing": {
+        "unpriced": "Harga katering ini belum tersedia"
+      }
+    },
+    "flight": {
+      "depart": "Berangkat · {route}",
+      "flyDate": "Tanggal terbang",
+      "periodInfo": "Periode jadwal {period} · {price}/penumpang · sisa {seats} kursi",
+      "returnTitle": "Tiket pulang (opsional)",
+      "returnSchedule": "Jadwal pulang",
+      "noReturn": "Tanpa tiket pulang",
+      "returnDate": "Tanggal pulang",
+      "noReturns": "Belum ada jadwal pulang untuk rute ini — pesan tiket pulang terpisah bila sudah tersedia.",
+      "passengers": "Jumlah penumpang",
+      "soldOut": "Kursi sudah habis.",
+      "missing": {
+        "pickDate": "Pilih tanggal terbang",
+        "outOfPeriod": "Tanggal terbang harus di periode {period}",
+        "pickReturn": "Pilih tanggal pulang",
+        "returnOutOfPeriod": "Tanggal pulang harus di periode {period}",
+        "soldOut": "Kursi sudah habis"
+      }
+    }
+  },
+  "cart": {
+    "metaTitle": "Keranjang",
+    "title": "Keranjang",
+    "emptyTitle": "Keranjang masih kosong",
+    "emptyHint": "Pilih produk dari katalog, lalu tekan “Tambah ke keranjang” untuk memesan beberapa layanan sekaligus.",
+    "browse": "Lihat layanan",
+    "people": "Jumlah jamaah (satu rombongan)",
+    "peopleHint": "Berlaku untuk semua produk di keranjang. Jumlah kamar hotel tidak ikut berubah — sesuaikan bila perlu.",
+    "remove": "Hapus {title} dari keranjang",
+    "completeTitle": "Lengkapi keranjang",
+    "requires": "Visa di keranjang mewajibkan: {items}.",
+    "catalogs": {
+      "packages": "Paket Umroh",
+      "haji": "Haji",
+      "visa": "Visa",
+      "flight": "Tiket Pesawat",
+      "hotels": "Hotel",
+      "transport": "Transportasi",
+      "muthowif": "Muthowif",
+      "tours": "Paket Ziarah",
+      "catering": "Katering"
     }
   }
 }

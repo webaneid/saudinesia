@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation'
 import { safeLocale } from '@/lib/utils/locale'
 import { getSession } from '@/lib/auth/session'
+import { authMetadata } from '../../metadata'
 import { CompleteRegistrationForm } from './CompleteRegistrationForm'
 
 // Token ada di query string: jangan bocor lewat header Referer ke sumber daya/tautan lain.
-export const metadata = { referrer: 'no-referrer' as const }
+export const generateMetadata = ({ params }: { params: Promise<{ locale: string }> }) => authMetadata(params, 'complete', { referrer: 'no-referrer' })
 
 export default async function CompleteRegistrationPage({
   params, searchParams,
