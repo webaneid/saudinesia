@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 type FilterBarProps = {
   /** Kotak cari (<SearchForm>) dan <FilterSelect> — selalu dalam urutan ini. */
@@ -14,17 +15,18 @@ type FilterBarProps = {
 
 /** Baris filter standar di atas setiap tabel (docs/arsitektur-tabel.md §2.3): pencarian + dropdown-autocomplete + Atur ulang. Server-safe. */
 export function FilterBar({ children, active, resetHref, onReset }: FilterBarProps) {
+  const t = useTranslations('shared.table')
   return (
-    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter">
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label={t('filter')}>
       {children}
       {active && resetHref && (
         <Link href={resetHref} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-admin-muted hover:text-admin-ink">
-          <X className="size-4" /> Atur ulang
+          <X className="size-4" /> {t('reset')}
         </Link>
       )}
       {active && onReset && !resetHref && (
         <button type="button" onClick={onReset} className="inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-sm font-semibold text-admin-muted hover:text-admin-ink">
-          <X className="size-4" /> Atur ulang
+          <X className="size-4" /> {t('reset')}
         </button>
       )}
     </div>

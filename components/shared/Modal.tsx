@@ -3,6 +3,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 
 type Props = {
   open: boolean
@@ -22,6 +23,7 @@ type Props = {
  */
 export function Modal({ open, title, onClose, children, footer, size = 'md' }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
+  const t = useTranslations('shared.modal')
 
   useEffect(() => {
     const dialog = ref.current
@@ -42,7 +44,7 @@ export function Modal({ open, title, onClose, children, footer, size = 'md' }: P
     >
       <div className="flex items-center justify-between gap-3 border-b px-5 py-3">
         <h2 className="text-base font-bold">{title}</h2>
-        <button type="button" onClick={onClose} aria-label="Tutup" className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
+        <button type="button" onClick={onClose} aria-label={t('close')} className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
       </div>

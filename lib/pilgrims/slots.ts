@@ -23,7 +23,7 @@ export type { PilgrimSlot, SlotDocument } from './slotTypes'
 
 const DONE = new Set(['pending', 'accepted'])
 
-export async function bookingPilgrimSlots(bookingId: string, departureDate: Date | null, pilgrims: readonly PilgrimInput[]) {
+export async function bookingPilgrimSlots(bookingId: string, departureDate: Date | null, pilgrims: readonly PilgrimInput[], locale?: string) {
   const [checklists, fieldsAll] = await Promise.all([
     bookingChecklists(bookingId, departureDate ? calendarDateOf(departureDate) : null, pilgrims.map(p => ({
       id: p.id, savedPilgrimId: p.savedPilgrimId,
@@ -54,7 +54,7 @@ export async function bookingPilgrimSlots(bookingId: string, departureDate: Date
       docs: { done: docsDone, required: required.length },
       ready: data.complete && docsDone === required.length,
       reviewStatus: p.reviewStatus,
-      rows: fieldRows(fields, values),
+      rows: fieldRows(fields, values, locale),
       documents: items.map(x => ({ key: x.key, label: x.label, required: x.required, state: x.state, reusable: x.reusable })),
     }
   })

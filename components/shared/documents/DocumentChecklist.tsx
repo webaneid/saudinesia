@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useLocale, useTranslations } from 'next-intl'
 import { AlertCircle, CheckCircle2, Circle, Clock, FileText, FolderOpen, Plane, Upload } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/shared/Modal'
@@ -37,14 +38,16 @@ type Props = {
 const DONE = new Set(['pending', 'accepted'])
 const PROBLEM = new Set(['rejected', 'expired', 'too_short'])
 
-function statusText(i: ChecklistItemView): string {
+type Translate = ReturnType<typeof useTranslations>
+
+function statusText(i: ChecklistItemView, t: Translate, locale: string): string {
   switch (i.state) {
-    case 'accepted': return 'Diterima petugas'
-    case 'pending': return 'Sudah diunggah, menunggu pemeriksaan petugas'
-    case 'rejected': return 'Ditolak petugas — unggah ulang'
-    case 'expired': return 'Sudah habis berlaku — unggah yang baru'
-    case 'too_short': return i.validUntilNeeded ? `Harus berlaku sampai ${formatCalendarDate(i.validUntilNeeded, DATE_LONG)} — unggah yang baru` : 'Masa berlaku kurang — unggah yang baru'
-    default: return 'Belum diunggah'
+    case 'accepted': return t('state.accepted')
+    case 'pending': return t('state.pending')
+    case 'rejected': return t('state.rejected')
+    case 'expired': return t('state.expired')
+    case 'too_short': return i.validUntilNeeded ? t('state.tooShortUntil', { date: formatCalendarDate(i.validUntilNeeded, DATE_LONG, locale) }) : t('state.tooShort')
+    default: return t('state.missing')
   }
 }
 
@@ -58,8 +61,11 @@ function StatusIcon({ state }: { state: string }) {
 const segmentTone = (state: string) =>
   state === 'accepted' ? 'bg-primary' : state === 'pending' ? 'bg-amber-500' : PROBLEM.has(state) ? 'bg-destructive' : 'bg-muted'
 
-export function DocumentChecklist({ items, card, endpoints, emptyHint = 'Pilih atau tambah data jamaah dulu, lalu dokumen berikut bisa diunggah di sini:' }: Props) {
+export function DocumentChecklist({ items, card, endpoints, emptyHint }: Props) {
   const router = useRouter()
+  const t = useTranslations('shared.documents.checklist')
+  const td = useTranslations('shared.documents')
+  const locale = useLocale()
   const [open, setOpen] = useState<{ personal: boolean; typeId?: string } | null>(null)
   if (items.length === 0) return null
 
@@ -68,27 +74,27 @@ export function DocumentChecklist({ items, card, endpoints, emptyHint = 'Pilih a
   const oneSource = sources.length === 1 ? sources[0] : null
 
   return (
-    <section className="space-y-3 rounded-md border p-3" aria-label="Kelengkapan dokumen">
+    <section className="space-y-3 rounded-md border p-3" aria-label={t('title')}>
       <div className="space-y-2">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <p className="text-sm font-medium">Kelengkapan dokumen</p>
-          {card && <p className="text-xs text-muted-foreground tabular-nums">{done} dari {items.length} sudah diunggah</p>}
+          <p className="text-sm font-medium">{t('title')}</p>
+          {card && <p className="text-xs text-muted-foreground tabular-nums">{t('progress', { done, total: items.length })}</p>}
         </div>
         {card && (
           <div className="flex gap-1" aria-hidden>
             {items.map(i => <span key={i.key} className={`h-1.5 flex-1 rounded-full ${segmentTone(i.state)}`} />)}
           </div>
         )}
-        {oneSource && <p className="text-xs text-muted-foreground">Diminta oleh {oneSource}</p>}
+        {oneSource && <p className="text-xs text-muted-foreground">{t('requestedBy', { sources: oneSource })}</p>}
       </div>
 
       {!card ? (
         <div className="space-y-2">
-          <p className="text-sm text-muted-foreground">{emptyHint}</p>
+          <p className="text-sm text-muted-foreground">{emptyHint ?? t('emptyHint')}</p>
           <ul className="flex flex-wrap gap-1.5">
             {items.map(i => (
               <li key={i.key} className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs">
-                <FileText className="h-3.5 w-3.5 text-muted-foreground" aria-hidden /> {i.label}{i.required ? '' : ' (opsional)'}
+                <FileText className="h-3.5 w-3.5 text-muted-foreground" aria-hidden /> {i.label}{i.required ? '' : ` ${td('optional')}`}
               </li>
             ))}
           </ul>
@@ -102,33 +108,31 @@ export function DocumentChecklist({ items, card, endpoints, emptyHint = 'Pilih a
                 <li key={i.key} className="flex items-center gap-3 py-2.5 first:pt-1 last:pb-1">
                   <StatusIcon state={i.state} />
                   <div className="min-w-0 flex-1 text-sm">
-                    <p className="font-medium">{i.label}{i.required ? '' : <span className="font-normal text-muted-foreground"> (opsional)</span>}</p>
-                    <p className={`text-xs ${PROBLEM.has(i.state) ? 'text-destructive' : 'text-muted-foreground'}`}>{statusText(i)}</p>
-                    {!oneSource && i.sources.length > 0 && <p className="text-xs text-muted-foreground">Diminta oleh {i.sources.join(', ')}</p>}
+                    <p className="font-medium">{i.label}{i.required ? '' : <span className="font-normal text-muted-foreground"> {td('optional')}</span>}</p>
+                    <p className={`text-xs ${PROBLEM.has(i.state) ? 'text-destructive' : 'text-muted-foreground'}`}>{statusText(i, t, locale)}</p>
+                    {!oneSource && i.sources.length > 0 && <p className="text-xs text-muted-foreground">{t('requestedBy', { sources: i.sources.join(', ') })}</p>}
                   </div>
                   <Button size="sm" variant={needsUpload ? 'default' : 'ghost'} className="shrink-0"
                     onClick={() => setOpen({ personal: i.reusable, typeId: needsUpload ? i.documentTypeId : undefined })}
-                    aria-label={`${needsUpload ? 'Unggah' : 'Lihat'} ${i.label}`}>
-                    {needsUpload ? <><Upload className="h-4 w-4" /> {i.state === 'missing' ? 'Unggah' : 'Ganti'}</> : 'Lihat'}
+                    aria-label={needsUpload ? td('uploadLabel', { label: i.label }) : td('viewLabel', { label: i.label })}>
+                    {needsUpload ? <><Upload className="h-4 w-4" /> {i.state === 'missing' ? td('upload') : td('replace')}</> : td('view')}
                   </Button>
                 </li>
               )
             })}
           </ul>
           <div className="flex flex-wrap gap-2 border-t pt-3">
-            {items.some(i => i.reusable) && <Button size="sm" variant="outline" onClick={() => setOpen({ personal: true })}><FolderOpen className="h-4 w-4" /> Dokumen pribadi</Button>}
-            {items.some(i => !i.reusable) && <Button size="sm" variant="outline" onClick={() => setOpen({ personal: false })}><Plane className="h-4 w-4" /> Dokumen perjalanan</Button>}
+            {items.some(i => i.reusable) && <Button size="sm" variant="outline" onClick={() => setOpen({ personal: true })}><FolderOpen className="h-4 w-4" /> {t('personal')}</Button>}
+            {items.some(i => !i.reusable) && <Button size="sm" variant="outline" onClick={() => setOpen({ personal: false })}><Plane className="h-4 w-4" /> {t('trip')}</Button>}
           </div>
         </>
       )}
 
       {card && endpoints && open && (
-        <Modal open title={open.personal ? `Dokumen pribadi — ${card.name}` : `Dokumen perjalanan — ${card.name}`} onClose={() => setOpen(null)}>
+        <Modal open title={open.personal ? t('personalTitle', { name: card.name }) : t('tripTitle', { name: card.name })} onClose={() => setOpen(null)}>
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              {open.personal
-                ? 'Dokumen pribadi yang diminta booking ini. Tersimpan di data jamaah (Jamaah Saya) dan dipakai lagi untuk pesanan berikutnya.'
-                : 'Dokumen perjalanan yang diminta booking ini — hanya untuk booking ini.'}
+              {open.personal ? t('personalIntro') : t('tripIntro')}
             </p>
             <DocumentRepeater
               key={`${open.personal}-${open.typeId ?? ''}`}

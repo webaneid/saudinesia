@@ -3,7 +3,9 @@ import Link from 'next/link'
 import { getSession } from '@/lib/auth/session'
 import { getOnboardingState, isOnboardingComplete } from '@/lib/auth/contact'
 import { safeLocale } from '@/lib/utils/locale'
+import { getTranslations } from 'next-intl/server'
 import { ClipboardList, LayoutDashboard, UserRound, UsersRound, Plus } from 'lucide-react'
+import { LocaleSwitcher } from '@/components/shared/LocaleSwitcher'
 
 type Props = {
   children: React.ReactNode
@@ -22,33 +24,38 @@ export default async function PilgrimLayout({ children, params }: Props) {
     if (state && !isOnboardingComplete(state)) redirect(`/${safeLocale(locale)}/lengkapi-data`)
   }
 
+  const t = await getTranslations({ locale: safeLocale(locale), namespace: 'pilgrimArea.nav' })
   const navItems = [
-    { href: `/${locale}/dashboard`, icon: LayoutDashboard, label: 'Dashboard' },
+    { href: `/${locale}/dashboard`, icon: LayoutDashboard, label: t('dashboard') },
     // Wizard 7-langkah lama dihapus (docs/decisions.md 2026-07-25) — arahkan ke hub katalog
     // publik sampai checkout pengganti per-produk (hotel/muthowif/catering/tourPackage) dibangun.
-    { href: `/${locale}`, icon: Plus, label: 'Buat Booking' },
-    { href: `/${locale}/bookings`, icon: ClipboardList, label: 'Booking Saya' },
-    { href: `/${locale}/jamaah`, icon: UsersRound, label: 'Jamaah Saya' },
-    { href: `/${locale}/profile`, icon: UserRound, label: 'Profil' },
+    { href: `/${locale}`, icon: Plus, label: t('newBooking') },
+    { href: `/${locale}/bookings`, icon: ClipboardList, label: t('bookings') },
+    { href: `/${locale}/jamaah`, icon: UsersRound, label: t('pilgrims') },
+    { href: `/${locale}/profile`, icon: UserRound, label: t('profile') },
   ]
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6 space-y-6">
       {/* Pilgrim nav — flex-wrap: turun baris di HP, tanpa geser samping */}
-      <nav className="flex flex-wrap items-center gap-1 border-b pb-4">
+      {/* Pengalih bahasa (landmark nav sendiri) dan tombol keluar di luar <nav> menu — landmark tidak bersarang. */}
+      <div className="flex flex-wrap items-center gap-1 border-b pb-4">
+        <nav aria-label={t('menu')} className="contents">
         {navItems.map(({ href, icon: Icon, label }) => (
           <Link key={href} href={href}
             className="flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">
             <Icon className="h-3.5 w-3.5" />{label}
           </Link>
         ))}
-        <form action={`/api/v1/auth/logout`} method="POST" className="ml-auto">
+        </nav>
+        <LocaleSwitcher className="ml-auto" />
+        <form action={`/api/v1/auth/logout`} method="POST" className="ml-2">
           <input type="hidden" name="locale" value={locale} />
           <button type="submit" className="text-xs text-muted-foreground hover:text-destructive transition-colors">
-            Keluar
+            {t('logout')}
           </button>
         </form>
-      </nav>
+      </div>
       {children}
     </div>
   )

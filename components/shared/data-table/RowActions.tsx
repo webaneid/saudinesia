@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import { Copy, Eye, EyeOff, FileSearch, Pencil, Trash2, type LucideIcon } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 
 // Kolom aksi standar (docs/arsitektur-tabel.md §2.4). Hanya IKON + tooltip (`data-tip`, kelas `.action-tip` di globals.css) + `aria-label`; ikon menunjukkan AKSI, bukan status (status = <Badge>).
@@ -43,7 +44,8 @@ export function RowActions({ children }: { children: React.ReactNode }) {
 /** Aksi berupa navigasi (Lihat / Edit). `label` bawaan dari jenisnya; isi bila perlu lebih spesifik ("Edit hotel Al Safwah"). */
 export function ActionLink({ kind, href, label }: { kind: Extract<ActionKind, 'view' | 'edit'>; href: string; label?: string }) {
   const Icon = ACTION_ICONS[kind]
-  const text = label ?? ACTION_LABELS[kind]
+  const t = useTranslations('shared.table.action')
+  const text = label ?? t(kind)
   return <Link href={href} data-tip={text} aria-label={text} className={actionClass(kind)}><Icon className="size-4" /></Link>
 }
 
@@ -55,6 +57,7 @@ export function ActionButton({ icon: Icon, label, onClick, tone, disabled }: { i
 /** Aksi baku dengan handler klien (Edit / Duplikat / Hapus di daftar bersarang, mis. periode harga hotel): ikon dari `ACTION_ICONS`, bukan ikon pilihan sendiri. */
 export function KindButton({ kind, label, onClick, disabled }: { kind: ActionKind; label?: string; onClick: () => void; disabled?: boolean }) {
   const Icon = ACTION_ICONS[kind]
-  const text = label ?? ACTION_LABELS[kind]
+  const t = useTranslations('shared.table.action')
+  const text = label ?? t(kind)
   return <button type="button" data-tip={text} aria-label={text} disabled={disabled} onClick={onClick} className={actionClass(kind)}><Icon className="size-4" /></button>
 }

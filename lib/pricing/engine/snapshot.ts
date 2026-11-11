@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError } from '@/lib/booking/errors'
-import { visaTierTextOfKey } from '@/lib/booking/visaDuration'
+import { visaTierRangeOfKey, visaTierText } from '@/lib/booking/visaDuration'
 import { computeCostComponents, type CostComponentsDb } from '../costComponents'
 import type { PriceOwnerType, PriceUnit } from './types'
 
@@ -229,11 +229,17 @@ export async function itemSellTotals(db: Db, bookingId: string): Promise<Map<str
 
 /** Teks jenjang durasi per pengajuan visa (`visaApplicationId` → "1–30 hari") dari varian yang DIBEKUKAN di snapshot berlaku — bukan dari
  *  `selectedDurationDays` (hari awal jenjang saja). Baris tanpa jenjang hari tidak dimuat. */
-export async function visaTierTexts(db: Pick<Prisma.TransactionClient, 'priceSnapshot'>, bookingId: string): Promise<Map<string, string>> {
+export async function visaTierRanges(db: Pick<Prisma.TransactionClient, 'priceSnapshot'>, bookingId: string): Promise<Map<string, { min: number; max: number }>> {
   const rows = await db.priceSnapshot.findMany({ where: { bookingId, itemType: 'visa', voidedAt: null }, select: { itemId: true, variantKey: true } })
-  const m = new Map<string, string>()
-  for (const r of rows) { const t = visaTierTextOfKey(r.variantKey); if (t) m.set(r.itemId, t) }
+  const m = new Map<string, { min: number; max: number }>()
+  for (const r of rows) { const t = visaTierRangeOfKey(r.variantKey); if (t) m.set(r.itemId, t) }
   return m
+}
+
+/** Teks jenjang (Indonesia) per lamaran visa — admin dan invoice. Halaman jamaah memakai `visaTierRanges` dan merangkai teks dalam bahasanya. */
+export async function visaTierTexts(db: Pick<Prisma.TransactionClient, 'priceSnapshot'>, bookingId: string): Promise<Map<string, string>> {
+  const ranges = await visaTierRanges(db, bookingId)
+  return new Map([...ranges].map(([id, r]) => [id, visaTierText(r.min, r.max)]))
 }
 
 /** Σ jual baris snapshot BERLAKU (belum di-void) + Σ modal baris yang modalnya diketahui (HPP awal). */

@@ -1,7 +1,8 @@
 import type { LucideIcon } from 'lucide-react'
 import { ReceiptText } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
-import { formulaOf, type SummaryRow } from '@/lib/booking/orderSummary'
+import { useTranslations } from 'next-intl'
+import type { SummaryRow } from '@/lib/booking/orderSummary'
 
 export type SummarySection = { icon: LucideIcon; title: string; rows: SummaryRow[] }
 
@@ -14,15 +15,20 @@ type Props = {
   invoiceNumber: string | null
 }
 
+/** Satuan rumus baris gabungan — kunci `pilgrimArea.summary.formula.*` (halaman memberi `unit` ini ke `collapseRows`). */
+export type SummaryUnit = 'order' | 'pilgrim'
+const unitOf = (u: string): SummaryUnit => (u === 'pilgrim' ? 'pilgrim' : 'order')
+
 /** Rincian pesanan ringkas: satu kartu, baris identik digabung dengan rumus ("3 jamaah × Rp …"), lalu total tagihan. */
 export function OrderSummaryCard({ sections, adjustment, taxAdded, grandTotal, invoiceNumber }: Props) {
+  const t = useTranslations('pilgrimArea.summary')
   const shown = sections.filter(s => s.rows.length > 0)
   return (
     <section className="rounded-xl border bg-card p-5 space-y-4" aria-labelledby="rincian-pesanan">
-      <h2 id="rincian-pesanan" className="font-semibold flex items-center gap-2"><ReceiptText className="h-4 w-4 text-primary" aria-hidden /> Rincian Pesanan</h2>
+      <h2 id="rincian-pesanan" className="font-semibold flex items-center gap-2"><ReceiptText className="h-4 w-4 text-primary" aria-hidden /> {t('title')}</h2>
       <ul className="divide-y text-sm">
         {shown.flatMap(s => s.rows.map(r => {
-          const formula = formulaOf(r, formatRupiah)
+          const formula = r.count > 1 ? t(`formula.${unitOf(r.unit)}`, { count: r.count, price: formatRupiah(r.unitPrice) }) : null
           return (
             <li key={r.key} className="flex items-start gap-3 py-3 first:pt-0">
               <s.icon className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden />
@@ -40,20 +46,20 @@ export function OrderSummaryCard({ sections, adjustment, taxAdded, grandTotal, i
       <dl className="space-y-1.5 border-t pt-3 text-sm">
         {adjustment !== 0 && (
           <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Penyesuaian harga</dt>
+            <dt className="text-muted-foreground">{t('adjustment')}</dt>
             <dd className="font-semibold tabular-nums">{adjustment < 0 ? `-${formatRupiah(-adjustment)}` : formatRupiah(adjustment)}</dd>
           </div>
         )}
         {taxAdded > 0 && (
           <div className="flex justify-between gap-3">
-            <dt className="text-muted-foreground">Pajak</dt>
+            <dt className="text-muted-foreground">{t('tax')}</dt>
             <dd className="tabular-nums">{formatRupiah(taxAdded)}</dd>
           </div>
         )}
         <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 pt-1">
           <dt>
-            <span className="font-semibold">Total Tagihan</span>
-            {invoiceNumber && <span className="block whitespace-nowrap text-xs text-muted-foreground">Invoice {invoiceNumber}</span>}
+            <span className="font-semibold">{t('total')}</span>
+            {invoiceNumber && <span className="block whitespace-nowrap text-xs text-muted-foreground">{t('invoice', { number: invoiceNumber })}</span>}
           </dt>
           <dd className="ml-auto text-xl font-bold tabular-nums text-primary sm:text-2xl">{formatRupiah(grandTotal)}</dd>
         </div>

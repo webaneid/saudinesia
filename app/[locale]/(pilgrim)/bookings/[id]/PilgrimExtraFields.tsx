@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ManifestFieldsForm, type ManifestField } from '@/components/booking/ManifestFieldsForm'
@@ -20,6 +21,7 @@ type Props = {
 
 export function PilgrimExtraFields({ bookingId, pilgrimId, fields, initial, editable }: Props) {
   const router = useRouter()
+  const t = useTranslations('pilgrimArea.extra')
   const [values, setValues] = useState<Record<string, unknown>>(initial)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -33,30 +35,30 @@ export function PilgrimExtraFields({ bookingId, pilgrimId, fields, initial, edit
       })
       const json = (await res.json().catch(() => null)) as { error?: string; meta?: { field?: string } } | null
       if (!res.ok) {
-        const text = json?.error ?? 'Gagal menyimpan.'
+        const text = json?.error ?? t('saveFailed')
         if (json?.meta?.field) setErrors({ [json.meta.field]: text })
         setNotice({ text, error: true })
         return
       }
-      setNotice({ text: 'Data tambahan tersimpan.', error: false })
+      setNotice({ text: t('saved'), error: false })
       router.refresh()
     } catch {
-      setNotice({ text: 'Tidak dapat menghubungi server.', error: true })
+      setNotice({ text: t('network'), error: true })
     } finally { setBusy(false) }
   }
 
   return (
     <section className="space-y-4 rounded-xl border bg-card p-5" aria-labelledby="data-tambahan">
       <div>
-        <h2 id="data-tambahan" className="font-semibold">Data tambahan</h2>
-        <p className="text-sm text-muted-foreground">Diminta oleh produk yang Anda pesan untuk jamaah ini.</p>
+        <h2 id="data-tambahan" className="font-semibold">{t('title')}</h2>
+        <p className="text-sm text-muted-foreground">{t('intro')}</p>
       </div>
       <fieldset disabled={!editable || busy} className="space-y-4">
         <ManifestFieldsForm fields={fields} values={values} onChange={setValues} errors={errors} />
       </fieldset>
       {notice && <p className={notice.error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'} role="status">{notice.text}</p>}
       {editable && (
-        <Button size="sm" onClick={save} disabled={busy}><Save className="h-4 w-4" /> Simpan data tambahan</Button>
+        <Button size="sm" onClick={save} disabled={busy}><Save className="h-4 w-4" /> {t('save')}</Button>
       )}
     </section>
   )

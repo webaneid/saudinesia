@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useTranslations } from 'next-intl'
 import { cn } from '@/lib/utils'
 
 export type Column<T> = {
@@ -35,7 +36,8 @@ const SKELETON_ROWS = 5
  * Tabel standar admin. Tanpa hook, jadi Server Component boleh melempar `cell: (row) => ...` langsung.
  * Layar >= md: tabel. Layar HP: tiap baris jadi kartu — baca `Column.mobile`.
  */
-export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.', loading, footer, rowClassName }: DataTableProps<T>) {
+export function DataTable<T>({ columns, rows, getRowId, empty, loading, footer, rowClassName }: DataTableProps<T>) {
+  const t = useTranslations('shared.table')
   const roleOf = (c: Column<T>): NonNullable<Column<T>['mobile']> => c.mobile ?? (c.actions || !c.header ? 'footer' : 'field')
   const titleCol = columns.find(c => c.mobile === 'title') ?? columns.find(c => roleOf(c) !== 'footer')
   const fieldCols = columns.filter(c => c !== titleCol && roleOf(c) === 'field')
@@ -58,7 +60,7 @@ export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.
                   c.actions && 'w-px whitespace-nowrap',
                 )}
               >
-                {c.header || (c.actions ? 'Aksi' : '')}
+                {c.header || (c.actions ? t('actions') : '')}
               </th>
             ))}
           </tr>
@@ -110,7 +112,7 @@ export function DataTable<T>({ columns, rows, getRowId, empty = 'Tidak ada data.
       </ul>
 
       {!loading && rows.length === 0 && (
-        <div className="px-4 py-12 text-center text-sm text-admin-muted">{empty}</div>
+        <div className="px-4 py-12 text-center text-sm text-admin-muted">{empty ?? t('empty')}</div>
       )}
       {footer && <div className="border-t border-admin-line px-4 py-3">{footer}</div>}
     </div>
