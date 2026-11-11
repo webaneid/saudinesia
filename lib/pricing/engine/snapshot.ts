@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client'
 import { ItemNotBookableError } from '@/lib/booking/errors'
+import { visaTierTextOfKey } from '@/lib/booking/visaDuration'
 import { computeCostComponents, type CostComponentsDb } from '../costComponents'
 import type { PriceOwnerType, PriceUnit } from './types'
 
@@ -224,6 +225,15 @@ export async function itemSellTotals(db: Db, bookingId: string): Promise<Map<str
   const m = new Map<string, number>()
   for (const r of rows) m.set(`${r.itemType}:${r.itemId}`, (m.get(`${r.itemType}:${r.itemId}`) ?? 0) + cents(Number(r.totalSellIdr)))
   return new Map([...m].map(([k, v]) => [k, v / 100]))
+}
+
+/** Teks jenjang durasi per pengajuan visa (`visaApplicationId` → "1–30 hari") dari varian yang DIBEKUKAN di snapshot berlaku — bukan dari
+ *  `selectedDurationDays` (hari awal jenjang saja). Baris tanpa jenjang hari tidak dimuat. */
+export async function visaTierTexts(db: Pick<Prisma.TransactionClient, 'priceSnapshot'>, bookingId: string): Promise<Map<string, string>> {
+  const rows = await db.priceSnapshot.findMany({ where: { bookingId, itemType: 'visa', voidedAt: null }, select: { itemId: true, variantKey: true } })
+  const m = new Map<string, string>()
+  for (const r of rows) { const t = visaTierTextOfKey(r.variantKey); if (t) m.set(r.itemId, t) }
+  return m
 }
 
 /** Σ jual baris snapshot BERLAKU (belum di-void) + Σ modal baris yang modalnya diketahui (HPP awal). */

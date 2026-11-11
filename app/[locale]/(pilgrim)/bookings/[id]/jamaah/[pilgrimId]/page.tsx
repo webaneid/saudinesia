@@ -13,6 +13,8 @@ import { REVIEW_LABEL, REVIEW_TONE } from '@/lib/pilgrims/reviewState'
 import { cardBoundKeys } from '@/lib/manifest/roles'
 import { isEmptyValue } from '@/lib/manifest/values'
 import { PilgrimTripPanel } from '../../PilgrimTripPanel'
+import { PilgrimExtraFields } from '../../PilgrimExtraFields'
+import { isReviewLocked } from '@/lib/pilgrims/reviewState'
 
 // Isi / edit SATU jamaah booking milik pemesan (pemilik 2026-11-10: tabel jamaah di halaman booking, fokus per jamaah di sini). Isinya panel yang
 // sama dengan sebelumnya (PilgrimTripPanel: pilih dari Jamaah Saya / tambah baru / diri sendiri, kelengkapan + unggah dokumen, ajukan).
@@ -44,6 +46,9 @@ export default async function BookingPilgrimPage({ params }: Props) {
   const bound = new Set(cardBoundKeys(fields))
   const values = (p.fieldValues ?? {}) as Record<string, unknown>
   const missingFields = fields.filter(f => f.required && isEmptyValue(values[f.fieldKey])).map(f => ({ label: f.label, fromCard: bound.has(f.fieldKey) }))
+  // Kolom tambahan (bukan dari kartu) diisi pemesan sendiri di "Data tambahan" (audit front-end 2026-11-11).
+  const extraFields = fields.filter(f => !bound.has(f.fieldKey))
+  const extraValues = Object.fromEntries(extraFields.filter(f => f.fieldKey in values).map(f => [f.fieldKey, values[f.fieldKey]]))
   // Catatan perbaikan terakhir dari petugas — nama petugas tidak dikirim ke pemesan.
   const history = (await reviewHistoryOf([p.id], false)).get(p.id) ?? []
 
@@ -94,6 +99,15 @@ export default async function BookingPilgrimPage({ params }: Props) {
           missingFields={missingFields}
         />
       </div>
+
+      {extraFields.length > 0 && (
+        <PilgrimExtraFields
+          bookingId={booking.id} pilgrimId={p.id}
+          fields={extraFields.map(f => ({ id: f.id, fieldKey: f.fieldKey, label: f.label, fieldType: f.fieldType, options: f.options, required: f.required, role: f.role, order: f.order }))}
+          initial={extraValues}
+          editable={booking.status === 'active' && !isReviewLocked(p.reviewStatus)}
+        />
+      )}
 
       <nav aria-label="Jamaah lain" className="flex items-center justify-between gap-3 text-sm">
         {prev

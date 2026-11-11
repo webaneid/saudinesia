@@ -248,3 +248,33 @@ Sesuai §7.2, dengan tambahan:
 
 Celah yang diketahui: teks hero beranda bawaan menyebut semua layanan ("Visa, hotel, transportasi, muthowif, dan paket …") — itu teks bebas yang diedit admin di Konten Situs, tidak disaring otomatis; ubah di sana bila layanan tertentu belum dibuka.
 
+
+## 8. Audit front-end menyeluruh + simulasi alur (2026-11-11, arahan pemilik "evaluasi total semua front-end")
+
+Dijalankan di server uji terpisah (port 6270) di atas **salinan** DB dev (`saudinesia_tmp_audit`, email/WA dimatikan) — data dev pemilik tidak disentuh. Simulasi lewat browser sungguhan: daftar akun baru → aktivasi → checkout Visa 2 jamaah (jenjang 1–30 hari) → invoice terbit → "Jadikan saya jamaah" → unggah paspor → unggah bukti transfer → admin mengonfirmasi pembayaran (status "Dikonfirmasi", sisa Rp 0) → jamaah mengisi data tambahan. Halaman checkout kesembilan jenis (Paket, Visa, Transport, Haji, Hotel, Ziarah, Muthowif, Katering, Tiket) dan keranjang terbuka 200 sebagai jamaah; semua tombol pesan katalog menuju `/checkout/...`; belum login → login dengan `next` → kembali ke checkout yang sama.
+
+### 8.1 Celah yang ditemukan dan DIPERBAIKI
+
+| # | Celah | Dampak | Perbaikan |
+|---|---|---|---|
+| G1 | Kolom manifest **non-kartu** (mis. "Nomor HP Host", "Short Address" di Visa Istidhofah) hanya bisa diisi petugas; checkout tidak lagi mengumpulkan data jamaah | Pemesan **tidak pernah bisa** mengajukan jamaahnya untuk diperiksa (tombol Ajukan mati) — alur utama buntu | Route pemilik `PUT /api/v1/bookings/[id]/pilgrims/[pilgrimId]` + penulis `lib/pilgrims/extraFields.ts` (`saveExtraFields`): hanya kolom yang TIDAK terikat peran kartu (`cardBoundKeys`), kolom kartu/asing → 400, hanya booking aktif milik sesi (lainnya 404), data `submitted|verified` terkunci (409), kunci `users FOR SHARE` → `booking_pilgrims FOR UPDATE`, `onboardingRefusal` + `ipLimited` + skema strict. Formulir "Data tambahan" (`PilgrimExtraFields`, memakai `ManifestFieldsForm`) di halaman jamaah. Uji `scripts/test-pilgrim-extra-fields.ts` |
+| G2 | Tombol "Keluar" di area jamaah menampilkan JSON mentah `{"success":true,"data":null}` | Pengguna tertinggal di halaman API | `POST /api/v1/auth/logout`: kiriman formulir → 303 ke `/{locale}/login` (locale lewat `safeLocale`, `Location` relatif — tak ada alihan ke luar); `fetch` admin tetap JSON |
+| G3 | Booking **visa saja** tak punya tanggal berangkat ("Berangkat -" di detail, daftar, pengingat) | Tanggal acuan hilang | `itemDateRange`: tanpa item bertanggal, rencana berangkat visa paling awal jadi `departureDate` (cadangan saja; tanggal kembali tak ditebak); route admin yang mengubah rencana berangkat memanggil `recomputeBookingDates`. Uji di `test-booking-lifecycle` (4 zona waktu) |
+| G4 | Pelanggan memilih jenjang "1–30 hari", invoice/detail menulis "1 hari" (hari awal jenjang) | Rincian pesanan salah baca | Teks dari kunci varian titik harga yang dipakai (`lib/booking/visaDuration.ts`); `itemDetail` snapshot kini "1–30 hari"; detail booking jamaah/admin membaca `visaTierTexts` (snapshot berlaku) |
+| G5 | Catatan beranda "baru Visa dan Transport yang bisa dipesan online" masih tampil (§F2 sudah menetapkan dihapus setelah checkout lain ada) | Klaim tidak benar (K3) | Catatan + kunci pesan `home.steps.availability*` dihapus |
+| G6 | Tombol katalog Paket Ziarah bertuliskan "Tambah ke paket" padahal membuka checkout | Membingungkan | "Pesan sekarang" / "Book now" |
+| G7 | Detail `muthowif/[id]` menampilkan rating "5.0 / 5.0" (bukan ulasan sungguhan, A7), teks Indonesia ditulis langsung, tanpa metadata | Klaim palsu; `/en` berbahasa Indonesia | Rating dihapus; teks `catalog.muthowif.detail` (id/en, bisa diedit di Konten Situs); `generateMetadata` (judul = nama, canonical/hreflang); `requireCatalog`; id bukan UUID → 404 |
+| G8 | Detail `hotels/[id]`: hotel Madinah ditulis "dari Masjid Al-Haram"; teks Indonesia langsung; palet mentah (`amber`, `green`, `black`, `white`) dan token `admin-*` di halaman publik; layanan hotel tanpa harga tampil "Rp 0"; tanpa metadata | Fakta salah; aturan warna dilanggar | Jarak menyebut masjid kotanya (Masjidil Haram / Masjid Nabawi); teks `catalog.hotels.detail`; token `brand`; tombol `btn-brand-*`; layanan/kamar tak berharga disembunyikan atau "—"; `generateMetadata`; `requireCatalog` |
+
+### 8.2 Dicatat, BELUM dikerjakan (butuh keputusan pemilik atau di luar lingkup audit)
+
+1. **Area jamaah, checkout, dan keranjang hanya berbahasa Indonesia di `/en`** (judul "Keranjang", semua label). Tidak pernah ada di rencana; menerjemahkannya = proyek tersendiri (puluhan komponen).
+2. Daftar fasilitas hotel (`HOTEL_FACILITIES`) dan kit tabel bersama masih Indonesia di `/en` (sudah tercatat F6).
+3. Katalog Muthowif tidak punya tombol pesan; pemesanan hanya dari halaman profil ("Pesan layanan muthowif"). Pertimbangkan tombol hero ke checkout layanan.
+4. Bagian CTA bawah setiap katalog ("Daftar Akun") tetap tampil untuk pengguna yang sudah masuk.
+5. Ringkasan keranjang visa menulis "1+ hari" untuk jenjang 1–30 (masukan keranjang hanya membawa hari awal).
+6. Halaman jamaah/login/daftar belum punya judul tab sendiri (semua "Saudinesia").
+7. Pesan galat bentuk isian manifest dari server masih teks Zod berbahasa Inggris (hanya muncul bila API dipanggil langsung — formulir tidak menghasilkan bentuk itu).
+8. Staf yang membuka `/{locale}/login` diarahkan ke dasbor jamaah ("Buat Booking Pertama").
+9. Rekening bank belum diisi di Pengaturan Invoice (peringatan tampil di halaman bayar) — setelan pemilik, bukan kode.
+10. Uji `test-site-content` tidak idempoten (gagal pada jalan kedua di DB yang sama karena jejak audit tersisa; lulus di DB segar seperti CI).

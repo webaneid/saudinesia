@@ -143,6 +143,23 @@ await t('recomputeBookingDates: paling awal / paling akhir dari item; tanpa item
   assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id: draft } })).departureDate, null, 'draf tanpa item tetap tanpa tanggal')
 })
 
+await t('recomputeBookingDates: booking VISA SAJA → berangkat = rencana berangkat jamaah paling awal; item bertanggal tetap menang', async () => {
+  const id = await mk({ dep: null, ret: null })
+  for (const plan of ['2092-05-20', '2092-05-14', null]) {
+    const bp = await prisma.bookingPilgrim.create({ data: { bookingId: id }, select: { id: true } })
+    await prisma.visaApplication.create({ data: { bookingPilgrimId: bp.id, visaType: 'umroh', plannedTravelDate: plan ? d(plan) : null } })
+  }
+  const r = await recomputeBookingDates(prisma, id)
+  assert.deepEqual([r.first?.toISOString().slice(0, 10), r.last], ['2092-05-14', null])
+  const saved = await prisma.booking.findUniqueOrThrow({ where: { id } })
+  assert.deepEqual([saved.departureDate?.toISOString().slice(0, 10), saved.returnDate], ['2092-05-14', null], 'tersimpan; tanggal kembali tak ditebak')
+  // Item bertanggal ditambahkan → rencana visa bukan lagi acuan (meski lebih awal).
+  await prisma.bookingMuthowif.create({ data: { bookingId: id, startDate: d('2092-06-01'), endDate: d('2092-06-03'), numDays: 3, numPeople: 1, totalPrice: 1 } })
+  const withItem = await recomputeBookingDates(prisma, id)
+  assert.deepEqual([withItem.first?.toISOString().slice(0, 10), withItem.last?.toISOString().slice(0, 10)], ['2092-06-01', '2092-06-03'])
+  await prisma.booking.update({ where: { id }, data: { status: 'cancelled' } })
+})
+
 // ── hangus ───────────────────────────────────────────────────────────────────────────────────────
 const mine = (r: { expired: Array<{ id: string }> }) => r.expired.map(x => x.id).filter(i => ids.includes(i)).sort()
 await t('HANGUS: hanya booking hidup, belum dikonfirmasi, TANPA pembayaran pending/confirmed, dan berangkat ≤ hari ini + N (batas hari mengikuti zona aplikasi WIB)', async () => {
