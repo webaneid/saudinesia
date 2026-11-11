@@ -28,8 +28,8 @@ type Props = {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-function formatDate(d: Date) {
-  return formatCalendarDate(d, DATE_SHORT_MONTH)
+function formatDate(d: Date, locale: string) {
+  return formatCalendarDate(d, DATE_SHORT_MONTH, locale)
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
@@ -76,7 +76,7 @@ export default async function FlightCatalogPage({ params, searchParams }: Props)
   const columns: Column<Row>[] = [
     { key: 'route', header: t('table.route'), mobile: 'title', cell: r => <span className="text-sm font-semibold text-brand-dark">{r.origin} → {r.destination}</span> },
     { key: 'airline', header: t('table.airline'), cell: r => <span className="text-sm text-muted-foreground">{r.airline ?? '—'}</span> },
-    { key: 'period', header: t('table.period'), cell: r => <span className="text-sm text-muted-foreground">{formatDate(r.departureFrom)} – {formatDate(r.departureTo)}</span> },
+    { key: 'period', header: t('table.period'), cell: r => <span className="text-sm text-muted-foreground">{formatDate(r.departureFrom, locale)} – {formatDate(r.departureTo, locale)}</span> },
     // Belum berharga = tanda pisah, tak pernah "Rp 0" (§6.7 R3).
     { key: 'price', header: t('table.price'), align: 'right', cell: r => <span className="text-sm font-bold tabular-nums text-brand">{r.price > 0 ? formatRupiah(r.price) : '—'}</span> },
     // Checkout tiket (docs/arsitektur-booking-engine-v2.md §10.6) — hanya jadwal berharga yang periodenya belum lewat.

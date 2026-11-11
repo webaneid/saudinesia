@@ -1,5 +1,6 @@
 'use client'
 
+import { useTranslations } from 'next-intl'
 import { AutocompleteSelect, type AutocompleteOption } from '@/components/shared/AutocompleteSelect'
 import { COUNTRIES } from '@/lib/constants/countries'
 
@@ -18,10 +19,11 @@ const OPTIONS: AutocompleteOption[] = [...COUNTRIES].sort((a, b) => Number(b.cod
 type Props = { value: string; onChange: (code: string) => void; disabled?: boolean }
 
 export function CountryCodeSelect({ value, onChange, disabled }: Props) {
+  const t = useTranslations('shared.countryCode')
   return (
     <AutocompleteSelect
       options={OPTIONS} value={value} onChange={code => onChange(code ?? 'ID')} clearable={false}
-      placeholder="Kode negara" searchPlaceholder="Cari negara atau kode…" disabled={disabled} className="w-32 shrink-0"
+      placeholder={t('placeholder')} searchPlaceholder={t('search')} disabled={disabled} className="w-32 shrink-0"
     />
   )
 }

@@ -5,8 +5,10 @@ import { defineRouting } from 'next-intl/routing'
 export const routing = defineRouting({
   locales: ['id', 'en'],
   defaultLocale: 'id',
-  // Tidak ada pengalih bahasa di UI (komponen LocaleSwitcher yang tak pernah dipasang sudah dihapus), jadi cookie NEXT_LOCALE tak berguna: deteksi lewat Accept-Language tiap
-  // kunjungan. Aktifkan kembali (objek `{ maxAge }`) bila pengalih bahasa dibangun.
+  // Bawaan SELALU Indonesia (pemilik 2026-11-11, docs/arsitektur-i18n-frontend.md K1): `/` → `/id` untuk semua pengunjung, bahasa browser
+  // (Accept-Language) tidak dipakai. Bahasa Inggris hanya lewat pengalih (`LocaleSwitcher`), dan pilihan diingat lewat URL saja (K2) — karena itu
+  // tanpa cookie NEXT_LOCALE.
+  localeDetection: false,
   localeCookie: false,
 })
 

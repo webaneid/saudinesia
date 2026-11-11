@@ -588,10 +588,14 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 ---
 
 ## M13 — i18n
-- [ ] All UI strings extracted to `i18n/messages/id.json` and `en.json`
-- [ ] Language switcher in header
-- [ ] Date format localised (DD MMMM YYYY in ID, MMMM DD YYYY in EN)
-- [ ] Currency formatted as `Rp 1.250.000` (IDR, no decimals)
+Rencana: `docs/arsitektur-i18n-frontend.md` (fase I1–I6; keputusan pemilik K1–K6 2026-11-11).
+- [x] **I1** — bawaan selalu Indonesia (tanpa deteksi browser/cookie), pengalih ID/EN di header/menu HP/footer (halaman + query sama), tanggal katalog ikut bahasa (`en` → `en-GB`), penjaga `scripts/test-i18n-coverage.ts`, namespace lama `auth`/`booking`/`visa` dihapus — 2026-11-11
+- [x] **I2** — auth (masuk, daftar, lupa/atur ulang password, aktivasi, lengkapi data, Google) + pengalih di layout auth + `ContactPicker`/`CountryCodeSelect`/`AutocompleteSelect`/`OrDivider` (dimajukan dari I5); penjaga memakai parser TypeScript — 2026-11-11
+- [x] **I3** — checkout 9 jenis + keranjang + ikon keranjang; `lib/checkout` mengembalikan kunci (alasan blokir, isi paket, penolakan keranjang, ringkasan entri), bukan kalimat; penjaga membaca daftar nilai dari sumbernya — 2026-11-11
+- [ ] I4 — area jamaah
+- [ ] I5 — komponen bersama + invoice publik
+- [ ] I6 — pesan galat server jalur pelanggan (kode + terjemahan klien)
+- [x] Currency formatted as `Rp 1.250.000` (IDR, no decimals) — sama di kedua bahasa (K6)
 
 ---
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
 import type { CheckoutCart } from '@/lib/validators/checkout'
 import type { RequiredComponentType } from '@/lib/validators/visa'
 
@@ -20,6 +21,7 @@ export type PreviewState =
 const DELAY_MS = 400
 
 export function useCheckoutPreview(cart: CheckoutCart | null): PreviewState {
+  const t = useTranslations('checkout')
   const [state, setState] = useState<PreviewState>({ status: 'idle' })
   const key = cart ? JSON.stringify(cart) : ''
 
@@ -32,14 +34,14 @@ export function useCheckoutPreview(cart: CheckoutCart | null): PreviewState {
         const res = await fetch('/api/v1/bookings/preview', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: key, signal: ctrl.signal })
         const json = await res.json() as { success: boolean; data?: PreviewData; error?: string; meta?: { violations?: PreviewViolation[] } }
         if (json.success && json.data) setState({ status: 'ok', data: json.data })
-        else setState({ status: 'error', message: json.error ?? 'Harga belum dapat dihitung', violations: (json.meta?.violations ?? []).map(v => ({ message: v.message, missing: v.missing })) })
+        else setState({ status: 'error', message: json.error ?? t('summary.previewFailed'), violations: (json.meta?.violations ?? []).map(v => ({ message: v.message, missing: v.missing })) })
       } catch (e) {
         if (e instanceof DOMException && e.name === 'AbortError') return
-        setState({ status: 'error', message: 'Gagal menghubungi server — periksa koneksi internet', violations: [] })
+        setState({ status: 'error', message: t('form.network'), violations: [] })
       }
     }, DELAY_MS)
     return () => { clearTimeout(timer); ctrl.abort() }
-  }, [key])
+  }, [key, t])
 
   return state
 }

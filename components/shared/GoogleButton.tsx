@@ -1,3 +1,5 @@
+import { useTranslations } from 'next-intl'
+
 // Tombol "Masuk/Daftar dengan Google" mengikuti pedoman branding Google: logo "G" berwarna asli di atas latar putih, teks jelas.
 // Berupa tautan biasa (navigasi tingkat-atas ke /api/v1/auth/google/start) — bukan fetch — karena alur OAuth meninggalkan situs.
 
@@ -20,10 +22,11 @@ export function GoogleButton({ locale, label, next = null }: { locale: string; l
 }
 
 export function OrDivider() {
+  const t = useTranslations('shared.google')
   return (
     <div className="flex items-center gap-3 text-xs text-muted-foreground" role="separator">
       <span className="h-px flex-1 bg-border" />
-      atau
+      {t('or')}
       <span className="h-px flex-1 bg-border" />
     </div>
   )

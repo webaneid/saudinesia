@@ -4,7 +4,10 @@ import { prisma } from '@/lib/db'
 import { getOnboardingState, isOnboardingComplete } from '@/lib/auth/contact'
 import { safeLocale } from '@/lib/utils/locale'
 import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
+import { authMetadata } from '../metadata'
 import { LengkapiDataForm } from './LengkapiDataForm'
+
+export const generateMetadata = ({ params }: { params: Promise<{ locale: string }> }) => authMetadata(params, 'contactData')
 
 // Gerbang data awal (docs/arsitektur-auth.md §3.5; docs/arsitektur-pelanggan.md §6): jamaah yang telepon/WhatsApp-nya belum lengkap (mis. baru daftar lewat Google)
 // ATAU yang belum memberi persetujuan Kebijakan Privasi / notifikasi WhatsApp (mis. akun yang dibuatkan admin) diarahkan ke sini oleh layout jamaah sampai selesai.

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useTranslations } from 'next-intl'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { CountryCodeSelect } from '@/components/shared/CountryCodeSelect'
@@ -48,6 +49,7 @@ type Props = {
 }
 
 export function ContactPicker({ value, onChange, showEmail = true }: Props) {
+  const t = useTranslations('shared.contact')
   // "Sama dengan nomor HP" dimulai dari nilai turunan (bandingkan phone vs whatsapp aktual —
   // penting saat memuat data existing yang sudah divergen), tapi begitu pengguna secara EKSPLISIT
   // membuka centang, itu harus tetap terbuka walau phone/whatsapp kebetulan masih sama persis —
@@ -87,7 +89,7 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <Label>Nomor HP</Label>
+        <Label>{t('phone')}</Label>
         <div className="flex gap-2">
           <CountryCodeSelect value={value.phoneCountryCode} onChange={setPhoneCountryCode} />
           <Input type="tel" placeholder="8xx xxxx xxxx" className="flex-1"
@@ -96,7 +98,7 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
       </div>
 
       <div className="space-y-2">
-        <Label>Nomor WhatsApp</Label>
+        <Label>{t('whatsapp')}</Label>
         <div className="flex gap-2">
           <CountryCodeSelect value={value.whatsappCountryCode} onChange={setWhatsappCountryCode} disabled={sameAsPhone} />
           <Input type="tel" placeholder="8xx xxxx xxxx" className="flex-1"
@@ -105,13 +107,13 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
         </div>
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input type="checkbox" checked={sameAsPhone} onChange={e => toggleSameAsPhone(e.target.checked)} />
-          Sama dengan nomor HP
+          {t('sameAsPhone')}
         </label>
       </div>
 
       {showEmail && (
         <div className="space-y-2">
-          <Label>Email</Label>
+          <Label>{t('email')}</Label>
           <Input type="email" placeholder="email@example.com"
             value={value.email} onChange={e => onChange({ ...value, email: e.target.value })} />
         </div>

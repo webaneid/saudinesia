@@ -28,8 +28,8 @@ const RATE_PAGE_SIZE = 10
 
 type Period = { id: string; periodStart: Date; periodEnd: Date; schedules: Array<{ roomTypeId: string; totalQuota: number; pendingQuota: number; bookedQuota: number; price: number }> }
 
-function formatShortDate(d: Date) {
-  return formatCalendarDate(d, DATE_SHORT_MONTH)
+function formatShortDate(d: Date, locale: string) {
+  return formatCalendarDate(d, DATE_SHORT_MONTH, locale)
 }
 
 // Teks lewat getPageText (catalog.hotels.detail), metadata judul = nama hotel, jarak menyebut masjid kotanya (Madinah = Masjid Nabawi), warna
@@ -210,7 +210,7 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
           const meta = buildPageMeta(hotel.pricePeriods.length, Math.min(list.page, Math.max(1, Math.ceil(hotel.pricePeriods.length / list.limit))), list.limit)
           const rows: Period[] = hotel.pricePeriods.slice((meta.page - 1) * meta.limit, meta.page * meta.limit)
           const columns: Column<Period>[] = [
-            { key: 'period', header: t('ratesPeriod'), mobile: 'title', cell: p => <span className="whitespace-nowrap text-[13px] font-medium">{formatShortDate(p.periodStart)} – {formatShortDate(p.periodEnd)}</span> },
+            { key: 'period', header: t('ratesPeriod'), mobile: 'title', cell: p => <span className="whitespace-nowrap text-[13px] font-medium">{formatShortDate(p.periodStart, locale)} – {formatShortDate(p.periodEnd, locale)}</span> },
             ...roomTypeColumns.map<Column<Period>>(rt => ({
               key: `rt-${rt.id}`, header: rt.name, align: 'right',
               cell: p => {

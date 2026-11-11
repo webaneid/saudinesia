@@ -164,17 +164,26 @@ const toDate = (v: DateInput): Date => {
   if (Number.isNaN(d.getTime())) throw new RangeError('Tanggal/instan tidak valid')
   return d
 }
-/** Tampilkan INSTAN di zona aplikasi (selalu `timeZone` eksplisit). Bahasa Indonesia. */
-export function formatInstant(value: DateInput, options: Intl.DateTimeFormatOptions = DATE_MEDIUM, tz: string = getAppTimezone()): string {
+/**
+ * Bahasa tampilan tanggal = bahasa halaman (docs/arsitektur-i18n-frontend.md K6): `en` → `en-GB` (tanggal-bulan-tahun, sama urutan dengan
+ * kebiasaan pelanggan), selain itu Indonesia. Menerima kode locale aplikasi (`routing.locales`) sebagai string supaya `lib/time` tetap murni
+ * tanpa impor; nilai asing → Indonesia (bawaan, K1). Zona TIDAK ikut bahasa — selalu zona aplikasi.
+ */
+export function dateLocaleTag(locale: string = 'id'): string {
+  return locale === 'en' ? 'en-GB' : 'id-ID'
+}
+/** Tampilkan INSTAN di zona aplikasi (selalu `timeZone` eksplisit). Bahasa `locale` halaman (bawaan Indonesia). */
+export function formatInstant(value: DateInput, options: Intl.DateTimeFormatOptions = DATE_MEDIUM, tz: string = getAppTimezone(), locale: string = 'id'): string {
   const withTime = 'timeStyle' in options || 'hour' in options || 'minute' in options
   const d = toDate(value)
-  return withTime ? d.toLocaleString('id-ID', { ...options, timeZone: tz }) : d.toLocaleDateString('id-ID', { ...options, timeZone: tz })
+  const tag = dateLocaleTag(locale)
+  return withTime ? d.toLocaleString(tag, { ...options, timeZone: tz }) : d.toLocaleDateString(tag, { ...options, timeZone: tz })
 }
-/** Tampilkan TANGGAL KALENDER (`@db.Date`, `YYYY-MM-DD`, atau ISO dari JSON kolom itu) — tak bergeser oleh zona mana pun. Bahasa Indonesia. */
-export function formatCalendarDate(value: Date | CalendarDate | string, options: Intl.DateTimeFormatOptions = DATE_MEDIUM): string {
+/** Tampilkan TANGGAL KALENDER (`@db.Date`, `YYYY-MM-DD`, atau ISO dari JSON kolom itu) — tak bergeser oleh zona mana pun. Bahasa `locale` halaman (bawaan Indonesia). */
+export function formatCalendarDate(value: Date | CalendarDate | string, options: Intl.DateTimeFormatOptions = DATE_MEDIUM, locale: string = 'id'): string {
   // String dari JSON kolom `@db.Date` berbentuk ISO ("2026-11-01T00:00:00.000Z"): tanggalnya adalah 10 karakter pertama (UTC tengah malam), bukan zona pembaca.
   const d = typeof value === 'string' ? dbDateOf(value.slice(0, 10)) : toDate(value)
-  return d.toLocaleDateString('id-ID', { ...options, timeZone: 'UTC' })
+  return d.toLocaleDateString(dateLocaleTag(locale), { ...options, timeZone: 'UTC' })
 }
 /** Singkatan zona untuk label formulir/tampilan: WIB/WITA/WIT untuk zona Indonesia, selain itu "GMT+3". */
 export function zoneLabel(tz: string = getAppTimezone(), at: Date = new Date()): string {

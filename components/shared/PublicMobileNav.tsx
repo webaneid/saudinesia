@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { LocaleSwitcher } from './LocaleSwitcher'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -72,6 +73,9 @@ export function PublicMobileNav({ locale, keys }: { locale: string; keys: readon
                 )
               })}
             </nav>
+            <div className="mt-auto border-t px-4 py-3">
+              <LocaleSwitcher />
+            </div>
           </div>
         </div>,
         document.body,

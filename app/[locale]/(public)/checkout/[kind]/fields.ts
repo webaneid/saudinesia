@@ -3,40 +3,48 @@ import { formatRupiah } from '@/lib/utils'
 import { daysBetween, formatCalendarDate, isCalendarDate } from '@/lib/time'
 import { entryPeople } from '@/lib/validators/checkout'
 
-/** Isian per jenis melaporkan masukan checkout yang LENGKAP (atau null) + petunjuk isian yang masih kurang. */
+/** Isian per jenis melaporkan masukan checkout yang LENGKAP (atau null) + petunjuk isian yang masih kurang (teks sudah diterjemahkan). */
 export type FieldsChange = (input: CheckoutInput | null, missing: string | null) => void
 
-/** Opsi ChoiceSelect dengan harga jual sebagai petunjuk di kanan (0 = tanpa angka). */
+/** Opsi ChoiceSelect dengan harga jual sebagai petunjuk di kanan (0 = tanpa angka). `unit` = teks satuan yang sudah diterjemahkan. */
 export const priceHint = (n: number, unit = ''): string | undefined => (n > 0 ? `${formatRupiah(n)}${unit}` : undefined)
+
+/** Isian rentang hari yang masih kurang — kunci `checkout.days.*`. */
+export type DaysMissing = 'pickDates' | 'startPast' | 'endBeforeStart' | 'tooLong'
 
 /**
  * Rentang hari layanan (muthowif, katering): nilai mentah isian tanggal → tanggal sah + jumlah hari (termasuk hari mulai dan selesai, aturan mesin)
- * + petunjuk yang masih kurang. Nilai setengah diketik (mis. tahun "0002") dianggap kosong — tak pernah dihitung (lib/time menolak).
+ * + kunci petunjuk yang masih kurang. Nilai setengah diketik (mis. tahun "0002") dianggap kosong — tak pernah dihitung (lib/time menolak).
  */
 export function serviceDays(rawStart: string, rawEnd: string, today: string, maxDays: number) {
   const start = isCalendarDate(rawStart) ? rawStart : ''
   const end = isCalendarDate(rawEnd) ? rawEnd : ''
   const days = start && end ? daysBetween(start, end) + 1 : 0
-  const missing = !start || !end ? 'Pilih tanggal mulai dan selesai'
-    : start < today ? 'Tanggal mulai tidak boleh sebelum hari ini'
-    : days < 1 ? 'Tanggal selesai tidak boleh sebelum tanggal mulai'
-    : days > maxDays ? `Maksimal ${maxDays} hari per pesanan` : null
+  const missing: DaysMissing | null = !start || !end ? 'pickDates'
+    : start < today ? 'startPast'
+    : days < 1 ? 'endBeforeStart'
+    : days > maxDays ? 'tooLong' : null
   return { start, end, days, missing }
 }
 
-const day = (d: string) => formatCalendarDate(d)
+/** Ringkasan satu baris pilihan pesanan — kunci `checkout.entry.*` + nilainya (tanggal sudah diformat dalam bahasa halaman). */
+export type EntrySummary = { key: 'package' | 'visa' | 'visaDuration' | 'people' | 'hotel' | 'tour' | 'range' | 'flight' | 'flightReturn'; values: Record<string, string | number> }
 
 /** Ringkasan satu baris pilihan pesanan untuk kartu keranjang (tanggal + jumlah orang) — tanpa harga, tanpa data pribadi. */
-export function entrySummary(c: CheckoutInput): string {
-  const people = `${entryPeople(c)} orang`
+export function entrySummary(c: CheckoutInput, locale: string): EntrySummary {
+  const day = (d: string) => formatCalendarDate(d, undefined, locale)
+  const people = entryPeople(c)
   switch (c.kind) {
-    case 'package': return `Berangkat ${day(c.departureDate)} · ${people}`
-    case 'visa': return `Rencana berangkat ${day(c.plannedTravelDate)}${c.selectedDurationDays ? ` · ${c.selectedDurationDays}+ hari` : ''} · ${people}`
-    case 'transport': return people
-    case 'haji': return people
-    case 'hotel': return `${day(c.checkIn)} – ${day(c.checkOut)} · ${c.numRooms} kamar · ${people}`
-    case 'tour': return `${day(c.tourDate)} · ${people}`
-    case 'muthowif': case 'catering': return `${day(c.startDate)} – ${day(c.endDate)} · ${people}`
-    case 'flight': return `Pergi ${day(c.departureDate)}${c.returnDate ? ` · pulang ${day(c.returnDate)}` : ''} · ${people}`
+    case 'package': return { key: 'package', values: { date: day(c.departureDate), people } }
+    case 'visa': return c.selectedDurationDays
+      ? { key: 'visaDuration', values: { date: day(c.plannedTravelDate), days: c.selectedDurationDays, people } }
+      : { key: 'visa', values: { date: day(c.plannedTravelDate), people } }
+    case 'transport': case 'haji': return { key: 'people', values: { people } }
+    case 'hotel': return { key: 'hotel', values: { checkIn: day(c.checkIn), checkOut: day(c.checkOut), rooms: c.numRooms, people } }
+    case 'tour': return { key: 'tour', values: { date: day(c.tourDate), people } }
+    case 'muthowif': case 'catering': return { key: 'range', values: { start: day(c.startDate), end: day(c.endDate), people } }
+    case 'flight': return c.returnDate
+      ? { key: 'flightReturn', values: { date: day(c.departureDate), returnDate: day(c.returnDate), people } }
+      : { key: 'flight', values: { date: day(c.departureDate), people } }
   }
 }
