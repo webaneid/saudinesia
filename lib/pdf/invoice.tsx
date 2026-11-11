@@ -40,6 +40,7 @@ const styles = StyleSheet.create({
   table: { marginTop: 4 },
   tableHeaderRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#1f2937', paddingBottom: 4, marginBottom: 6 },
   tableRow: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#f3f4f6', paddingVertical: 6 },
+  sectionRow: { backgroundColor: '#f3f4f6', paddingVertical: 4, paddingHorizontal: 4, marginTop: 6, fontSize: 8, fontWeight: 700 },
   colItem:   { width: '28%', paddingRight: 8, fontWeight: 700 },
   colDesc:   { width: '38%', paddingRight: 8, color: '#6b7280', fontSize: 8 },
   colQty:    { width: '8%', textAlign: 'center' },
@@ -140,12 +141,16 @@ function InvoiceDocument({ data, logo }: { data: InvoiceData; logo: Buffer | nul
             <Text style={[styles.colTotal, styles.thText]}>Total</Text>
           </View>
           {data.lineItems.map((li, i) => (
-            <View key={i} style={styles.tableRow} wrap={false}>
+            <View key={i} wrap={false}>
+            {/* Booking berrombongan: subjudul setiap kali bagian berganti (nama rombongan hidup, docs/arsitektur-booking-engine-v2.md §10.8). */}
+            {li.section && li.section !== data.lineItems[i - 1]?.section && <Text style={styles.sectionRow}>{pdfText(li.section)}</Text>}
+            <View style={styles.tableRow}>
               <Text style={styles.colItem}>{pdfText(li.label)}</Text>
               <Text style={styles.colDesc}>{pdfText(li.description)}</Text>
               <Text style={styles.colQty}>{li.qty}</Text>
               <Text style={styles.colPrice}>{formatRupiahPdf(li.unitPrice)}</Text>
               <Text style={styles.colTotal}>{formatRupiahPdf(li.amount)}</Text>
+            </View>
             </View>
           ))}
         </View>

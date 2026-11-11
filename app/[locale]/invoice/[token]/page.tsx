@@ -66,13 +66,16 @@ export default async function PublicInvoicePage({ params }: Props) {
       <section className="rounded-xl border">
         <ul className="divide-y" aria-label="Rincian invoice">
           {d.lineItems.map((l, i) => (
-            <li key={i} className="flex items-start justify-between gap-4 p-4 text-sm">
+            <li key={i}>
+            {l.section && l.section !== d.lineItems[i - 1]?.section && <p className="bg-muted/60 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{l.section}</p>}
+            <div className="flex items-start justify-between gap-4 p-4 text-sm">
               <div className="min-w-0">
                 <p className="font-semibold">{l.label}</p>
                 {l.description && <p className="text-xs text-muted-foreground">{l.description}</p>}
                 <p className="text-xs text-muted-foreground">{l.qty} × {formatRupiah(l.unitPrice)}</p>
               </div>
               <p className="shrink-0 font-semibold tabular-nums">{formatRupiah(l.amount)}</p>
+            </div>
             </li>
           ))}
         </ul>

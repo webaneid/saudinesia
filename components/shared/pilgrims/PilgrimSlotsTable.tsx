@@ -68,7 +68,14 @@ export function PilgrimSlotsTable({ total, slots, addHref, deleteEndpoint }: Pro
 
   const columns: Column<SlotRow>[] = [
     { key: 'no', header: 'No', cell: s => <span className="tabular-nums text-muted-foreground">{s.no}</span> },
-    { key: 'name', header: 'Nama jamaah', mobile: 'title', cell: s => <span className="font-medium">{nameOf(s)}</span> },
+    {
+      key: 'name', header: 'Nama jamaah', mobile: 'title', cell: s => (
+        <span className="min-w-0">
+          <span className="font-medium">{nameOf(s)}</span>
+          {s.group && <span className="block text-xs text-muted-foreground">{s.group}</span>}
+        </span>
+      ),
+    },
     {
       key: 'data', header: 'Data', cell: s => s.data.complete
         ? <Badge variant="success">Lengkap</Badge>

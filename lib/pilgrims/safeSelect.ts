@@ -7,5 +7,5 @@ import type { Prisma } from '@prisma/client'
  */
 export const BOOKING_PILGRIM_SAFE_SELECT = {
   id: true, bookingId: true, userId: true, isLeader: true, fieldValues: true, savedPilgrimId: true, passportLast4: true,
-  reviewStatus: true, submittedAt: true, verifiedAt: true,
+  reviewStatus: true, submittedAt: true, verifiedAt: true, groupId: true,
 } as const satisfies Prisma.BookingPilgrimSelect

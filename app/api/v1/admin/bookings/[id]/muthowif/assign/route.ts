@@ -3,9 +3,11 @@ import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { assignMuthowifToBooking } from '@/lib/muthowif/assign'
+import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
 
-const schema = z.object({ muthowifId: z.string().min(1) })
+// `bookingMuthowifId` wajib (§10.8, 11d-2b): booking berrombongan bisa memuat beberapa layanan muthowif — penugasan harus menyebut itemnya.
+const schema = z.object({ bookingMuthowifId: z.string().min(1).max(64), muthowifId: z.string().min(1).max(64) }).strict()
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -39,9 +41,10 @@ export async function POST(req: Request, { params }: Ctx) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
     const bm = await prisma.bookingMuthowif.findFirst({
-      where: { bookingId, muthowifId: null },
+      where: { id: parsed.data.bookingMuthowifId, bookingId, muthowifId: null },
+      select: { id: true },
     })
-    if (!bm) return NextResponse.json(err('Tidak ada layanan muthowif yang menunggu assignment untuk booking ini'), { status: 404 })
+    if (!bm) return NextResponse.json(err('Layanan muthowif ini tidak ada di booking ini atau sudah di-assign'), { status: 404 })
 
     await prisma.$transaction((tx) => assignMuthowifToBooking(tx, bm.id, parsed.data.muthowifId))
 
@@ -50,7 +53,9 @@ export async function POST(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    if (e instanceof Error) {
+    if (isRecordNotFound(e)) return NextResponse.json(err('Muthowif tidak ditemukan'), { status: 404 })
+    // Galat domain (sudah di-assign, nonaktif, kapasitas) = Error polos → 409 dengan pesannya; galat Prisma (ber-`code`) tak pernah dibocorkan.
+    if (e instanceof Error && !('code' in e)) {
       return NextResponse.json(err(e.message), { status: 409 })
     }
     console.error('[admin/bookings/[id]/muthowif/assign/POST]', e)

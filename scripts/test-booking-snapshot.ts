@@ -495,7 +495,13 @@ await t('PENJAGA SUMBER: hanya engine/snapshot.ts menulis price_snapshots; route
   assert.match(readFileSync(join(root, 'lib/booking/create.ts'), 'utf8'), /const total = await writeBookingItems\(tx, bookingId, p\.data, p\.tours, p\.packages(, written)?\)/)
   assert.match(readFileSync(join(root, 'lib/checkout/place.ts'), 'utf8'), /await writeBooking\(tx, prepared, bk\.id\)/)
   const invoice = readFileSync(join(root, 'lib/pdf/invoiceData.ts'), 'utf8')
-  assert.doesNotMatch(invoice, /\.totalPrice|\.unitPrice|\.pricePerNight|sellPriceSnapshot|\.hotels|\.transports|\.tourPackages/, 'invoice hanya membaca price_snapshots')
+  assert.doesNotMatch(invoice, /\.totalPrice|\.unitPrice|\.pricePerNight|sellPriceSnapshot/, 'invoice hanya membaca price_snapshots')
+  // Relasi item hanya dimuat untuk rombongannya (§10.8, 11d-2b): TEPAT `{ id, groupId }` — tak ada kolom harga/jumlah item yang bisa masuk invoice.
+  const itemRelations = ['hotels', 'transports', 'flights', 'muthowif', 'catering', 'tourPackages', 'haji', 'packages']
+  for (const rel of itemRelations) {
+    const decl = invoice.match(new RegExp(`^\\s*${rel}:\\s*(\\{.*\\}),?\\s*$`, 'm'))?.[1]
+    assert.equal(decl, '{ select: { id: true, groupId: true } }', `invoice memuat ${rel} hanya { id, groupId }`)
+  }
   const items = readFileSync(join(root, 'lib/booking/lineItems.ts'), 'utf8')
   assert.doesNotMatch(items, /requireSellPrice|computeSellPrice|totalAmount/, 'lineItems tak menghitung harga dengan jalur lama')
 })

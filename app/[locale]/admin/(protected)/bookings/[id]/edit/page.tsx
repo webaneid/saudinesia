@@ -28,7 +28,7 @@ type Violation = { missing: string; message: string }
 type Pilgrim = BookingRevisionInput['pilgrims'][number] & { position?: number; locked?: boolean; lockReason?: string | null; visaFromPackage?: boolean; row?: string; visaPriceIdr?: number }
 type Change = { kind: string; label: string; detail?: string }
 type Preview = {
-  lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number }>
+  lines: Array<{ label: string; description: string; qty: number; unitPrice: number; amount: number; section?: string }>
   totalBefore: number; totalAfter: number; taxBefore: number; taxAfter: number; grandBefore: number; grandAfter: number; revision: number; changes: Change[]; notices: string[]; itemTotals: number[]; pilgrimVisaTotals: number[]
 }
 
@@ -216,9 +216,12 @@ export default function BookingRevisionPage({ params }: Props) {
             </ul>
             <ul className="m-0 list-none divide-y divide-admin-line border-t border-admin-line p-0" aria-label="Baris invoice sesudah revisi">
               {preview.lines.map((l, i) => (
-                <li key={i} className="flex items-start justify-between gap-3 py-1.5">
-                  <span className="min-w-0"><span className="font-medium text-admin-ink">{l.label}</span>{l.description && <span className="block text-xs text-admin-muted">{l.description}</span>}</span>
-                  <span className="shrink-0 font-semibold tabular-nums">{formatRupiah(l.amount)}</span>
+                <li key={i} className="py-1.5">
+                  {l.section && l.section !== preview.lines[i - 1]?.section && <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-admin-muted">{l.section}</span>}
+                  <span className="flex items-start justify-between gap-3">
+                    <span className="min-w-0"><span className="font-medium text-admin-ink">{l.label}</span>{l.description && <span className="block text-xs text-admin-muted">{l.description}</span>}</span>
+                    <span className="shrink-0 font-semibold tabular-nums">{formatRupiah(l.amount)}</span>
+                  </span>
                 </li>
               ))}
             </ul>

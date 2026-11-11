@@ -7,7 +7,7 @@ import type { RequiredComponentType } from '@/lib/validators/visa'
 // Pratinjau harga dari server (POST /api/v1/bookings/preview) — mesin pesan yang sama dengan saat memesan, di transaksi yang di-rollback.
 // Badan = keranjang (`checkoutCartSchema`; checkout satu produk = keranjang satu entri). Dipanggil ulang (jeda 400 ms) setiap isian berubah; permintaan lama dibatalkan. Klien TIDAK menghitung harga sendiri.
 
-export type PreviewLine = { label: string; description: string; qty: number; unitPrice: number; amount: number; group?: { label: string; unit: string } }
+export type PreviewLine = { label: string; description: string; qty: number; unitPrice: number; amount: number; group?: { label: string; unit: string }; section?: string }
 export type PreviewData = { lines: PreviewLine[]; total: number; tax: Array<{ name: string; ratePercent: number; mode: string; amountIdr: number }>; taxAdded: number; grandTotal: number; dueDays: number }
 /** Pelanggaran aturan visa (lib/booking/rules.ts): jenis komponen yang kurang dipakai halaman keranjang untuk menautkan katalognya. */
 export type PreviewViolation = { message: string; missing: RequiredComponentType | 'rule' }

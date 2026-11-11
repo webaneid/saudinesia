@@ -37,7 +37,7 @@ export function CheckoutSummary({ preview, missing, submitting, submitError, onS
           <ul className="divide-y text-sm">
             {/* Baris per jamaah yang identik (visa) digabung: "Visa … · 3 jamaah × Rp …"; baris lain tetap satu per item. */}
             {collapseRows(preview.data.lines.map((l, i) => ({
-              group: l.group ? 'per-jamaah' : `baris-${i}`, name: l.group?.label ?? l.label, detail: l.description,
+              group: l.group ? `per-jamaah|${l.section ?? ''}` : `baris-${i}`, name: l.group?.label ?? l.label, detail: l.description,
               unit: l.group?.unit ?? '', amount: l.amount, line: l,
             }))).map(r => {
               const formula = formulaOf(r, formatRupiah)

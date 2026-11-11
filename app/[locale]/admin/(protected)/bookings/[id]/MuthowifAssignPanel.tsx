@@ -7,7 +7,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 
 type RosterItem = { id: string; name: string; dailyCapacity: number }
 
-export function MuthowifAssignPanel({ bookingId }: { bookingId: string }) {
+export function MuthowifAssignPanel({ bookingId, bookingMuthowifId }: { bookingId: string; bookingMuthowifId: string }) {
   const router = useRouter()
   const [roster, setRoster] = useState<RosterItem[]>([])
   const [selected, setSelected] = useState('')
@@ -26,7 +26,7 @@ export function MuthowifAssignPanel({ bookingId }: { bookingId: string }) {
     const res = await fetch(`/api/v1/admin/bookings/${bookingId}/muthowif/assign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ muthowifId: selected }),
+      body: JSON.stringify({ bookingMuthowifId, muthowifId: selected }),
     })
     const json = await res.json()
     setLoading(false)

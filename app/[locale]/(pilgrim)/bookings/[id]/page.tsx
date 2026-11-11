@@ -21,6 +21,7 @@ import { getPaymentConfig } from '@/lib/constants/payment'
 import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
 import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
 import { PilgrimSlotsTable } from '@/components/shared/pilgrims/PilgrimSlotsTable'
+import { groupView } from '@/lib/booking/groups'
 import { DATETIME_FULL, DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
 
 type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ baru?: string }> }
@@ -46,6 +47,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
       pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
       invoice:    { select: { number: true, taxAddedIdr: true, taxIncludedIdr: true, bankSnapshot: true } },
+      groups:     { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true } },
     },
   })
   if (!booking) notFound()
@@ -70,17 +72,21 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
 
   const day = (d: Date) => formatCalendarDate(d, DATE_NUMERIC)
   // Satu baris per item; baris identik (mis. visa yang sama untuk tiap jamaah) digabung jadi rumus "3 jamaah × Rp …" (lib/booking/orderSummary.ts).
-  const one = (group: string, name: string, detail: string, amount: number, unit = 'pesanan'): SummaryInput => ({ group, name, detail, unit, amount })
+  // Booking berrombongan (§10.8, 11d-2b): nama rombongan (label hidup) mengawali keterangan — baris rombongan berbeda tidak pernah digabung.
+  const gv = groupView(booking.groups)
+  const pilgrimGroup = new Map(booking.pilgrims.map(p => [p.id, p.groupId]))
+  const one = (group: string, name: string, detail: string, amount: number, unit = 'pesanan', groupId: string | null = null): SummaryInput =>
+    ({ group, name, detail: gv ? [gv.name(groupId), detail].filter(Boolean).join(' · ') : detail, unit, amount })
   const sections: SummarySection[] = [
-    { icon: Package, title: 'Paket Umroh', rows: collapseRows(booking.packages.map(bp => one('Paket Umroh', bp.package.name, `${day(bp.departureDate)} – ${day(bp.returnDate)} · ${bp.numPeople} orang`, sellOf('package', bp.id)))) },
-    { icon: Landmark, title: 'Haji', rows: collapseRows(booking.haji.map(bh => one('Haji', bh.hajiProduct.name, `${bh.numPersons} orang`, sellOf('haji', bh.id)))) },
-    { icon: Plane, title: 'Tiket Pesawat', rows: collapseRows(booking.flights.map(bf => one('Tiket Pesawat', `${bf.flightSchedule.route.origin} → ${bf.flightSchedule.route.destination}`, `${day(bf.departureDate)} · ${bf.numPassengers} penumpang`, sellOf('flight', bf.id)))) },
-    { icon: Building2, title: 'Hotel', rows: collapseRows(booking.hotels.map(h => one('Hotel', h.hotelRoomSchedule.period.hotel.name, `${h.hotelRoomSchedule.period.hotel.city} · ${h.nights} malam · ${h.numRooms} kamar ${h.hotelRoomSchedule.roomType.name}`, sellOf('hotel', h.id)))) },
-    { icon: Bus, title: 'Transport', rows: collapseRows(booking.transports.map(bt => one('Transport', bt.transportQuota.pricing.trip.name, `${day(bt.travelDate)} · ${bt.transportQuota.pricing.vehicle.name} · ${bt.numPassengers} penumpang`, sellOf('transport', bt.id)))) },
-    { icon: UserRound, title: 'Muthowif', rows: collapseRows(booking.muthowif.map(bm => one('Muthowif', bm.muthowif?.name ?? 'Layanan Muthowif', `${day(bm.startDate)} – ${day(bm.endDate)} · ${bm.numDays} hari · ${bm.numPeople} orang`, sellOf('muthowif', bm.id)))) },
-    { icon: UtensilsCrossed, title: 'Katering', rows: collapseRows(booking.catering.map(bc => one('Katering', bc.cateringOption.name, `${day(bc.startDate)} – ${day(bc.endDate)} · ${bc.numDays} hari · ${bc.numPeople} orang`, sellOf('catering', bc.id)))) },
-    { icon: Building2, title: 'Paket Ziarah', rows: collapseRows(booking.tourPackages.map(tp => one('Paket Ziarah', tp.tourPackage.name, `${day(tp.tourDate)} · ${tp.numPeople} orang${tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}`, sellOf('tourPackage', tp.id)))) },
-    { icon: Stamp, title: 'Visa', rows: collapseRows(booking.pilgrims.flatMap(p => p.visaApplication ? [one('Visa', p.visaApplication.visaProduct?.name ?? 'Visa', p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', sellOf('visa', p.visaApplication.id), 'jamaah')] : [])) },
+    { icon: Package, title: 'Paket Umroh', rows: collapseRows(booking.packages.map(bp => one('Paket Umroh', bp.package.name, `${day(bp.departureDate)} – ${day(bp.returnDate)} · ${bp.numPeople} orang`, sellOf('package', bp.id), undefined, bp.groupId))) },
+    { icon: Landmark, title: 'Haji', rows: collapseRows(booking.haji.map(bh => one('Haji', bh.hajiProduct.name, `${bh.numPersons} orang`, sellOf('haji', bh.id), undefined, bh.groupId))) },
+    { icon: Plane, title: 'Tiket Pesawat', rows: collapseRows(booking.flights.map(bf => one('Tiket Pesawat', `${bf.flightSchedule.route.origin} → ${bf.flightSchedule.route.destination}`, `${day(bf.departureDate)} · ${bf.numPassengers} penumpang`, sellOf('flight', bf.id), undefined, bf.groupId))) },
+    { icon: Building2, title: 'Hotel', rows: collapseRows(booking.hotels.map(h => one('Hotel', h.hotelRoomSchedule.period.hotel.name, `${h.hotelRoomSchedule.period.hotel.city} · ${h.nights} malam · ${h.numRooms} kamar ${h.hotelRoomSchedule.roomType.name}`, sellOf('hotel', h.id), undefined, h.groupId))) },
+    { icon: Bus, title: 'Transport', rows: collapseRows(booking.transports.map(bt => one('Transport', bt.transportQuota.pricing.trip.name, `${day(bt.travelDate)} · ${bt.transportQuota.pricing.vehicle.name} · ${bt.numPassengers} penumpang`, sellOf('transport', bt.id), undefined, bt.groupId))) },
+    { icon: UserRound, title: 'Muthowif', rows: collapseRows(booking.muthowif.map(bm => one('Muthowif', bm.muthowif?.name ?? 'Layanan Muthowif', `${day(bm.startDate)} – ${day(bm.endDate)} · ${bm.numDays} hari · ${bm.numPeople} orang`, sellOf('muthowif', bm.id), undefined, bm.groupId))) },
+    { icon: UtensilsCrossed, title: 'Katering', rows: collapseRows(booking.catering.map(bc => one('Katering', bc.cateringOption.name, `${day(bc.startDate)} – ${day(bc.endDate)} · ${bc.numDays} hari · ${bc.numPeople} orang`, sellOf('catering', bc.id), undefined, bc.groupId))) },
+    { icon: Building2, title: 'Paket Ziarah', rows: collapseRows(booking.tourPackages.map(tp => one('Paket Ziarah', tp.tourPackage.name, `${day(tp.tourDate)} · ${tp.numPeople} orang${tp.transportQuota ? ` · ${tp.transportQuota.pricing.vehicle.name}` : ''}`, sellOf('tourPackage', tp.id), undefined, tp.groupId))) },
+    { icon: Stamp, title: 'Visa', rows: collapseRows(booking.pilgrims.flatMap(p => p.visaApplication ? [one('Visa', p.visaApplication.visaProduct?.name ?? 'Visa', p.visaApplication.selectedDurationDays ? `${p.visaApplication.selectedDurationDays} hari` : '', sellOf('visa', p.visaApplication.id), 'jamaah', p.groupId)] : [])) },
   ]
   // Diskon/biaya tambahan di total pesanan tidak menempel pada satu layanan: tampil terpisah supaya rincian di atas tetap menjumlah ke tagihan.
   const shownCents = sections.reduce((sum, c) => sum + c.rows.reduce((n, r) => n + Math.round(r.amount * 100), 0), 0)
@@ -190,7 +196,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
         <p className="text-sm text-muted-foreground">Isi satu per satu: data diri dan dokumen tiap jamaah, lalu ajukan untuk diperiksa petugas.</p>
         <PilgrimSlotsTable
           total={slots.length}
-          slots={slots.map(x => ({ ...x, editHref: jamaahHref(x.id) }))}
+          slots={slots.map(x => ({ ...x, ...(gv && { group: gv.name(pilgrimGroup.get(x.id)) }), editHref: jamaahHref(x.id) }))}
           addHref={open && nextEmpty ? jamaahHref(nextEmpty.id) : null}
           deleteEndpoint={open ? `/api/v1/bookings/${booking.id}/pilgrims/{id}` : null}
         />
