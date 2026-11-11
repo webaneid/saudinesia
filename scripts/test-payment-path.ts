@@ -35,7 +35,14 @@ await t('setiap jenis item tampil di detail booking admin', () => {
 })
 await t('rincian jamaah menjumlah ke tagihan: penyesuaian total tampil terpisah', () => {
   assert.match(read(PILGRIM), /<OrderSummaryCard[^>]*adjustment=/)
-  assert.match(read('app/[locale]/(pilgrim)/bookings/[id]/OrderSummaryCard.tsx'), /Penyesuaian harga/)
+  // Sejak I4 teksnya di berkas pesan (pilgrimArea.summary.adjustment), bukan di komponen.
+  const card = read('app/[locale]/(pilgrim)/bookings/[id]/OrderSummaryCard.tsx')
+  assert.match(card, /useTranslations\('pilgrimArea\.summary'\)/)
+  assert.match(card, /adjustment !== 0 &&[\s\S]*?t\('adjustment'\)/)
+  for (const locale of ['id', 'en']) {
+    const msg = (JSON.parse(read(`i18n/messages/${locale}.json`)) as { pilgrimArea?: { summary?: { adjustment?: unknown } } }).pilgrimArea?.summary?.adjustment
+    assert.ok(typeof msg === 'string' && msg.length > 0, `pesan pilgrimArea.summary.adjustment (${locale}) tidak ada`)
+  }
 })
 
 await t('route bukti tidak mempercayai MIME/nama dari klien dan tidak melewati penyimpanan di dev', () => {
