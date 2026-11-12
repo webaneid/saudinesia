@@ -11,6 +11,8 @@ import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { catalogMetadata } from '@/lib/public-content/metadata'
 import { formatRupiah } from '@/lib/utils'
+import { getTranslations } from 'next-intl/server'
+import { safeLocale } from '@/lib/utils/locale'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
@@ -29,10 +31,11 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function VisaCatalogPage({ params }: Props) {
   const { locale } = await params
   await requireCatalog('visa')
-  const [products, content, t] = await Promise.all([
+  const [products, content, t, tcomp] = await Promise.all([
     prisma.visaProduct.findMany({ where: { isActive: true }, orderBy: [{ country: 'asc' }, { visaType: 'asc' }, { id: 'asc' }] }),
     getPageContent(locale, 'visa'),
     getPageText(locale, 'visa'),
+    getTranslations({ locale: safeLocale(locale), namespace: 'checkout.components' }),
   ])
   const ids = products.map(p => p.id)
   const [reqs, covers, priceSummary] = await Promise.all([
@@ -108,7 +111,7 @@ export default async function VisaCatalogPage({ params }: Props) {
                           {model.plus ? (
                             <p className="flex items-start gap-2 text-xs text-muted-foreground">
                               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
-                              <span>{t('card.bundled', { parts: model.parts.join(', ') })}</span>
+                              <span>{t('card.bundled', { parts: model.types.map(c => tcomp(c)).join(', ') })}</span>
                             </p>
                           ) : summary.from > 0 ? (
                             <Link href={checkoutPath(locale, 'visa', v.id)} className="btn-brand-solid w-full">

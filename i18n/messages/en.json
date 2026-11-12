@@ -920,6 +920,30 @@
         "network": "Could not reach the server.",
         "loading": "Loading file…"
       }
+    },
+    "requiredDocs": {
+      "title": "Required Documents",
+      "optional": "Optional / Conditional:"
+    },
+    "hotelFacilities": {
+      "wifi": "Free WiFi",
+      "breakfast": "Breakfast",
+      "ac": "Air conditioning",
+      "tv": "TV",
+      "pool": "Swimming pool",
+      "gym": "Fitness centre",
+      "parking": "Parking",
+      "room_service": "24-hour room service",
+      "prayer_room": "Prayer room",
+      "airport_shuttle": "Airport shuttle",
+      "laundry": "Laundry",
+      "elevator": "Lift",
+      "restaurant": "Restaurant",
+      "front_desk_24h": "24-hour front desk",
+      "family_room": "Family room",
+      "full_board": "Full board",
+      "half_board": "Half board",
+      "room_only": "Room only (no breakfast)"
     }
   },
   "checkout": {
@@ -1515,5 +1539,52 @@
       "deleteYes": "Yes, delete",
       "delete": "Delete"
     }
+  },
+  "invoicePage": {
+    "metaTitle": "Invoice",
+    "limited": "Too many requests. Please try again in {minutes, plural, one {# minute} other {# minutes}}.",
+    "phone": "Phone: {phone}",
+    "taxId": "Tax ID (NPWP): {taxId}",
+    "heading": "INVOICE",
+    "revision": "Revision {number}",
+    "billedTo": "Billed to",
+    "bookingCode": "Booking code",
+    "invoiceDate": "Invoice date",
+    "dueDate": "Due date",
+    "balanceDue": "Balance due",
+    "lines": "Invoice details",
+    "subtotal": "Subtotal",
+    "taxIncluded": "(included in the price)",
+    "total": "Total",
+    "paid": "Paid",
+    "howToPay": "How to pay",
+    "transferTo": "Transfer to <b>{bank}</b> <mono>{account}</mono>, account holder {holder}",
+    "branch": " ({branch})",
+    "validAfter": "Payment is valid once confirmed by the {company} team.",
+    "terms": "Terms & Conditions",
+    "downloadPdf": "Download PDF"
+  },
+  "privacy": {
+    "metaTitle": "Privacy Policy",
+    "title": "Privacy Policy",
+    "version": "Version {version}",
+    "draftTitle": "DRAFT — requires legal review before go-live.",
+    "draftBody": "This page is an initial framework for compliance with Indonesia’s Personal Data Protection Law (UU PDP) and has not yet been verified by {company}’s legal counsel.",
+    "collectTitle": "1. Data We Collect",
+    "collectIntro": "To process Hajj & Umrah bookings (visa, hotel, transport, muthowif, catering), we collect:",
+    "categories": {
+      "identity": "Full name, email, WhatsApp number, and address",
+      "documents": "Passport number, ID card (KTP/NIK), and Family Card (documents required for visa/Hajj-Umrah)",
+      "health": "Vaccination certificates and health history relevant to the trip",
+      "payment": "Payment data (transfer receipts) — not including your card or bank account numbers"
+    },
+    "purposeTitle": "2. Purpose of Processing",
+    "purposeBody": "Data is used solely to process your bookings: visa processing, hotel/transport/muthowif reservations, payment confirmation, and trip-related communication (WhatsApp/email). We do not sell your personal data to third parties.",
+    "storageTitle": "3. Storage & Security",
+    "storageBody": "Documents (passport, ID card, Family Card, vaccination certificate) are stored in private storage and can only be accessed through temporary links (presigned URLs) that expire automatically. Data is never written to application logs.",
+    "rightsTitle": "4. Your Rights as a Data Subject",
+    "rightsBody": "Under the UU PDP, you have the right to access, correct, and request deletion of your personal data. To request account deletion, use the \"{button}\" button on your Profile page after signing in. Requests are processed manually because some data (transaction history) must be retained for legal and tax purposes.",
+    "contactTitle": "5. Contact",
+    "contactWa": "WhatsApp +{number}"
   }
 }

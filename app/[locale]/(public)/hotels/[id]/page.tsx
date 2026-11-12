@@ -13,7 +13,9 @@ import { getProductImages } from '@/lib/media/urls'
 import { MapPin, Star, ArrowLeft, CheckCircle, Building2, ExternalLink } from 'lucide-react'
 import { parseMapsUrl } from '@/lib/address/maps'
 import { formatRupiah, formatDistance } from '@/lib/utils'
-import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
+import { HOTEL_FACILITIES, type HotelFacilityCode } from '@/lib/constants/hotelFacilities'
+import { getTranslations } from 'next-intl/server'
+import { safeLocale } from '@/lib/utils/locale'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { sellPrices } from '@/lib/pricing/engine/read'
 import { buildListHref, buildPageMeta, parseListParams } from '@/lib/table/pagination'
@@ -50,7 +52,7 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
   await requireCatalog('hotels')
   if (!UUID.test(id)) notFound()
   const list = parseListParams(await searchParams, RATE_PAGE_SIZE)
-  const [t, tc] = await Promise.all([getPageText(locale, 'hotels', 'detail'), getPageText(locale, 'hotels', 'card')])
+  const [t, tc, tf] = await Promise.all([getPageText(locale, 'hotels', 'detail'), getPageText(locale, 'hotels', 'card'), getTranslations({ locale: safeLocale(locale), namespace: 'shared.hotelFacilities' })])
 
   // Rate sheet — tampilkan SEMUA periode aktif (bukan cuma yang mencakup hari ini), supaya
   // pengunjung bisa lihat harga ke depan sebelum pilih tanggal, sama seperti rate sheet vendor
@@ -83,7 +85,9 @@ export default async function HotelDetailPage({ params, searchParams }: Props) {
   const roomTypeColumns = [...roomTypeMap.values()].sort((a, b) => a.defaultCapacity - b.defaultCapacity)
 
   const facilityLabels = (Array.isArray(hotel.facilities) ? hotel.facilities as string[] : [])
-    .map(code => HOTEL_FACILITIES.find(f => f.code === code)?.label ?? code)
+    // Kode baku → label bahasa halaman (shared.hotelFacilities; admin memakai label lib). Kode asing tak ditampilkan mentah.
+    .filter((code): code is HotelFacilityCode => HOTEL_FACILITIES.some(f => f.code === code))
+    .map(code => tf(code))
 
   // Foto hotel dari layanan media universal: sampul dulu, lalu galeri berurutan (URL presigned 1 jam).
   const imageUrls = ((await getProductImages('hotel', [hotel.id])).get(hotel.id)?.images ?? []).map(i => i.url)
