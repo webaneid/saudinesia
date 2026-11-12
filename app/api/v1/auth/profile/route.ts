@@ -4,7 +4,8 @@ import { requireSession } from '@/lib/auth/session'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { profileSchema } from '@/lib/validators/auth'
 import { upsertAddress } from '@/lib/address/prepare'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
+import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 
 // Dipakai wizard booking (docs/arsitektur-komponen-kontak.md §5) untuk prefill Kontak
 // jamaah #1 (Pemesan) dari data akun — client component, tidak bisa panggil getSession() langsung.
@@ -18,10 +19,10 @@ export async function GET() {
     return NextResponse.json(ok(user))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json(err('Unauthorized'), { status: 401 })
+      return apiErrorJson('unauthorized', 401)
     }
     console.error('[auth/profile]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }
 
@@ -34,7 +35,7 @@ export async function PUT(request: Request) {
     const body = await request.json().catch(() => null)
     const parsed = profileSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
+      return zodFailure(parsed.error)
     }
 
     const { fullName, address } = parsed.data
@@ -43,7 +44,7 @@ export async function PUT(request: Request) {
     if (address) {
       const existing = await prisma.user.findUniqueOrThrow({ where: { id: session.userId }, select: { addressId: true } })
       const result = await upsertAddress(existing.addressId, address)
-      if (!result.ok) return NextResponse.json(err(result.message), { status: 400 })
+      if (!result.ok) return apiErrorJson(result.code, 400, { field: 'address' })
       data.addressId = result.id
     }
 
@@ -56,9 +57,9 @@ export async function PUT(request: Request) {
     return NextResponse.json(ok(user))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
-      return NextResponse.json(err('Unauthorized'), { status: 401 })
+      return apiErrorJson('unauthorized', 401)
     }
     console.error('[auth/profile]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

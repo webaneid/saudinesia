@@ -6,7 +6,8 @@ import { createSession } from '@/lib/auth/session'
 import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { googleCompleteSchema } from '@/lib/validators/auth'
 import { notify } from '@/lib/notifications/notify'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
+import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 
 // Pengguna Google baru menyetujui kebijakan privasi → akun dibuat → masuk.
 export async function POST(request: Request) {
@@ -17,13 +18,13 @@ export async function POST(request: Request) {
       if (!h.allowed) return tooManyRequests(h.retryAfterSec)
     }
     const parsed = googleCompleteSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
+    if (!parsed.success) return zodFailure(parsed.error)
 
     const identity = await readSignupCookie(await readSignupCookieValue())
-    if (!identity) return NextResponse.json(err('Sesi pendaftaran Google berakhir. Mulai lagi dari tombol Google.'), { status: 401 })
+    if (!identity) return apiErrorJson('googleSessionExpired', 401)
 
     const result = await createGoogleAccount(identity, parsed.data.fullName)
-    if (!result.ok) return NextResponse.json(err('Akun dengan email ini sudah ada. Silakan masuk.'), { status: 409 })
+    if (!result.ok) return apiErrorJson('accountExists', 409)
 
     await clearSignupCookie()
     await createSession(result.user.id)
@@ -31,6 +32,6 @@ export async function POST(request: Request) {
     return NextResponse.json(ok({ role: result.user.role }))
   } catch (error) {
     console.error('[auth/google/complete]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

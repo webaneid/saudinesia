@@ -9,11 +9,13 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PasswordHints, passwordMeetsHints } from '../PasswordHints'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Token dikonsumsi hanya saat tombol ditekan (POST) — membuka tautan oleh pemindai email tidak menghanguskannya.
 export function ResetPasswordForm({ locale, token }: { locale: string; token: string }) {
   const t = useTranslations('authPages.reset')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const router = useRouter()
   const [newPassword, setNewPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
@@ -29,7 +31,7 @@ export function ResetPasswordForm({ locale, token }: { locale: string; token: st
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, newPassword }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return }
+      if (!json.success) { setError(errorText(json, t('failed'))); return }
       router.push(`/${locale}/dashboard`)
     } catch {
       setError(c('networkError'))

@@ -3,8 +3,9 @@ import { compare } from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
 import { loginSchema } from '@/lib/validators/auth'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
 import { accountKey, clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
+import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 
 // Hash bcrypt cost 12 yang valid, tidak cocok dengan password mana pun yang dipakai pengguna — hanya untuk menyamakan waktu.
 const DUMMY_HASH = '$2b$12$mMjECRUCpXjI1zuGrztAd.jA/C6.JUsjG4mWPzlh9aGhJLtg1mD7C'
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     const body = await request.json().catch(() => null)
     const parsed = loginSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
+      return zodFailure(parsed.error)
     }
 
     const { email, password } = parsed.data
@@ -50,7 +51,7 @@ export async function POST(request: Request) {
     })
 
     // Same error for "not found" and "wrong password" — prevent email enumeration. Keduanya sudah terhitung (reservasi di atas).
-    const invalid = () => NextResponse.json(err('Email atau password salah.'), { status: 401 })
+    const invalid = () => apiErrorJson('invalidCredentials', 401)
 
     // Akun tidak ada tetap membayar biaya bcrypt yang sama (hash tiruan) — selisih waktu tak membocorkan email terdaftar.
     if (!user) {
@@ -68,11 +69,11 @@ export async function POST(request: Request) {
     // Status akun baru diungkap SETELAH password terbukti benar — sebelum itu membedakan "akun nonaktif" dari "salah password"
     // membocorkan keberadaan akun (enumerasi email).
     if (!user.isActive) {
-      return NextResponse.json(err('Akun ini dinonaktifkan. Hubungi kami untuk bantuan.'), { status: 403 })
+      return apiErrorJson('accountDisabled', 403)
     }
     if (!user.emailVerifiedAt) {
       // Akun lama (sebelum verifikasi email): reset password membuktikan kepemilikan email dan mengaktifkannya.
-      return NextResponse.json(err('Email belum diverifikasi. Gunakan "Lupa password" untuk mengaktifkan akun.'), { status: 403 })
+      return apiErrorJson('emailUnverified', 403)
     }
 
     // Versi yang dilihat saat password diperiksa dibawa ke penerbitan: reset password yang commit di celah bcrypt membuat ini ditolak (S18-B).
@@ -85,6 +86,6 @@ export async function POST(request: Request) {
     return NextResponse.json(ok({ role: user.role }))
   } catch (error) {
     console.error('[auth/login]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

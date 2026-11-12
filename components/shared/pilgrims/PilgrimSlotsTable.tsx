@@ -12,6 +12,7 @@ import { DataTable, type Column } from '@/components/shared/data-table/DataTable
 import { ActionLink, KindButton, RowActions } from '@/components/shared/data-table/RowActions'
 import { REVIEW_TONE, isReviewLocked } from '@/lib/pilgrims/reviewState'
 import type { PilgrimSlot } from '@/lib/pilgrims/slotTypes'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Tabel jamaah satu booking (pemilik 2026-11-10) — SATU komponen untuk halaman booking jamaah dan admin (tanpa impor admin). Hanya slot yang
 // sudah diisi yang tampil; slot kosong berikutnya diisi lewat tombol "Tambah jamaah" (jumlah slot = yang ditagih — menambah/mengurangi orang
@@ -46,6 +47,7 @@ export function PilgrimSlotsTable({ total, slots, addHref, deleteEndpoint }: Pro
   const router = useRouter()
   const t = useTranslations('shared.pilgrims.slots')
   const tr = useTranslations('shared.review')
+  const errorText = useApiError()
   const [viewing, setViewing] = useState<SlotRow | null>(null)
   const [deleting, setDeleting] = useState<SlotRow | null>(null)
   const [busy, setBusy] = useState(false)
@@ -61,7 +63,7 @@ export function PilgrimSlotsTable({ total, slots, addHref, deleteEndpoint }: Pro
     try {
       const res = await fetch(deleteEndpoint.replace('{id}', deleting.id), { method: 'DELETE' })
       const json = await res.json().catch(() => null) as { error?: string } | null
-      if (!res.ok) { setError(json?.error ?? t('deleteFailed')); return }
+      if (!res.ok) { setError(errorText(json, t('deleteFailed'))); return }
       setDeleting(null)
       router.refresh()
     } catch {

@@ -60,7 +60,7 @@ export const tokenOnlySchema = z.object({ token: tokenSchema }).strict()
 export const googleCompleteSchema = z
   .object({
     fullName: fullNameSchema,
-    privacyConsent: z.literal(true, { error: 'Anda harus menyetujui Kebijakan Privasi' }),
+    privacyConsent: z.literal(true, { error: 'Anda harus menyetujui Kebijakan Privasi.' }),
   })
   .strict()
 
@@ -68,8 +68,8 @@ export const completeRegistrationSchema = z
   .object({
     token: tokenSchema,
     password: passwordSchema,
-    privacyConsent: z.literal(true, { error: 'Anda harus menyetujui Kebijakan Privasi' }),
-    whatsappConsent: z.literal(true, { error: 'Anda harus menyetujui pemberitahuan WhatsApp' }),
+    privacyConsent: z.literal(true, { error: 'Anda harus menyetujui Kebijakan Privasi.' }),
+    whatsappConsent: z.literal(true, { error: 'Anda harus menyetujui pemberitahuan WhatsApp.' }),
   })
   .strict()
 

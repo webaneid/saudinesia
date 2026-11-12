@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import sharp from 'sharp'
 import { MAX_INPUT_PIXELS, MAX_UPLOAD_BYTES, sniffImage } from '@/lib/media/image'
+import { apiErrorText, type ApiErrorCode } from '@/lib/errors/api'
 
 // Pemeriksa + pengolah berkas dokumen jamaah (docs/arsitektur-jamaah.md §7.3, menutup D3). Nama berkas dan MIME dari klien TIDAK dipercaya:
 // jenis ditentukan dari ISI berkas. Gambar (JPG/PNG/WebP) didekode sungguhan lalu DIENKODE ULANG ke WebP — EXIF/GPS dan muatan tersisip
@@ -15,7 +16,10 @@ const WEBP_QUALITY = 85
 const PDF_ACTIVE = /\/(JavaScript|JS|Launch|EmbeddedFile|RichMedia|SubmitForm|ImportData|GoToR|GoToE|XFA)\b/
 const pdfNames = (raw: string) => raw.replace(/\/[^\s/<>[\]()]+/g, n => n.replace(/#([0-9A-Fa-f]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16))))
 
-export class DocumentFileRejected extends Error {}
+/** Berkas ditolak: `message` = teks Indonesia, `code` = kunci `apiErrors` untuk pelanggan (docs/arsitektur-i18n-frontend.md §6.6). */
+export class DocumentFileRejected extends Error {
+  constructor(readonly code: ApiErrorCode) { super(apiErrorText(code)) }
+}
 
 export type PreparedDocument = { body: Buffer; mimeType: 'image/webp' | 'application/pdf'; ext: 'webp' | 'pdf'; sha256: string; sizeBytes: number }
 
@@ -25,8 +29,8 @@ function isPdf(buf: Buffer): boolean {
 }
 
 export async function prepareDocumentFile(input: Buffer): Promise<PreparedDocument> {
-  if (input.length === 0) throw new DocumentFileRejected('Berkas kosong.')
-  if (input.length > MAX_UPLOAD_BYTES) throw new DocumentFileRejected('Ukuran berkas maksimal 5 MB.')
+  if (input.length === 0) throw new DocumentFileRejected('fileEmpty')
+  if (input.length > MAX_UPLOAD_BYTES) throw new DocumentFileRejected('fileTooLarge')
   let body: Buffer
   let mimeType: PreparedDocument['mimeType']
   if (sniffImage(input)) {
@@ -37,16 +41,16 @@ export async function prepareDocumentFile(input: Buffer): Promise<PreparedDocume
         .webp({ quality: WEBP_QUALITY })
         .toBuffer()
     } catch {
-      throw new DocumentFileRejected('Berkas bukan gambar yang valid.')
+      throw new DocumentFileRejected('fileBadImage')
     }
     mimeType = 'image/webp'
   } else if (isPdf(input)) {
-    if (PDF_ACTIVE.test(pdfNames(input.toString('latin1')))) throw new DocumentFileRejected('PDF berisi skrip atau lampiran tidak diterima. Simpan ulang sebagai PDF biasa atau unggah foto.')
+    if (PDF_ACTIVE.test(pdfNames(input.toString('latin1')))) throw new DocumentFileRejected('filePdfActive')
     body = input
     mimeType = 'application/pdf'
   } else {
-    throw new DocumentFileRejected('Gunakan foto (JPG, PNG, WebP) atau PDF.')
+    throw new DocumentFileRejected('fileType')
   }
-  if (body.length > MAX_UPLOAD_BYTES) throw new DocumentFileRejected('Ukuran berkas maksimal 5 MB.')
+  if (body.length > MAX_UPLOAD_BYTES) throw new DocumentFileRejected('fileTooLarge')
   return { body, mimeType, ext: mimeType === 'image/webp' ? 'webp' : 'pdf', sha256: createHash('sha256').update(body).digest('hex'), sizeBytes: body.length }
 }

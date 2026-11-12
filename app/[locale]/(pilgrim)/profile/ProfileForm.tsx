@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { ContactPicker, contactFromStored, type ContactValue } from '@/components/shared/ContactPicker'
 import { e164FromCountry } from '@/lib/utils/phone'
+import { useApiError } from '@/components/shared/useApiError'
 
 type AddressRecord = {
   type: 'domestic' | 'international'
@@ -42,6 +43,7 @@ function toAddressValue(a: AddressRecord): AddressValue {
 export function ProfileForm({ locale, needsConsent, initialData, initialAddress }: ProfileFormProps) {
   const router = useRouter()
   const t = useTranslations('pilgrimArea.profile')
+  const errorText = useApiError()
   const [fullName, setFullName] = useState(initialData.fullName)
   const [address,  setAddress]  = useState<AddressValue>(toAddressValue(initialAddress))
   const [contact,  setContact]  = useState<ContactValue>(() => contactFromStored(initialData.phone, initialData.whatsapp))
@@ -62,7 +64,7 @@ export function ProfileForm({ locale, needsConsent, initialData, initialAddress 
         body: JSON.stringify(body),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('saveFailed')); return }
+      if (!json.success) { setError(errorText(json, t('saveFailed'))); return }
 
       const phone = e164FromCountry(contact.phoneCountryCode, contact.phone)
       const whatsapp = e164FromCountry(contact.whatsappCountryCode, contact.whatsapp)
@@ -75,7 +77,7 @@ export function ProfileForm({ locale, needsConsent, initialData, initialAddress 
         body: JSON.stringify({ phone, whatsapp, ...(needsConsent ? { whatsappConsent: consent } : {}) }),
       })
       const cj = await c.json()
-      if (!cj.success) { setError(cj.error ?? t('phoneFailed')); return }
+      if (!cj.success) { setError(errorText(cj, t('phoneFailed'))); return }
       setSuccess(true)
       router.refresh() // status verifikasi WhatsApp bergantung pada nomor yang baru disimpan
     } catch {

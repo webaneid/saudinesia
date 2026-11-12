@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
+import { apiErrorJson } from '@/lib/errors/api'
 
 // Publik, tanpa auth — data referensi wilayah (docs/arsitektur-alamat.md), sama pola catalog publik.
 // Cuma 38 baris — dikembalikan semua sekaligus, filter/cari dilakukan di sisi client (combobox).
@@ -10,6 +11,6 @@ export async function GET() {
     return NextResponse.json(ok(provinces))
   } catch (e) {
     console.error('[address/wilayah/provinces/GET]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { Redis } from 'ioredis'
 import { NextResponse } from 'next/server'
-import { err } from '@/lib/validators'
+import { apiError } from '@/lib/errors/api'
 
 // Rate limit untuk endpoint auth (docs/lessons-learned.md SEC-04). Counter jendela-tetap di Redis; bila Redis tidak
 // terjangkau jatuh ke penyimpanan memori proses — aplikasi berjalan 1 replika (node-cron di dalam proses), jadi memori
@@ -208,7 +208,7 @@ function ipv6Prefix64(ip: string): string {
 
 export function tooManyRequests(retryAfterSec: number): NextResponse {
   const minutes = Math.max(1, Math.ceil(retryAfterSec / 60))
-  return NextResponse.json(err(`Terlalu banyak percobaan. Coba lagi dalam ${minutes} menit.`), {
+  return NextResponse.json(apiError('tooManyAttempts', { params: { minutes } }), {
     status: 429,
     headers: { 'Retry-After': String(Math.max(1, Math.ceil(retryAfterSec))) },
   })

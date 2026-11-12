@@ -154,7 +154,7 @@ await t('CAKUPAN: akun lain unggah/lihat/hapus/daftar kartu A → 404 yang sama 
   assert.deepEqual(viaB, missing); assert.deepEqual(viaBOwner, missing); assert.equal(missing.ok ? 0 : missing.status, 404)
   assert.equal(mem.size, before, 'unggahan yang ditolak tak meninggalkan objek')
   const doc = await prisma.pilgrimDocument.findFirstOrThrow({ where: { savedPilgrimId: cardA } })
-  assert.deepEqual(await svc.previewUrl(b, b.userId, cardA, doc.id), { ok: false, status: 404, error: 'Dokumen tidak ditemukan' })
+  assert.deepEqual(await svc.previewUrl(b, b.userId, cardA, doc.id), { ok: false, status: 404, error: 'Dokumen tidak ditemukan', code: 'documentNotFound' })
   assert.equal((await svc.previewUrl(b, a.userId, cardA, doc.id)).ok, false)
   assert.equal((await svc.remove(b, b.userId, cardA, doc.id)).ok, false)
   assert.equal(await listCardDocuments(b, b.userId, cardA), null)

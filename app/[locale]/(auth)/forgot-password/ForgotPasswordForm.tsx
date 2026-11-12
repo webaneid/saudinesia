@@ -8,12 +8,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useCooldown } from '@/components/shared/useCooldown'
+import { useApiError } from '@/components/shared/useApiError'
 
 interface ForgotPasswordFormProps { locale: string }
 
 export function ForgotPasswordForm({ locale }: ForgotPasswordFormProps) {
   const t = useTranslations('authPages.forgot')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const [email, setEmail] = useState('')
   const [sent, setSent] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -30,7 +32,7 @@ export function ForgotPasswordForm({ locale }: ForgotPasswordFormProps) {
         body: JSON.stringify({ email, locale }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return }
+      if (!json.success) { setError(errorText(json, t('failed'))); return }
       setSent(true)
       startCooldown()
     } catch {

@@ -180,7 +180,7 @@ await t('akun buatan admin: kontak lengkap TAPI belum ada persetujuan → gerban
 })
 await t('rute kontak: privasi diperiksa SEBELUM menyimpan apa pun dan dicatat hanya atas tindakan pemilik; layout jamaah dan halaman Lengkapi data memakai gerbang yang sama', () => {
   const route = read('app/api/v1/auth/contact/route.ts')
-  assert.match(route, /!state\.privacyConsent && privacyConsent !== true\) return NextResponse\.json\(err\('Anda harus menyetujui Kebijakan Privasi\.'\), \{ status: 400 \}\)/)
+  assert.match(route, /!state\.privacyConsent && privacyConsent !== true\) return apiErrorJson\('privacyConsentRequired', 400\)/)
   assert.ok(route.indexOf('privacyConsent !== true') < route.indexOf('updateContact(session.userId'), 'cek privasi sebelum updateContact')
   assert.doesNotMatch(route, /ensurePrivacyConsent/, 'persetujuan dicatat atomik di updateContact, bukan pemanggilan terpisah')
   assert.match(route, /updateContact\(session\.userId, parsed\.data\)/)
@@ -260,7 +260,7 @@ await t('SEC-107 onboardingRefusal: jamaah belum menyetujui → 422 siap kirim; 
   assert.ok(r.ok); if (!r.ok) return
   const refusal = await onboardingRefusal(r.id, 'pilgrim')
   assert.equal(refusal?.status, 422)
-  assert.deepEqual(await refusal!.json(), { success: false, error: 'Lengkapi nomor telepon, WhatsApp, dan persetujuan Anda terlebih dahulu.' })
+  assert.deepEqual(await refusal!.json(), { success: false, error: 'Lengkapi nomor telepon, WhatsApp, dan persetujuan Anda terlebih dahulu.', meta: { code: 'contactRequired' } })
   assert.equal(await onboardingRefusal(r.id, 'admin'), null)
   assert.ok((await updateContact(r.id, { phone: '6281234567890', whatsapp: '6281234567890', whatsappConsent: true, privacyConsent: true })).ok)
   assert.equal(await onboardingRefusal(r.id, 'pilgrim'), null)

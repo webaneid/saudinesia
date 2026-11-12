@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Modal } from '@/components/shared/Modal'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Melihat berkas pribadi (dokumen jamaah, bukti transfer) DI DALAM aplikasi — permintaan pemilik 2026-11-10: membuka berkas di tab baru
 // (alamat penyimpanan) terasa keluar dari lingkungan kita. SATU komponen untuk jamaah dan admin (tanpa impor admin).
@@ -22,6 +23,7 @@ type Source = { url: string; mimeType: string }
 
 export function FileViewerDialog({ title, endpoint, onClose, children, footer }: Props) {
   const t = useTranslations('shared.documents.viewer')
+  const errorText = useApiError()
   const [source, setSource] = useState<Source | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,11 +34,11 @@ export function FileViewerDialog({ title, endpoint, onClose, children, footer }:
       .then(({ ok, json }) => {
         if (!alive) return
         if (ok && json?.data?.url) setSource({ url: json.data.url, mimeType: json.data.mimeType ?? '' })
-        else setError(json?.error ?? t('loadFailed'))
+        else setError(errorText(json, t('loadFailed')))
       })
       .catch(() => alive && setError(t('network')))
     return () => { alive = false }
-  }, [endpoint, t])
+  }, [endpoint, t, errorText])
 
   return (
     <Modal open title={title} onClose={onClose} footer={footer} size="wide">

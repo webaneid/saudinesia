@@ -4,7 +4,7 @@ import { getSession, ADMIN_ROLES } from '@/lib/auth/session'
 import { invoiceBookingInclude, buildInvoiceData } from '@/lib/pdf/invoiceData'
 import { generateInvoicePdf } from '@/lib/pdf/invoice'
 import { loadInvoiceLogo } from '@/lib/pdf/logo'
-import { err } from '@/lib/validators'
+import { apiErrorJson } from '@/lib/errors/api'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -15,19 +15,18 @@ export async function GET(_req: Request, { params }: Params) {
   const { id } = await params
 
   const session = await getSession()
-  if (!session) return NextResponse.json(err('Unauthorized'), { status: 401 })
+  if (!session) return apiErrorJson('unauthorized', 401)
 
   const booking = await prisma.booking.findUnique({
     where: { id },
     include: invoiceBookingInclude,
   })
-  if (!booking) return NextResponse.json(err('Booking tidak ditemukan'), { status: 404 })
+  if (!booking) return apiErrorJson('bookingNotFound', 404)
 
   const isAdmin = ADMIN_ROLES.includes(session.role)
-  if (!isAdmin && booking.userId !== session.userId) {
-    return NextResponse.json(err('Unauthorized'), { status: 401 })
-  }
-  if (!isAdmin && booking.status === 'draft') return NextResponse.json(err('Booking tidak ditemukan'), { status: 404 }) // draf belum diterbitkan
+  // Booking akun lain = 404 seragam (bukan 401) — tidak membuka keberadaan booking.
+  if (!isAdmin && booking.userId !== session.userId) return apiErrorJson('bookingNotFound', 404)
+  if (!isAdmin && booking.status === 'draft') return apiErrorJson('bookingNotFound', 404) // draf belum diterbitkan
 
   try {
     const data = await buildInvoiceData(booking)
@@ -44,6 +43,6 @@ export async function GET(_req: Request, { params }: Params) {
   } catch (error) {
     // Invoice tidak boleh terbit bila Σ snapshot ≠ total (invarian I4) — dicatat, klien hanya menerima 500 generik.
     console.error('[bookings/invoice]', error instanceof Error ? error.message : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

@@ -5,11 +5,13 @@ import { useLocale, useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { ShieldAlert } from 'lucide-react'
 import { DATE_NUMERIC, formatInstant } from '@/lib/time'
+import { useApiError } from '@/components/shared/useApiError'
 
 type DeletionRequest = { status: 'pending' | 'completed' | 'rejected' | 'withdrawn'; requestedAt: string; minWaitHours?: number } | null
 
 export function DeletionRequestCard() {
   const t = useTranslations('pilgrimArea.deletion')
+  const errorText = useApiError()
   const locale = useLocale()
   const [request, setRequest] = useState<DeletionRequest>(null)
   const [confirming, setConfirming] = useState(false)
@@ -28,7 +30,7 @@ export function DeletionRequestCard() {
     try {
       const r = await fetch('/api/v1/account/deletion-requests', { method })
       const j = await r.json().catch(() => null)
-      if (!r.ok) setError(j?.error ?? (r.status === 429 ? t('tooMany') : t('failed')))
+      if (!r.ok) setError(errorText(j, (r.status === 429 ? t('tooMany') : t('failed'))))
       await load()
       setConfirming(false)
     } finally {

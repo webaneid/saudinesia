@@ -16,6 +16,7 @@ import type { AddressValue } from '@/components/shared/AddressPicker'
 import { EMPTY_PILGRIM_FORM, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import { PilgrimCardDialog } from '@/components/shared/pilgrims/PilgrimCardDialog'
 import { DocumentChecklist, type ChecklistItemView } from '@/components/shared/documents/DocumentChecklist'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot); "Ubah data jamaah"
 // = popup kartu yang sama dengan "Tambah", sesudah disimpan kartu langsung disalin ulang ke booking ini (tak perlu keluar halaman), kelengkapan dokumen (DocumentChecklist: progres + unggah dalam popup, dokumen pribadi ke kartu, dokumen perjalanan ke booking ini).
@@ -39,6 +40,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
   const t = useTranslations('pilgrimArea.trip')
   const tr = useTranslations('shared.review')
   const tw = useTranslations('shared.pilgrims.warning')
+  const errorText = useApiError()
   const [options, setOptions] = useState<AutocompleteOption[]>([])
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
@@ -68,7 +70,7 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
     try {
       const res = await fetch(`${base}/${path}`, { method, headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined })
       const json = await res.json().catch(() => null)
-      if (!res.ok) { const text = json?.error ?? t('saveFailed'); setNotice({ text, error: true }); return text }
+      if (!res.ok) { const text = errorText(json, t('saveFailed')); setNotice({ text, error: true }); return text }
       setNotice({ text: done, error: false })
       setCardId('')
       setCreating(null)

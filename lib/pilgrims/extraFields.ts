@@ -6,7 +6,8 @@ import { completeness, validateFieldValues, type Completeness } from '@/lib/mani
 import { cardBoundKeys } from '@/lib/manifest/roles'
 import { resolveAddressValues } from '@/lib/manifest/address'
 import { isDeletedAccount } from '@/lib/customers/query'
-import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from '@/lib/pilgrims/reviewState'
+import { isReviewLocked } from '@/lib/pilgrims/reviewState'
+import { codedError, type ApiErrorCode } from '@/lib/errors/api'
 import type { ServiceError } from './service'
 
 // Isian TAMBAHAN jamaah booking oleh PEMESAN sendiri (audit front-end 2026-11-11, docs/arsitektur-frontend-publik.md §8): kolom manifest produk
@@ -19,7 +20,12 @@ import type { ServiceError } from './service'
 
 export type ExtraFieldsResult = { ok: true; completeness: Completeness } | ServiceError
 
-const fail = (status: ServiceError['status'], error: string, field?: string): ServiceError => ({ ok: false, status, error, ...(field ? { field } : {}) })
+const fail = (status: ServiceError['status'], code: ApiErrorCode, field?: string): ServiceError => ({ ok: false, status, ...codedError(code), ...(field ? { field } : {}) })
+/** Isian kolom tidak lolos: teks rinci Indonesia tetap di `error` (admin, /id); pelanggan bahasa lain melihat "<label> tidak valid". */
+const invalidField = (fields: readonly { fieldKey: string; label: string }[], key: string | undefined, detail: string | undefined): ServiceError => {
+  const label = fields.find(f => f.fieldKey === key)?.label ?? key ?? ''
+  return { ok: false, status: 400, ...codedError('fieldInvalid', { label }), ...(detail ? { error: detail } : {}), ...(key ? { field: key } : {}) }
+}
 
 /** Simpan kolom non-kartu satu jamaah di booking AKTIF milik `userId`. Booking/jamaah akun lain → 404 sama dengan "tidak ada". */
 export async function saveExtraFields(userId: string, bookingId: string, pilgrimId: string, input: Record<string, unknown>): Promise<ExtraFieldsResult> {
@@ -27,8 +33,8 @@ export async function saveExtraFields(userId: string, bookingId: string, pilgrim
     where: { id: pilgrimId, bookingId, booking: { userId, status: { not: 'draft' } } },
     select: { visaApplication: { select: { visaProductId: true } }, booking: { select: { status: true } } },
   })
-  if (!pilgrim) return fail(404, 'Data jamaah tidak ditemukan')
-  if (pilgrim.booking.status !== 'active') return fail(409, 'Booking ini sudah tidak aktif — data dan dokumen tidak dapat ditambah lagi')
+  if (!pilgrim) return fail(404, 'pilgrimNotFound')
+  if (pilgrim.booking.status !== 'active') return fail(409, 'bookingNotActive')
 
   const fields = pilgrim.visaApplication?.visaProductId
     ? await getManifestFieldRequirements('visa', pilgrim.visaApplication.visaProductId)
@@ -36,28 +42,28 @@ export async function saveExtraFields(userId: string, bookingId: string, pilgrim
   const bound = new Set(cardBoundKeys(fields))
   const known = new Set(fields.map(f => f.fieldKey))
   for (const key of Object.keys(input)) {
-    if (!known.has(key)) return fail(400, 'Kolom tidak dikenal', key)
-    if (bound.has(key)) return fail(400, 'Kolom ini diisi dari data Jamaah Saya — ubah lewat "Ubah data jamaah"', key)
+    if (!known.has(key)) return fail(400, 'unknownField', key)
+    if (bound.has(key)) return fail(400, 'fieldFromCard', key)
   }
   const extra = fields.filter(f => !bound.has(f.fieldKey))
   const checked = validateFieldValues(extra, input)
-  if (!checked.ok) { const [k, m] = Object.entries(checked.errors)[0] ?? []; return fail(400, m ?? 'Data tidak valid', k) }
+  if (!checked.ok) { const [k, m] = Object.entries(checked.errors)[0] ?? []; return invalidField(extra, k, m) }
   const addressed = await resolveAddressValues(extra, checked.values)
-  if (!addressed.ok) { const [k, m] = Object.entries(addressed.errors)[0] ?? []; return fail(400, m ?? 'Alamat tidak valid', k) }
+  if (!addressed.ok) { const [k, m] = Object.entries(addressed.errors)[0] ?? []; return invalidField(extra, k, m) }
 
   return prisma.$transaction(async (tx): Promise<ExtraFieldsResult> => {
     // $queryRaw: ORM tak punya FOR SHARE/FOR UPDATE.
     const owner = await tx.$queryRaw<Array<{ email: string }>>(Prisma.sql`SELECT "email" FROM "users" WHERE "id" = ${userId} FOR SHARE`)
-    if (!owner[0] || isDeletedAccount(owner[0].email)) return fail(404, 'Data jamaah tidak ditemukan')
+    if (!owner[0] || isDeletedAccount(owner[0].email)) return fail(404, 'pilgrimNotFound')
     const locked = await tx.$queryRaw<Array<{ fieldValues: unknown; reviewStatus: PilgrimReviewStatus; status: string }>>(Prisma.sql`
       SELECT bp."fieldValues", bp."reviewStatus", b."status"::text AS "status"
       FROM "booking_pilgrims" bp JOIN "bookings" b ON b."id" = bp."bookingId"
       WHERE bp."id" = ${pilgrimId} AND bp."bookingId" = ${bookingId} AND b."userId" = ${userId}
       FOR UPDATE OF bp`)
     const row = locked[0]
-    if (!row) return fail(404, 'Data jamaah tidak ditemukan')
-    if (row.status !== 'active') return fail(409, 'Booking ini sudah tidak aktif — data dan dokumen tidak dapat ditambah lagi')
-    if (isReviewLocked(row.reviewStatus)) return fail(409, REVIEW_LOCKED_MESSAGE)
+    if (!row) return fail(404, 'pilgrimNotFound')
+    if (row.status !== 'active') return fail(409, 'bookingNotActive')
+    if (isReviewLocked(row.reviewStatus)) return fail(409, 'reviewLocked')
     const merged = { ...((row.fieldValues ?? {}) as Record<string, unknown>), ...addressed.values }
     await tx.bookingPilgrim.update({ where: { id: pilgrimId }, data: { fieldValues: merged as Prisma.InputJsonValue }, select: { id: true } })
     return { ok: true, completeness: completeness(fields, merged) }

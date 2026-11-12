@@ -8,11 +8,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { useApiError } from '@/components/shared/useApiError'
 
 /** `next` = jalur kembali yang SUDAH disaring server (cookie pendaftaran bertanda tangan), atau null. */
 export function GoogleSignupForm({ locale, next = null, email, initialName }: { locale: string; next?: string | null; email: string; initialName: string }) {
   const t = useTranslations('authPages.google')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const router = useRouter()
   const [fullName, setFullName] = useState(initialName)
   const [privacyConsent, setPrivacyConsent] = useState(false)
@@ -28,7 +30,7 @@ export function GoogleSignupForm({ locale, next = null, email, initialName }: { 
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fullName, privacyConsent }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return }
+      if (!json.success) { setError(errorText(json, t('failed'))); return }
       router.push(next ?? `/${locale}/dashboard`)
     } catch {
       setError(c('networkError'))

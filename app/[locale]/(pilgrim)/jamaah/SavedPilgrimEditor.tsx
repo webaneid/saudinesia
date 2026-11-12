@@ -10,6 +10,7 @@ import { SavedPilgrimFields } from '@/components/shared/pilgrims/SavedPilgrimFie
 import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { EMPTY_PILGRIM_FORM, bodyFromForm, canSubmitPilgrim, formFromCard, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import type { PilgrimWarning, SavedPilgrimView } from '@/lib/pilgrims/service'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Tambah/ubah kartu "Jamaah Saya" (Fase 3). Respons selalu diperiksa: galat server tampil, formulir tidak ditutup.
 // Peringatan NIK hanya dari masukan sendiri (tak pernah menyebut akun lain) — tampil sesudah simpan, tidak menghalangi.
@@ -23,6 +24,7 @@ export function SavedPilgrimEditor({ locale, card, initialWarnings = [], created
   const router = useRouter()
   const t = useTranslations('pilgrimArea.editor')
   const tw = useTranslations('shared.pilgrims.warning')
+  const errorText = useApiError()
   const base = `/${locale}/jamaah`
   const [form, setForm] = useState<SavedPilgrimFormValue>(() => (card ? formFromCard(card) : EMPTY_PILGRIM_FORM))
   const [busy, setBusy] = useState<'save' | 'delete' | 'restore' | null>(null)
@@ -43,7 +45,7 @@ export function SavedPilgrimEditor({ locale, card, initialWarnings = [], created
     setBusy('save'); setError(null); setNotice(null); setWarnings([])
     try {
       const { res, json } = await call(card ? 'PUT' : 'POST', card ? `${API}/${card.id}` : API, bodyFromForm(form))
-      if (!res.ok || !json?.data) { setError(json?.error ?? t('saveFailed')); return }
+      if (!res.ok || !json?.data) { setError(errorText(json, t('saveFailed'))); return }
       const saved = json.data as unknown as SavedPilgrimView
       const w = json.meta?.warnings ?? []
       if (!card) { router.push(`${base}/${saved.id}${w.length ? `?w=${w.join(',')}` : '?saved=1'}`); return }
@@ -62,9 +64,9 @@ export function SavedPilgrimEditor({ locale, card, initialWarnings = [], created
     setBusy('delete'); setError(null); setNotice(null)
     try {
       const { res, json } = await call('DELETE', `${API}/${card.id}`)
-      if (!res.ok || !json?.data) { setError(json?.error ?? t('deleteFailed')); return }
+      if (!res.ok || !json?.data) { setError(errorText(json, t('deleteFailed'))); return }
       if (json.data.deleted) { router.push(base); return }
-      setNotice(typeof json.data.message === 'string' ? json.data.message : t('archivedNotice'))
+      setNotice(t('archivedNotice')) // teks server (Indonesia) tidak dipakai — pesan halaman ikut bahasa
       setConfirmDelete(false)
       setArchived(true)
     } catch {
@@ -79,7 +81,7 @@ export function SavedPilgrimEditor({ locale, card, initialWarnings = [], created
     setBusy('restore'); setError(null); setNotice(null)
     try {
       const { res, json } = await call('POST', `${API}/${card.id}/restore`)
-      if (!res.ok || !json?.data) { setError(json?.error ?? t('restoreFailed')); return }
+      if (!res.ok || !json?.data) { setError(errorText(json, t('restoreFailed'))); return }
       setNotice(t('restored'))
       setArchived(false)
     } catch {

@@ -1,13 +1,14 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
+import { apiErrorJson } from '@/lib/errors/api'
 
 // Publik, tanpa auth — rata-rata ~14 kab/kota per provinsi (514/38), dikembalikan semua
 // sekaligus per provinceId, filter/cari di sisi client (combobox). docs/arsitektur-alamat.md.
 export async function GET(req: Request) {
   try {
     const provinceId = new URL(req.url).searchParams.get('provinceId')
-    if (!provinceId) return NextResponse.json(err('provinceId wajib diisi'), { status: 400 })
+    if (!provinceId) return apiErrorJson('regionParentRequired', 400)
 
     const regencies = await prisma.addressRegency.findMany({
       where: { provinceId },
@@ -16,6 +17,6 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(regencies))
   } catch (e) {
     console.error('[address/wilayah/regencies/GET]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

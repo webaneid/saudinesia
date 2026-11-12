@@ -1,6 +1,6 @@
 # Arsitektur — Bahasa (id/en) di seluruh front-end pelanggan
 
-> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11, I5 SELESAI 2026-11-12 (§6); I6 belum.**
+> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11, I5 SELESAI 2026-11-12 (§6); I6a SELESAI 2026-11-13 (§6.7); I6b belum.**
 > Pemicu: audit front-end 2026-11-11 (`docs/arsitektur-frontend-publik.md` §8.2 butir 1) dan arahan pemilik:
 > *"kita seriusi dulu bahasa ya di front-end.. default-nya bahasa Indonesia bro.. kita blm bikin select bahasa di menu.."*
 
@@ -231,3 +231,52 @@ Recheck (SOP langkah 1) dengan memperluas sementara `MIGRATED_AREAS` ke seluruh 
 - Simulasi browser (server uji port 6270, DB klon): `/en/invoice/<token>` (status "AWAITING VERIFICATION", "11 Nov 2026"/"15 Nov 2026", header no-store/noindex/no-referrer, `<html lang="en">` sesudah perbaikan matcher, pengalih membawa token ke `/id/…` yang sepenuhnya Indonesia, token salah tetap 404); `/en/privacy`; `/en/visa` ("Required Documents"; visa plus uji: "Booked together with: Flight ticket, Makkah hotel", lalu dikembalikan); `/en/hotels/<id>` (fasilitas Inggris); 375 px tanpa geser samping.
 
 **Diketahui:** isi baris invoice, kop, rekening, S&K, dan PDF tetap Indonesia (K5); `DateTimeField` dan editor teks kaya tetap Indonesia (khusus admin). Blok "How to pay" tidak terlihat di browser (DB uji tanpa rekening) — teksnya diuji lewat render ICU kedua bahasa. **Di luar cakupan (dicatat):** kartu katalog visa plus menyuruh menghubungi admin tanpa tombol pesan, padahal checkout/keranjang sudah mendukung visa plus (11c); `canBuyDirectly` di `lib/catalog/home.ts` juga mengecualikannya.
+
+### 6.6 I6 — rencana rinci (recheck 2026-11-13)
+
+Recheck (SOP langkah 1) atas semua route non-admin dan modul yang mereka panggil. Pelanggan kini menampilkan `json.error` apa adanya di 21 berkas klien (auth 7, jamaah 6, checkout/keranjang 3, komponen bersama 5). Sumber teks galat yang bisa sampai ke pelanggan (perkiraan, ±150–180 pesan):
+
+| Sumber | Contoh | Jumlah |
+|---|---|---|
+| Literal `err('…')` di route pelanggan | "Email atau password salah.", "Booking tidak ditemukan", "Internal server error"/"Unauthorized" (Inggris mentah) | 39 bentuk |
+| Helper HTTP bersama | `lib/pilgrims/http.ts`, `lib/documents/http.ts` (ukuran berkas, terlalu banyak unggahan, booking tak aktif) | ±20 |
+| Hasil service (`{ error, status }` / `message`) | `lib/pilgrims/service.ts`, `lib/documents/*`, `lib/address`, `auth/profile`, verifikasi WhatsApp, `DocumentFileRejected` | ±40 |
+| Mesin pesan (`bookingFailure`) | `ItemNotBookableError` (±40, banyak dengan nama produk/tanggal), galat kuota **berbahasa Inggris teknis** ("Hotel quota insufficient: need 2, have 0"), bentrok serialisasi, P2025, `RuleViolationError` | ±50 |
+| Pesan Zod validator pelanggan | `auth.ts` (password, nama, email), `checkout.ts`, `pilgrims.ts`, `address.ts`, `manifest` | ±60 |
+
+Pelanggaran aturan visa (`meta.violations`) sudah membawa `visaName` + `missing` (kunci jenis) — bisa diterjemahkan di klien tanpa kode baru.
+
+**Rancangan:**
+
+| Bagian | Rencana |
+|---|---|
+| Katalog | Pesan `apiErrors.<kode>` di `id.json`/`en.json` = SATU sumber. Teks `id` = teks server sekarang (admin dan log tak berubah). |
+| Server | `lib/errors/api.ts` (khusus server): `apiError(kode, params?)` → `{ success: false, error: <teks id>, meta: { code, params } }`; teks `id` dirender dari pesan `id` (ICU), jadi tak ada teks ganda. Bentuk respons tetap `{ success, data?, error?, meta? }` — kode masuk `meta`, bersama `field`/`violations` yang sudah ada. Galat domain membawa kode: hasil service `{ code, params, status }`, `ItemNotBookableError`/galat kuota mendapat `code` + `params` (teks tetap untuk admin). |
+| Zod | Satu `zodFailure(error)` untuk route pelanggan: pesan issue dicari di indeks balik teks `id` → kode (hanya pesan statis); tak dikenal → `invalidInput` + `meta.field`. Pesan Zod berparameter (mis. "Maksimal {n} orang") diganti pesan statis per batas atau kode eksplisit lewat `superRefine`. |
+| Parameter | Hanya data yang memang sudah tampil ke pemesan (nama produk, tanggal kalender `YYYY-MM-DD`, angka). Tanpa PII. Tanggal diformat di klien sesuai bahasa halaman (nama parameter berakhiran `Date`). |
+| Klien | Satu helper `useApiError()` (komponen bersama): kode dikenal → `t(apiErrors.<kode>, params)`; tanpa kode → teks server di `/id`, teks gagal bawaan formulir di `/en` (lihat keputusan I6-1). Pelanggaran visa diterjemahkan dari `visaName` + `missing`. |
+| Penjaga | (1) Route pelanggan dan helper/service yang mereka panggil tak boleh `err('<literal>')`/`error: '<literal>'` — harus `apiError`; (2) klien area pelanggan tak boleh membaca `json.error` langsung; (3) setiap `ItemNotBookableError`/galat kuota punya kode; (4) setiap pesan Zod statis di validator pelanggan ada di katalog; (5) kunci id↔en dan argumen ICU sama (penjaga lama). |
+
+**Keputusan pemilik (2026-11-13): I6-1 = (a), I6-2 = (a).**
+
+- **I6-1 — galat tanpa kode di `/en`:** **dipilih (a)** — tampilkan teks gagal bawaan formulir berbahasa Inggris (mis. "Order failed — please try again"); rinciannya hilang, tapi penjaga membuat kasus ini jarang. (b) tampilkan teks server apa adanya (Indonesia) — rincian tetap ada tapi campur bahasa.
+- **I6-2 — pemecahan fase:** **dipilih (a)** — **I6a** auth, profil, alamat, jamaah & dokumen, bukti bayar (±100 pesan) lalu **I6b** checkout/keranjang + mesin pesan (±80, termasuk galat kuota Inggris teknis) — masing-masing satu PR; (b) satu fase I6 sekaligus (PR besar, ±40–60 berkas).
+
+### 6.7 I6a (2026-11-13) — as-built
+
+Cakupan: auth (masuk, daftar, aktivasi, Google, lupa/atur ulang password, kontak/WhatsApp), profil, penghapusan akun, alamat, jamaah tersimpan & dokumen, data jamaah booking, bukti bayar, invoice PDF pemesan. Checkout/keranjang dan mesin pesan = I6b.
+
+| Bagian | As-built | Berkas |
+|---|---|---|
+| Katalog | ±135 kode `apiErrors.<kode>`; teks `id` = teks server (tak berubah untuk admin/log, kecuali tanda baca persetujuan dan `Unauthorized`/`Internal server error` yang kini kalimat Indonesia). | `i18n/messages/{id,en}.json` |
+| Server | `apiErrorText`/`apiError`/`apiErrorJson(kode, status, {params, field, headers})`, `zodFailure` (pesan Zod dikenal → kode lewat indeks balik `codeOfText`; tak dikenal → teks tanpa kode + `meta.field`), `codedError` + `failureJson` untuk hasil service (`{ code, params, field }`, `Retry-After`). Khusus server (membaca `id.json`). | `lib/errors/api.ts` |
+| Service | `fail`/`bad` menerima KODE: `lib/pilgrims/{service,bookingLink,review,extraFields,http}.ts`, `lib/documents/{service,http,file}.ts` (`DocumentFileRejected(code)`), `lib/address/{prepare,maps}.ts`, `lib/auth/{rateLimit,contact}.ts`. Galat kolom tambahan menyimpan teks rinci (`error`) + kode `fieldInvalid{label}`. | |
+| Klien | `useApiError()` → `resolveApiError` murni: bahasa bawaan = teks server (lebih rinci, `/id` tak berubah); bahasa lain = kode dikenal → terjemahan (param `…Date` diformat sesuai bahasa), selain itu teks gagal bawaan formulir (I6-1). Kode dari JSON wajib berbentuk kunci katalog dan bukan nama `Object.prototype`; `__proto__` dibuang dari params (SEC-226). 18 berkas klien memakainya; `AddressPicker` menerjemahkan kode hasil urai tautan peta langsung. | `lib/errors/params.ts`, `components/shared/useApiError.ts` |
+| Penjaga | `scripts/test-api-errors.ts`: route pelanggan tanpa `err(`; modul berkode hanya memberi kunci katalog ke `fail`/`bad`; klien tak membaca `.error ??` (pengecualian `CLIENT_PENDING_I6B` = checkout/keranjang); pesan statis validator pelanggan ada di katalog; teks `id` unik, `en` berbeda; setiap kode dipakai; perilaku `resolveApiError`/helper server. Mutasi M1–M6 semua merah. | |
+
+**Bukti (2026-11-13, salinan DB audit, port 6270):** `/en/login` password salah → "Incorrect email or password." (`/id` "Email atau password salah."); NIK urut salah → "Invalid NIK sequence number" (server `meta.code = nikSequence`, `field = nik`); unggah PNG palsu → "Use a photo (JPG, PNG, WebP) or a PDF."; data tambahan nomor `812-ABC-999` → `/en` "Nomor HP Host is not valid", `/id` "Nomor hanya angka" (teks rinci server). Suite penuh lulus di DB sekali pakai; build 0 error.
+
+**Ikut diperbaiki:** `GET /bookings/[id]/invoice` — booking akun lain kini 404 seragam (sebelumnya 401 = oracle keberadaan, dan kini akan tampil "Sesi Anda berakhir", SEC-227).
+
+**Diketahui:** label kolom data jamaah di param (`fieldInvalid{label}`) adalah data admin → tetap seperti diisi; galat tanpa kode di `/en` jatuh ke teks bawaan formulir.
+
