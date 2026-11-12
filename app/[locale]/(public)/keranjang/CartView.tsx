@@ -12,6 +12,7 @@ import { CheckoutSummary } from '../checkout/[kind]/CheckoutSummary'
 import { PeopleStepper } from '../checkout/[kind]/PeopleStepper'
 import { useCheckoutPreview } from '../checkout/[kind]/useCheckoutPreview'
 import { entrySummary } from '../checkout/[kind]/fields'
+import { useApiError } from '@/components/shared/useApiError'
 
 /** Jenis komponen yang diwajibkan visa → katalog tempat menambahkannya (hanya ditautkan bila katalognya berproduk). */
 const CATALOG_FOR: Record<RequiredComponentType, CatalogKey> = {
@@ -24,6 +25,7 @@ export function CartView({ locale, maxPeople, available }: { locale: string; max
   const router = useRouter()
   const t = useTranslations('cart')
   const tc = useTranslations('checkout')
+  const errorText = useApiError()
   const cart = useSyncExternalStore(subscribeCart, readCart, serverCart)
   const body = cartBody(cart)
   const preview = useCheckoutPreview(body)
@@ -36,8 +38,8 @@ export function CartView({ locale, maxPeople, available }: { locale: string; max
     setSubmitError('')
     try {
       const res = await fetch('/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const json = await res.json() as { success: boolean; data?: { bookingId: string }; error?: string }
-      if (!json.success || !json.data) { setSubmitError(json.error ?? tc('form.orderFailed')); return }
+      const json = await res.json() as { success: boolean; data?: { bookingId: string } }
+      if (!json.success || !json.data) { setSubmitError(errorText(json, tc('form.orderFailed'))); return }
       clearCart()
       router.push(`/${locale}/bookings/${json.data.bookingId}?baru=1`)
     } catch {

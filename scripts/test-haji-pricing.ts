@@ -10,7 +10,7 @@ import { computeHajiBreakdown } from '@/lib/pricing/computeHajiPrice'
 import { getPricePoint, repriceOwner, repriceOwnerType } from '@/lib/pricing/engine'
 import { createCostComponentHandlers } from '@/lib/pricing/costComponentHandlers'
 import { reserveHaji } from '@/lib/quota/adapters'
-import { ItemNotBookableError } from '@/lib/booking/errors'
+import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
 import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
 import { hajiAvailable, hajiPriced, toCatalogHaji } from '@/lib/haji/catalog'
 import { hajiProductCreateSchema, hajiProductUpdateSchema } from '@/lib/validators/adminUpdates'
@@ -129,10 +129,10 @@ await t('produk NONAKTIF atau BELUM BERHARGA ditolak (ItemNotBookableError) dan 
   assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: good.id } })).pendingQuota, 3)
 })
 
-await t('kuota habis tetap error "insufficient" (→ 409, bukan 422) dan transaksi rollback', async () => {
+await t('kuota habis = QuotaExhaustedError (→ 409, bukan 422) dan transaksi rollback', async () => {
   const p = await haji({ totalQuota: 2 })
   await pricePoint(p.id, 5000000)
-  await assert.rejects(tryReserve(p.id, 3), (e) => !(e instanceof ItemNotBookableError) && /insufficient/.test((e as Error).message))
+  await assert.rejects(tryReserve(p.id, 3), (e) => e instanceof QuotaExhaustedError && (e as QuotaExhaustedError).code === 'quotaHaji')
   assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: p.id } })).pendingQuota, 0)
 })
 
@@ -203,10 +203,9 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
   }
   assert.doesNotMatch(readFileSync('app/api/v1/admin/products/haji/route.ts', 'utf8'), /price: 0/) // produk baru TANPA titik harga (belum berharga) — kolom harga sudah dihapus
   // Pemeta galat POST /bookings = bookingFailure (lib/booking/simulate.ts): produk tak dapat dijual → 422, dicek sebelum pemetaan kuota 409.
-  assert.match(readFileSync('app/api/v1/bookings/route.ts', 'utf8'), /const f = bookingFailure\(error\)/)
+  assert.match(readFileSync('app/api/v1/bookings/route.ts', 'utf8'), /bookingFailureJson\(bookingFailure\(error\)\)/)
   const bk = readFileSync('lib/booking/simulate.ts', 'utf8')
-  assert.match(bk, /if \(e instanceof ItemNotBookableError\) return \{ ok: false, status: 422, message: e\.message \}/)
-  assert.ok(bk.indexOf('ItemNotBookableError)') < bk.indexOf("includes('insufficient')"), '422 dicek sebelum pemetaan 409')
+  assert.match(bk, /e instanceof ItemNotBookableError \|\| e instanceof QuotaExhaustedError/, '422/409 dipetakan dari jenis galat, bukan teks')
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
   // Daftar refresh kini satu (lib/pricing/refreshAll.ts, Fase 0 harga terpadu): cron memakai agregator, Haji ada di dalamnya.
   assert.match(cron, /refreshAllPricingCaches\(updatedCurrencies\)/)

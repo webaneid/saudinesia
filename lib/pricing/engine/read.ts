@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/db'
-import { ItemNotBookableError } from '@/lib/booking/errors'
+import { ItemNotBookableError, type PriceSubject } from '@/lib/booking/errors'
 import type { PriceOwnerType } from './types'
 
 // PEMBACA TUNGGAL harga jual (invarian I3, docs/arsitektur-harga-terpadu.md §15): katalog, booking, kuota, dan komputasi paket membaca `price_points` lewat
@@ -32,12 +32,12 @@ export async function sellPrice(ownerType: PriceOwnerType, id: string): Promise<
  * `db` boleh klien transaksi agar dibaca konsisten dengan kuota yang sedang ditahan.
  */
 export async function requireSellPrice(
-  ownerType: PriceOwnerType, id: string, what: string,
+  ownerType: PriceOwnerType, id: string, what: PriceSubject,
   db: Pick<typeof prisma, 'pricePoint'> = prisma,
 ): Promise<number> {
   const rows = await db.pricePoint.findMany({ where: { ownerType, ownerId: id }, select: { sellIdr: true } })
   const price = rows.length === 0 ? 0 : Math.min(...rows.map(r => Number(r.sellIdr)))
-  if (!(price > 0)) throw new ItemNotBookableError(`Harga ${what} belum ditetapkan`)
+  if (!(price > 0)) throw new ItemNotBookableError('itemPriceNotSet', { what })
   return price
 }
 

@@ -1,8 +1,27 @@
+import { apiErrorText, type ApiErrorCode } from '@/lib/errors/api'
+import type { ApiErrorParams } from '@/lib/errors/params'
+
+// Galat mesin pesan BERKODE (docs/arsitektur-i18n-frontend.md §6.8, I6b): `code`/`params` = kunci katalog `apiErrors` untuk pelanggan;
+// `message` = teks Indonesia katalog (admin dan log tak berubah) atau rincian Indonesia yang lebih spesifik (`detail`).
+
+/** Barang yang dihargai — dipilih ICU `select` di pesan `itemPriceNotSet`/`itemVisaTierNotSet` (kedua bahasa). */
+export type PriceSubject =
+  | 'hotelRoom' | 'transport' | 'muthowif' | 'haji' | 'flight' | 'visa' | 'tourPackage' | 'umrahPackage'
+  | 'chosenVehicle' | 'chosenHotel' | 'chosenHotelMakkah' | 'chosenHotelMadinah' | 'chosenVisa' | 'chosenFlight'
+
 /** Item booking yang ditolak karena belum/tidak bisa dijual (bukan kuota habis): mis. produk nonaktif atau belum berharga. Dipetakan ke 422. */
 export class ItemNotBookableError extends Error {
-  constructor(message: string) {
-    super(message)
+  constructor(readonly code: ApiErrorCode, readonly params?: ApiErrorParams, detail?: string) {
+    super(detail ?? apiErrorText(code, params))
     this.name = 'ItemNotBookableError'
+  }
+}
+
+/** Kuota/kapasitas tidak cukup (kamar, kursi, kuota haji, muthowif). Dipetakan ke 409 lewat `instanceof` — jangan mencocokkan teks pesan. */
+export class QuotaExhaustedError extends Error {
+  constructor(readonly code: ApiErrorCode, readonly params?: ApiErrorParams) {
+    super(apiErrorText(code, params))
+    this.name = 'QuotaExhaustedError'
   }
 }
 

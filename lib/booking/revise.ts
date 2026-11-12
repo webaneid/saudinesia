@@ -14,7 +14,7 @@ import { writeBookingItems } from './lineItems'
 import { recomputeBookingDates } from './dates'
 import { recordRevision, type RevisionChange } from './revisionLog'
 import { isSerializationConflict, retrySerializable } from './serializable'
-import { ItemNotBookableError, itemIndexOf, remapItemIndex } from './errors'
+import { ItemNotBookableError, QuotaExhaustedError, itemIndexOf, remapItemIndex } from './errors'
 import { partialItemTotals } from './partialTotals'
 import type { RuleViolation } from './rules'
 import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/safeSelect'
@@ -255,7 +255,7 @@ async function syncMembers(
   })
   // Per rombongan bila berrombongan — aturan tunggal yang sama dengan pesan baru (lib/booking/members.ts `assignInGroups`).
   const r = assignInGroups(rows, b.haji.map(h => ({ key: h.id, numPeople: h.numPersons })), pilgrims, groupIds.length)
-  if (!r.ok) throw new RevisionError(422, memberProblem(r, k => rows.find(x => x.key === k)?.name ?? 'paket'))
+  if (!r.ok) throw new RevisionError(422, memberProblem(r, k => rows.find(x => x.key === k)?.name ?? 'paket').message)
   const visaOf = new Map(rows.map(x => [x.key, x.visaProductId]))
   for (const [i, pg] of b.pilgrims.entries()) {
     const m = r.members[i]!
@@ -542,7 +542,7 @@ function revisionFailureOf(e: unknown): { status: number; error: string; violati
   if (e instanceof RevisionError) return { status: e.status, error: e.message }
   if (e instanceof RuleViolationError) return { status: 422, error: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError || e instanceof InvoiceError) return { status: 422, error: e.message }
-  if (e instanceof Error && /insufficient|capacity/.test(e.message)) return { status: 409, error: 'Kuota tidak mencukupi untuk perubahan ini' }
+  if (e instanceof QuotaExhaustedError) return { status: 409, error: 'Kuota tidak mencukupi untuk perubahan ini' }
   if (isSerializationConflict(e)) return { status: 409, error: 'Booking sedang diproses di tempat lain — muat ulang lalu coba lagi' }
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') return { status: 422, error: 'Ada produk yang tidak ditemukan lagi — pilih ulang' }
   return null

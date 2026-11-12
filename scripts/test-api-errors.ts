@@ -11,7 +11,11 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { z } from 'zod'
 import { routing } from '@/i18n/routing'
-import { apiError, apiErrorText, codeOfText, failureJson, zodFailure } from '@/lib/errors/api'
+import { apiError, apiErrorText, codeOfText, failureJson, matchText, MATCH_TEXT_MAX, zodFailure } from '@/lib/errors/api'
+import { checkoutCartSchema, CHECKOUT_MAX_PEOPLE } from '@/lib/validators/checkout'
+import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
+import { bookingFailure, bookingFailureJson } from '@/lib/booking/simulate'
+import { REQUIRED_COMPONENT_TYPES } from '@/lib/validators/visa'
 import { readErrorParams, resolveApiError } from '@/lib/errors/params'
 
 let failed = 0
@@ -37,26 +41,27 @@ const ID = JSON.parse(read('i18n/messages/id.json')).apiErrors as Record<string,
 const EN = JSON.parse(read('i18n/messages/en.json')).apiErrors as Record<string, string>
 const KEYS = new Set(Object.keys(ID))
 
-// Route pelanggan yang sudah berkode. I6b menambah checkout/keranjang (`bookings/route.ts`, `bookings/preview`).
-const CODED_ROUTE_DIRS = ['app/api/v1/auth', 'app/api/v1/account', 'app/api/v1/address', 'app/api/v1/manifest', 'app/api/v1/bookings/[id]']
-const CODED_ROUTES = CODED_ROUTE_DIRS.flatMap(d => walk(d)).filter(f => f.endsWith('/route.ts'))
+// Route pelanggan berkode: I6a (auth, akun, alamat, manifest, booking milik pemesan) + I6b (checkout/keranjang: `bookings/route.ts`, `bookings/preview`).
+const CODED_ROUTE_DIRS = ['app/api/v1/auth', 'app/api/v1/account', 'app/api/v1/address', 'app/api/v1/manifest', 'app/api/v1/bookings/[id]', 'app/api/v1/bookings/preview']
+const CODED_ROUTES = [...CODED_ROUTE_DIRS.flatMap(d => walk(d)).filter(f => f.endsWith('/route.ts')), 'app/api/v1/bookings/route.ts']
 
 // Modul penghasil galat route di atas. Galat khusus staf di modul lain (gudang identitas, katalog jenis dokumen) tetap teks (admin).
 const CODED_MODULES = [
   'lib/pilgrims/http.ts', 'lib/pilgrims/service.ts', 'lib/pilgrims/bookingLink.ts', 'lib/pilgrims/review.ts', 'lib/pilgrims/extraFields.ts',
   'lib/documents/http.ts', 'lib/documents/service.ts', 'lib/documents/file.ts', 'lib/address/prepare.ts', 'lib/auth/contact.ts', 'lib/auth/rateLimit.ts',
+  'lib/checkout/dates.ts', 'lib/booking/simulate.ts',
 ]
 
-// Area klien pelanggan. Checkout & keranjang menyusul di I6b (pesan mesin pesan belum berkode).
+// Area klien pelanggan (seluruhnya, sejak I6b termasuk checkout & keranjang).
 const CLIENT_DIRS = ['app/[locale]/(auth)', 'app/[locale]/(pilgrim)', 'app/[locale]/(public)', 'app/[locale]/invoice', 'components/shared', 'components/booking']
-const CLIENT_PENDING_I6B = ['app/[locale]/(public)/checkout/', 'app/[locale]/(public)/keranjang/']
-const CLIENT_FILES = CLIENT_DIRS.flatMap(d => walk(d)).filter(f => !CLIENT_PENDING_I6B.some(p => f.startsWith(p)))
+const CLIENT_FILES = CLIENT_DIRS.flatMap(d => walk(d))
 
 // Pesan Zod yang bisa sampai ke pelanggan: berkas utuh, atau potongan [awal, akhir) untuk berkas campuran admin/pelanggan.
 const CUSTOMER_VALIDATORS: { file: string; from?: string; to?: string }[] = [
   { file: 'lib/validators/auth.ts' },
   { file: 'lib/validators/pilgrims.ts' },
   { file: 'lib/validators/address.ts' },
+  { file: 'lib/validators/checkout.ts' },
   { file: 'lib/validators/documents.ts', from: 'const calendarDate', to: 'export type DocumentUploadFields' },
 ]
 
@@ -121,7 +126,9 @@ await t('katalog: teks id statis unik, en diterjemahkan (beda dari id), kunci id
 
 await t('katalog: setiap kode dipakai (literal kode di kode sumber, atau teks id = pesan validator)', () => {
   const src = ['app', 'components', 'lib'].flatMap(d => walk(d)).map(f => code(read(f))).join('\n')
-  const unused = [...KEYS].filter(k => !src.includes(`'${k}'`) && !src.includes(`'${ID[k]!}'`))
+  // Pesan Zod bertemplat (`Maksimal ${N} …`) dipakai lewat pola katalog (`matchText`): teks id dengan `{x}` = templat dengan `${…}`.
+  const templ = (v: string) => new RegExp('`' + v.split(/\{\w+\}/).map(p => p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\$\\{[^}]+\\}') + '`')
+  const unused = [...KEYS].filter(k => !src.includes(`'${k}'`) && !src.includes(`'${ID[k]!}'`) && !(/\{\w+\}/.test(ID[k]!) && !/\{\w+,/.test(ID[k]!) && templ(ID[k]!).test(src)))
   assert.deepEqual(unused, [])
 })
 
@@ -158,6 +165,115 @@ await t('server: zodFailure berkode bila pesan dikenal, apiError/failureJson mem
   assert.equal(r.status, 429); assert.equal(r.headers.get('Retry-After'), '30')
   assert.deepEqual(await r.json(), { success: false, error: 'x', meta: { code: 'tooManyPilgrimChanges', field: 'nik' } })
   assert.deepEqual(await failureJson({ status: 404, error: 'Teks staf' }).json(), { success: false, error: 'Teks staf' })
+})
+
+// Mesin pesan (I6b, §6.8): galat item/kuota berkode di SELURUH lib/ dan app/ (mesin dipakai checkout pelanggan DAN draf/revisi admin).
+const LIB_APP = ['lib', 'app'].flatMap(d => walk(d))
+
+await t('mesin pesan: ItemNotBookableError/QuotaExhaustedError hanya menerima kunci katalog; kuota tak lagi dikenali dari teks', () => {
+  const bad: string[] = []
+  for (const f of LIB_APP) {
+    const src = code(read(f))
+    for (const m of src.matchAll(/new (ItemNotBookableError|QuotaExhaustedError)\(\s*(['`]?)([^'`,)]*)\2/g)) {
+      if (m[2] !== "'" || !KEYS.has(m[3]!)) bad.push(`${f}:${lineOf(src, m.index)} ${m[1]}(${m[2]}${m[3]}${m[2]}) bukan kode katalog`)
+    }
+    for (const m of src.matchAll(/throw new Error\([^)]*(insufficient|capacity)/gi)) bad.push(`${f}:${lineOf(src, m.index)} galat kuota tanpa kode`)
+    for (const m of src.matchAll(/(includes\('(insufficient|capacity)'\)|\/insufficient)/g)) bad.push(`${f}:${lineOf(src, m.index)} 409 dikenali dari teks — pakai instanceof QuotaExhaustedError`)
+  }
+  assert.deepEqual(bad, [])
+})
+
+/** Opsi ICU `select` sebuah argumen di teks katalog (tanpa `other`). */
+const selectOptions = (text: string, arg: string) => {
+  const at = text.indexOf(`{${arg}, select, `)
+  assert.ok(at >= 0, `${arg} select tak ada`)
+  let depth = 0, i = at, body = ''
+  for (; i < text.length; i++) { const c = text[i]!; if (c === '{') depth++; if (c === '}') { depth--; if (depth === 0) break } }
+  body = text.slice(at + `{${arg}, select, `.length, i)
+  return [...body.matchAll(/(\w+) \{/g)].map(m => m[1]!).filter(k => k !== 'other').sort()
+}
+
+await t('katalog: opsi select = daftar kunci di kode (barang dihargai, pilihan paket, komponen visa) — tak pernah jatuh ke "other"', () => {
+  const union = (file: string, type: string) => {
+    const src = read(file); const at = src.indexOf(`export type ${type} =`); assert.ok(at >= 0, `${type} di ${file}`)
+    return [...src.slice(at, src.indexOf('\n\n', at)).matchAll(/'(\w+)'/g)].map(m => m[1]!).sort()
+  }
+  const subjects = union('lib/booking/errors.ts', 'PriceSubject')
+  const choices = [...new Set([...[...read('lib/booking/packageItem.ts').matchAll(/type Choice = ([^\n]+)/g)].flatMap(m => [...m[1]!.matchAll(/'(\w+)'/g)].map(x => x[1]!)), 'hotel'])].sort()
+  for (const cat of [ID, EN]) {
+    assert.deepEqual(selectOptions(cat.itemPriceNotSet!, 'what'), subjects)
+    assert.deepEqual(selectOptions(cat.itemVisaTierNotSet!, 'what'), subjects)
+    assert.deepEqual(selectOptions(cat.itemChoiceNotOffered!, 'choice'), choices)
+    assert.deepEqual(selectOptions(cat.itemChoiceNotApplicable!, 'choice'), choices)
+    assert.deepEqual(selectOptions(cat.visaRequires!, 'component'), [...REQUIRED_COMPONENT_TYPES].sort())
+  }
+})
+
+await t('mesin pesan: bookingFailure membawa kode + params; kuota 409, item 422; teks Indonesia tetap untuk admin', () => {
+  const q = bookingFailure(new QuotaExhaustedError('quotaFlight', { need: 3, have: 1 }))
+  assert.equal(q.status, 409); assert.equal(q.code, 'quotaFlight'); assert.deepEqual(q.params, { need: 3, have: 1 })
+  assert.equal(q.message, 'Kursi pesawat tidak cukup: dibutuhkan 3, tersisa 1')
+  const i = bookingFailure(new ItemNotBookableError('itemPriceNotSet', { what: 'umrahPackage' }))
+  assert.equal(i.status, 422); assert.equal(i.message, 'Harga paket umroh belum ditetapkan')
+  const d = bookingFailure(new ItemNotBookableError('fieldInvalid', { label: 'Nomor HP' }, 'Nomor hanya angka'))
+  assert.equal(d.message, 'Nomor hanya angka', 'rincian Indonesia untuk admin/`/id`'); assert.equal(d.code, 'fieldInvalid')
+  assert.match(apiErrorText('quotaMuthowifDate', { travelDate: '2026-12-20', need: 2, have: 0 }), /20 Des 2026/)
+  assert.throws(() => bookingFailure(new Error('lain')), /lain/, 'galat tak dikenal dilempar ulang (500 + log)')
+})
+
+await t('Zod checkout: pesan bertemplat (Maksimal N …) berkode lewat pola katalog', async () => {
+  assert.deepEqual(matchText(`Maksimal ${CHECKOUT_MAX_PEOPLE} orang per pesanan`), { code: 'maxPeople', params: { max: CHECKOUT_MAX_PEOPLE } })
+  assert.deepEqual(matchText('Keranjang kosong'), { code: 'cartEmpty' })
+  assert.equal(matchText('Teks yang tak dikenal sama sekali'), undefined)
+  const r = await zodFailure(checkoutCartSchema.safeParse({ items: [] }).error!).json() as { meta?: { code?: string } }
+  assert.equal(r.meta?.code, 'cartEmpty')
+})
+
+await t('matchText tahan masukan panjang dan pola katalog tak ambigu (SEC-231)', () => {
+  const t0 = performance.now()
+  assert.equal(matchText('Maksimal '.repeat(5000)), undefined)
+  assert.equal(matchText('a'.repeat(MATCH_TEXT_MAX + 1)), undefined)
+  assert.ok(performance.now() - t0 < 50, 'masukan panjang dilewati tanpa regex')
+  // Setiap pesan katalog berargumen sederhana punya teks pemisah di antara argumen — dua `{a}{b}` berdempet membuat pencocokan ambigu.
+  for (const [k, v] of Object.entries(ID)) {
+    if (!v.includes('{') || /\{\w+,/.test(v)) continue
+    assert.doesNotMatch(v, /\}\{/, `${k}: argumen berdempet`)
+  }
+})
+
+await t('bookingFailureJson: detail InvoiceError tak sampai ke pelanggan (SEC-230)', async () => {
+  const body = await bookingFailureJson({ ok: false, status: 422, code: 'orderNotIssuable', message: 'Total snapshot 100 ≠ total booking 90 (internal)' }).json() as { error: string; meta: { code: string } }
+  assert.equal(body.error, apiErrorText('orderNotIssuable')); assert.equal(body.meta.code, 'orderNotIssuable')
+})
+
+await t('klien tak menjangkau lib/errors/api.ts (katalog pesan + next/server khusus server) lewat rantai impor', () => {
+  const resolve = (from: string, spec: string): string | undefined => {
+    const base = spec.startsWith('@/') ? spec.slice(2) : spec.startsWith('.') ? join(from, '..', spec).replace(/^\.\//, '') : undefined
+    if (!base) return undefined
+    for (const c of [`${base}.ts`, `${base}.tsx`, `${base}/index.ts`]) { try { if (statSync(join(root, c)).isFile()) return c } catch { /* lanjut */ } }
+    return undefined
+  }
+  const deps = new Map<string, string[]>()
+  const depsOf = (f: string) => {
+    let d = deps.get(f)
+    if (!d) {
+      d = [...code(read(f)).matchAll(/^\s*(?:import|export)\s+(?!type\b)[^'"]*?from\s+['"]([^'"]+)['"]/gm)].map(m => resolve(f, m[1]!)).filter((x): x is string => !!x)
+      deps.set(f, d)
+    }
+    return d
+  }
+  const bad: string[] = []
+  for (const f of ['app', 'components'].flatMap(d => walk(d)).filter(f => /^['"]use client['"]/m.test(read(f).slice(0, 200)))) {
+    const seen = new Set<string>([f]), stack: string[][] = [[f]]
+    while (stack.length) {
+      const path = stack.pop()!
+      for (const d of depsOf(path.at(-1)!)) {
+        if (d === 'lib/errors/api.ts') { bad.push(path.concat(d).join(' → ')); continue }
+        if (!seen.has(d)) { seen.add(d); stack.push(path.concat(d)) }
+      }
+    }
+  }
+  assert.deepEqual(bad, [])
 })
 
 if (failed > 0) { console.log(`\n${failed} uji gagal`); process.exit(1) }

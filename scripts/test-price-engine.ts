@@ -241,16 +241,16 @@ await t('pembaca: sellPrice/sellPrices/withSellPrice mengikuti titik harga dan s
 await t('requireSellPrice (jalur pesan): tanpa titik atau ≤ 0 → ItemNotBookableError (422), tak pernah gratis; berharga → nilainya; dibaca lewat klien transaksi juga', async () => {
   const none = await newSchedule()
   const bookable = (e: unknown) => e instanceof ItemNotBookableError && /belum ditetapkan/.test((e as Error).message)
-  await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable)
+  await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'hotelRoom'), bookable)
   await prisma.pricePoint.create({ data: { ownerType: 'hotel', ownerId: none.schedule.id, unit: 'room_night', autoSellIdr: 0, sellIdr: 0 } })
-  await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable, 'titik bernilai 0 juga ditolak')
-  assert.equal(await requireSellPrice('hotel', h1.schedule.id, 'kamar hotel'), 1_500_000)
-  assert.equal(await prisma.$transaction(tx => requireSellPrice('hotel', h1.schedule.id, 'kamar hotel', tx)), 1_500_000)
+  await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'hotelRoom'), bookable, 'titik bernilai 0 juga ditolak')
+  assert.equal(await requireSellPrice('hotel', h1.schedule.id, 'hotelRoom'), 1_500_000)
+  assert.equal(await prisma.$transaction(tx => requireSellPrice('hotel', h1.schedule.id, 'hotelRoom', tx)), 1_500_000)
   // Klien transaksi dihormati: titik harga yang BARU dibuat di dalam transaksi (belum commit) terbaca lewat `tx`, bukan lewat klien global.
   await prisma.$transaction(async tx => {
     await tx.pricePoint.update({ where: { ownerType_ownerId_variantKey: { ownerType: 'hotel', ownerId: none.schedule.id, variantKey: '' } }, data: { autoSellIdr: 777_000, sellIdr: 777_000 } })
-    assert.equal(await requireSellPrice('hotel', none.schedule.id, 'kamar hotel', tx), 777_000)
-    await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'kamar hotel'), bookable, 'di luar transaksi masih 0')
+    assert.equal(await requireSellPrice('hotel', none.schedule.id, 'hotelRoom', tx), 777_000)
+    await assert.rejects(() => requireSellPrice('hotel', none.schedule.id, 'hotelRoom'), bookable, 'di luar transaksi masih 0')
   })
   await prisma.pricePoint.deleteMany({ where: { ownerId: none.schedule.id } })
 })

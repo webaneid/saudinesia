@@ -76,7 +76,7 @@ await t('jual DI BAWAH modal TIDAK diblokir dan tak wajib catatan (Fase 8: siste
   const v2 = await setManualSell({ ownerType: 'hotel', ownerId: nocost.schedule.id, sellIdr: 500_000, byUserId: who })
   assert.deepEqual([v2.costIdr, v2.sellIdr, v2.mode, v2.profitIdr], [null, 500_000, 'manual', null])
   assert.equal(await column(nocost.schedule.id), 500_000)
-  assert.equal(await requireSellPrice('hotel', nocost.schedule.id, 'kamar'), 500_000, 'langsung dapat dipesan')
+  assert.equal(await requireSellPrice('hotel', nocost.schedule.id, 'hotelRoom'), 500_000, 'langsung dapat dipesan')
 })
 
 await t('batas masukan: ≤ 0, NaN/Infinity, di atas batas atas, varian yang belum ada, dan produk yang tak ada → PriceInputError (400)', async () => {

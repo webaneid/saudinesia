@@ -1,7 +1,7 @@
 // All quota helpers MUST be called inside prisma.$transaction() to prevent race conditions.
-import { ItemNotBookableError } from '@/lib/booking/errors'
+import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
 import type { Prisma } from '@prisma/client'
-import { formatCalendarDate } from '@/lib/time'
+import { calendarDateOf } from '@/lib/time'
 
 type Tx = Prisma.TransactionClient
 
@@ -11,7 +11,7 @@ export async function reserveHotelQuota(tx: Tx, hotelRoomScheduleId: string, roo
     select: { totalQuota: true, pendingQuota: true, bookedQuota: true },
   })
   const available = schedule.totalQuota - schedule.pendingQuota - schedule.bookedQuota
-  if (available < rooms) throw new Error(`Hotel quota insufficient: need ${rooms}, have ${available}`)
+  if (available < rooms) throw new QuotaExhaustedError('quotaHotel', { need: rooms, have: available })
   await tx.hotelRoomSchedule.update({
     where: { id: hotelRoomScheduleId },
     data: { pendingQuota: { increment: rooms } },
@@ -40,7 +40,7 @@ export async function reserveTransportQuota(tx: Tx, quotaId: string, seats: numb
     select: { totalSeats: true, pendingSeats: true, bookedSeats: true },
   })
   const available = quota.totalSeats - quota.pendingSeats - quota.bookedSeats
-  if (available < seats) throw new Error(`Transport quota insufficient: need ${seats}, have ${available}`)
+  if (available < seats) throw new QuotaExhaustedError('quotaTransport', { need: seats, have: available })
   await tx.transportQuota.update({
     where: { id: quotaId },
     data: { pendingSeats: { increment: seats } },
@@ -68,9 +68,9 @@ export async function reserveFlightQuota(tx: Tx, scheduleId: string, seats: numb
     select: { totalSeats: true, pendingSeats: true, bookedSeats: true, isActive: true },
   })
   // Jadwal tak ada / nonaktif = item tak dapat dijual (422), bukan galat server — dicek sebelum kursi ditahan.
-  if (!schedule || !schedule.isActive) throw new ItemNotBookableError('Jadwal tiket pesawat tidak tersedia')
+  if (!schedule || !schedule.isActive) throw new ItemNotBookableError('itemFlightUnavailable')
   const available = schedule.totalSeats - schedule.pendingSeats - schedule.bookedSeats
-  if (available < seats) throw new Error(`Flight quota insufficient: need ${seats}, have ${available}`)
+  if (available < seats) throw new QuotaExhaustedError('quotaFlight', { need: seats, have: available })
   await tx.flightSchedule.update({
     where: { id: scheduleId },
     data: { pendingSeats: { increment: seats } },
@@ -99,7 +99,7 @@ export async function reserveMuthowifQuota(tx: Tx, muthowifId: string, date: Dat
     select: { pendingCount: true, bookedCount: true, muthowif: { select: { dailyCapacity: true } } },
   })
   const available = avail.muthowif.dailyCapacity - avail.pendingCount - avail.bookedCount
-  if (available < people) throw new Error('Muthowif capacity insufficient for selected dates')
+  if (available < people) throw new QuotaExhaustedError('quotaMuthowif')
   await tx.muthowifAvailability.update({
     where: { muthowifId_date: { muthowifId, date } },
     data: { pendingCount: { increment: people } },
@@ -140,13 +140,9 @@ export async function reservePoolMuthowifQuota(tx: Tx, date: Date, people: numbe
   })
   const available = totalCapacity - pool.pendingCount - pool.bookedCount
   if (available < people) {
-    // Sertakan tanggal spesifik yang penuh — menutup Gap #7 (docs/arsitektur-muthowif.md §7):
-    // dulu pesan generik tanpa bilang hari mana, reservasi tetap all-or-nothing tapi user
-    // sekarang tahu persisnya kenapa gagal. Kata "insufficient"/"capacity" dipertahankan
-    // (pola sama fungsi reserve* lain di file ini) supaya cocok dengan pattern-match di
-    // app/api/v1/bookings/route.ts yang mem-forward pesan ini apa adanya sebagai 409.
-    const dateLabel = formatCalendarDate(date)
-    throw new Error(`Muthowif pool capacity insufficient for ${dateLabel}: need ${people}, have ${Math.max(available, 0)}`)
+    // Sertakan tanggal spesifik yang penuh — menutup Gap #7 (docs/arsitektur-muthowif.md §7). Galat kuota = `QuotaExhaustedError` berkode
+    // (I6b): dipetakan ke 409 lewat `instanceof` (lib/booking/simulate.ts), tanggal dikirim sebagai tanggal kalender dan diformat sesuai bahasa.
+    throw new QuotaExhaustedError('quotaMuthowifDate', { travelDate: calendarDateOf(date), need: people, have: Math.max(available, 0) })
   }
   await tx.muthowifPoolAvailability.update({
     where: { date },

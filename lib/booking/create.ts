@@ -57,11 +57,11 @@ export async function prepareBooking(input: BookingInput, opts: { rules?: boolea
     let transportQuotaId: string | null = null
     if (breakdown.transportMode === 'included' && breakdown.includedTransportPricingId) {
       const date = tp.tourDate ?? data.departureDate
-      if (!date) throw new ItemNotBookableError('Tanggal paket ziarah wajib diisi')
+      if (!date) throw new ItemNotBookableError('itemTourDateRequired')
       const quota = await prisma.transportQuota.findUnique({
         where: { pricingId_travelDate: { pricingId: breakdown.includedTransportPricingId, travelDate: new Date(date) } },
       })
-      if (!quota) throw new ItemNotBookableError('Kendaraan untuk paket ini belum tersedia di tanggal keberangkatan — hubungi admin.')
+      if (!quota) throw new ItemNotBookableError('itemTourVehicleMissing')
       transportQuotaId = quota.id
     } else if (breakdown.transportMode === 'user_choice' && tp.transportQuotaId) {
       transportQuotaId = tp.transportQuotaId
@@ -77,7 +77,7 @@ export async function prepareBooking(input: BookingInput, opts: { rules?: boolea
 }
 
 /**
- * Di DALAM transaksi: tahan kuota (melempar "insufficient" → 409), tulis item + jamaah + snapshot ke booking `bookingId` (baris sudah ada), hitung tanggal acuan,
+ * Di DALAM transaksi: tahan kuota (melempar `QuotaExhaustedError` → 409), tulis item + jamaah + snapshot ke booking `bookingId` (baris sudah ada), hitung tanggal acuan,
  * simpan total = Σ snapshot (invarian I4). Mengembalikan total.
  */
 export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBooking, bookingId: string, written?: ItemMeta[]): Promise<number> {
@@ -88,7 +88,7 @@ export async function writeBooking(tx: Prisma.TransactionClient, p: PreparedBook
   return total
 }
 
-/** Tahan kuota setiap item masukan (melempar "insufficient" → 409). Dipakai pesan baru dan revisi (item yang ditambah). */
+/** Tahan kuota setiap item masukan (melempar `QuotaExhaustedError` → 409). Dipakai pesan baru dan revisi (item yang ditambah). */
 export async function reserveItems(tx: Prisma.TransactionClient, p: PreparedBooking): Promise<void> {
   let tourIdx = 0
   let packageIdx = 0

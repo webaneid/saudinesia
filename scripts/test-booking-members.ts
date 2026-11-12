@@ -47,7 +47,7 @@ await t('PEMBANDING: siapa mendapat visa paket = pembagian lama, untuk SEMUA kom
 await t('JUMLAH: Σ orang paket > jamaah → ditolak (paket); Σ orang haji > jamaah → ditolak (haji); pas = sah', () => {
   const r = assignMembers([{ key: 'p', numPeople: 3, visaProductId: null }], [], [fresh(false), fresh(false)])
   assert.deepEqual(r, { ok: false, reason: 'too_few_pilgrims', what: 'package', needed: 3, pilgrims: 2 })
-  assert.match(memberProblem(r as Extract<typeof r, { ok: false }>, () => 'x'), /Jumlah jamaah \(2\) kurang dari jumlah orang di Paket Umroh \(3\)/)
+  assert.match(memberProblem(r as Extract<typeof r, { ok: false }>, () => 'x').message, /Jumlah jamaah \(2\) kurang dari jumlah orang di Paket Umroh \(3\)/)
   const h = assignMembers([], [{ key: 'h', numPeople: 2 }], [fresh(false)])
   assert.equal(!h.ok && h.reason === 'too_few_pilgrims' && h.what, 'haji')
   assert.deepEqual(ok(assignMembers([], [{ key: 'h', numPeople: 2 }], [fresh(false), fresh(true)])).map(m => m.haji), ['h', 'h'])
@@ -56,7 +56,7 @@ await t('JUMLAH: Σ orang paket > jamaah → ditolak (paket); Σ orang haji > ja
 await t('K4: anggota paket BERVISA yang ber-visa sendiri → ditolak (Jamaah ke-N); paket TANPA visa boleh berisi jamaah ber-visa sendiri', () => {
   const r = assignMembers([{ key: 'p', numPeople: 2, visaProductId: 'A' }], [], [fresh(false), fresh(true)])
   assert.deepEqual(r, { ok: false, reason: 'double_visa', pilgrimIndex: 1, packageKey: 'p' })
-  assert.match(memberProblem(r as Extract<typeof r, { ok: false }>, () => 'Paket Hemat'), /Jamaah ke-2 anggota Paket Hemat yang visanya sudah termasuk paket/)
+  assert.match(memberProblem(r as Extract<typeof r, { ok: false }>, () => 'Paket Hemat').message, /Jamaah ke-2 anggota Paket Hemat yang visanya sudah termasuk paket/)
   assert.deepEqual(ok(assignMembers([{ key: 'p', numPeople: 2, visaProductId: null }], [], [fresh(true), fresh(true)])).map(m => m.package), ['p', 'p'])
 })
 
@@ -92,7 +92,7 @@ await t('assignInGroups: paket per rombongan dibagi di dalam rombongannya; nomor
   const dv = assignInGroups([{ key: 'pB', numPeople: 1, visaProductId: 'A', group: 1 }], [], [g(0), g(1, true)], 2)
   assert.ok(!dv.ok && dv.reason === 'double_visa' && dv.pilgrimIndex === 1)
   const mixed = assignInGroups([{ key: 'all', numPeople: 1, visaProductId: null }, { key: 'pB', numPeople: 1, visaProductId: null, group: 1 }], [], [g(0), g(1)], 2)
-  assert.ok(!mixed.ok && mixed.reason === 'mixed_groups'); assert.match(memberProblem(mixed, () => 'x'), /tidak dapat digabung/)
+  assert.ok(!mixed.ok && mixed.reason === 'mixed_groups'); assert.match(memberProblem(mixed, () => 'x').message, /tidak dapat digabung/)
   assert.deepEqual(assignInGroups([{ key: 'p', numPeople: 2, visaProductId: null }], [], [fresh(false), fresh(false)], 0), assignMembers([{ key: 'p', numPeople: 2, visaProductId: null }], [], [fresh(false), fresh(false)]), 'tanpa rombongan = assignMembers')
 })
 

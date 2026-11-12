@@ -42,6 +42,20 @@ await t('DITOLAK: tanpa item (400), kunci liar (400), item booking lain (404), i
   assert.equal((await prisma.bookingMuthowif.findUniqueOrThrow({ where: { id: foreign.id } })).muthowifId, null)
 })
 
+await t('DITOLAK 409 (bukan 500): kapasitas muthowif habis dan muthowif nonaktif — galat domain dikenali dari kelasnya (SEC-229)', async () => {
+  const small = await prisma.muthowif.create({ data: { name: `${tag} Kecil`, dailyCapacity: 1 } })
+  const full = await call(b.id, { bookingMuthowifId: first.id, muthowifId: small.id })
+  assert.equal(full.status, 409)
+  assert.match(((await full.json()) as { error: string }).error, /tidak cukup|tersisa/i)
+  const off = await prisma.muthowif.create({ data: { name: `${tag} Nonaktif`, dailyCapacity: 50, isActive: false } })
+  const inactive = await call(b.id, { bookingMuthowifId: first.id, muthowifId: off.id })
+  assert.equal(inactive.status, 409)
+  assert.equal(((await inactive.json()) as { error: string }).error, 'Muthowif tidak aktif')
+  assert.equal((await prisma.bookingMuthowif.findUniqueOrThrow({ where: { id: first.id } })).muthowifId, null)
+  await prisma.muthowifAvailability.deleteMany({ where: { muthowifId: { in: [small.id, off.id] } } })
+  await prisma.muthowif.deleteMany({ where: { id: { in: [small.id, off.id] } } })
+})
+
 await prisma.booking.deleteMany({ where: { userId: user.id } })
 await prisma.muthowifAvailability.deleteMany({ where: { muthowifId: guide.id } })
 await prisma.muthowif.delete({ where: { id: guide.id } })
