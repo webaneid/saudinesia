@@ -180,6 +180,9 @@ await t('matcher TIDAK melepas rute terlindungi/locale dan melepas aset (_next, 
     assert.ok(matches(p), `harus dicocokkan matcher: ${p}`)
   }
   for (const p of ['/_next/static/chunks/app.js', '/favicon.ico', '/robots.txt', '/images/logo.png']) assert.ok(!matches(p), `harus dilepas matcher: ${p}`)
+  // Token invoice publik bertitik tetap lewat middleware (locale halaman = locale URL).
+  for (const p of ['/en/invoice/abc123.def-456_x', '/id/invoice/abc.def']) assert.ok(matches(p), `harus dicocokkan matcher: ${p}`)
+  for (const p of ['/en/invoice/a/b.png', '/_next/invoice/x.js']) assert.ok(!matches(p), `aset tetap dilepas: ${p}`)
 })
 
 await t('penjaga sumber: middleware.ts tidak mengimpor session.ts (Prisma tak boleh masuk bundel Edge) dan jwtVerify membatasi algoritma', async () => {

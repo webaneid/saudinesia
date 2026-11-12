@@ -920,6 +920,30 @@
         "network": "Tidak dapat menghubungi server.",
         "loading": "Memuat berkas…"
       }
+    },
+    "requiredDocs": {
+      "title": "Persyaratan Dokumen",
+      "optional": "Opsional / Kondisional:"
+    },
+    "hotelFacilities": {
+      "wifi": "WiFi Gratis",
+      "breakfast": "Sarapan",
+      "ac": "AC",
+      "tv": "TV",
+      "pool": "Kolam Renang",
+      "gym": "Pusat Kebugaran",
+      "parking": "Parkir",
+      "room_service": "Layanan Kamar 24 Jam",
+      "prayer_room": "Ruang Sholat",
+      "airport_shuttle": "Antar-Jemput Bandara",
+      "laundry": "Laundry",
+      "elevator": "Lift",
+      "restaurant": "Restoran",
+      "front_desk_24h": "Resepsionis 24 Jam",
+      "family_room": "Kamar Keluarga",
+      "full_board": "Full Board",
+      "half_board": "Half Board",
+      "room_only": "Tanpa Sarapan (Room Only)"
     }
   },
   "checkout": {
@@ -1515,5 +1539,52 @@
       "deleteYes": "Ya, hapus",
       "delete": "Hapus"
     }
+  },
+  "invoicePage": {
+    "metaTitle": "Invoice",
+    "limited": "Terlalu banyak permintaan. Coba lagi dalam {minutes, plural, other {# menit}}.",
+    "phone": "Telp: {phone}",
+    "taxId": "NPWP: {taxId}",
+    "heading": "INVOICE",
+    "revision": "Revisi ke-{number}",
+    "billedTo": "Ditagihkan kepada",
+    "bookingCode": "Kode booking",
+    "invoiceDate": "Tanggal invoice",
+    "dueDate": "Jatuh tempo",
+    "balanceDue": "Sisa tagihan",
+    "lines": "Rincian invoice",
+    "subtotal": "Subtotal",
+    "taxIncluded": "(termasuk dalam harga)",
+    "total": "Total",
+    "paid": "Terbayar",
+    "howToPay": "Cara pembayaran",
+    "transferTo": "Transfer ke <b>{bank}</b> <mono>{account}</mono> a.n. {holder}",
+    "branch": " ({branch})",
+    "validAfter": "Pembayaran dianggap sah setelah dikonfirmasi oleh tim {company}.",
+    "terms": "Syarat & Ketentuan",
+    "downloadPdf": "Unduh PDF"
+  },
+  "privacy": {
+    "metaTitle": "Kebijakan Privasi",
+    "title": "Kebijakan Privasi",
+    "version": "Versi {version}",
+    "draftTitle": "DRAFT — perlu review legal sebelum go-live.",
+    "draftBody": "Halaman ini disusun sebagai kerangka awal kepatuhan UU Pelindungan Data Pribadi (UU PDP), belum diverifikasi oleh penasihat hukum {company}.",
+    "collectTitle": "1. Data yang Kami Kumpulkan",
+    "collectIntro": "Untuk memproses pemesanan Haji & Umroh (visa, hotel, transportasi, muthowif, katering), kami mengumpulkan:",
+    "categories": {
+      "identity": "Nama lengkap, email, nomor WhatsApp, dan alamat",
+      "documents": "Nomor paspor, KTP/NIK, dan Kartu Keluarga (dokumen wajib visa/haji-umroh)",
+      "health": "Sertifikat vaksin dan riwayat kesehatan yang relevan dengan perjalanan",
+      "payment": "Data pembayaran (bukti transfer) — tidak termasuk nomor kartu/rekening bank Anda"
+    },
+    "purposeTitle": "2. Tujuan Pemrosesan",
+    "purposeBody": "Data digunakan semata-mata untuk memproses pemesanan Anda: pengurusan visa, reservasi hotel/transportasi/muthowif, konfirmasi pembayaran, dan komunikasi terkait perjalanan (WhatsApp/email). Kami tidak menjual data pribadi Anda kepada pihak ketiga.",
+    "storageTitle": "3. Penyimpanan & Keamanan",
+    "storageBody": "Dokumen (paspor, KTP, KK, sertifikat vaksin) disimpan di penyimpanan privat, hanya dapat diakses lewat tautan sementara (presigned URL) yang kedaluwarsa otomatis. Data tidak pernah dicatat di log aplikasi.",
+    "rightsTitle": "4. Hak Anda Sebagai Subjek Data",
+    "rightsBody": "Sesuai UU PDP, Anda berhak mengakses, memperbaiki, dan meminta penghapusan data pribadi Anda. Untuk permintaan hapus akun, gunakan tombol \"{button}\" di halaman Profil Saya setelah masuk ke akun Anda. Permintaan diproses manual mengingat sebagian data (riwayat transaksi) wajib disimpan untuk kebutuhan hukum/pajak.",
+    "contactTitle": "5. Kontak",
+    "contactWa": "WhatsApp +{number}"
   }
 }

@@ -593,7 +593,7 @@ Rencana: `docs/arsitektur-i18n-frontend.md` (fase I1–I6; keputusan pemilik K1�
 - [x] **I2** — auth (masuk, daftar, lupa/atur ulang password, aktivasi, lengkapi data, Google) + pengalih di layout auth + `ContactPicker`/`CountryCodeSelect`/`AutocompleteSelect`/`OrDivider` (dimajukan dari I5); penjaga memakai parser TypeScript — 2026-11-11
 - [x] **I3** — checkout 9 jenis + keranjang + ikon keranjang; `lib/checkout` mengembalikan kunci (alasan blokir, isi paket, penolakan keranjang, ringkasan entri), bukan kalimat; penjaga membaca daftar nilai dari sumbernya — 2026-11-11
 - [x] **I4** — area jamaah (dasbor, booking, bayar, jamaah per booking, Jamaah Saya, profil) + pengalih di layout jamaah + kit tabel/`Modal`/`AddressPicker`/dokumen/kartu jamaah (dimajukan dari I5); label `lib/` (status booking/pemeriksaan/dokumen, peringatan NIK, jenjang visa, rombongan) diterjemahkan lewat kunci, penjaga mencocokkan teks `id` dengan peta `lib` — 2026-11-11
-- [ ] I5 — sisa komponen bersama (`DateTimeField`) + invoice publik + fasilitas hotel + label visa plus
+- [x] **I5** — invoice publik (status/tanggal sesuai bahasa, pengalih, matcher middleware untuk token bertitik), kebijakan privasi, `RequiredDocuments`, fasilitas hotel, label visa plus; penjaga mencakup seluruh area pelanggan (`DateTimeField`/editor teks kaya dibuktikan khusus admin) — 2026-11-12
 - [ ] I6 — pesan galat server jalur pelanggan (kode + terjemahan klien)
 - [x] Currency formatted as `Rp 1.250.000` (IDR, no decimals) — sama di kedua bahasa (K6)
 

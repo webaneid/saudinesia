@@ -80,10 +80,12 @@ await t('aturan visa: data tersimpan tak sah (string lama, tipe liar / tipe lama
   assert.equal(visaRequiredComponentsSchema.safeParse(REQUIRED_COMPONENT_TYPES.map(type => ({ type }))).success, true, 'ketujuh tipe sekaligus sah')
 })
 await t('model penjualan visa: turunan aturan — kosong = Visa only; label jumlah komponen; bagian berurutan tetap (urutan daftar tipe)', () => {
-  assert.deepEqual(visaSalesModel([]), { plus: false, label: 'Visa only', parts: [] })
-  assert.deepEqual(visaSalesModel([{ type: 'hotel_madinah' }, { type: 'flight' }]), { plus: true, label: 'Visa plus · 2 komponen', parts: ['Tiket pesawat', 'Hotel Madinah'] })
-  assert.deepEqual(visaSalesModel([{ type: 'transport', categories: ['airport'] }]), { plus: true, label: 'Visa plus · 1 komponen', parts: ['Transportasi'] })
+  assert.deepEqual(visaSalesModel([]), { plus: false, label: 'Visa only', parts: [], types: [] })
+  assert.deepEqual(visaSalesModel([{ type: 'hotel_madinah' }, { type: 'flight' }]), { plus: true, label: 'Visa plus · 2 komponen', parts: ['Tiket pesawat', 'Hotel Madinah'], types: ['flight', 'hotel_madinah'] })
+  assert.deepEqual(visaSalesModel([{ type: 'transport', categories: ['airport'] }]), { plus: true, label: 'Visa plus · 1 komponen', parts: ['Transportasi'], types: ['transport'] })
   assert.deepEqual(visaSalesModel([{ type: 'catering' }, { type: 'muthowif' }, { type: 'tour' }]).parts, ['Muthowif', 'Wisata (Paket Ziarah)', 'Katering'])
+  // `types` (untuk halaman pelanggan, diterjemahkan lewat checkout.components) mengikuti urutan yang sama dengan `parts`.
+  assert.deepEqual(visaSalesModel([{ type: 'catering' }, { type: 'muthowif' }, { type: 'tour' }]).types, ['muthowif', 'tour', 'catering'])
   // Data tersimpan tak sah dibaca sebagai "tanpa aturan" + invalid — pemanggil (rules.ts) yang menolak, label tidak boleh menyamarkannya jadi aman.
   assert.equal(parseRequiredComponents('flight').invalid, true)
 })

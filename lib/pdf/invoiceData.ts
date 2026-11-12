@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { displayStatus, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
-import { DATE_SHORT_MONTH_2D, formatCalendarDate, formatInstant } from '@/lib/time'
+import { DATE_SHORT_MONTH_2D, calendarDateOf, dateInApp, formatCalendarDate, formatInstant, type CalendarDate } from '@/lib/time'
 import { formatAddressLine } from '@/lib/address/format'
 import { billOf } from '@/lib/invoice/bill'
 import { frozenTaxRules, type BankSnapshot, type CompanySnapshot } from '@/lib/invoice/issue'
@@ -55,6 +55,10 @@ export type InvoiceData = {
   dueDate:       string | null
   paidDate:      string | null
   statusLabel:   string
+  /** Untuk halaman invoice publik (dwibahasa): status turunan dan tanggal kalender mentah — `statusLabel`/`invoiceDate`/`dueDate` di atas sudah berupa teks Indonesia untuk PDF. */
+  displayStatus: DisplayStatus
+  invoiceDay:    CalendarDate
+  dueDay:        CalendarDate | null
   bookingCode:   string
   /** > 1 = invoice pernah direvisi (Fase 6b). */
   revision:      number
@@ -167,6 +171,7 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
   }
   // Booking tanpa invoice (hanya pratinjau draf — semua booking terbit punya invoice sejak Fase 6a): kop & rekening dari setelan lama, tanpa pajak.
   const fallback = getPaymentConfig()
+  const status = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
 
   return {
     invoiceNumber: inv?.number ?? `INV-${booking.bookingCode}`,
@@ -182,7 +187,10 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
     terms:         plainText(inv?.termsDoc),
     footerNote:    plainText(inv?.footerNoteDoc),
     paidDate:      confirmedPayment?.confirmedAt ? formatDate(confirmedPayment.confirmedAt) : null,
-    statusLabel:   STATUS_LABEL[displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })],
+    statusLabel:   STATUS_LABEL[status],
+    displayStatus: status,
+    invoiceDay:    inv ? calendarDateOf(inv.invoiceDate) : dateInApp(booking.createdAt),
+    dueDay:        inv ? calendarDateOf(inv.dueDate) : null,
     bookingCode:   booking.bookingCode,
     buyer: {
       name:    booking.user.fullName,

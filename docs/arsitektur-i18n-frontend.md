@@ -1,6 +1,6 @@
 # Arsitektur — Bahasa (id/en) di seluruh front-end pelanggan
 
-> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11 (§6); I5–I6 belum.**
+> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11, I5 SELESAI 2026-11-12 (§6); I6 belum.**
 > Pemicu: audit front-end 2026-11-11 (`docs/arsitektur-frontend-publik.md` §8.2 butir 1) dan arahan pemilik:
 > *"kita seriusi dulu bahasa ya di front-end.. default-nya bahasa Indonesia bro.. kita blm bikin select bahasa di menu.."*
 
@@ -198,3 +198,36 @@ Recheck kode area jamaah (SOP langkah 1) menemukan hal yang belum tertulis di §
 **Diketahui (sesuai rencana):** pesan dari server (mis. "Data incomplete: …" berisi label kolom admin) dan data isian admin (nama produk, label dokumen/kolom, "Diminta oleh <produk>") tetap Indonesia; tanggal di baris ringkasan item ("20/12/2026 – 24/12/2026") berasal dari snapshot server — I6.
 
 **Insiden uji (bukan bug produk):** menjalankan skrip uji DB di DB audit menulis nilai cek kunci PII dengan kunci uji, sehingga server audit (kunci `.env.local`) menolak menyimpan jamaah — `ensurePiiKeysMatch` gagal-tertutup sesuai SEC-168. Dibereskan dengan mengosongkan `pii_key_checks` di DB sekali pakai itu saja. Pelajaran: DB untuk simulasi browser dan DB untuk skrip uji jangan sama.
+
+### 6.5 I5 (2026-11-12) — rencana rinci lalu as-built
+
+Recheck (SOP langkah 1) dengan memperluas sementara `MIGRATED_AREAS` ke seluruh area pelanggan (`app/[locale]/(public)`, `app/[locale]/invoice`, `components/shared`, `components/booking`) — teks JSX langsung yang tersisa hanya di 4 berkas: invoice publik (22), kebijakan privasi (13), `rich-text/RichTextEditorImpl` (12), `RequiredDocuments` (2). Di luar JSX: label fasilitas hotel (`HOTEL_FACILITIES` di halaman detail hotel publik) dan nama komponen "visa plus" di kartu katalog Visa (`visaSalesModel().parts` = label Indonesia `REQUIRED_COMPONENT_LABEL`). Temuan yang mengubah §4:
+
+- `DateTimeField` dan editor teks kaya **hanya dipakai admin** (tak ada pengimpor di luar `admin/`) — bukan area pelanggan, tetap Indonesia (admin). Dikeluarkan dari cakupan dengan daftar beralasan yang DIPERIKSA penjaga (berkas itu tak boleh punya pengimpor di luar admin).
+- Kebijakan privasi masih teks keras dan belum ada di §4 — masuk I5.
+
+| Bagian | Rencana |
+|---|---|
+| Invoice publik | Teks halaman → `invoicePage.*`; status dari `displayStatus` (kunci `shared.bookingStatus`, sama dengan area jamaah) — `InvoiceData` mendapat `displayStatus` dan tanggal kalender mentah (`invoiceDay`/`dueDay`) di samping teks yang dipakai PDF; tanggal diformat sesuai bahasa halaman; judul tab lewat `generateMetadata` (tetap noindex/no-referrer); pengalih bahasa di halaman (token ikut di alamat sama, header no-referrer tetap). Isi baris (label/deskripsi item, nama bagian), kop, rekening, S&K = data beku → tetap apa adanya (K5, sama dengan PDF). |
+| Kebijakan privasi | Seluruh teks → `privacy.*` (id = teks sekarang, en = terjemahan), kategori data dari pesan (`PERSONAL_DATA_CATEGORIES` dihapus — satu-satunya pemakai halaman ini); `generateMetadata`. Versi kebijakan (`PRIVACY_POLICY_VERSION`) TIDAK naik — isi kebijakan tak berubah, hanya ditambah terjemahan. Status DRAFT/peninjauan hukum berlaku untuk kedua bahasa. |
+| Persyaratan dokumen | `RequiredDocuments` → `shared.requiredDocs.*`. Label/deskripsi syarat = data admin (tetap). |
+| Fasilitas hotel | Halaman detail hotel menerjemahkan kode lewat `hotels.facilities.<kode>` (as-built: `shared.hotelFacilities.<kode>`); penjaga: setiap kode `HOTEL_FACILITIES` punya pesan dan teks `id` = label `lib` (admin tetap memakai label `lib`). |
+| Visa plus | `visaSalesModel` ikut mengembalikan `types` (jenis komponen); kartu katalog menerjemahkan lewat `checkout.components.<jenis>` (sudah ada sejak I3). |
+| Penjaga | `MIGRATED_AREAS` menjadi seluruh area pelanggan (`app/[locale]/(public)`, `app/[locale]/invoice`, `components/shared`, `components/booking`, `app/not-found.tsx`); pengecualian hanya `ADMIN_ONLY_SHARED` beralasan, dan penjaga membuktikan berkas itu tak diimpor dari luar admin. |
+
+**As-built (berbeda/tambahan dari rencana di atas):**
+
+| Bagian | Isi | Lokasi |
+|---|---|---|
+| Invoice publik | `InvoiceData` mendapat `displayStatus`, `invoiceDay`, `dueDay` (tanggal kalender mentah) di samping teks PDF; halaman memakai `invoicePage.*` + `shared.bookingStatus.<status>` — kata status mengikuti area jamaah ("Menunggu Verifikasi"), bukan teks PDF lama. Bank lewat `t.rich('transferTo', …)`. Pengalih bahasa di atas halaman. | `lib/pdf/invoiceData.ts`, `app/[locale]/invoice/[token]/page.tsx` |
+| Matcher middleware | **Temuan simulasi:** token invoice berisi titik, sehingga entri matcher pertama (pengecualian berkas aset `.*\\..*`) melepasnya — tanpa middleware, `getLocale()`/`useLocale()` jatuh ke `id`: `<html lang>` dan pengalih bahasa salah di `/en/invoice/…` meski teks halaman sudah Inggris. Ditambah entri kedua `'/([^/_][^/]*)/invoice/([^/]+)'` (segmen pertama tak boleh `_`, jadi `/_next` tetap dilepas). Middleware kini MELIPUTI lebih banyak path (gerbang hanya bertambah). | `middleware.ts`, `scripts/test-i18n-routing.ts` |
+| Fasilitas hotel | Namespace `shared.hotelFacilities` (bukan `hotels.facilities`); kode tak dikenal disaring (sebelumnya kode mentah tampil). | `app/[locale]/(public)/hotels/[id]/page.tsx` |
+| Visa plus | `visaSalesModel` mengembalikan `types` berurutan sama dengan `parts`; katalog Visa memanggil `getTranslations` untuk `checkout.components`. Penjaga katalog (`test-public-home`) yang sebelumnya melarang `getTranslations` di halaman katalog kini hanya mengizinkan namespace kosakata bersama `SHARED_VOCAB_NAMESPACES` (`checkout.components`) — teks halaman katalog tetap hanya lewat `getPageText`/`getPageContent`. | `lib/validators/visa.ts`, `app/[locale]/(public)/visa/page.tsx`, `scripts/test-public-home.ts` |
+| Penjaga | `MIGRATED_AREAS` = seluruh area pelanggan; `ADMIN_ONLY_SHARED` = `DateTimeField`, `RichTextEditor`, `RichTextEditorImpl` — uji membuktikan tak ada pengimpor non-admin (transitif lewat `components/shared` dan `lib`) dan daftar tak basi. Uji kunci dirangkai: `privacy.categories` (dari daftar `CATEGORIES` halaman) dan `shared.hotelFacilities` (dari `HOTEL_FACILITIES`, teks `id` = label `lib`). | `scripts/test-i18n-coverage.ts` |
+
+**Bukti:**
+- `tsc` dan `bun run build` tanpa galat (build diulang sesudah perubahan matcher); `bun run test` penuh di DB sekali pakai lulus; `bun audit` tidak berubah (tanpa dependensi baru).
+- Mutasi penjaga merah lalu hijau setelah dipulihkan: kunci kategori privasi en dihapus; kode fasilitas baru tanpa pesan; teks `id` fasilitas berbeda dari label `lib`; teks JSX langsung di invoice; berkas `ADMIN_ONLY_SHARED` diimpor dari halaman publik; `getTranslations('catalog.visa')` di katalog.
+- Simulasi browser (server uji port 6270, DB klon): `/en/invoice/<token>` (status "AWAITING VERIFICATION", "11 Nov 2026"/"15 Nov 2026", header no-store/noindex/no-referrer, `<html lang="en">` sesudah perbaikan matcher, pengalih membawa token ke `/id/…` yang sepenuhnya Indonesia, token salah tetap 404); `/en/privacy`; `/en/visa` ("Required Documents"; visa plus uji: "Booked together with: Flight ticket, Makkah hotel", lalu dikembalikan); `/en/hotels/<id>` (fasilitas Inggris); 375 px tanpa geser samping.
+
+**Diketahui:** isi baris invoice, kop, rekening, S&K, dan PDF tetap Indonesia (K5); `DateTimeField` dan editor teks kaya tetap Indonesia (khusus admin). Blok "How to pay" tidak terlihat di browser (DB uji tanpa rekening) — teksnya diuji lewat render ICU kedua bahasa. **Di luar cakupan (dicatat):** kartu katalog visa plus menyuruh menghubungi admin tanpa tombol pesan, padahal checkout/keranjang sudah mendukung visa plus (11c); `canBuyDirectly` di `lib/catalog/home.ts` juga mengecualikannya.

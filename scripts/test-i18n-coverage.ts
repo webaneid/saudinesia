@@ -14,6 +14,7 @@ import { BOOKING_STATUS } from '@/lib/constants/booking'
 import { REVIEW_LABEL } from '@/lib/pilgrims/reviewState'
 import { WARNING_TEXT } from '@/components/shared/pilgrims/warningText'
 import { ACTION_LABELS } from '@/components/shared/data-table/RowActions'
+import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
 
 let failed = 0
 function t(name: string, fn: () => void) {
@@ -230,6 +231,20 @@ t('area jamaah (I4): teks Indonesia di pesan = teks peta lib yang masih dipakai 
   assert.deepEqual(problems, [])
 })
 
+t('I5: kunci yang dirangkai (kategori privasi, fasilitas hotel) ada di semua locale; teks id fasilitas = label lib (admin)', () => {
+  const groups: Array<[string, string[]]> = [
+    ['privacy.categories', listOf('app/[locale]/(public)/privacy/page.tsx', 'CATEGORIES')],
+    ['shared.hotelFacilities', HOTEL_FACILITIES.map(f => f.code)],
+  ]
+  const problems: string[] = []
+  for (const [ns, values] of groups) {
+    assert.ok(values.length > 0, `${ns}: daftar nilai kosong — penjaga basi`)
+    for (const l of routing.locales) for (const v of values) if (typeof nodeAt(MESSAGES[l]!, `${ns}.${v}`) !== 'string') problems.push(`${l}: ${ns}.${v}`)
+  }
+  for (const f of HOTEL_FACILITIES) if (nodeAt(MESSAGES.id!, `shared.hotelFacilities.${f.code}`) !== f.label) problems.push(`shared.hotelFacilities.${f.code} ≠ lib "${f.label}"`)
+  assert.deepEqual(problems, [])
+})
+
 // ── 3. area yang sudah dimigrasi tanpa teks JSX langsung ────────────────────────────────────────────────────────────
 // Bertambah per fase (I2 auth, I3 checkout, I4 jamaah, I5 komponen bersama). Awalan path; berkas `.tsx` di bawahnya diperiksa.
 const MIGRATED_AREAS = [
@@ -256,7 +271,20 @@ const MIGRATED_AREAS = [
   'components/shared/AddressPicker.tsx',
   'components/shared/WhatsappVerifyCard.tsx',
   'components/booking/ManifestFieldsForm.tsx',
+  // I5 (2026-11-12): SELURUH area pelanggan — sisanya (invoice publik, kebijakan privasi, persyaratan dokumen) ikut. Daftar di atas tetap sebagai riwayat.
+  'app/[locale]/(public)',
+  'app/[locale]/invoice',
+  'app/not-found.tsx',
+  'components/shared',
+  'components/booking',
 ]
+// Berkas di folder bersama yang HANYA dipakai admin (bahasa admin = Indonesia). Pengecualian dibuktikan: uji di bawah merah bila berkas ini
+// (atau berkas yang mengimpornya) dipakai dari luar area admin. Berkas → alasan.
+const ADMIN_ONLY_SHARED: Record<string, string> = {
+  'components/shared/DateTimeField.tsx': 'formulir tanggal-jam — hanya halaman admin (setelan invoice, produk)',
+  'components/shared/rich-text/RichTextEditor.tsx': 'editor teks kaya — hanya formulir produk admin',
+  'components/shared/rich-text/RichTextEditorImpl.tsx': 'isi editor teks kaya (dimuat RichTextEditor)',
+}
 // Teks yang memang sama di semua bahasa (nama merek, kode). Berkas → teks → alasan.
 const ALLOWED_TEXT: Record<string, Record<string, string>> = {
   'components/shared/Header.tsx': { Saudinesia: 'nama merek', S: 'monogram logo' },
@@ -288,9 +316,38 @@ function hardcodedText(file: string): string[] {
 }
 
 t('area yang sudah dimigrasi tak memuat teks tampilan langsung (hanya lewat pesan)', () => {
-  const files = FILES.filter(f => f.endsWith('.tsx') && MIGRATED_AREAS.some(a => f === a || f.startsWith(`${a}/`)))
+  const files = FILES.filter(f => f.endsWith('.tsx') && MIGRATED_AREAS.some(a => f === a || f.startsWith(`${a}/`)) && !(f in ADMIN_ONLY_SHARED))
   assert.ok(files.length >= MIGRATED_AREAS.length, 'berkas area termigrasi tak ditemukan — path MIGRATED_AREAS basi')
   const problems = files.flatMap(f => hardcodedText(f).map(p => `${f}: ${p}`))
+  assert.deepEqual(problems, [])
+})
+
+t('pengecualian ADMIN_ONLY_SHARED benar-benar hanya dipakai admin (pengimpor transitif di luar admin = merah)', () => {
+  const isAdmin = (f: string) => f.startsWith('app/[locale]/admin/') || f.startsWith('components/admin/')
+  const modOf = (f: string) => '@/' + f.replace(/\.tsx?$/, '').replace(/\/index$/, '')
+  // Pengimpor = berkas yang menyebut modul itu dalam import/dynamic import (alias @/ atau relatif ./Nama).
+  const importers = (f: string) => {
+    const mod = modOf(f), base = f.split('/').pop()!.replace(/\.tsx?$/, '')
+    const dir = f.slice(0, f.lastIndexOf('/'))
+    return FILES.filter(g => g !== f).filter(g => {
+      const src = code(read(g))
+      return src.includes(`'${mod}'`) || (g.startsWith(dir + '/') && g.lastIndexOf('/') === dir.length && new RegExp(`['"]\\./${base}['"]`).test(src))
+    })
+  }
+  const problems: string[] = []
+  for (const f of Object.keys(ADMIN_ONLY_SHARED)) {
+    assert.ok(FILES.includes(f), `${f}: berkas tak ada — daftar basi`)
+    const seen = new Set<string>([f]); const queue = [f]
+    while (queue.length) {
+      for (const g of importers(queue.shift()!)) {
+        if (seen.has(g)) continue
+        seen.add(g)
+        if (isAdmin(g)) continue
+        if (g.startsWith('components/shared/') || g.startsWith('lib/')) { queue.push(g); continue }
+        problems.push(`${f} ← ${g}`)
+      }
+    }
+  }
   assert.deepEqual(problems, [])
 })
 

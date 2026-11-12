@@ -38,8 +38,10 @@ export function parseRequiredComponents(json: unknown): { components: RequiredCo
 
 // Model penjualan visa (docs/rencana-visa-produk.md §2.1) — TURUNAN dari `requiredComponents`, bukan kolom sendiri:
 // kosong = "Visa only" (cukup lengkapi dokumen), berisi = "Visa plus" (komponen itu wajib dibeli dari kita di booking yang sama).
-// `label` ringkas untuk lencana; `parts` = label tiap komponen (urut daftar centang) untuk ringkasan lengkap.
-export function visaSalesModel(components: readonly RequiredComponent[]): { plus: boolean; label: string; parts: string[] } {
-  const parts = REQUIRED_COMPONENT_TYPES.filter(t => components.some(c => c.type === t)).map(t => REQUIRED_COMPONENT_LABEL[t])
-  return parts.length === 0 ? { plus: false, label: 'Visa only', parts } : { plus: true, label: `Visa plus · ${parts.length} komponen`, parts }
+// `label` ringkas untuk lencana; `parts` = label tiap komponen (urut daftar centang) untuk ringkasan lengkap — keduanya bahasa admin.
+// `types` = jenis komponen (urutan sama) untuk halaman pelanggan, yang menerjemahkannya lewat `checkout.components.<jenis>`.
+export function visaSalesModel(components: readonly RequiredComponent[]): { plus: boolean; label: string; parts: string[]; types: RequiredComponentType[] } {
+  const types = REQUIRED_COMPONENT_TYPES.filter(t => components.some(c => c.type === t))
+  const parts = types.map(t => REQUIRED_COMPONENT_LABEL[t])
+  return parts.length === 0 ? { plus: false, label: 'Visa only', parts, types } : { plus: true, label: `Visa plus · ${parts.length} komponen`, parts, types }
 }

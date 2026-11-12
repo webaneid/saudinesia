@@ -16,6 +16,10 @@ const root = new URL('..', import.meta.url).pathname.replace(/\/$/, '')
 const read = (f: string) => readFileSync(join(root, f), 'utf8')
 const HOME_DIR = 'app/[locale]/(public)/_home'
 const filesIn = (dir: string, ext: string) => readdirSync(join(root, dir)).filter(f => f.endsWith(ext)).map(f => `${dir}/${f}`)
+// Namespace kosakata bersama yang boleh dibaca halaman katalog lewat getTranslations (bukan teks halaman; tak bisa diedit di Konten Situs). Nama → alasan di komentar.
+const SHARED_VOCAB_NAMESPACES = new Set([
+  'checkout.components', // nama jenis komponen (visa plus di kartu Visa) — sama dengan checkout/keranjang
+])
 /** Katalog yang sudah memakai pola hero + daftar + CTA (§6). Katalog yang dirombak di F6 WAJIB ditambahkan di sini. */
 const REDESIGNED_CATALOGS = ['packages', 'visa', 'haji', 'hotels', 'transport', 'muthowif', 'tours', 'flight', 'catering']
 const SHARED_SOURCES = [...filesIn('components/shared/public', '.tsx'), ...filesIn('lib/public-content', '.ts')]
@@ -186,7 +190,13 @@ t('beranda dan katalog memakai hero dan CTA bersama, bukan buatan sendiri', () =
     assert.ok(new RegExp(`\\b${c}: \\{`).test(content), `${c}: belum terdaftar di lib/public-content/pages.ts`)
     assert.ok(src.includes('generateMetadata') && src.includes(`catalogMetadata((await params).locale, '${c}')`), `${c}: metadata harus lewat catalogMetadata`)
     for (const part of ['<PageHero', '<PageCta', '<CatalogSection', `getPageContent(locale, '${c}')`]) assert.ok(src.includes(part), `${c}: ${part}`)
-    assert.doesNotMatch(src, /getTranslations\(/, `${c}: teks halaman hanya lewat getPageText/getPageContent`)
+    // Teks HALAMAN hanya lewat getPageText/getPageContent (bisa diedit superadmin). getTranslations hanya boleh untuk kosakata BERSAMA yang
+    // terdaftar (bukan teks halaman, mis. nama jenis komponen visa plus — I5), dan selalu dengan namespace literal.
+    const calls = [...src.matchAll(/getTranslations\(([^\n]*)/g)].map(m => m[1] ?? '')
+    for (const args of calls) {
+      const ns = /namespace:\s*'([^']+)'/.exec(args)?.[1]
+      assert.ok(ns && SHARED_VOCAB_NAMESPACES.has(ns), `${c}: teks halaman hanya lewat getPageText/getPageContent (getTranslations namespace "${ns ?? '?'}" bukan kosakata bersama)`)
+    }
   }
   // Metadata katalog dari satu pembantu: judul/deskripsi suntingan, hreflang, Open Graph.
   const meta = read('lib/public-content/metadata.ts')

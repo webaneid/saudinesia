@@ -58,5 +58,7 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next|.*\\..*).*)'],
+  // Entri kedua: token invoice publik berisi titik (`<id>.<mac>`) sehingga lolos dari entri pertama (pengecualian berkas aset) — tanpa middleware,
+  // `getLocale()`/`useLocale()` jatuh ke bawaan dan `<html lang>`/pengalih bahasa salah di /en/invoice (docs/arsitektur-i18n-frontend.md §6.5).
+  matcher: ['/((?!_next|.*\\..*).*)', '/([^/_][^/]*)/invoice/([^/]+)'],
 }
