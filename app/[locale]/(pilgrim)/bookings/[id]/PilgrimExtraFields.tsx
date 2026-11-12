@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ManifestFieldsForm, type ManifestField } from '@/components/booking/ManifestFieldsForm'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Kolom tambahan jamaah booking yang TIDAK berasal dari kartu Jamaah Saya (mis. "Nomor HP Host" visa tertentu) — diisi pemesan sendiri
 // (audit front-end 2026-11-11). Disimpan lewat PUT /api/v1/bookings/[id]/pilgrims/[pilgrimId]; server menolak kolom kartu dan data terkunci.
@@ -22,6 +23,7 @@ type Props = {
 export function PilgrimExtraFields({ bookingId, pilgrimId, fields, initial, editable }: Props) {
   const router = useRouter()
   const t = useTranslations('pilgrimArea.extra')
+  const errorText = useApiError()
   const [values, setValues] = useState<Record<string, unknown>>(initial)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState(false)
@@ -35,7 +37,7 @@ export function PilgrimExtraFields({ bookingId, pilgrimId, fields, initial, edit
       })
       const json = (await res.json().catch(() => null)) as { error?: string; meta?: { field?: string } } | null
       if (!res.ok) {
-        const text = json?.error ?? t('saveFailed')
+        const text = errorText(json, t('saveFailed'))
         if (json?.meta?.field) setErrors({ [json.meta.field]: text })
         setNotice({ text, error: true })
         return

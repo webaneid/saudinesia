@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
+import { codedError, type ApiErrorCode } from '@/lib/errors/api'
 import { formatAddressLine } from '@/lib/address/format'
 import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
 import { isSealedRole, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
@@ -13,7 +14,7 @@ import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import { pilgrimRequirements } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { lockCardOwner, type Actor, type ServiceError } from './service'
-import { isReviewLocked, REVIEW_LOCKED_MESSAGE } from './reviewState'
+import { isReviewLocked } from './reviewState'
 
 // Tautan kartu jamaah tersimpan → jamaah booking (docs/arsitektur-jamaah.md §5.3, Fase 7a) — SATU-SATUNYA penulis `booking_pilgrims.savedPilgrimId`,
 // `identityId`, dan kolom NIK/paspor tersegel. Aturan:
@@ -31,8 +32,8 @@ export type LinkResult = { ok: true; savedPilgrimId: string | null; fieldValues:
 class Abort extends Error {
   constructor(readonly result: ServiceError) { super(result.error) }
 }
-const fail = (status: ServiceError['status'], error: string, field?: string): never => { throw new Abort({ ok: false, status, error, ...(field ? { field } : {}) }) }
-const notFound = () => fail(404, 'Jamaah tidak ditemukan')
+const fail = (status: ServiceError['status'], code: ApiErrorCode, field?: string): never => { throw new Abort({ ok: false, status, ...codedError(code), ...(field ? { field } : {}) }) }
+const notFound = () => fail(404, 'bookingPilgrimNotFound')
 const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 
 const cardSelect = {
@@ -79,21 +80,21 @@ async function lockBookingPilgrim(tx: Tx, actor: Actor, bookingId: string, booki
   const ownerId = head.booking.userId
   if (!isStaff(actor) && actor.userId !== ownerId) return notFound()
   const refusal = await lockCardOwner(tx, actor, ownerId)
-  if (refusal) throw new Abort(refusal.status === 404 ? { ok: false, status: 404, error: 'Jamaah tidak ditemukan' } : refusal)
+  if (refusal) throw new Abort(refusal.status === 404 ? { ok: false, status: 404, ...codedError('bookingPilgrimNotFound') } : refusal)
   // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
   const rows = await tx.$queryRaw<{ savedPilgrimId: string | null; fieldValues: unknown; reviewStatus: PilgrimReviewStatus }[]>`
     SELECT "savedPilgrimId", "fieldValues", "reviewStatus" FROM "booking_pilgrims" WHERE "id" = ${bookingPilgrimId} AND "bookingId" = ${bookingId} FOR UPDATE`
   const row = rows[0]
   if (!row) return notFound()
   // Diajukan/terverifikasi (Fase 6): ditolak SEBELUM mengunci kartu — urutan kunci layanan dokumen (kartu → jamaah booking) tetap aman.
-  if (isReviewLocked(row.reviewStatus)) return fail(409, REVIEW_LOCKED_MESSAGE)
+  if (isReviewLocked(row.reviewStatus)) return fail(409, 'reviewLocked')
   const visa = await tx.visaApplication.findUnique({ where: { bookingPilgrimId }, select: { visaProductId: true } })
   return { id: bookingPilgrimId, bookingId, ownerId, savedPilgrimId: row.savedPilgrimId, fieldValues: (row.fieldValues ?? {}) as Record<string, unknown>, visaProductId: visa?.visaProductId ?? null }
 }
 
 async function rateLimited(actor: Actor): Promise<ServiceError | null> {
   const hit = await consume(policy(isStaff(actor) ? 'pilgrimWriteStaff' : 'pilgrimWriteUser', actor.userId))
-  return hit.allowed ? null : { ok: false, status: 429, error: 'Terlalu banyak perubahan data jamaah. Coba lagi nanti.', retryAfterSec: hit.retryAfterSec }
+  return hit.allowed ? null : { ok: false, status: 429, ...codedError('tooManyPilgrimChanges'), retryAfterSec: hit.retryAfterSec }
 }
 
 async function run(actor: Actor, fn: (tx: Tx) => Promise<LinkResult>): Promise<LinkResult> {
@@ -103,9 +104,9 @@ async function run(actor: Actor, fn: (tx: Tx) => Promise<LinkResult>): Promise<L
     return await retryConflict(() => prisma.$transaction(fn)) // deadlock dengan gabung identitas (F8, SEC-205) → ulang
   } catch (e) {
     if (e instanceof Abort) return e.result
-    if (isRetryableConflict(e)) return { ok: false, status: 409, error: 'Data jamaah sedang diubah bersamaan — coba lagi' }
+    if (isRetryableConflict(e)) return { ok: false, status: 409, ...codedError('pilgrimConcurrent') }
     // Balapan dua jamaah menautkan kartu yang sama (indeks unik bookingId+savedPilgrimId) → sama dengan cek kembar.
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { ok: false, status: 409, error: 'Data jamaah ini sudah dipakai jamaah lain di booking yang sama', field: 'cardId' }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return { ok: false, status: 409, ...codedError('cardUsedTwice'), field: 'cardId' }
     throw e
   }
 }
@@ -119,10 +120,10 @@ export function linkCard(actor: Actor, bookingId: string, bookingPilgrimId: stri
     // Kunci kartu (FOR SHARE) supaya tak dihapus/dipindah identitasnya di tengah — snapshot dan segel dari versi yang sama. $queryRaw: tak ada FOR SHARE di ORM.
     const held = await tx.$queryRaw<{ id: string }[]>`SELECT "id" FROM "saved_pilgrims" WHERE "id" = ${cardId} AND "ownerId" = ${bp.ownerId} FOR SHARE`
     const card = held[0] ? await tx.savedPilgrim.findUnique({ where: { id: cardId }, select: cardSelect }) : null
-    if (!card) return fail(404, 'Data jamaah tersimpan tidak ditemukan', 'cardId')
-    if (card.archivedAt) return fail(409, 'Data jamaah ini diarsipkan — pulihkan dulu sebelum dipakai', 'cardId')
+    if (!card) return fail(404, 'savedPilgrimNotFound', 'cardId')
+    if (card.archivedAt) return fail(409, 'pilgrimArchivedUse', 'cardId')
     const twin = await tx.bookingPilgrim.findFirst({ where: { bookingId, savedPilgrimId: cardId, id: { not: bookingPilgrimId } }, select: { id: true } })
-    if (twin) return fail(409, 'Data jamaah ini sudah dipakai jamaah lain di booking yang sama', 'cardId')
+    if (twin) return fail(409, 'cardUsedTwice', 'cardId')
     const fields = await manifestFieldsOf(tx, bp.visaProductId)
     const fieldValues = { ...bp.fieldValues, ...snapshotFromCard(fields, forSnapshot(card)) }
     await tx.bookingPilgrim.update({
@@ -141,14 +142,14 @@ export function linkCard(actor: Actor, bookingId: string, bookingPilgrimId: stri
 
 async function refuseTripDocs(tx: Tx, bookingId: string, cardId: string) {
   const tripDocs = await tx.pilgrimDocument.count({ where: { bookingId, savedPilgrimId: cardId } })
-  if (tripDocs > 0) fail(409, 'Hapus dulu dokumen perjalanan jamaah ini sebelum melepas atau mengganti data jamaah tersimpan')
+  if (tripDocs > 0) fail(409, 'removeTripDocumentsFirst')
 }
 
 /** Lepas tautan kartu — snapshot (termasuk segel) TETAP. Ditolak bila kartu masih memegang dokumen perjalanan booking ini. */
 export function unlinkCard(actor: Actor, bookingId: string, bookingPilgrimId: string): Promise<LinkResult> {
   return run(actor, async (tx) => {
     const bp = await lockBookingPilgrim(tx, actor, bookingId, bookingPilgrimId)
-    if (!bp.savedPilgrimId) return fail(409, 'Jamaah ini belum memakai data jamaah tersimpan')
+    if (!bp.savedPilgrimId) return fail(409, 'noSavedPilgrim')
     await refuseTripDocs(tx, bookingId, bp.savedPilgrimId)
     await tx.bookingPilgrim.update({ where: { id: bookingPilgrimId }, data: { savedPilgrimId: null, identityId: null }, select: { id: true } })
     return { ok: true, savedPilgrimId: null, fieldValues: bp.fieldValues }

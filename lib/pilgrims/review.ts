@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
+import { codedError, type ApiErrorCode } from '@/lib/errors/api'
+import type { ApiErrorParams } from '@/lib/errors/params'
 import { completeness } from '@/lib/manifest/values'
 import { pilgrimRequirements } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
@@ -28,8 +30,8 @@ export type ReviewDecision = { decision: 'verified' | 'needs_revision'; note?: s
 class Abort extends Error {
   constructor(readonly result: ServiceError) { super(result.error) }
 }
-const fail = (status: ServiceError['status'], error: string, field?: string): never => { throw new Abort({ ok: false, status, error, ...(field ? { field } : {}) }) }
-const notFound = () => fail(404, 'Jamaah tidak ditemukan')
+const fail = (status: ServiceError['status'], code: ApiErrorCode, field?: string, params?: ApiErrorParams): never => { throw new Abort({ ok: false, status, ...codedError(code, params), ...(field ? { field } : {}) }) }
+const notFound = () => fail(404, 'bookingPilgrimNotFound')
 const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 
 type Locked = {
@@ -46,9 +48,9 @@ async function lockForReview(tx: Tx, actor: Actor, bookingId: string, bookingPil
   if (!head) return notFound()
   const { userId: ownerId, status, bookingCode: code, departureDate } = head.booking
   if (!isStaff(actor) && actor.userId !== ownerId) return notFound()
-  if (status !== 'active') return fail(409, 'Booking ini tidak aktif — pengajuan data jamaah ditutup')
+  if (status !== 'active') return fail(409, 'submissionClosed')
   const refusal = await lockCardOwner(tx, actor, ownerId)
-  if (refusal) throw new Abort(refusal.status === 404 ? { ok: false, status: 404, error: 'Jamaah tidak ditemukan' } : refusal)
+  if (refusal) throw new Abort(refusal.status === 404 ? { ok: false, status: 404, ...codedError('bookingPilgrimNotFound') } : refusal)
   // Keputusan: dokumen kartu dikunci FOR SHARE SEBELUM jamaah booking (SEC-200) — urutan sama dengan layanan dokumen (dokumen → jamaah booking),
   // jadi tolak/ganti/hapus serentak menunggu keputusan selesai lalu membuka ulang, dan yang dinilai = isi terkunci. $queryRaw: tak ada FOR SHARE di ORM.
   let cardSeen: string | null = null
@@ -64,8 +66,8 @@ async function lockForReview(tx: Tx, actor: Actor, bookingId: string, bookingPil
   const row = rows[0]
   if (!row) return notFound()
   // Dibaca ulang sesudah kunci (SEC-203): pembatalan/hangus serentak tak diikuti verifikasi + email.
-  if (row.bookingStatus !== 'active') return fail(409, 'Booking ini tidak aktif — pengajuan data jamaah ditutup')
-  if (lockDocs && row.savedPilgrimId !== cardSeen) return fail(409, 'Data jamaah baru saja berubah — muat ulang lalu coba lagi')
+  if (row.bookingStatus !== 'active') return fail(409, 'submissionClosed')
+  if (lockDocs && row.savedPilgrimId !== cardSeen) return fail(409, 'pilgrimDataChanged')
   const visa = await tx.visaApplication.findUnique({ where: { bookingPilgrimId }, select: { visaProductId: true, plannedTravelDate: true } })
   const referenceDate = visa?.plannedTravelDate ? calendarDateOf(visa.plannedTravelDate) : departureDate ? calendarDateOf(departureDate) : todayInApp()
   return {
@@ -120,16 +122,17 @@ async function transition(tx: Tx, bp: Locked, to: PilgrimReviewStatus, actorId: 
   await tx.pilgrimReviewEvent.create({ data: { bookingPilgrimId: bp.id, fromStatus: bp.status, toStatus: to, actorId, note } })
 }
 
-function missingMessage(a: Assessment, need: 'ready' | 'verified'): string {
-  if (a.missingFields.length > 0) return `Lengkapi data jamaah dulu: ${a.missingFields.slice(0, 5).join(', ')}`
+/** Yang kurang untuk diajukan/diverifikasi. Nama kolom/dokumen = label admin (data, tidak diterjemahkan). */
+function missing(a: Assessment, need: 'ready' | 'verified'): { code: ApiErrorCode; params: ApiErrorParams } {
+  if (a.missingFields.length > 0) return { code: 'missingFields', params: { fields: a.missingFields.slice(0, 5).join(', ') } }
   const bad = a.items.filter(i => i.required && (need === 'ready' ? i.state !== 'pending' && i.state !== 'accepted' : i.state !== 'accepted'))
-  const names = bad.slice(0, 5).map(i => i.label).join(', ')
-  return need === 'ready' ? `Dokumen wajib belum lengkap atau tidak berlaku: ${names}` : `Dokumen wajib belum semuanya diterima: ${names}`
+  const documents = bad.slice(0, 5).map(i => i.label).join(', ')
+  return { code: need === 'ready' ? 'documentsIncomplete' : 'documentsNotAccepted', params: { documents } }
 }
 
 async function rateLimited(actor: Actor): Promise<ServiceError | null> {
   const hit = await consume(policy(isStaff(actor) ? 'pilgrimWriteStaff' : 'pilgrimWriteUser', actor.userId))
-  return hit.allowed ? null : { ok: false, status: 429, error: 'Terlalu banyak perubahan data jamaah. Coba lagi nanti.', retryAfterSec: hit.retryAfterSec }
+  return hit.allowed ? null : { ok: false, status: 429, ...codedError('tooManyPilgrimChanges'), retryAfterSec: hit.retryAfterSec }
 }
 
 type Done = { status: PilgrimReviewStatus; notifyTo?: { ownerId: string; bookingId: string; code: string } }
@@ -142,9 +145,9 @@ async function run(actor: Actor, fn: (tx: Tx) => Promise<Done>): Promise<ReviewR
     done = await retryConflict(() => prisma.$transaction(fn)) // deadlock dengan gabung identitas (F8, SEC-205) → ulang
   } catch (e) {
     if (e instanceof Abort) return e.result
-    if (isRetryableConflict(e)) return { ok: false, status: 409, error: 'Data jamaah sedang diubah bersamaan — coba lagi' }
+    if (isRetryableConflict(e)) return { ok: false, status: 409, ...codedError('pilgrimConcurrent') }
     // Dokumen yang hendak ditautkan dihapus di sela pembacaan dan penulisan tautan (FK) — muat ulang dan coba lagi.
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') return { ok: false, status: 409, error: 'Dokumen jamaah baru saja berubah — muat ulang lalu coba lagi' }
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') return { ok: false, status: 409, ...codedError('documentsChanged') }
     throw e
   }
   const n = done.notifyTo
@@ -156,10 +159,10 @@ async function run(actor: Actor, fn: (tx: Tx) => Promise<Done>): Promise<ReviewR
 export function submitPilgrim(actor: Actor, bookingId: string, bookingPilgrimId: string): Promise<ReviewResult> {
   return run(actor, async (tx) => {
     const bp = await lockForReview(tx, actor, bookingId, bookingPilgrimId)
-    if (bp.status !== 'draft' && bp.status !== 'needs_revision') return fail(409, bp.status === 'verified' ? 'Data jamaah ini sudah terverifikasi' : 'Data jamaah ini sudah diajukan')
-    if (!bp.savedPilgrimId) return fail(409, 'Pilih data jamaah dari Jamaah Saya dulu sebelum mengajukan')
+    if (bp.status !== 'draft' && bp.status !== 'needs_revision') return fail(409, bp.status === 'verified' ? 'alreadyVerified' : 'alreadySubmitted')
+    if (!bp.savedPilgrimId) return fail(409, 'chooseCardFirst')
     const a = await assess(tx, bp)
-    if (!a.ready) return fail(422, missingMessage(a, 'ready'))
+    if (!a.ready) { const m = missing(a, 'ready'); return fail(422, m.code, undefined, m.params) }
     await relinkDocuments(tx, bp.id, a.usedDocIds)
     await transition(tx, bp, 'submitted', actor.userId, null)
     // Pemesan tak perlu email atas tindakannya sendiri; diajukan staf atas namanya → diberi tahu.
@@ -169,17 +172,17 @@ export function submitPilgrim(actor: Actor, bookingId: string, bookingPilgrimId:
 
 /** Keputusan petugas atas pengajuan `submitted`: terverifikasi (dokumen wajib diterima semua) atau dikembalikan (catatan wajib). */
 export function decidePilgrim(actor: Actor, bookingId: string, bookingPilgrimId: string, input: ReviewDecision): Promise<ReviewResult> {
-  if (!isStaff(actor)) return Promise.resolve({ ok: false, status: 404, error: 'Jamaah tidak ditemukan' })
+  if (!isStaff(actor)) return Promise.resolve({ ok: false, status: 404, ...codedError('bookingPilgrimNotFound') })
   const note = input.note?.trim() || null
-  if (input.decision === 'needs_revision' && !note) return Promise.resolve({ ok: false, status: 400, error: 'Tulis catatan perbaikan untuk pemesan', field: 'note' })
+  if (input.decision === 'needs_revision' && !note) return Promise.resolve({ ok: false, status: 400, ...codedError('reviewNoteRequired'), field: 'note' })
   return run(actor, async (tx) => {
     const bp = await lockForReview(tx, actor, bookingId, bookingPilgrimId, input.decision === 'verified')
-    if (bp.status !== 'submitted') return fail(409, bp.status === 'verified' ? 'Data jamaah ini sudah terverifikasi' : 'Data jamaah ini belum diajukan')
+    if (bp.status !== 'submitted') return fail(409, bp.status === 'verified' ? 'alreadyVerified' : 'notSubmitted')
     if (input.decision === 'needs_revision') {
       await transition(tx, bp, 'needs_revision', actor.userId, note)
     } else {
       const a = await assess(tx, bp)
-      if (!a.verified) return fail(422, missingMessage(a, 'verified'))
+      if (!a.verified) { const m = missing(a, 'verified'); return fail(422, m.code, undefined, m.params) }
       await relinkDocuments(tx, bp.id, a.usedDocIds)
       await transition(tx, bp, 'verified', actor.userId, note, actor.userId)
       if (bp.identityId) await applyVerifiedSnapshot(tx, bp.identityId, canonicalOf(a.fields, bp.fieldValues), actor.userId, bp.id)

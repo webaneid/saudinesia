@@ -13,6 +13,7 @@ import { FileViewerDialog } from './FileViewerDialog'
 import { formatCalendarDate } from '@/lib/time'
 import type { DocumentTypeOption, PilgrimDocumentView } from '@/lib/documents/service'
 import { EMPTY_DRAFT, canUpload, documentRows, formatBytes, uploadFields, type DocumentRow, type UploadDraft } from './documentRows'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Dokumen satu jamaah (docs/arsitektur-jamaah.md §7.4) — satu komponen untuk "Jamaah Saya" dan admin atas nama pelanggan (tanpa impor admin).
 // `endpoint` = koleksi dokumen kartu (GET daftar + jenis, POST unggah); `${endpoint}/${id}` = lihat (URL presigned, ditampilkan di popup FileViewerDialog) / hapus.
@@ -35,6 +36,7 @@ const STATUS_VARIANT = { pending: 'muted', accepted: 'success', rejected: 'destr
 
 export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onChange, onlyTypeIds }: Props) {
   const t = useTranslations('shared.documents')
+  const errorText = useApiError()
   const [data, setData] = useState<Loaded | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -48,12 +50,12 @@ export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onCha
     try {
       const res = await fetch(endpoint, { cache: 'no-store' })
       const json = await res.json().catch(() => null) as { data?: Loaded; error?: string } | null
-      if (!res.ok || !json?.data) { setLoadError(json?.error ?? t('loadFailed')); return }
+      if (!res.ok || !json?.data) { setLoadError(errorText(json, t('loadFailed'))); return }
       setData(json.data); setLoadError(null)
     } catch {
       setLoadError(t('network'))
     }
-  }, [endpoint, t])
+  }, [endpoint, t, errorText])
 
   useEffect(() => { void load() }, [load])
 
@@ -62,7 +64,7 @@ export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onCha
     try {
       const res = await fetch(`${endpoint}/${doc.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => null) as { error?: string } | null
-      if (!res.ok) { setError(json?.error ?? t('deleteFailed')); return }
+      if (!res.ok) { setError(errorText(json, t('deleteFailed'))); return }
       setConfirmDelete(null); setNotice(t('deleted'))
       await load(); onChange?.()
     } catch {
@@ -197,6 +199,7 @@ function AddExtra({ types, endpoint, open, onOpen, onClose, onUploaded }: { type
 
 function UploadForm({ type, endpoint, replacing, onCancel, onUploaded }: { type: DocumentTypeOption; endpoint: string; replacing: boolean; onCancel: () => void; onUploaded: () => Promise<void> }) {
   const t = useTranslations('shared.documents')
+  const errorText = useApiError()
   const [draft, setDraft] = useState<UploadDraft>(EMPTY_DRAFT)
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
@@ -213,7 +216,7 @@ function UploadForm({ type, endpoint, replacing, onCancel, onUploaded }: { type:
     try {
       const res = await fetch(endpoint, { method: 'POST', body })
       const json = await res.json().catch(() => null) as { error?: string } | null
-      if (!res.ok) { setError(json?.error ?? t('uploadFailed')); return }
+      if (!res.ok) { setError(errorText(json, t('uploadFailed'))); return }
       await onUploaded()
     } catch {
       setError(t('network'))

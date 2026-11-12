@@ -187,6 +187,7 @@ export function AddressPicker({ value, onChange, withMap = false, mapsQuery }: P
 // Lokasi Google Maps TANPA API key: cari lewat Maps URLs publik di tab baru → salin tautan "Bagikan" → tempel. Validasi yang sama dengan server (lib/address/maps.ts).
 function MapsField({ url, query, onChange }: { url: string; query: string; onChange: (url: string) => void }) {
   const t = useTranslations('shared.address')
+  const te = useTranslations('apiErrors')
   const parsed = url.trim() ? parseMapsUrl(url) : null
   return (
     <div className="space-y-1.5 rounded-md border border-input p-3">
@@ -199,7 +200,7 @@ function MapsField({ url, query, onChange }: { url: string; query: string; onCha
           <Search className="h-3.5 w-3.5" /> {t('mapsSearch')}
         </a>
       </div>
-      {parsed && !parsed.ok && <p role="alert" className="text-xs text-destructive">{parsed.message}</p>}
+      {parsed && !parsed.ok && <p role="alert" className="text-xs text-destructive">{te(parsed.code)}</p>}
       {parsed?.ok && (
         <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <a href={parsed.value.url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-foreground underline-offset-2 hover:underline">

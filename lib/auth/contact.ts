@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import type { UserRole } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { PRIVACY_POLICY_VERSION, WHATSAPP_CONSENT_VERSION } from '@/lib/constants/legal'
-import { err } from '@/lib/validators'
+import { apiErrorJson } from '@/lib/errors/api'
 
 // Data kontak akun (docs/arsitektur-auth.md §3.5). Telepon & WhatsApp: digit E.164, tidak diverifikasi, tidak unik.
 
@@ -44,7 +44,7 @@ export async function requireContactForBooking(userId: string, role: UserRole): 
  */
 export async function onboardingRefusal(userId: string, role: UserRole): Promise<NextResponse | null> {
   if (await requireContactForBooking(userId, role)) return null
-  return NextResponse.json(err('Lengkapi nomor telepon, WhatsApp, dan persetujuan Anda terlebih dahulu.'), { status: 422 })
+  return apiErrorJson('contactRequired', 422)
 }
 
 export type ContactUpdate =

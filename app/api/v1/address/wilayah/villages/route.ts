@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
 import { escapeLike } from '@/lib/utils/search'
+import { apiErrorJson } from '@/lib/errors/api'
 
 // Publik, tanpa auth — rata-rata ~11-12 desa/kelurahan per kecamatan (83.762/7.285), tapi
 // beberapa kecamatan bisa jauh lebih banyak — dukung filter teks `q` (server-side) untuk kasus
@@ -11,7 +12,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url)
     const districtId = searchParams.get('districtId')
     const q = searchParams.get('q')
-    if (!districtId) return NextResponse.json(err('districtId wajib diisi'), { status: 400 })
+    if (!districtId) return apiErrorJson('regionParentRequired', 400)
 
     const villages = await prisma.addressVillage.findMany({
       where: { districtId, ...(q ? { name: { contains: escapeLike(q), mode: 'insensitive' } } : {}) },
@@ -21,6 +22,6 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(villages))
   } catch (e) {
     console.error('[address/wilayah/villages/GET]', e)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

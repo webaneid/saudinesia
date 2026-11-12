@@ -11,6 +11,7 @@ import { ContactPicker, EMPTY_CONTACT, type ContactValue } from '@/components/sh
 import { useCooldown } from '@/components/shared/useCooldown'
 import { GoogleButton, OrDivider } from '@/components/shared/GoogleButton'
 import { e164FromCountry } from '@/lib/utils/phone'
+import { useApiError } from '@/components/shared/useApiError'
 
 type Step = 'form' | 'sent'
 
@@ -20,6 +21,7 @@ interface RegisterFormProps { locale: string; next?: string | null; googleEnable
 export function RegisterForm({ locale, next = null, googleEnabled = false }: RegisterFormProps) {
   const t = useTranslations('authPages.register')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const [step, setStep] = useState<Step>('form')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -43,7 +45,7 @@ export function RegisterForm({ locale, next = null, googleEnabled = false }: Reg
         body: JSON.stringify({ fullName, email, phone, whatsapp, locale, ...(next ? { next } : {}) }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return false }
+      if (!json.success) { setError(errorText(json, t('failed'))); return false }
       startCooldown()
       return true
     } catch {

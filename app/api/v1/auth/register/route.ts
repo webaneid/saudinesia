@@ -4,7 +4,8 @@ import { sendAuthEmail } from '@/lib/auth/authEmail'
 import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { maskE164 } from '@/lib/utils/phone'
 import { registerSchema } from '@/lib/validators/auth'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
+import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 
 // Pendaftaran manual (docs/arsitektur-auth.md §3.2): TIDAK membuat akun — mengirim tautan ke email. Respons SERAGAM untuk
 // email baru maupun yang sudah terdaftar (tidak membocorkan keberadaan akun).
@@ -12,7 +13,7 @@ export async function POST(request: Request) {
   try {
     const parsed = registerSchema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
-      return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
+      return zodFailure(parsed.error)
     }
     const input = parsed.data
 
@@ -37,6 +38,6 @@ export async function POST(request: Request) {
     return NextResponse.json(ok({ sent: true }))
   } catch (error) {
     console.error('[auth/register]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

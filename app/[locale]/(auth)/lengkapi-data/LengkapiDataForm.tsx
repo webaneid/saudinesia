@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { ContactPicker, contactFromStored, type ContactValue } from '@/components/shared/ContactPicker'
 import { e164FromCountry } from '@/lib/utils/phone'
+import { useApiError } from '@/components/shared/useApiError'
 
 /** `next` = jalur kembali yang SUDAH disaring server, atau null. */
 interface Props { locale: string; next?: string | null; name: string; phone: string; whatsapp: string; needsConsent: boolean; needsPrivacy: boolean }
@@ -15,6 +16,7 @@ interface Props { locale: string; next?: string | null; name: string; phone: str
 export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, needsConsent, needsPrivacy }: Props) {
   const t = useTranslations('authPages.contactData')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const router = useRouter()
   const [contact, setContact] = useState<ContactValue>(() => contactFromStored(phone, whatsapp))
   const [consent, setConsent] = useState(!needsConsent)
@@ -36,7 +38,7 @@ export function LengkapiDataForm({ locale, next = null, name, phone, whatsapp, n
         body: JSON.stringify({ phone: p, whatsapp: w, ...(needsConsent ? { whatsappConsent: consent } : {}), ...(needsPrivacy ? { privacyConsent: privacy } : {}) }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return }
+      if (!json.success) { setError(errorText(json, t('failed'))); return }
       router.push(next ?? `/${locale}/dashboard`)
       router.refresh()
     } catch {

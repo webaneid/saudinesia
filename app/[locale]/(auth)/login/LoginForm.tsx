@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { GoogleButton, OrDivider } from '@/components/shared/GoogleButton'
+import { useApiError } from '@/components/shared/useApiError'
 
 /** `next` = jalur kembali yang SUDAH disaring server (lib/auth/nextPath.ts), atau null. */
 interface LoginFormProps { locale: string; next?: string | null; googleEnabled?: boolean; initialError?: string }
@@ -16,6 +17,7 @@ interface LoginFormProps { locale: string; next?: string | null; googleEnabled?:
 export function LoginForm({ locale, next = null, googleEnabled = false, initialError = '' }: LoginFormProps) {
   const t = useTranslations('authPages.login')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -34,7 +36,7 @@ export function LoginForm({ locale, next = null, googleEnabled = false, initialE
         body: JSON.stringify({ email, password }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return }
+      if (!json.success) { setError(errorText(json, t('failed'))); return }
       router.push(next ?? `/${locale}/dashboard`)
     } catch {
       setError(c('networkError'))

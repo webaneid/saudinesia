@@ -1,6 +1,8 @@
 import { Prisma, type Gender, type UserRole } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { upsertAddress } from '@/lib/address/prepare'
+import { codedError, codeOfText, type ApiErrorCode } from '@/lib/errors/api'
+import type { ApiErrorParams } from '@/lib/errors/params'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikHints, nikProblem, nikProvinceCode, normalizeNik, normalizePassport, sealNik, sealPassport, type NikHint } from '@/lib/pii'
@@ -62,7 +64,8 @@ export type SavedPilgrimAddress = {
   stateRegion: string | null
 }
 
-export type ServiceError = { ok: false; status: 400 | 404 | 409 | 422 | 429; error: string; field?: string; retryAfterSec?: number }
+/** `error` = teks Indonesia (admin); `code`/`params` = kunci `apiErrors` untuk pelanggan (docs/arsitektur-i18n-frontend.md §6.6). */
+export type ServiceError = { ok: false; status: 400 | 404 | 409 | 422 | 429; error: string; code?: ApiErrorCode; params?: ApiErrorParams; field?: string; retryAfterSec?: number }
 export type WriteResult = { ok: true; card: SavedPilgrimView; warnings: PilgrimWarning[] } | ServiceError
 export type DeleteResult = { ok: true; result: 'deleted' | 'archived' } | ServiceError
 
@@ -91,8 +94,8 @@ function toView(r: ViewRow): SavedPilgrimView {
 class Abort extends Error {
   constructor(readonly result: ServiceError) { super(result.error) }
 }
-function fail(status: ServiceError['status'], error: string, field?: string): never {
-  throw new Abort({ ok: false, status, error, ...(field ? { field } : {}) })
+function fail(status: ServiceError['status'], code: ApiErrorCode, field?: string): never {
+  throw new Abort({ ok: false, status, ...codedError(code), ...(field ? { field } : {}) })
 }
 
 type Tx = Prisma.TransactionClient
@@ -100,12 +103,12 @@ const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 
 /** Pemilik kartu = akun jamaah aktif yang belum dihapus. Dikunci FOR SHARE: penghapusan akun (FOR UPDATE) menunggu, dan sebaliknya. */
 async function lockOwner(tx: Tx, actor: Actor, ownerId: string): Promise<void> {
-  if (actor.userId !== ownerId && !isStaff(actor)) fail(404, 'Data jamaah tidak ditemukan')
+  if (actor.userId !== ownerId && !isStaff(actor)) fail(404, 'pilgrimNotFound')
   // $queryRaw: Prisma ORM tidak punya SELECT ... FOR SHARE.
   const rows = await tx.$queryRaw<{ role: string; isActive: boolean; email: string }[]>`SELECT "role"::text AS "role", "isActive", "email" FROM "users" WHERE "id" = ${ownerId} FOR SHARE`
   const u = rows[0]
-  if (!u) fail(404, 'Data jamaah tidak ditemukan')
-  else if (u.role !== 'pilgrim' || !u.isActive || (u.email.startsWith('deleted-') && u.email.endsWith('@deleted.invalid'))) fail(422, 'Akun pelanggan tidak aktif')
+  if (!u) fail(404, 'pilgrimNotFound')
+  else if (u.role !== 'pilgrim' || !u.isActive || (u.email.startsWith('deleted-') && u.email.endsWith('@deleted.invalid'))) fail(422, 'customerInactive')
 }
 
 /** `lockOwner` untuk layanan lain yang menulis data milik kartu (dokumen, lib/documents/service.ts): galat dikembalikan, bukan dilempar. */
@@ -161,37 +164,37 @@ function resolvePii(input: SavedPilgrimInput, existing: Existing | null): Resolv
   if (input.nik === null || input.nik?.trim() === '') nik = null
   else if (input.nik !== undefined) {
     newNik = normalizeNik(input.nik)
-    if (!newNik) return fail(400, nikProblem(input.nik.replace(/[\s.\-]/g, '')) ?? 'NIK tidak valid', 'nik')
+    if (!newNik) return fail(400, codeOfText(nikProblem(input.nik.replace(/[\s.\-]/g, '')) ?? '') ?? 'nikInvalid', 'nik') // nikProblem: teks (lib/pii), dipetakan ke kode
     nik = sealNik(newNik)
   }
 
   const nationality = input.nationality
   let passport: Resolved['passport'] = null
   if (input.passport === undefined && existing?.passportKeyHash) {
-    if (existing.nationality !== nationality) fail(400, 'Nomor paspor wajib diisi ulang bila kewarganegaraan berubah', 'passport.number')
+    if (existing.nationality !== nationality) fail(400, 'passportReenter', 'passport.number')
     passport = { keyHash: existing.passportKeyHash, cipher: existing.passportCipher!, last4: existing.passportLast4!, issuedAt: cal(existing.passportIssuedAt), expiry: cal(existing.passportExpiry) }
   } else if (input.passport) {
     const issuedAt = input.passport.issuedAt ?? null
     const expiry = input.passport.expiry ?? null
-    if (issuedAt && expiry && expiry <= issuedAt) fail(400, 'Tanggal habis berlaku harus sesudah tanggal terbit', 'passport.expiry')
+    if (issuedAt && expiry && expiry <= issuedAt) fail(400, 'expiryAfterIssue', 'passport.expiry')
     if (input.passport.number === undefined) {
-      if (!existing?.passportKeyHash) fail(400, 'Nomor paspor wajib diisi', 'passport.number')
-      if (existing!.nationality !== nationality) fail(400, 'Nomor paspor wajib diisi ulang bila kewarganegaraan berubah', 'passport.number')
+      if (!existing?.passportKeyHash) fail(400, 'passportRequired', 'passport.number')
+      if (existing!.nationality !== nationality) fail(400, 'passportReenter', 'passport.number')
       passport = { keyHash: existing!.passportKeyHash!, cipher: existing!.passportCipher!, last4: existing!.passportLast4!, issuedAt, expiry }
     } else {
       const number = normalizePassport(input.passport.number)
-      if (!number) fail(400, 'Nomor paspor harus 5–20 huruf/angka', 'passport.number')
+      if (!number) fail(400, 'passportFormat', 'passport.number')
       // Negara penerbit paspor = kewarganegaraan (paspor diterbitkan negara warganya).
       passport = { ...sealPassport(nationality, number!), issuedAt, expiry }
     }
   }
 
-  if (input.birthDate > todayInApp()) fail(400, 'Tanggal lahir tidak boleh di masa depan', 'birthDate')
+  if (input.birthDate > todayInApp()) fail(400, 'birthDateFuture', 'birthDate')
   if (nationality === 'ID') {
-    if (!nik && !isBaby(input.birthDate)) fail(400, 'NIK wajib diisi (kecuali bayi di bawah 2 tahun)', 'nik')
+    if (!nik && !isBaby(input.birthDate)) fail(400, 'nikRequired', 'nik')
   } else {
-    if (nik) fail(400, 'NIK hanya untuk WNI — kosongkan NIK untuk warga negara lain', 'nik')
-    if (!passport) fail(400, 'Nomor paspor wajib untuk warga negara lain', 'passport.number')
+    if (nik) fail(400, 'nikOnlyIndonesian', 'nik')
+    if (!passport) fail(400, 'passportRequiredForeign', 'passport.number')
   }
   return { nik, passport, newNik }
 }
@@ -291,16 +294,16 @@ async function warningsFor(nik: Resolved['newNik'], input: SavedPilgrimInput): P
 
 async function rateLimited(actor: Actor): Promise<ServiceError | null> {
   const hit = await consume(policy(isStaff(actor) ? 'pilgrimWriteStaff' : 'pilgrimWriteUser', actor.userId))
-  return hit.allowed ? null : { ok: false, status: 429, error: 'Terlalu banyak perubahan data jamaah. Coba lagi nanti.', retryAfterSec: hit.retryAfterSec }
+  return hit.allowed ? null : { ok: false, status: 429, ...codedError('tooManyPilgrimChanges'), retryAfterSec: hit.retryAfterSec }
 }
 
 /** Galat unik dari balapan yang tak tertangkap pemeriksaan awal (dua permintaan serentak milik akun yang sama). */
 function uniqueViolation(e: unknown): ServiceError | null {
   if (!(e instanceof Prisma.PrismaClientKnownRequestError) || e.code !== 'P2002') return null
   const target = String((e.meta as { target?: unknown } | undefined)?.target ?? '')
-  if (target.includes('selfOfUserId')) return { ok: false, status: 409, error: 'Data "Saya sendiri" sudah ada di daftar jamaah Anda', field: 'isSelf' }
-  if (target.includes('passportKeyHash')) return { ok: false, status: 409, error: 'Nomor paspor ini sudah ada di daftar jamaah Anda', field: 'passport.number' }
-  if (target.includes('nikHash')) return { ok: false, status: 409, error: 'NIK ini sudah ada di daftar jamaah Anda', field: 'nik' }
+  if (target.includes('selfOfUserId')) return { ok: false, status: 409, ...codedError('selfExists'), field: 'isSelf' }
+  if (target.includes('passportKeyHash')) return { ok: false, status: 409, ...codedError('passportExists'), field: 'passport.number' }
+  if (target.includes('nikHash')) return { ok: false, status: 409, ...codedError('nikExists'), field: 'nik' }
   return null
 }
 
@@ -311,7 +314,7 @@ const existingSelect = {
 
 /** Simpan kartu baru (`cardId` null) atau ubah kartu milik `ownerId`. `actor` = pemilik sendiri atau staf (atas nama pelanggan). */
 async function write(actor: Actor, ownerId: string, cardId: string | null, input: SavedPilgrimInput): Promise<WriteResult> {
-  if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, error: 'Data jamaah tidak ditemukan' }
+  if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, ...codedError('pilgrimNotFound') }
   const limited = await rateLimited(actor)
   if (limited) return limited
   await ensurePiiKeysMatch() // kunci salah → lempar (500 di route), bukan menulis indeks yang tak cocok dengan data lama
@@ -325,7 +328,7 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
       let existing: Prisma.SavedPilgrimGetPayload<{ select: typeof existingSelect }> | null = null
       if (cardId) {
         existing = await tx.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: existingSelect })
-        if (!existing) fail(404, 'Data jamaah tidak ditemukan')
+        if (!existing) fail(404, 'pilgrimNotFound')
       }
 
       const resolved = resolvePii(input, existing)
@@ -350,32 +353,31 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
       if (wantKey) {
         const again = await identityByKey(tx, wantKey)
         // Identitas alias yang terhapus di sela itu juga gagal di sini: kunci `wantKey` sendiri tak dipegang (SEC-209).
-        if (!held.includes(again?.primary ?? wantKey.hash)) fail(409, 'Data jamaah ini baru saja diubah — muat ulang lalu coba lagi')
+        if (!held.includes(again?.primary ?? wantKey.hash)) fail(409, 'pilgrimChanged')
       }
 
       if (cardId && existing) {
         // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE. Menserialkan dua ubah serentak pada kartu yang sama.
         await tx.$queryRaw`SELECT "id" FROM "saved_pilgrims" WHERE "id" = ${cardId} AND "ownerId" = ${ownerId} FOR UPDATE`
         const now = await tx.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: existingSelect })
-        if (!now) fail(404, 'Data jamaah tidak ditemukan')
+        if (!now) fail(404, 'pilgrimNotFound')
         if (now.identityId !== existing.identityId || now.nikHash !== existing.nikHash || now.passportKeyHash !== existing.passportKeyHash || now.nationality !== existing.nationality
           || !sameDate(now.nikCheckRequestedAt, existing.nikCheckRequestedAt)) {
-          fail(409, 'Data jamaah ini baru saja diubah — muat ulang lalu coba lagi')
+          fail(409, 'pilgrimChanged')
         }
-        if (now.archivedAt) fail(409, 'Data jamaah ini diarsipkan — pulihkan dulu sebelum mengubahnya')
+        if (now.archivedAt) fail(409, 'pilgrimArchivedEdit')
         existing = now
       }
 
       // NIK/paspor ganda di daftar AKUN INI SENDIRI — satu-satunya penolakan terkait NIK (data miliknya, bukan orakel).
       const dupWhere = (w: Prisma.SavedPilgrimWhereInput) => tx.savedPilgrim.findFirst({ where: { ownerId, ...w, ...(cardId ? { id: { not: cardId } } : {}) }, select: { archivedAt: true } })
-      const archivedNote = (d: { archivedAt: Date | null }) => (d.archivedAt ? ' (diarsipkan — pulihkan dari arsip)' : '')
-      if (resolved.nik) { const d = await dupWhere({ nikHash: resolved.nik.hash }); if (d) fail(409, `NIK ini sudah ada di daftar jamaah Anda${archivedNote(d)}`, 'nik') }
-      if (resolved.passport) { const d = await dupWhere({ passportKeyHash: resolved.passport.keyHash }); if (d) fail(409, `Nomor paspor ini sudah ada di daftar jamaah Anda${archivedNote(d)}`, 'passport.number') }
+      if (resolved.nik) { const d = await dupWhere({ nikHash: resolved.nik.hash }); if (d) fail(409, d.archivedAt ? 'nikExistsArchived' : 'nikExists', 'nik') }
+      if (resolved.passport) { const d = await dupWhere({ passportKeyHash: resolved.passport.keyHash }); if (d) fail(409, d.archivedAt ? 'passportExistsArchived' : 'passportExists', 'passport.number') }
 
       const selfOfUserId = input.isSelf === undefined ? (existing?.selfOfUserId ?? null) : (input.isSelf ? ownerId : null)
       if (selfOfUserId && !existing?.selfOfUserId) {
         const other = await tx.savedPilgrim.findUnique({ where: { selfOfUserId: ownerId }, select: { id: true } })
-        if (other) fail(409, 'Data "Saya sendiri" sudah ada di daftar jamaah Anda', 'isSelf')
+        if (other) fail(409, 'selfExists', 'isSelf')
       }
 
       const fullName = input.fullName
@@ -392,7 +394,7 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
       const dropAddress = input.address === null && addressId
       if (input.address) {
         const a = await upsertAddress(addressId, input.address, tx)
-        if (!a.ok) fail(400, a.message, 'address')
+        if (!a.ok) fail(400, a.code, 'address')
         else addressId = a.id
       }
 
@@ -447,7 +449,7 @@ export const updateSavedPilgrim = (actor: Actor, ownerId: string, cardId: string
 
 /** Hapus-aman: kartu yang pernah dipakai booking diarsipkan (riwayat tetap utuh), selain itu dihapus sungguhan beserta alamatnya. */
 export async function deleteSavedPilgrim(actor: Actor, ownerId: string, cardId: string): Promise<DeleteResult> {
-  if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, error: 'Data jamaah tidak ditemukan' }
+  if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, ...codedError('pilgrimNotFound') }
   const limited = await rateLimited(actor)
   if (limited) return limited
   let docKeys: string[] = []
@@ -457,13 +459,13 @@ export async function deleteSavedPilgrim(actor: Actor, ownerId: string, cardId: 
       const cardSelect = { identityId: true, addressId: true, archivedAt: true, identity: { select: { nikHash: true, passportKeyHash: true } }, _count: { select: { bookingPilgrims: true } } } satisfies Prisma.SavedPilgrimSelect
       // Kunci identitas sebelum kunci baris kartu (SEC-174, sama dengan write).
       const pre = await tx.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: cardSelect })
-      if (!pre) fail(404, 'Data jamaah tidak ditemukan')
+      if (!pre) fail(404, 'pilgrimNotFound')
       await lockIdentityKeys(tx, [pre.identity?.nikHash ?? pre.identity?.passportKeyHash])
       // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
       await tx.$queryRaw`SELECT "id" FROM "saved_pilgrims" WHERE "id" = ${cardId} AND "ownerId" = ${ownerId} FOR UPDATE`
       const card = await tx.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: cardSelect })
-      if (!card) fail(404, 'Data jamaah tidak ditemukan')
-      if (card.identityId !== pre.identityId) fail(409, 'Data jamaah ini baru saja diubah — muat ulang lalu coba lagi')
+      if (!card) fail(404, 'pilgrimNotFound')
+      if (card.identityId !== pre.identityId) fail(409, 'pilgrimChanged')
       if (card._count.bookingPilgrims > 0) {
         if (!card.archivedAt) await tx.savedPilgrim.update({ where: { id: cardId }, data: { archivedAt: new Date() } })
         return { ok: true as const, result: 'archived' as const }
@@ -493,14 +495,14 @@ export async function deleteSavedPilgrim(actor: Actor, ownerId: string, cardId: 
 
 /** Pulihkan kartu dari arsip (CRUD lengkap: yang dinonaktifkan bisa diaktifkan kembali). */
 export async function restoreSavedPilgrim(actor: Actor, ownerId: string, cardId: string): Promise<WriteResult> {
-  if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, error: 'Data jamaah tidak ditemukan' }
+  if (actor.userId !== ownerId && !isStaff(actor)) return { ok: false, status: 404, ...codedError('pilgrimNotFound') }
   const limited = await rateLimited(actor)
   if (limited) return limited
   try {
     const card = await prisma.$transaction(async (tx) => {
       await lockOwner(tx, actor, ownerId)
       const { count } = await tx.savedPilgrim.updateMany({ where: { id: cardId, ownerId }, data: { archivedAt: null } })
-      if (count === 0) fail(404, 'Data jamaah tidak ditemukan')
+      if (count === 0) fail(404, 'pilgrimNotFound')
       return tx.savedPilgrim.findUniqueOrThrow({ where: { id: cardId }, select: viewSelect })
     })
     return { ok: true, card: toView(card), warnings: [] }

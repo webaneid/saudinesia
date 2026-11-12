@@ -299,7 +299,7 @@ await t('route POST /bookings memanggil onboardingRefusal (gerbang langkah awal,
   assert.ok(guard < post.indexOf('request.json()'), 'penjaga harus sebelum membaca body')
   assert.ok(post.indexOf('placeCheckout(') > 0 && guard < post.indexOf('placeCheckout('), 'penjaga harus sebelum transaksi/efek samping (lib/checkout/place.ts)')
   assert.match(post, /if \(refusal\) return refusal/)
-  assert.match(readFileSync(new URL('../lib/auth/contact.ts', import.meta.url), 'utf8'), /status: 422/, 'gerbang menjawab 422')
+  assert.match(readFileSync(new URL('../lib/auth/contact.ts', import.meta.url), 'utf8'), /apiErrorJson\('contactRequired', 422\)/, 'gerbang menjawab 422 berkode (docs/arsitektur-i18n-frontend.md §6.6)')
 })
 
 await t('updateContact: pengguna daftar manual (sudah menyetujui saat menyelesaikan) tidak ditanya lagi; akun tak ada → not_found', async () => {

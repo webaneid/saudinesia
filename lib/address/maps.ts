@@ -8,7 +8,8 @@ const SHORT_HOSTS = new Set(['maps.app.goo.gl']) // tautan "Bagikan" aplikasi
 const MAPS_HOSTS = new Set(['maps.google.com', 'maps.google.co.id', 'maps.google.com.sa'])
 
 export type MapsLocation = { url: string; latitude: number | null; longitude: number | null }
-export type MapsParse = { ok: true; value: MapsLocation } | { ok: false; message: string }
+/** `code` = kunci `apiErrors` (diterjemahkan klien, docs/arsitektur-i18n-frontend.md §6.6); `message` = teks Indonesia (validator, admin). */
+export type MapsParse = { ok: true; value: MapsLocation } | { ok: false; code: 'mapsUrlInvalid' | 'mapsUrlTooLong'; message: string }
 
 const coord = (lat: string, lng: string): { latitude: number; longitude: number } | null => {
   const latitude = Number(lat), longitude = Number(lng)
@@ -32,8 +33,8 @@ function coordinatesOf(u: URL): { latitude: number; longitude: number } | null {
 /** Periksa tautan Google Maps yang ditempel admin. Ditolak: bukan https, host di luar daftar, kredensial/port di URL, terlalu panjang. */
 export function parseMapsUrl(raw: string): MapsParse {
   const text = raw.trim()
-  const bad = { ok: false as const, message: 'Tautan harus tautan Google Maps (https://maps.app.goo.gl/… atau https://www.google.com/maps/…)' }
-  if (!text || text.length > MAPS_URL_MAX) return text ? { ok: false, message: 'Tautan Google Maps terlalu panjang' } : bad
+  const bad = { ok: false as const, code: 'mapsUrlInvalid' as const, message: 'Tautan harus tautan Google Maps (https://maps.app.goo.gl/… atau https://www.google.com/maps/…)' }
+  if (!text || text.length > MAPS_URL_MAX) return text ? { ok: false, code: 'mapsUrlTooLong', message: 'Tautan Google Maps terlalu panjang' } : bad
   let u: URL
   try { u = new URL(text) } catch { return bad }
   if (u.protocol !== 'https:' || u.username || u.password || u.port) return bad

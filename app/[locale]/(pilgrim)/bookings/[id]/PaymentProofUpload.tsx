@@ -7,11 +7,13 @@ import { UploadCloud } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Unggah bukti transfer. Semua pemeriksaan berkas ada di server (isi berkas, ukuran); pesan penolakannya ditampilkan apa adanya.
 export function PaymentProofUpload({ bookingId }: { bookingId: string }) {
   const router = useRouter()
   const t = useTranslations('pilgrimArea.payment')
+  const errorText = useApiError()
   const [file, setFile] = useState<File | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -24,7 +26,7 @@ export function PaymentProofUpload({ bookingId }: { bookingId: string }) {
     try {
       const res = await fetch(`/api/v1/bookings/${bookingId}/payment/bukti`, { method: 'POST', body })
       const json = await res.json().catch(() => null) as { error?: string } | null
-      if (!res.ok) { setError(json?.error ?? t('failed')); return }
+      if (!res.ok) { setError(errorText(json, t('failed'))); return }
       router.refresh()
     } catch {
       setError(t('network'))

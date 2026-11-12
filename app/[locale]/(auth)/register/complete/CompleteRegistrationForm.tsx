@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { PasswordHints, passwordMeetsHints } from '../../PasswordHints'
+import { useApiError } from '@/components/shared/useApiError'
 
 type Preview = { email: string; fullName: string; phone: string; whatsapp: string; next: string | null }
 
@@ -17,6 +18,7 @@ type Preview = { email: string; fullName: string; phone: string; whatsapp: strin
 export function CompleteRegistrationForm({ locale, token }: { locale: string; token: string }) {
   const t = useTranslations('authPages.complete')
   const c = useTranslations('authPages.common')
+  const errorText = useApiError()
   const router = useRouter()
   const [preview, setPreview] = useState<Preview | null>(null)
   const [invalid, setInvalid] = useState(false)
@@ -46,7 +48,7 @@ export function CompleteRegistrationForm({ locale, token }: { locale: string; to
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token, password, privacyConsent, whatsappConsent }),
       })
       const json = await res.json()
-      if (!json.success) { setError(json.error ?? t('failed')); return }
+      if (!json.success) { setError(errorText(json, t('failed'))); return }
       router.push(preview?.next ?? `/${locale}/dashboard`) // jalur kembali sudah disaring server (lib/auth/nextPath.ts)
     } catch {
       setError(c('networkError'))

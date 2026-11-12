@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { CheckCircle2, MessageCircle } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { useApiError } from '@/components/shared/useApiError'
 
 type Issued = { code: string; link: string; expiresAt: string }
 
@@ -14,6 +15,7 @@ const POLL_MS = 3000
 // Verifikasi TIDAK menghalangi apa pun — tanpa verifikasi, notifikasi tetap dikirim lewat email.
 export function WhatsappVerifyCard({ initialVerified, hasNumber }: { initialVerified: boolean; hasNumber: boolean }) {
   const t = useTranslations('shared.whatsapp')
+  const errorText = useApiError()
   const [verified, setVerified] = useState(initialVerified)
   const [issued, setIssued] = useState<Issued | null>(null)
   const [loading, setLoading] = useState(false)
@@ -41,7 +43,7 @@ export function WhatsappVerifyCard({ initialVerified, hasNumber }: { initialVeri
     try {
       const res = await fetch('/api/v1/auth/whatsapp/verification', { method: 'POST' })
       const j = await res.json()
-      if (!j.success) { setError(j.error ?? t('requestFailed')); return }
+      if (!j.success) { setError(errorText(j, t('requestFailed'))); return }
       setIssued(j.data); setSlow(false)
     } catch {
       setError(t('network'))

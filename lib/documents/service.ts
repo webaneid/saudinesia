@@ -1,5 +1,7 @@
 import { Prisma, type DocumentRejectReason, type DocumentReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { codedError, type ApiErrorCode } from '@/lib/errors/api'
+import type { ApiErrorParams } from '@/lib/errors/params'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { lockCardOwner, type Actor } from '@/lib/pilgrims/service'
@@ -44,7 +46,8 @@ export type PilgrimDocumentView = {
   createdAt: string
 }
 
-export type DocServiceError = { ok: false; status: 400 | 404 | 409 | 422 | 429 | 503; error: string; field?: string; retryAfterSec?: number }
+/** `error` = teks Indonesia (admin); `code`/`params` = kunci `apiErrors` untuk pelanggan (docs/arsitektur-i18n-frontend.md §6.6). */
+export type DocServiceError = { ok: false; status: 400 | 404 | 409 | 422 | 429 | 503; error: string; code?: ApiErrorCode; params?: ApiErrorParams; field?: string; retryAfterSec?: number }
 
 const docSelect = {
   id: true, documentTypeId: true, label: true, referenceCode: true, mimeType: true, sizeBytes: true, issuedAt: true, expiresAt: true,
@@ -66,9 +69,9 @@ const typeSelect = {
 
 const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 const allowed = (actor: Actor, ownerId: string) => actor.userId === ownerId || isStaff(actor)
-const notFound = (): DocServiceError => ({ ok: false, status: 404, error: 'Data jamaah tidak ditemukan' })
-const bad = (error: string, field?: string): DocServiceError => ({ ok: false, status: 400, error, ...(field ? { field } : {}) })
-const notRequired = (): DocServiceError => bad('Dokumen ini tidak diminta untuk booking ini', 'documentTypeId')
+const notFound = (): DocServiceError => ({ ok: false, status: 404, ...codedError('pilgrimNotFound') })
+const bad = (code: ApiErrorCode, field?: string, params?: ApiErrorParams): DocServiceError => ({ ok: false, status: 400, ...codedError(code, params), ...(field ? { field } : {}) })
+const notRequired = (): DocServiceError => bad('documentNotRequired', 'documentTypeId')
 
 class Abort extends Error {
   constructor(readonly result: DocServiceError) { super(result.error) }
@@ -115,7 +118,7 @@ export async function listCardDocuments(actor: Actor, ownerId: string, cardId: s
 
 async function rateLimited(actor: Actor): Promise<DocServiceError | null> {
   const hit = await consume(policy(isStaff(actor) ? 'pilgrimDocStaff' : 'pilgrimDocUser', actor.userId))
-  return hit.allowed ? null : { ok: false, status: 429, error: 'Terlalu banyak unggahan dokumen. Coba lagi nanti.', retryAfterSec: hit.retryAfterSec }
+  return hit.allowed ? null : { ok: false, status: 429, ...codedError('tooManyDocumentUploads'), retryAfterSec: hit.retryAfterSec }
 }
 
 /** Kunci pemilik + baris kartu; kartu harus milik `ownerId` dan tidak diarsipkan. */
@@ -126,7 +129,7 @@ async function lockCard(tx: Prisma.TransactionClient, actor: Actor, ownerId: str
   const rows = await tx.$queryRaw<{ archivedAt: Date | null }[]>`SELECT "archivedAt" FROM "saved_pilgrims" WHERE "id" = ${cardId} AND "ownerId" = ${ownerId} FOR UPDATE`
   const card = rows[0]
   if (!card) throw new Abort(notFound())
-  if (card.archivedAt) throw new Abort({ ok: false, status: 409, error: 'Data jamaah ini diarsipkan — pulihkan dulu sebelum mengubah dokumennya' })
+  if (card.archivedAt) throw new Abort({ ok: false, status: 409, ...codedError('pilgrimArchivedDocuments') })
 }
 
 /** Cakupan perjalanan: ada jamaah booking `bookingId` (bukan draf, milik `ownerId`) yang tertaut ke kartu — dikunci FOR SHARE supaya lepas-tautan
@@ -147,24 +150,24 @@ type Checked = { label: string; referenceCode: string | null; issuedAt: Calendar
 export function checkUploadFields(type: DocumentTypeOption, f: DocumentUploadFields, today: CalendarDate = todayInApp()): Checked | DocServiceError {
   let label = type.label
   if (type.key === 'other') {
-    if (!f.label) return bad('Isi nama dokumen', 'label')
+    if (!f.label) return bad('documentLabelRequired', 'label')
     label = f.label
-  } else if (f.label !== undefined) return bad('Nama dokumen hanya untuk "Dokumen Lain"', 'label')
+  } else if (f.label !== undefined) return bad('documentLabelOnlyOther', 'label')
 
   let referenceCode: string | null = null
   if (type.referenceLabel) {
     const code = (f.referenceCode ?? '').toUpperCase().replace(/\s+/g, '')
     if (type.referencePattern) {
-      if (!code) return bad(`Isi ${type.referenceLabel}`, 'referenceCode')
-      if (!new RegExp(type.referencePattern).test(code)) return bad(`${type.referenceLabel} tidak sesuai format`, 'referenceCode')
+      if (!code) return bad('referenceRequired', 'referenceCode', { label: type.referenceLabel })
+      if (!new RegExp(type.referencePattern).test(code)) return bad('referenceFormat', 'referenceCode', { label: type.referenceLabel })
     }
     referenceCode = code || null
-  } else if (f.referenceCode) return bad('Jenis dokumen ini tidak memakai kode referensi', 'referenceCode')
+  } else if (f.referenceCode) return bad('referenceNotUsed', 'referenceCode')
 
-  if (!type.hasExpiry && (f.issuedAt || f.expiresAt)) return bad('Jenis dokumen ini tidak memakai masa berlaku', 'expiresAt')
-  if (type.minValidityMonths != null && !f.expiresAt) return bad('Isi tanggal habis berlaku', 'expiresAt')
-  if (f.issuedAt && f.issuedAt > today) return bad('Tanggal terbit tidak boleh di masa depan', 'issuedAt')
-  if (f.issuedAt && f.expiresAt && f.issuedAt >= f.expiresAt) return bad('Tanggal habis berlaku harus sesudah tanggal terbit', 'expiresAt')
+  if (!type.hasExpiry && (f.issuedAt || f.expiresAt)) return bad('expiryNotUsed', 'expiresAt')
+  if (type.minValidityMonths != null && !f.expiresAt) return bad('expiryRequired', 'expiresAt')
+  if (f.issuedAt && f.issuedAt > today) return bad('issuedFuture', 'issuedAt')
+  if (f.issuedAt && f.expiresAt && f.issuedAt >= f.expiresAt) return bad('expiryAfterIssue', 'expiresAt')
   return { label, referenceCode, issuedAt: f.issuedAt ?? null, expiresAt: f.expiresAt ?? null }
 }
 
@@ -174,7 +177,7 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
     const limited = await rateLimited(actor)
     if (limited) return limited
     const type = await prisma.documentType.findFirst({ where: { id: fields.documentTypeId, isActive: true, reusable: scope.bookingId === null }, select: typeSelect })
-    if (!type) return bad('Jenis dokumen tidak tersedia', 'documentTypeId')
+    if (!type) return bad('documentTypeUnavailable', 'documentTypeId')
     if (scope.bookingId !== null) {
       const ids = await tripTypeIds(prisma, scope.bookingId, cardId)
       if (!ids) return notFound()
@@ -185,18 +188,18 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
     // Pemeriksaan murah sebelum memproses berkas (yang otoritatif diulang di dalam kunci).
     const card = await prisma.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: { archivedAt: true } })
     if (!card) return notFound()
-    if (card.archivedAt) return { ok: false, status: 409, error: 'Data jamaah ini diarsipkan — pulihkan dulu sebelum mengubah dokumennya' }
+    if (card.archivedAt) return { ok: false, status: 409, ...codedError('pilgrimArchivedDocuments') }
 
     let prepared
     try { prepared = await prepareDocumentFile(file) } catch (e) {
-      if (e instanceof DocumentFileRejected) return bad(e.message, 'file')
+      if (e instanceof DocumentFileRejected) return bad(e.code, 'file')
       throw e
     }
     const key = newDocumentKey(ownerId, cardId, type.key, prepared.ext)
     try {
       await storage.put(key, prepared.body, prepared.mimeType)
     } catch {
-      return { ok: false, status: 503, error: 'Penyimpanan berkas sedang bermasalah. Coba lagi.' }
+      return { ok: false, status: 503, ...codedError('storageUnavailable') }
     }
 
     let replaced: string[] = []
@@ -217,7 +220,7 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
           }
         }
         if ((await tx.pilgrimDocument.count({ where: { savedPilgrimId: cardId } })) >= MAX_DOCUMENTS_PER_CARD) {
-          throw new Abort({ ok: false, status: 409, error: `Maksimal ${MAX_DOCUMENTS_PER_CARD} dokumen per jamaah. Hapus dokumen yang tidak dipakai.` })
+          throw new Abort({ ok: false, status: 409, ...codedError('maxDocuments', { max: MAX_DOCUMENTS_PER_CARD }) })
         }
         return tx.pilgrimDocument.create({
           data: {
@@ -235,7 +238,7 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
       await removeObjectsQuietly(storage, [key], 'documents/upload-rollback')
       if (e instanceof Abort) return e.result
       // Jenis dihapus admin di antara pembacaan di atas dan INSERT (FK) — bukan galat server (SEC-185).
-      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') return bad('Jenis dokumen tidak tersedia', 'documentTypeId')
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003') return bad('documentTypeUnavailable', 'documentTypeId')
       throw e
     }
   }
@@ -249,7 +252,7 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
         await lockCard(tx, actor, ownerId, cardId)
         await lockTripScope(tx, ownerId, cardId, scope)
         const doc = await tx.pilgrimDocument.findFirst({ where: { id: docId, savedPilgrimId: cardId, bookingId: scope.bookingId }, select: { objectKey: true, documentTypeId: true } })
-        if (!doc) throw new Abort({ ok: false, status: 404, error: 'Dokumen tidak ditemukan' })
+        if (!doc) throw new Abort({ ok: false, status: 404, ...codedError('documentNotFound') })
         await tx.pilgrimDocument.delete({ where: { id: docId } })
         await reopenForChangedDocument(tx, { savedPilgrimId: cardId, bookingId: scope.bookingId, documentTypeId: doc.documentTypeId }, actor.userId, 'Dokumen dihapus') // sesudah mengubah (SEC-200)
         return doc.objectKey
@@ -268,11 +271,11 @@ export function createDocumentService(storage: DocumentStorage = minioDocumentSt
     const doc = await prisma.pilgrimDocument.findFirst({
       where: { id: docId, savedPilgrimId: cardId, bookingId: scope.bookingId, savedPilgrim: { ownerId } }, select: { objectKey: true, mimeType: true },
     })
-    if (!doc) return { ok: false, status: 404, error: 'Dokumen tidak ditemukan' }
+    if (!doc) return { ok: false, status: 404, ...codedError('documentNotFound') }
     try {
       return { ok: true, url: await storage.url(doc.objectKey, PREVIEW_TTL_SECONDS), mimeType: doc.mimeType }
     } catch {
-      return { ok: false, status: 503, error: 'Penyimpanan berkas sedang bermasalah. Coba lagi.' }
+      return { ok: false, status: 503, ...codedError('storageUnavailable') }
     }
   }
 

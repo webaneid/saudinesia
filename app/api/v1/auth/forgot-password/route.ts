@@ -3,13 +3,14 @@ import { requestPasswordReset } from '@/lib/auth/accounts'
 import { sendAuthEmail } from '@/lib/auth/authEmail'
 import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { forgotPasswordSchema } from '@/lib/validators/auth'
-import { ok, err } from '@/lib/validators'
+import { ok } from '@/lib/validators'
+import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 
 // Reset password lewat tautan email (docs/arsitektur-auth.md §3.2). Respons SERAGAM untuk email terdaftar maupun tidak.
 export async function POST(request: Request) {
   try {
     const parsed = forgotPasswordSchema.safeParse(await request.json().catch(() => null))
-    if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Input tidak valid'), { status: 400 })
+    if (!parsed.success) return zodFailure(parsed.error)
     const { email, locale } = parsed.data
 
     // Batas dihitung SEBELUM mencari akun dan sama untuk email yang ada maupun tidak — 429 tidak boleh membocorkan apakah email terdaftar.
@@ -29,6 +30,6 @@ export async function POST(request: Request) {
     return NextResponse.json(ok({ sent: true }))
   } catch (error) {
     console.error('[auth/forgot-password]', error instanceof Error ? error.name : error)
-    return NextResponse.json(err('Internal server error'), { status: 500 })
+    return apiErrorJson('internal', 500)
   }
 }

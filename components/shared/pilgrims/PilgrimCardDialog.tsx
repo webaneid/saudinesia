@@ -8,6 +8,7 @@ import { Modal } from '@/components/shared/Modal'
 import { SavedPilgrimFields } from '@/components/shared/pilgrims/SavedPilgrimFields'
 import { bodyFromForm, canSubmitPilgrim, formFromCard, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import type { PilgrimWarning, SavedPilgrimView } from '@/lib/pilgrims/service'
+import { useApiError } from '@/components/shared/useApiError'
 
 // Popup kartu jamaah tanpa meninggalkan booking — SATU komponen untuk halaman jamaah dan admin, untuk MEMBUAT dan MENGUBAH kartu:
 // formulir kartu yang sama (SavedPilgrimFields), disimpan lewat API kartu (`endpoint`: /api/v1/account/pilgrims atau
@@ -36,6 +37,7 @@ type Json = { data?: Record<string, unknown> & { id?: string }; error?: string; 
 
 export function PilgrimCardDialog({ endpoint, cardId, intro, idPrefix, title, initial, showSelf, saveLabel, onClose, onSaved }: Props) {
   const t = useTranslations('shared.pilgrims.dialog')
+  const errorText = useApiError()
   const [form, setForm] = useState<SavedPilgrimFormValue | null>(cardId ? null : initial ?? null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,10 +49,10 @@ export function PilgrimCardDialog({ endpoint, cardId, intro, idPrefix, title, in
     let alive = true
     fetch(`${endpoint}/${cardId}`, { cache: 'no-store' })
       .then(r => r.json() as Promise<Json>)
-      .then(j => { if (!alive) return; if (j?.data) setForm(formFromCard(j.data as unknown as SavedPilgrimView)); else setError(j?.error ?? t('loadFailed')) })
+      .then(j => { if (!alive) return; if (j?.data) setForm(formFromCard(j.data as unknown as SavedPilgrimView)); else setError(errorText(j, t('loadFailed'))) })
       .catch(() => alive && setError(t('network')))
     return () => { alive = false }
-  }, [endpoint, cardId, t])
+  }, [endpoint, cardId, t, errorText])
 
   async function save() {
     if (!form || !canSubmitPilgrim(form) || busy) return
@@ -61,7 +63,7 @@ export function PilgrimCardDialog({ endpoint, cardId, intro, idPrefix, title, in
       if (!id) {
         const res = await fetch(cardId ? `${endpoint}/${cardId}` : endpoint, { method: cardId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bodyFromForm(form)) })
         const json = await res.json().catch(() => null) as Json
-        if (!res.ok || !json?.data?.id) { setError(json?.error ?? t('saveFailed')); return }
+        if (!res.ok || !json?.data?.id) { setError(errorText(json, t('saveFailed'))); return }
         id = json.data.id
         warnings = json.meta?.warnings ?? []
         setSavedId(id)
