@@ -261,6 +261,19 @@
         "primaryCta": "Lihat Hotel",
         "secondaryCta": "Lihat Paket Umroh"
       },
+      "search": {
+        "city": "Kota",
+        "anyCity": "Semua kota",
+        "checkIn": "Check-in",
+        "checkOut": "Check-out",
+        "rooms": "Kamar",
+        "guests": "Tamu",
+        "submit": "Cari hotel",
+        "needDates": "Pilih tanggal check-in dan check-out dulu.",
+        "checkInPast": "Tanggal check-in tidak boleh sebelum hari ini.",
+        "checkOutAfter": "Tanggal check-out harus sesudah check-in.",
+        "tooLong": "Maksimal {max} malam per pesanan."
+      },
       "facts": {
         "count": "{count, plural, other {# hotel}}",
         "priceFrom": "Mulai {price} per malam",
@@ -272,10 +285,18 @@
         "empty": "Hotel akan segera tersedia.",
         "emptyFiltered": "Tidak ada hotel yang sesuai filter."
       },
-      "filters": {
-        "city": "Kota",
-        "stars": "Bintang",
-        "all": "Semua"
+      "results": {
+        "title": "Hotel tersedia {checkIn} – {checkOut} ({nights, plural, other {# malam}})",
+        "summary": "{city} · {rooms, plural, other {# kamar}} · {guests, plural, other {# tamu}}",
+        "empty": "Belum ada hotel dengan kamar tersedia untuk seluruh malam di tanggal itu.",
+        "nearest": "Periode harga yang tersedia:",
+        "period": "{from} – {to}",
+        "capacity": "{count, plural, other {Muat # orang}}",
+        "perNight": "{price} per kamar per malam",
+        "roomsLeft": "{count, plural, other {Sisa # kamar}}",
+        "shortOfBeds": "Hanya muat {beds} orang untuk {guests} tamu — tambah kamar di halaman pesan.",
+        "totalFor": "Total {nights, plural, other {# malam}} × {rooms, plural, other {# kamar}}",
+        "choose": "Pilih"
       },
       "card": {
         "cities": {

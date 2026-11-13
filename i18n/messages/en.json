@@ -261,6 +261,19 @@
         "primaryCta": "View Hotels",
         "secondaryCta": "View Umrah Packages"
       },
+      "search": {
+        "city": "City",
+        "anyCity": "All cities",
+        "checkIn": "Check-in",
+        "checkOut": "Check-out",
+        "rooms": "Rooms",
+        "guests": "Guests",
+        "submit": "Search hotels",
+        "needDates": "Choose check-in and check-out dates first.",
+        "checkInPast": "The check-in date can’t be before today.",
+        "checkOutAfter": "The check-out date must be after check-in.",
+        "tooLong": "At most {max} nights per order."
+      },
       "facts": {
         "count": "{count, plural, one {# hotel} other {# hotels}}",
         "priceFrom": "From {price} per night",
@@ -272,10 +285,18 @@
         "empty": "Hotels will be available soon.",
         "emptyFiltered": "No hotels match the filter."
       },
-      "filters": {
-        "city": "City",
-        "stars": "Stars",
-        "all": "All"
+      "results": {
+        "title": "Hotels available {checkIn} – {checkOut} ({nights, plural, one {# night} other {# nights}})",
+        "summary": "{city} · {rooms, plural, one {# room} other {# rooms}} · {guests, plural, one {# guest} other {# guests}}",
+        "empty": "No hotel has rooms available for every night on those dates yet.",
+        "nearest": "Available rate periods:",
+        "period": "{from} – {to}",
+        "capacity": "{count, plural, one {Fits # person} other {Fits # people}}",
+        "perNight": "{price} per room per night",
+        "roomsLeft": "{count, plural, one {# room left} other {# rooms left}}",
+        "shortOfBeds": "Fits only {beds} people for {guests} guests — add rooms on the order page.",
+        "totalFor": "Total for {nights, plural, one {# night} other {# nights}} × {rooms, plural, one {# room} other {# rooms}}",
+        "choose": "Select"
       },
       "card": {
         "cities": {
