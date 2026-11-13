@@ -281,7 +281,7 @@ Dijalankan di server uji terpisah (port 6270) di atas **salinan** DB dev (`saudi
 
 ## 9. Tahap 4 — Hero "kotak cari" untuk Pesawat dan Hotel (arahan pemilik 2026-11-13)
 
-> **Status: RENCANA DISETUJUI (2026-11-13) — K-H1..K-H4 sesuai usulan. H1 SELESAI 2026-11-13 (§9.5); H2, H3 belum.**
+> **Status: RENCANA DISETUJUI (2026-11-13) — K-H2..K-H4 sesuai usulan; K-H1 DIKOREKSI pemilik (tanggal persis, lihat §9.6). H1 SELESAI 2026-11-13 (§9.5), H2 SELESAI 2026-11-13 (§9.6); H3 belum.**
 
 Arahan pemilik: katalog Pesawat dan Hotel boleh punya tampilan hero berbeda (foto besar + kotak cari menempel di bawahnya, gaya situs pemesanan tiket), **asal isi teksnya tetap sama** — judul, subjudul, tombol dari Konten Situs, dua bahasa.
 
@@ -330,4 +330,18 @@ Arahan pemilik: katalog Pesawat dan Hotel boleh punya tampilan hero berbeda (fot
 - Katalog Pesawat dan Hotel memakai varian itu. **Sementara (sampai H2/H3)** isi kotak = filter lama yang dipindah dari atas daftar (cari rute; kota + bintang) — supaya varian langsung dipakai dan diuji, tidak ada kode tanpa pemakai.
 - **Bukti:** HTML `<main>` 10 halaman publik × 2 bahasa dibandingkan sebelum/sesudah di server uji (DB audit): 16 identik byte demi byte, hanya Pesawat dan Hotel (id/en) yang berubah. HP 375 px tanpa geser horizontal (`scrollWidth` = 375), kotak di dalam layar (28–347 px); dropdown Kota terbuka di atas daftar dan memilih Makkah menyaring ke 3 hotel (`?city=makkah`). Suite penuh lulus di DB sekali pakai; build 0 error.
 - **Belum diuji dengan foto hero terunggah** di halaman ini (DB audit tanpa foto) — jalur foto memakai potongan yang sama persis dengan varian bawaan.
+
+### 9.6 As-built H2 (2026-11-13) — pesawat: kotak cari = isian awal checkout
+
+**Koreksi pemilik sesudah H1** (2026-11-13): H1 dinilai "hanya memindah filter lama ke atas". Yang diminta = **preform seperti Agoda/tiket.com**: dari mana, ke mana, tanggal berapa, berapa orang, pesawat apa — lalu checkout terbuka SUDAH TERISI. Karena itu K-H1 berubah dari "per bulan" menjadi **tanggal berangkat persis** (+ tanggal pulang opsional), dan pita bulan (R3) dibatalkan — pengganti "kosong yang membantu" adalah daftar jadwal terdekat (R5).
+
+| Bagian | As-built | Berkas |
+|---|---|---|
+| Isian awal checkout | Modul murni `lib/checkout/prefill.ts`: `PREFILL_KEYS` (pesawat `date`/`pax`/`ret`/`retDate`; hotel `checkIn`/`checkOut`/`rooms`/`guests` — dipakai H3), `readPrefill` (daftar putih, nilai tak sah diabaikan), `prefillQuery` (urutan kanonik). `checkoutPath(locale, kind, id, prefill?)` membawa isian; halaman checkout membacanya dan meneruskan `initial` ke `FlightFields`/`HotelFields` — hanya nilai AWAL formulir, periode/kursi/kamar tetap diperiksa formulir dan mesin pesan. | `lib/checkout/{prefill,kinds}.ts`, `app/[locale]/(public)/checkout/[kind]/{page,CheckoutForm,FlightFields,HotelFields}.tsx` |
+| Jalur kembali login | `safeNextPath` menerima isian awal HANYA untuk jenis yang punya `PREFILL_KEYS`, dalam urutan kanonik, nilai berpola sempit (`\d{4}-\d{2}-\d{2}`, `[1-9]\d{0,2}`, UUID); batas panjang 120 → 200 (sama dengan `next` di `lib/validators/auth.ts`). Masih teks mentah tanpa dekode. | `lib/auth/nextPath.ts` |
+| Kotak cari | `FlightSearch` (klien, teks lewat props): Dari / Ke = `AutocompleteSelect` berkotak cari dari rute aktif yang masih punya jadwal (pilihan saling menyaring, tombol tukar), tanggal berangkat, tanggal pulang (opsional), jamaah (`PeopleStepper`). Dua baris (kota; tanggal/jamaah/tombol). Kirim = GET ke `/{locale}/flight?from&to&date&ret&pax#catalog`. | `app/[locale]/(public)/flight/FlightSearch.tsx` |
+| Hasil | Server: parameter daftar putih (kota dari rute aktif, tanggal ≥ hari ini, pulang ≥ berangkat, jamaah 1..`CHECKOUT_MAX_PEOPLE`; asing = diabaikan). Jadwal yang periodenya memuat tanggal itu, berharga, kursi ≥ jamaah; pulang = rute kebalikan yang memuat tanggal pulang (termurah). Kartu: maskapai, rute, tanggal berangkat/pulang, "Sisa N kursi" bila ≤ 10, harga per orang (+ pulang), total × jamaah, tombol **Pesan** → checkout terisi. Kosong → 3 jadwal terdekat rute itu (tautan cari ulang). Tanpa tanggal → tabel semua jadwal seperti sebelumnya. Query dibatasi 200 baris. Fakta hero kini hanya jadwal yang belum lewat. | `app/[locale]/(public)/flight/page.tsx` |
+| Teks | `catalog.flight.search.*`, `catalog.flight.results.*` (id/en); `list.search`/`list.emptyFiltered` dihapus (kotak cari teks lama tidak ada lagi). | `i18n/messages/{id,en}.json` |
+
+**Bukti (2026-11-13, server uji DB audit):** isi Dari = "cgk" lewat kotak cari dropdown, tanggal 10 Des 2026, pulang 20 Des, 2 jamaah → hasil "Penerbangan 10 Des 2026 · 2 jamaah", Saudia Air CGK → MED, Rp 46.000.000 untuk 2 jamaah, keterangan tiket pulang tak tersedia; Pesan → `/id/checkout/flight?id=…&date=2026-12-10&pax=2` → belum login dialihkan ke login dengan `next` berisi isian → sesudah masuk checkout terbuka dengan tanggal 10/12/2026 dan 2 penumpang, pratinjau server Rp 46.000.000. `/en` dengan tanggal tanpa kursi → pesan kosong + jadwal terdekat. HP 375 px tanpa geser horizontal; 1366 px kotak dua baris tanpa label terpotong. Parameter liar (`pax=abc`, `from=<script>`, tanggal lampau/rusak, pulang < berangkat, `page=-1`) → 200, diabaikan. Uji `test-checkout` "isian awal checkout" (pola, urutan, penolakan 11 bentuk). Suite penuh lulus di DB sekali pakai; build 0 error.
 

@@ -456,12 +456,39 @@
       "facts": {
         "count": "{count, plural, other {# jadwal}}"
       },
+      "search": {
+        "from": "Dari",
+        "to": "Ke",
+        "anyOrigin": "Semua kota asal",
+        "anyDestination": "Semua tujuan",
+        "swap": "Tukar asal dan tujuan",
+        "date": "Tanggal berangkat",
+        "returnDate": "Tanggal pulang",
+        "returnOptional": "(opsional)",
+        "passengers": "Jamaah",
+        "submit": "Cari penerbangan",
+        "needDate": "Pilih tanggal berangkat dulu.",
+        "datePast": "Tanggal berangkat tidak boleh sebelum hari ini.",
+        "returnBefore": "Tanggal pulang harus sama atau setelah tanggal berangkat."
+      },
+      "results": {
+        "title": "Penerbangan {date} · {count, plural, other {# jamaah}}",
+        "route": "{from} → {to}",
+        "empty": "Tidak ada kursi tersedia pada {date} untuk pencarian ini.",
+        "nearest": "Jadwal terdekat yang masih ada kursinya",
+        "period": "Berangkat {from} – {to}",
+        "seatsLeft": "{count, plural, other {Sisa # kursi}}",
+        "departOn": "Berangkat {date}",
+        "returnOn": "Pulang {date} · {route}",
+        "noReturn": "Tiket pulang untuk {date} tidak tersedia — tiket pulang bisa dipilih di halaman pesan.",
+        "perPerson": "{price} per orang",
+        "totalFor": "{count, plural, other {Total untuk # jamaah}}",
+        "order": "Pesan"
+      },
       "list": {
         "title": "Jadwal penerbangan",
-        "description": "Cari menurut kota asal atau tujuan.",
-        "empty": "Jadwal penerbangan akan segera tersedia.",
-        "emptyFiltered": "Tidak ada jadwal yang cocok dengan pencarian.",
-        "search": "Cari kota asal / tujuan…"
+        "description": "Semua jadwal aktif, diurutkan menurut tanggal berangkat. Gunakan kotak cari di atas untuk memilih tanggal dan jumlah jamaah.",
+        "empty": "Jadwal penerbangan akan segera tersedia."
       },
       "table": {
         "route": "Rute",

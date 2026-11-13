@@ -8,6 +8,7 @@ import { getOnboardingState, isOnboardingComplete } from '@/lib/auth/contact'
 import { safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { requireCatalog, type CatalogKey } from '@/lib/catalog/availability'
 import { checkoutPath, isCheckoutKind, type CheckoutKind } from '@/lib/checkout/kinds'
+import { readPrefill } from '@/lib/checkout/prefill'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
 import { CHECKOUT_MAX_PEOPLE } from '@/lib/validators/checkout'
 import { safeLocale } from '@/lib/utils/locale'
@@ -15,7 +16,7 @@ import { todayInApp } from '@/lib/time'
 import { CheckoutForm } from './CheckoutForm'
 import { ProductIntro } from './ProductIntro'
 
-type Props = { params: Promise<{ locale: string; kind: string }>; searchParams: Promise<{ id?: string }> }
+type Props = { params: Promise<{ locale: string; kind: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
 
 // Halaman pesan bukan untuk mesin pencari (berisi sesi pengguna, tak bermakna tanpa login).
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
@@ -32,8 +33,11 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
   const { locale: rawLocale, kind } = await params
   const locale = safeLocale(rawLocale)
   if (!isCheckoutKind(kind)) notFound()
-  const id = (await searchParams).id ?? ''
-  const here = checkoutPath(locale, kind, id)
+  const sp = await searchParams
+  const id = typeof sp.id === 'string' ? sp.id : ''
+  // Isian awal dari kotak cari katalog (pesawat/hotel, §9 H2/H3) — hanya nilai berpola sah; ikut dibawa ke jalur kembali login.
+  const prefill = readPrefill(kind, sp)
+  const here = checkoutPath(locale, kind, id, prefill)
   if (!safeNextPath(here)) notFound() // id bukan UUID (jalur yang sama dipakai sebagai jalur kembali login)
   await requireCatalog(CATALOG_OF[kind])
 
@@ -68,7 +72,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
           </p>
         </div>
       ) : (
-        <CheckoutForm locale={locale} product={product} today={todayInApp()} maxPeople={CHECKOUT_MAX_PEOPLE} intro={<ProductIntro product={product} />} />
+        <CheckoutForm locale={locale} product={product} prefill={prefill} today={todayInApp()} maxPeople={CHECKOUT_MAX_PEOPLE} intro={<ProductIntro product={product} />} />
       )}
     </div>
   )

@@ -9,20 +9,22 @@ import { formatRupiah } from '@/lib/utils'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { PeopleStepper } from './PeopleStepper'
 import type { FieldsChange } from './fields'
+import type { FlightPrefill } from '@/lib/checkout/prefill'
 
 const later = (a: string, b: string) => (a > b ? a : b)
 const periodText = (from: string, to: string, locale: string) => `${formatCalendarDate(from, DATE_LONG, locale)} – ${formatCalendarDate(to, DATE_LONG, locale)}`
 
 // Tiket pesawat (docs/arsitektur-booking-engine-v2.md §10.6, K11b-1 = b): tanggal terbang di dalam periode jadwal (≥ hari ini) + jumlah penumpang;
 // tiket PULANG opsional = jadwal rute kebalikan (dua item tiket dalam satu booking). Periode & kursi diperiksa ulang mesin (422/409).
-export function FlightFields({ product, today, maxPeople, onChange }: { product: FlightCheckout; today: string; maxPeople: number; onChange: FieldsChange }) {
+export function FlightFields({ product, today, maxPeople, onChange, initial = {} }: { product: FlightCheckout; today: string; maxPeople: number; onChange: FieldsChange; initial?: FlightPrefill }) {
   const t = useTranslations('checkout')
   const locale = useLocale()
   const s = product.schedule
-  const [rawDate, setDate] = useState('')
-  const [returnId, setReturnId] = useState('')
-  const [rawReturn, setReturnDate] = useState('')
-  const [people, setPeople] = useState(1)
+  // Isian awal dari kotak cari katalog (§9 H2): hanya petunjuk — periode/kursi tetap diperiksa di bawah dan oleh mesin pesan.
+  const [rawDate, setDate] = useState<string>(initial.date ?? '')
+  const [returnId, setReturnId] = useState(initial.ret && product.returns.some(r => r.id === initial.ret) ? initial.ret : '')
+  const [rawReturn, setReturnDate] = useState<string>(initial.ret && initial.retDate ? initial.retDate : '')
+  const [people, setPeople] = useState(initial.pax ?? 1)
 
   const date = isCalendarDate(rawDate) ? rawDate : ''
   const ret = product.returns.find(r => r.id === returnId) ?? null

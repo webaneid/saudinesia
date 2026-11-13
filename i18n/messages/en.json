@@ -456,12 +456,39 @@
       "facts": {
         "count": "{count, plural, one {# schedule} other {# schedules}}"
       },
+      "search": {
+        "from": "From",
+        "to": "To",
+        "anyOrigin": "Any origin",
+        "anyDestination": "Any destination",
+        "swap": "Swap origin and destination",
+        "date": "Departure date",
+        "returnDate": "Return date",
+        "returnOptional": "(optional)",
+        "passengers": "Pilgrims",
+        "submit": "Search flights",
+        "needDate": "Choose a departure date first.",
+        "datePast": "The departure date can’t be before today.",
+        "returnBefore": "The return date must be on or after the departure date."
+      },
+      "results": {
+        "title": "Flights on {date} · {count, plural, one {# pilgrim} other {# pilgrims}}",
+        "route": "{from} → {to}",
+        "empty": "No seats available on {date} for this search.",
+        "nearest": "Nearest schedules with seats left",
+        "period": "Departs {from} – {to}",
+        "seatsLeft": "{count, plural, one {# seat left} other {# seats left}}",
+        "departOn": "Departs {date}",
+        "returnOn": "Returns {date} · {route}",
+        "noReturn": "No return ticket for {date} — you can choose a return ticket on the booking page.",
+        "perPerson": "{price} per person",
+        "totalFor": "{count, plural, one {Total for # pilgrim} other {Total for # pilgrims}}",
+        "order": "Book"
+      },
       "list": {
         "title": "Flight schedules",
-        "description": "Search by origin or destination city.",
-        "empty": "Flight schedules will be available soon.",
-        "emptyFiltered": "No schedules match your search.",
-        "search": "Search origin / destination city…"
+        "description": "All active schedules, sorted by departure date. Use the search box above to choose a date and number of pilgrims.",
+        "empty": "Flight schedules will be available soon."
       },
       "table": {
         "route": "Route",
