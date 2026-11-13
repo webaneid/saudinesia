@@ -20,7 +20,8 @@ export function HotelFields({ product, today, maxPeople, onChange, initial = {} 
   const t = useTranslations('checkout')
   const locale = useLocale()
   const rooms = useMemo(() => roomsOf(product.schedules, product.id), [product])
-  const [roomTypeId, setRoomTypeId] = useState(rooms.length === 1 ? rooms[0]!.id : '')
+  // Tipe kamar dari kotak cari katalog dipakai hanya bila memang tipe kamar hotel ini.
+  const [roomTypeId, setRoomTypeId] = useState(initial.room && rooms.some(r => r.id === initial.room) ? initial.room : rooms.length === 1 ? rooms[0]!.id : '')
   // Nilai mentah isian (saat tahun sedang diketik bisa "0002-12-11") — hitungan tanggal HANYA atas nilai yang sudah berupa tanggal kalender sah.
   // Isian awal dari kotak cari katalog (§9 H3): hanya petunjuk — periode/kamar tetap diperiksa di bawah dan oleh mesin pesan.
   const [rawIn, setCheckIn] = useState<string>(initial.checkIn ?? '')

@@ -64,7 +64,6 @@ const UNBOUNDED_ADMIN_GET: Record<string, string> = {
 const UNPAGINATED_PAGES: Record<string, string> = {
   'app/[locale]/(public)/catering/page.tsx': 'katalog kartu kurasi',
   'app/[locale]/(public)/haji/page.tsx': 'katalog kartu kurasi',
-  'app/[locale]/(public)/hotels/page.tsx': 'katalog kartu kurasi',
   'app/[locale]/(public)/muthowif/page.tsx': 'katalog kartu kurasi',
   'app/[locale]/(public)/packages/page.tsx': 'katalog kartu kurasi',
   'app/[locale]/(public)/tours/page.tsx': 'katalog kartu kurasi',
