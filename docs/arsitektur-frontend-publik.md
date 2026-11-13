@@ -278,3 +278,56 @@ Dijalankan di server uji terpisah (port 6270) di atas **salinan** DB dev (`saudi
 8. Staf yang membuka `/{locale}/login` diarahkan ke dasbor jamaah ("Buat Booking Pertama").
 9. Rekening bank belum diisi di Pengaturan Invoice (peringatan tampil di halaman bayar) — setelan pemilik, bukan kode.
 10. Uji `test-site-content` tidak idempoten (gagal pada jalan kedua di DB yang sama karena jejak audit tersisa; lulus di DB segar seperti CI).
+
+## 9. Tahap 4 — Hero "kotak cari" untuk Pesawat dan Hotel (arahan pemilik 2026-11-13)
+
+> **Status: RENCANA DISETUJUI (2026-11-13) — K-H1..K-H4 sesuai usulan. H1 SELESAI 2026-11-13 (§9.5); H2, H3 belum.**
+
+Arahan pemilik: katalog Pesawat dan Hotel boleh punya tampilan hero berbeda (foto besar + kotak cari menempel di bawahnya, gaya situs pemesanan tiket), **asal isi teksnya tetap sama** — judul, subjudul, tombol dari Konten Situs, dua bahasa.
+
+### 9.1 Recheck (2026-11-13)
+
+| Hal | Temuan di kode |
+|---|---|
+| Hero | Satu komponen `components/shared/public/PageHero.tsx` (ukuran `lg`/`md`, fakta, dua tombol). Isi dari `getPageContent(locale, '<halaman>')`. |
+| Foto hero | **Sudah ada** sejak F5 (C5): pemilik media `public_page` (`featured`, `superadminOnly`), diunggah superadmin di Sistem → Konten Situs per halaman; `PageHero` menampilkan foto + lapisan `brand-dark`. Tidak perlu fitur unggah baru — cukup foto untuk halaman `flight` dan `hotels` diunggah. |
+| Data pesawat | `FlightRoute` (`origin`/`destination` teks bebas, mis. "Cengkareng (CGK)") + `FlightSchedule` = **periode** keberangkatan (`departureFrom`–`departureTo`) dengan kuota kursi (`totalSeats − pendingSeats − bookedSeats`); maskapai dari vendor biaya (`lib/catalog/flight.ts`). **Tidak ada** jam, nomor penerbangan, transit, atau bagasi. Halaman sekarang: tabel + cari teks rute. |
+| Data hotel | `Hotel` (`city`, `stars`, `distanceToHaramM`) → `HotelPricePeriod` (rentang tanggal) → `HotelRoomSchedule` (tipe kamar, kuota). Halaman sekarang: kartu + filter kota/bintang, harga "mulai dari / malam" periode berjalan. |
+| Checkout | Satu halaman `/{locale}/checkout/[jenis]?id=` (`hotel`, `flight` termasuk). Hotel menerima check-in/check-out/kamar; pesawat menerima tanggal + orang. |
+| Drift dokumen | `docs/arsitektur-tiket-pesawat.md` banner masih "kuota tanpa pemanggil, belum terintegrasi booking" — **basi**: `reserveFlightQuota` dipanggil `lib/booking/create.ts` + `lib/quota/adapters/flight.ts`, checkout `flight` ada. Diperbarui di fase pertama tahap ini. |
+
+### 9.2 Rancangan
+
+- **R1 — Varian, bukan hero baru.** `PageHero` mendapat `variant: 'default' | 'search'` dan slot `search?: ReactNode`. Varian `search`: foto penuh (atau permukaan hijau + pola bila belum ada foto), judul/subjudul di atas foto, kotak cari menempel di tepi bawah hero. Teks tetap kunci yang sama → Konten Situs dan terjemahan tak berubah; penjaga `REDESIGNED_CATALOGS` tetap berlaku.
+- **R2 — Kotak cari = formulir GET** ke halaman yang sama (`#catalog`), parameter di URL (bisa di-bookmark), disaring di server dengan daftar putih (nilai asing diabaikan, bukan 500), memakai `FilterSelect`/`AutocompleteSelect` dan kontrol tanggal yang sudah ada (bukan `<select>` polos).
+  - Pesawat: `from` (asal, dari rute aktif), `to` (tujuan, dari rute aktif), `month` (YYYY-MM, bulan berjalan s.d. +12), `pax` (1–`CHECKOUT_MAX_PEOPLE`).
+  - Hotel: `city` (Makkah/Madinah — `CITIES` yang ada), `checkIn`, `checkOut` (tanggal kalender lewat `lib/time`), `rooms`.
+- **R3 — Pita bulan (pesawat).** 6 bulan ke depan dengan harga jual termurah jadwal yang beririsan dengan bulan itu dan masih punya kursi; bulan tanpa kursi abu-abu "habis". Harga hanya lewat `sellPrices` (jual saja).
+- **R4 — Kartu hasil** hanya data yang benar-benar ada: rute, maskapai, periode berangkat, sisa kursi (ditampilkan hanya bila ≤ ambang, mis. 10), harga per orang (dan × `pax` bila diisi), tombol Pesan → checkout dengan isian terbawa (`?id=…&date=…&pax=…` lewat `checkoutPath`). Hotel: bintang, jarak ke Haram, tipe kamar, harga "mulai dari / malam"; bila tanggal diisi, hotel yang periodenya tidak menutup seluruh malam disaring keluar.
+- **R5 — Kosong yang membantu.** Pencarian tanpa hasil menawarkan bulan/tanggal terdekat yang ada kursinya, bukan halaman kosong.
+- **R6 — Yang sengaja TIDAK ditiru:** angka statistik karangan (fakta hero tetap dari data aktif, §6), pita promo/kode diskon (tak ada mesinnya), jam/nomor penerbangan/bagasi (data tak ada — lihat K-H3).
+
+### 9.3 Keputusan yang menunggu pemilik
+
+| # | Pertanyaan | Usulan |
+|---|---|---|
+| K-H1 | Pesawat dicari per **bulan** atau per **tanggal persis**? | Bulan (jadwal kita berupa periode; tanggal persis dipilih di checkout). |
+| K-H2 | Harga hotel di kartu: "mulai dari / malam" atau **total seluruh malam × kamar** bila tanggal diisi? | Total bila tanggal + kamar diisi (dihitung server dari titik harga, sama dengan checkout), selain itu "mulai dari / malam". |
+| K-H3 | Tambah data pesawat (jam berangkat, transit, bagasi) di admin? | Belum — tahap terpisah; kartu cukup dengan data yang ada. |
+| K-H4 | Varian `search` juga untuk katalog lain (Transport, Paket)? | Tidak sekarang — hanya Pesawat dan Hotel. |
+
+### 9.4 Fase (satu PR per fase, Fase Eksekusi SOP)
+
+| Fase | Isi | Selesai bila |
+|---|---|---|
+| **H1** | `PageHero` varian `search` + slot; perbarui banner `docs/arsitektur-tiket-pesawat.md`; penjaga katalog tetap hijau. | Halaman lain tak berubah (HTML dibandingkan); varian tampil di HP 375 px tanpa geser horizontal. |
+| **H2** | Pesawat: kotak cari + parameter + pita bulan + kartu hasil + kosong yang membantu + tautan checkout berisi. | `/id` dan `/en` utuh; parameter asing diabaikan; harga hanya jual; uji penyaringan di `scripts/`. |
+| **H3** | Hotel: kotak cari + saring periode + harga sesuai K-H2 + tautan checkout berisi. | Sama seperti H2. |
+
+### 9.5 As-built H1 (2026-11-13)
+
+- `PageHero` menerima `variant` (`'default' | 'search'`) dan `search?: ReactNode`. Latar (foto Konten Situs + lapisan, atau pola) dan teks (label, judul, subjudul, tombol, fakta) adalah SATU potongan JSX yang dipakai kedua varian — teks tak mungkin berbeda antarvarian. Varian `search`: panel hero dengan ruang bawah lebih lega, lalu kotak `.hero-search` (`app/globals.css`: kartu putih ber-bayangan, `-mt-12` menimpa tepi bawah hero, `z-10` supaya daftar dropdown di dalamnya tak tertutup).
+- Katalog Pesawat dan Hotel memakai varian itu. **Sementara (sampai H2/H3)** isi kotak = filter lama yang dipindah dari atas daftar (cari rute; kota + bintang) — supaya varian langsung dipakai dan diuji, tidak ada kode tanpa pemakai.
+- **Bukti:** HTML `<main>` 10 halaman publik × 2 bahasa dibandingkan sebelum/sesudah di server uji (DB audit): 16 identik byte demi byte, hanya Pesawat dan Hotel (id/en) yang berubah. HP 375 px tanpa geser horizontal (`scrollWidth` = 375), kotak di dalam layar (28–347 px); dropdown Kota terbuka di atas daftar dan memilih Makkah menyaring ke 3 hotel (`?city=makkah`). Suite penuh lulus di DB sekali pakai; build 0 error.
+- **Belum diuji dengan foto hero terunggah** di halaman ini (DB audit tanpa foto) — jalur foto memakai potongan yang sama persis dengan varian bawaan.
+

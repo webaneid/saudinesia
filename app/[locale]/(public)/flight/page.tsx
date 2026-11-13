@@ -86,22 +86,23 @@ export default async function FlightCatalogPage({ params, searchParams }: Props)
         : null,
     },
   ]
+  // Hero varian `search` (§9 H1): pencarian rute menempel di bawah hero; H2 menggantinya dengan kotak cari asal/tujuan/bulan/jamaah.
+  const search = (
+    <FilterBar active={Boolean(q)} resetHref={buildListHref(base, { limit: limitParam })}>
+      <SearchForm action={base} q={q} placeholder={t('list.search')} preserve={{ limit: limitParam }} clearHref={buildListHref(base, { limit: limitParam })} />
+    </FilterBar>
+  )
   const facts: HeroFact[] = total > 0 ? [{ icon: Plane, label: t('facts.count', { count: total }) }] : []
 
   return (
     <div className="space-y-14">
-      <PageHero locale={locale} content={content.hero} facts={facts} />
+      <PageHero locale={locale} content={content.hero} facts={facts} variant="search" search={search} />
 
       <CatalogSection
         title={t('list.title')}
         description={t('list.description')}
         empty={{ icon: Plane, text: t('list.empty') }}
         isEmpty={false}
-        toolbar={
-          <FilterBar active={Boolean(q)} resetHref={buildListHref(base, { limit: limitParam })}>
-            <SearchForm action={base} q={q} placeholder={t('list.search')} preserve={{ limit: limitParam }} clearHref={buildListHref(base, { limit: limitParam })} />
-          </FilterBar>
-        }
       >
         <DataTable
           columns={columns} rows={rows} getRowId={r => r.id}
