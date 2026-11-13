@@ -11,22 +11,24 @@ import { CHECKOUT_MAX_NIGHTS, CHECKOUT_MAX_ROOMS } from '@/lib/validators/checko
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { PeopleStepper } from './PeopleStepper'
 import type { FieldsChange } from './fields'
+import type { HotelPrefill } from '@/lib/checkout/prefill'
 
 // Hotel (docs/arsitektur-booking-engine-v2.md §10.6): tipe kamar → check-in/check-out (periode harga dipilih OTOMATIS dari tanggal, seluruh malam harus dalam
 // satu periode — aturan sama dengan mesin) → jumlah kamar & tamu. Jumlah malam dihitung server dari tanggal. Kamar kurang untuk jumlah tamu hanya
 // DIINGATKAN (K11b-2 = a), tidak ditolak.
-export function HotelFields({ product, today, maxPeople, onChange }: { product: HotelCheckout; today: string; maxPeople: number; onChange: FieldsChange }) {
+export function HotelFields({ product, today, maxPeople, onChange, initial = {} }: { product: HotelCheckout; today: string; maxPeople: number; onChange: FieldsChange; initial?: HotelPrefill }) {
   const t = useTranslations('checkout')
   const locale = useLocale()
   const rooms = useMemo(() => roomsOf(product.schedules, product.id), [product])
   const [roomTypeId, setRoomTypeId] = useState(rooms.length === 1 ? rooms[0]!.id : '')
   // Nilai mentah isian (saat tahun sedang diketik bisa "0002-12-11") — hitungan tanggal HANYA atas nilai yang sudah berupa tanggal kalender sah.
-  const [rawIn, setCheckIn] = useState('')
-  const [rawOut, setCheckOut] = useState('')
+  // Isian awal dari kotak cari katalog (§9 H3): hanya petunjuk — periode/kamar tetap diperiksa di bawah dan oleh mesin pesan.
+  const [rawIn, setCheckIn] = useState<string>(initial.checkIn ?? '')
+  const [rawOut, setCheckOut] = useState<string>(initial.checkOut ?? '')
   const checkIn = isCalendarDate(rawIn) ? rawIn : ''
   const checkOut = isCalendarDate(rawOut) ? rawOut : ''
-  const [numRooms, setNumRooms] = useState(1)
-  const [guests, setGuests] = useState(1)
+  const [numRooms, setNumRooms] = useState(Math.min(initial.rooms ?? 1, CHECKOUT_MAX_ROOMS))
+  const [guests, setGuests] = useState(initial.guests ?? 1)
 
   const room = rooms.find(r => r.id === roomTypeId)
   const resolved = resolveHotelSchedule(product.schedules, product.id, roomTypeId, checkIn, checkOut)

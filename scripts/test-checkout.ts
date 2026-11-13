@@ -15,6 +15,7 @@ import { detectSeason } from '@/lib/utils/season'
 import { GLOBAL_RULE_KEY } from '@/lib/pricing/pricingHelpers'
 import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { checkoutPath } from '@/lib/checkout/kinds'
+import { readPrefill } from '@/lib/checkout/prefill'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
 import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
 import { cartDateRefusal, checkoutDateRefusal } from '@/lib/checkout/dates'
@@ -51,6 +52,26 @@ await t('safeNextPath: hanya halaman checkout berlocale + uuid; semua bentuk lai
   // Keranjang (§10.7): persis `/{locale}/keranjang`, tanpa parameter.
   for (const ok of ['/id/keranjang', '/en/keranjang']) assert.equal(safeNextPath(ok), ok)
   for (const bad of ['/fr/keranjang', '/id/keranjang?x=1', '/id/keranjang/', '/id/keranjang#a', '/id//keranjang', '/id/Keranjang', '/keranjang']) assert.equal(safeNextPath(bad), null, bad)
+})
+
+await t('isian awal checkout (§9 H2/H3): pola sempit, urutan kanonik, hanya pesawat/hotel; ikut jalur kembali login', () => {
+  const fl = checkoutPath('id', 'flight', U, { date: '2090-02-12', pax: 3, ret: U, retDate: '2090-02-20' })
+  assert.equal(fl, `/id/checkout/flight?id=${U}&date=2090-02-12&pax=3&ret=${U}&retDate=2090-02-20`)
+  assert.equal(safeNextPath(fl), fl)
+  const ho = checkoutPath('en', 'hotel', U, { checkIn: '2090-02-12', checkOut: '2090-02-17', rooms: 2, guests: 4 })
+  assert.equal(safeNextPath(ho), ho)
+  // nilai tak sah dibuang saat membuat tautan; jenis lain tak membawa isian awal
+  assert.equal(checkoutPath('id', 'hotel', U, { checkIn: 'besok', rooms: 0, guests: 1000 }), `/id/checkout/hotel?id=${U}`)
+  assert.equal(checkoutPath('id', 'visa', U, { date: '2090-02-12' }), `/id/checkout/visa?id=${U}`)
+  for (const bad of [
+    `/id/checkout/flight?id=${U}&pax=3&date=2090-02-12`, `/id/checkout/visa?id=${U}&date=2090-02-12`, `/id/checkout/flight?id=${U}&checkIn=2090-02-12`,
+    `/id/checkout/flight?id=${U}&pax=0`, `/id/checkout/flight?id=${U}&pax=1000`, `/id/checkout/flight?id=${U}&date=2090-2-12`, `/id/checkout/flight?id=${U}&ret=nope`,
+    `/id/checkout/flight?id=${U}&date=2090-02-12&date=2090-02-13`, `/id/checkout/hotel?id=${U}&rooms=2&x=1`, `/id/checkout/flight?id=${U}&date=2090-02-12#x`,
+    `/id/checkout/flight?id=${U}&date=%32090-02-12`,
+  ]) assert.equal(safeNextPath(bad), null, bad)
+  assert.deepEqual(readPrefill('flight', { id: U, date: '2090-02-12', pax: '3', ret: 'x', retDate: '2090-02-30', extra: '1' }), { date: '2090-02-12', pax: 3 })
+  assert.deepEqual(readPrefill('hotel', { checkIn: ['2090-02-12'], rooms: '05', guests: '2' }), { guests: 2 })
+  assert.deepEqual(readPrefill('visa', { date: '2090-02-12' }), {})
 })
 
 await t('checkoutSchema: ketat — harga/total/jamaah/pemilik dari klien ditolak; jenis liar ditolak; batas orang 1..100; visa wajib tanggal', () => {

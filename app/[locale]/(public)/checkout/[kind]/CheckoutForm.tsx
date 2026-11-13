@@ -22,12 +22,12 @@ import { useApiError } from '@/components/shared/useApiError'
 import { addToCart } from '@/lib/checkout/cartStore'
 import { CART_MAX_ITEMS } from '@/lib/validators/checkout'
 
-type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode }
+type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode; prefill?: Record<string, string | number> }
 
 // Orkestrator checkout (docs/arsitektur-booking-engine-v2.md §10.5): isian per jenis → masukan checkout → pratinjau server → pesan (POST /bookings).
 // Sukses → detail booking (`?baru=1`) untuk mengisi data jamaah dan membayar. "Pesan sekarang" = keranjang satu entri; "Tambah ke keranjang" menyimpan
 // pilihan yang sama di perangkat (lib/checkout/cartStore.ts, §10.7) untuk digabung dengan produk lain — Haji selalu dipesan sendiri.
-export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props) {
+export function CheckoutForm({ locale, product, today, maxPeople, intro, prefill = {} }: Props) {
   const router = useRouter()
   const t = useTranslations('checkout')
   const errorText = useApiError()
@@ -76,11 +76,11 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props
         {product.kind === 'visa' && <VisaFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'transport' && <TransportFields product={product} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'haji' && <HajiFields product={product} maxPeople={maxPeople} onChange={onChange} />}
-        {product.kind === 'hotel' && <HotelFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'hotel' && <HotelFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} initial={prefill} />}
         {product.kind === 'tour' && <TourFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'muthowif' && <MuthowifFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'catering' && <CateringFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
-        {product.kind === 'flight' && <FlightFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'flight' && <FlightFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} initial={prefill} />}
       </div>
       <aside className="min-w-0">
         <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit}>
