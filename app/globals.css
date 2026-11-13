@@ -107,6 +107,8 @@
   .btn-brand-outline { @apply btn-brand border border-brand bg-background text-brand hover:bg-brand-light; }
   /* Kartu produk katalog publik (§6.7 G2). */
   .catalog-card { @apply flex flex-col overflow-hidden rounded-2xl border bg-card transition-colors hover:border-brand; }
+  /* Kotak cari yang menempel di tepi bawah hero varian `search` (Pesawat, Hotel — docs/arsitektur-frontend-publik.md §9 R1). */
+  .hero-search { @apply relative z-10 mx-3 -mt-12 rounded-2xl border bg-card p-3 text-foreground shadow-xl sm:mx-6 sm:p-4 md:mx-10; }
   .catalog-chip { @apply inline-flex items-center gap-1 rounded-full bg-brand-light px-2.5 py-0.5 text-xs font-semibold text-brand; }
   /* Checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5). */
   .checkout-panel { @apply space-y-4 rounded-2xl border bg-card p-5 sm:p-6; }

@@ -70,36 +70,37 @@ export default async function HotelsPage({ params, searchParams }: Props) {
   }
   const cityLabel = (c: string) => ((CITIES as readonly string[]).includes(c) ? t(`card.cities.${c}`) : c)
   const base = `/${locale}/hotels`
+  // Hero varian `search` (§9 H1): filter katalog menempel di bawah hero; H3 menggantinya dengan kotak cari tanggal + kamar.
+  const search = hotels.length > 0 ? (
+    <FilterBar active={!!city || !!stars} resetHref={`${base}#catalog`}>
+      <FilterSelect
+        label={t('filters.city')}
+        allLabel={t('filters.all')}
+        options={CITIES.map(c => ({ value: c, label: cityLabel(c) }))}
+        value={city}
+        nav={{ base, param: 'city', query: { stars: stars || undefined } }}
+      />
+      {starOptions.length > 1 && (
+        <FilterSelect
+          label={t('filters.stars')}
+          allLabel={t('filters.all')}
+          options={starOptions.map(s => ({ value: String(s), label: t('card.stars', { count: s }) }))}
+          value={stars}
+          nav={{ base, param: 'stars', query: { city: city || undefined } }}
+        />
+      )}
+    </FilterBar>
+  ) : undefined
 
   return (
     <div className="space-y-14">
-      <PageHero locale={locale} content={content.hero} facts={facts} />
+      <PageHero locale={locale} content={content.hero} facts={facts} variant="search" search={search} />
 
       <CatalogSection
         title={t('list.title')}
         description={t('list.description')}
         empty={{ icon: Building2, text: hotels.length === 0 ? t('list.empty') : t('list.emptyFiltered') }}
         isEmpty={shown.length === 0}
-        toolbar={hotels.length > 0 && (
-          <FilterBar active={!!city || !!stars} resetHref={`${base}#catalog`}>
-            <FilterSelect
-              label={t('filters.city')}
-              allLabel={t('filters.all')}
-              options={CITIES.map(c => ({ value: c, label: cityLabel(c) }))}
-              value={city}
-              nav={{ base, param: 'city', query: { stars: stars || undefined } }}
-            />
-            {starOptions.length > 1 && (
-              <FilterSelect
-                label={t('filters.stars')}
-                allLabel={t('filters.all')}
-                options={starOptions.map(s => ({ value: String(s), label: t('card.stars', { count: s }) }))}
-                value={stars}
-                nav={{ base, param: 'stars', query: { city: city || undefined } }}
-              />
-            )}
-          </FilterBar>
-        )}
       >
         <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
           {shown.map(hotel => {
