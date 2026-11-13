@@ -6,7 +6,10 @@ import type { TaxLine } from '@/lib/invoice/tax'
 import { buildInvoiceData, invoiceBookingInclude, type InvoiceLineItem } from '@/lib/pdf/invoiceData'
 import { itemSellTotals, type ItemMeta } from '@/lib/pricing/engine/snapshot'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
-import { ItemNotBookableError, itemIndexOf } from './errors'
+import { NextResponse } from 'next/server'
+import { apiErrorText, type ApiErrorCode } from '@/lib/errors/api'
+import type { ApiErrorParams } from '@/lib/errors/params'
+import { ItemNotBookableError, QuotaExhaustedError, itemIndexOf } from './errors'
 import { isSerializationConflict } from './serializable'
 import type { RuleViolation } from './rules'
 
@@ -65,10 +68,24 @@ export async function simulateBooking(target: SimulationTarget, input: BookingIn
   throw new Error('pratinjau tidak di-rollback') // tak terjangkau: transaksi di atas selalu melempar Rollback
 }
 
-/** `itemIndex` = item masukan (urut `items`) penyebab galat. */
-export type BookingFailure = { ok: false; status: 404 | 409 | 422; message: string; violations?: RuleViolation[]; itemIndex?: number }
+/**
+ * `itemIndex` = item masukan (urut `items`) penyebab galat. `code`/`params` = kunci katalog `apiErrors` untuk pelanggan (I6b, §6.8);
+ * `message` = teks Indonesia (admin, `/id`). Pelanggaran aturan visa membawa kodenya sendiri per pelanggaran.
+ */
+export type BookingFailure = { ok: false; status: 404 | 409 | 422; message: string; code: ApiErrorCode; params?: ApiErrorParams; violations?: RuleViolation[]; itemIndex?: number }
 
 /** Galat mesin pesan → jawaban terarah (422 aturan/tak dapat dijual, 409 kuota/bentrok). Galat lain dilempar ulang (500 + log di pemanggil). */
+const coded = (code: ApiErrorCode) => ({ ok: false as const, message: apiErrorText(code), code })
+
+/** Respons galat mesin pesan untuk pelanggan: teks Indonesia + `meta` berkode (dan pelanggaran aturan visa bila ada). */
+export function bookingFailureJson(f: BookingFailure): NextResponse {
+  return NextResponse.json({
+    // `orderNotIssuable` membawa detail InvoiceError untuk log admin — pelanggan hanya menerima teks katalog.
+    success: false, error: f.code === 'orderNotIssuable' ? apiErrorText(f.code) : f.message,
+    meta: { code: f.code, ...(f.params ? { params: f.params } : {}), ...(f.violations ? { violations: f.violations } : {}) },
+  }, { status: f.status })
+}
+
 export function bookingFailure(e: unknown): BookingFailure {
   const r = failureOf(e)
   const itemIndex = itemIndexOf(e)
@@ -76,13 +93,18 @@ export function bookingFailure(e: unknown): BookingFailure {
 }
 
 function failureOf(e: unknown): BookingFailure {
-  if (e instanceof RuleViolationError) return { ok: false, status: 422, message: e.message, violations: e.violations }
-  if (e instanceof ItemNotBookableError) return { ok: false, status: 422, message: e.message }
-  if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message }
-  if (e instanceof Error && (e.message.includes('insufficient') || e.message.includes('capacity'))) return { ok: false, status: 409, message: e.message }
+  if (e instanceof RuleViolationError) {
+    const first = e.violations[0]
+    return { ok: false, status: 422, message: e.message, code: first?.code ?? 'visaRuleInvalid', ...(first ? { params: first.params } : {}), violations: e.violations }
+  }
+  if (e instanceof ItemNotBookableError || e instanceof QuotaExhaustedError) {
+    return { ok: false, status: e instanceof QuotaExhaustedError ? 409 : 422, message: e.message, code: e.code, ...(e.params ? { params: e.params } : {}) }
+  }
+  // Setelan invoice bermasalah = urusan admin: rinciannya di `message` (admin), pelanggan menerima kode umum.
+  if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message, code: 'orderNotIssuable' }
   // Bentrok serialisasi yang masih tersisa setelah diulang (retrySerializable) — mis. beberapa pesanan serentak pada kursi yang sama.
-  if (isSerializationConflict(e)) return { ok: false, status: 409, message: 'Pesanan sedang diproses di tempat lain — coba lagi' }
+  if (isSerializationConflict(e)) return { status: 409, ...coded('orderConflict') }
   // Id produk/jadwal yang (sudah) tidak ada — masukan, bukan galat server (SEC-130).
-  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') return { ok: false, status: 422, message: 'Produk yang dipilih tidak ditemukan lagi — pilih ulang' }
+  if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') return { status: 422, ...coded('productNotFound') }
   throw e
 }

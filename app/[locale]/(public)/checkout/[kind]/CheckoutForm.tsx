@@ -18,6 +18,7 @@ import { MuthowifFields } from './MuthowifFields'
 import { CateringFields } from './CateringFields'
 import { FlightFields } from './FlightFields'
 import { useCheckoutPreview } from './useCheckoutPreview'
+import { useApiError } from '@/components/shared/useApiError'
 import { addToCart } from '@/lib/checkout/cartStore'
 import { CART_MAX_ITEMS } from '@/lib/validators/checkout'
 
@@ -29,6 +30,7 @@ type Props = { locale: string; product: CheckoutProduct; today: string; maxPeopl
 export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props) {
   const router = useRouter()
   const t = useTranslations('checkout')
+  const errorText = useApiError()
   const [input, setInput] = useState<CheckoutInput | null>(null)
   const [missing, setMissing] = useState<string | null>(() => t('form.completeChoices'))
   const [submitting, setSubmitting] = useState(false)
@@ -56,8 +58,8 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro }: Props
     setSubmitError('')
     try {
       const res = await fetch('/api/v1/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const json = await res.json() as { success: boolean; data?: { bookingId: string }; error?: string }
-      if (!json.success || !json.data) { setSubmitError(json.error ?? t('form.orderFailed')); return }
+      const json = await res.json() as { success: boolean; data?: { bookingId: string } }
+      if (!json.success || !json.data) { setSubmitError(errorText(json, t('form.orderFailed'))); return }
       router.push(`/${locale}/bookings/${json.data.bookingId}?baru=1`)
     } catch {
       setSubmitError(t('form.network'))

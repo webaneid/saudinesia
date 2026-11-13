@@ -4,6 +4,11 @@ import { calendarDateOf, dbDateOf, eachDay } from '@/lib/time'
 
 type Tx = Prisma.TransactionClient
 
+/** Penugasan ditolak karena keadaan data (sudah ditugaskan, muthowif nonaktif) — rute menjawab 409 dengan pesannya. */
+export class MuthowifAssignError extends Error {
+  override name = 'MuthowifAssignError'
+}
+
 function* daysInRange(start: Date, end: Date) {
   for (const day of eachDay(calendarDateOf(start), calendarDateOf(end))) yield dbDateOf(day)
 }
@@ -20,10 +25,10 @@ export async function assignMuthowifToBooking(tx: Tx, bookingMuthowifId: string,
     where: { id: bookingMuthowifId },
     include: { booking: { select: { status: true, confirmedAt: true } } },
   })
-  if (bm.muthowifId) throw new Error('Sudah di-assign ke muthowif lain')
+  if (bm.muthowifId) throw new MuthowifAssignError('Sudah di-assign ke muthowif lain')
 
   const muthowif = await tx.muthowif.findUniqueOrThrow({ where: { id: muthowifId } })
-  if (!muthowif.isActive) throw new Error('Muthowif tidak aktif')
+  if (!muthowif.isActive) throw new MuthowifAssignError('Muthowif tidak aktif')
 
   const alreadyPaid = bm.quotaConfirmed // kuota baris ini sudah dikonfirmasi (status per baris — produk tambahan revisi bisa masih pending)
 

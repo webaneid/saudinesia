@@ -1,4 +1,4 @@
-import { groupLabel } from '@/lib/booking/groups'
+import { groupLabel } from '@/lib/booking/groupNames'
 import type { ItemRow } from './ItemRows'
 import { visaRowsFromSlots, type VisaSlot } from './visaRows'
 

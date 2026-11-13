@@ -230,11 +230,14 @@ export function passportCountryOf(fields: readonly FieldLite[], values: Record<s
 }
 
 /** Jamaah booking BARU (checkout/booking admin, lib/booking/lineItems.ts): alamat dibekukan, field `nik`/`passport_number` disegel sebelum ditulis. */
-export async function sealNewPilgrim(tx: Tx, visaProductId: string | null, values: Record<string, unknown>): Promise<ManualPii> {
+export async function sealNewPilgrim(tx: Tx, visaProductId: string | null, values: Record<string, unknown>): Promise<ManualPii & { labels?: Record<string, string> }> {
   const fields = await manifestFieldsOf(tx, visaProductId)
+  // Label kolom (data admin) menyertai galat — mesin pesan menjawab pelanggan dengan kode `fieldInvalid{label}` (I6b).
+  const labels = () => Object.fromEntries(fields.map(f => [f.fieldKey, f.label]))
   const addressed = await resolveAddressValues(fields, values, tx) // alamat dibekukan dengan `text` dari DB (D1)
-  if (!addressed.ok) return addressed
-  return sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values), tx)
+  if (!addressed.ok) return { ...addressed, labels: labels() }
+  const sealed = await sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values), tx)
+  return sealed.ok ? sealed : { ...sealed, labels: labels() }
 }
 
 /**

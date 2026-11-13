@@ -1,5 +1,5 @@
 import type { Prisma } from '@prisma/client'
-import { ItemNotBookableError } from '@/lib/booking/errors'
+import { ItemNotBookableError, type PriceSubject } from '@/lib/booking/errors'
 import { visaTierRangeOfKey, visaTierText } from '@/lib/booking/visaDuration'
 import { computeCostComponents, type CostComponentsDb } from '../costComponents'
 import type { PriceOwnerType, PriceUnit } from './types'
@@ -40,9 +40,9 @@ export async function readPoint(db: Db, ownerType: PriceOwnerType, ownerId: stri
 }
 
 /** Seperti `readPoint` tetapi untuk JALUR PESAN: tak ada titik atau jual ≤ 0 → `ItemNotBookableError` (422). Tak pernah gratis. */
-export async function takePoint(db: Db, ownerType: PriceOwnerType, ownerId: string, variantKey: string, what: string): Promise<TakenPoint> {
+export async function takePoint(db: Db, ownerType: PriceOwnerType, ownerId: string, variantKey: string, what: PriceSubject): Promise<TakenPoint> {
   const p = await readPoint(db, ownerType, ownerId, variantKey)
-  if (!p || !(p.sellIdr > 0)) throw new ItemNotBookableError(`Harga ${what} belum ditetapkan`)
+  if (!p || !(p.sellIdr > 0)) throw new ItemNotBookableError('itemPriceNotSet', { what })
   return p
 }
 
@@ -50,14 +50,14 @@ export async function takePoint(db: Db, ownerType: PriceOwnerType, ownerId: stri
  * Tier Visa yang memuat `days` hari (varian `days:min-max`). Tak ada tier yang cocok, atau jualnya ≤ 0 → `ItemNotBookableError`: Visa tak pernah terjual gratis
  * hanya karena lama tinggal di luar rentang mana pun (dulu lolos Rp 0).
  */
-export async function takeVisaTier(db: Db, visaProductId: string, days: number, what = 'visa'): Promise<TakenPoint> {
+export async function takeVisaTier(db: Db, visaProductId: string, days: number, what: PriceSubject = 'visa'): Promise<TakenPoint> {
   const rows = await db.pricePoint.findMany({ where: { ownerType: 'visa', ownerId: visaProductId }, select: { variantKey: true } })
   const hit = rows
     .map(r => ({ key: r.variantKey, m: /^days:(\d+)-(\d+)$/.exec(r.variantKey) }))
     .filter((r): r is { key: string; m: RegExpExecArray } => r.m !== null)
     .filter(r => days >= Number(r.m[1]) && days <= Number(r.m[2]))
     .sort((a, b) => Number(a.m[1]) - Number(b.m[1]) || a.key.localeCompare(b.key))[0]
-  if (!hit) throw new ItemNotBookableError(`Harga ${what} untuk ${days} hari belum ditetapkan`)
+  if (!hit) throw new ItemNotBookableError('itemVisaTierNotSet', { what, days })
   return takePoint(db, 'visa', visaProductId, hit.key, what)
 }
 
@@ -112,9 +112,9 @@ export type CompositePart = { lineKey: string; description: string; qty: number;
  * `multiplier` = jumlah satuan yang dibeli (Haji dan Paket Umroh: orang; paket ziarah: 1 — harga per paket).
  * Titik harga tak ada → `ItemNotBookableError`. Jual titik 0 diizinkan (paket yang seluruhnya pilihan pilgrim); pemanggil menolak item bertotal 0.
  */
-export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat: "Harga {what} belum ditetapkan" */ what: string; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
+export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat `itemPriceNotSet` */ what: PriceSubject; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
   const point = await readPoint(db, o.ownerType, o.ownerId, '')
-  if (!point) throw new ItemNotBookableError(`Harga ${o.what} belum ditetapkan`)
+  if (!point) throw new ItemNotBookableError('itemPriceNotSet', { what: o.what })
   const { components } = await computeCostComponents(o.ownerType, o.ownerId, db)
 
   const lines: SnapshotLine[] = components.map(c => ({

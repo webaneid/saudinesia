@@ -1,6 +1,6 @@
 import type { BookingHaji } from '@prisma/client'
 import type { QuotaAdapter, Tx } from './types'
-import { ItemNotBookableError } from '@/lib/booking/errors'
+import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
 import { requireSellPrice } from '@/lib/pricing/engine/read'
 
 // docs/arsitektur-booking.md §6 Step 2 — menutup Gap #1 (docs/arsitektur-umroh.md §7): HajiProduct
@@ -14,10 +14,10 @@ export async function reserveHaji(tx: Tx, hajiProductId: string, numPersons: num
   })
   // SEC-66: produk nonaktif atau belum berharga (titik harga `haji` = hasil Komponen Biaya, tak ada/0 sampai diisi) TIDAK boleh dipesan — dulu `totalPrice = 0 × orang`
   // meloloskan booking gratis. Dicek SEBELUM kuota ditahan; transaksi booking di-rollback.
-  if (!product.isActive) throw new ItemNotBookableError('Produk haji tidak tersedia')
-  await requireSellPrice('haji', hajiProductId, 'produk haji', tx)
+  if (!product.isActive) throw new ItemNotBookableError('itemHajiUnavailable')
+  await requireSellPrice('haji', hajiProductId, 'haji', tx)
   const available = product.totalQuota - product.pendingQuota - product.bookedQuota
-  if (available < numPersons) throw new Error(`Haji quota insufficient: need ${numPersons}, have ${available}`)
+  if (available < numPersons) throw new QuotaExhaustedError('quotaHaji', { need: numPersons, have: available })
   await tx.hajiProduct.update({
     where: { id: hajiProductId },
     data: { pendingQuota: { increment: numPersons } },

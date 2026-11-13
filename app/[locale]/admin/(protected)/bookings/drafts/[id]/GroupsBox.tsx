@@ -3,7 +3,7 @@
 import { Plus, Trash2, UsersRound } from 'lucide-react'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { Button } from '@/components/admin/ui/Button'
-import { groupLabel } from '@/lib/booking/groups'
+import { groupLabel } from '@/lib/booking/groupNames'
 import type { GroupDraft } from './groupRows'
 
 // Kotak "Rombongan" di editor draf dan revisi (docs/arsitektur-booking-engine-v2.md §10.8, 11d-2a). Draf mengatur ukuran rombongan di sini; revisi memindahkan

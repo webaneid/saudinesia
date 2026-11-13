@@ -1,3 +1,4 @@
+import { ItemNotBookableError } from './errors'
 // Anggota Paket Umroh / Haji per jamaah booking (docs/rencana-visa-produk.md §3.3, K2 "otomatis urut", K4 "visa dobel ditolak"). Fungsi di sini MURNI:
 // pemanggil (lib/booking/lineItems.ts saat pesan, lib/booking/revise.ts saat revisi) memuat keadaan lalu menulis hasilnya — SATU aturan pembagian.
 //
@@ -89,11 +90,9 @@ export function assignInGroups(
   return { ok: true, members: out }
 }
 
-/** Pesan galat untuk pengguna (Jamaah ke-N dihitung dari 1). */
-export function memberProblem(r: Exclude<GroupedMemberResult, { ok: true }>, packageName: (key: string) => string): string {
-  if (r.reason === 'mixed_groups') return 'Paket Umroh/Haji untuk semua jamaah tidak dapat digabung dengan paket per rombongan — pilih rombongan untuk setiap paket'
-  if (r.reason === 'too_few_pilgrims') {
-    return `Jumlah jamaah (${r.pilgrims}) kurang dari jumlah orang di ${r.what === 'package' ? 'Paket Umroh' : 'Haji'} (${r.needed}) — tambah jamaah atau kurangi jumlah orangnya`
-  }
-  return `Jamaah ke-${r.pilgrimIndex + 1} anggota ${packageName(r.packageKey)} yang visanya sudah termasuk paket — hapus visa terpisahnya`
+/** Galat berkode untuk pengguna (Jamaah ke-N dihitung dari 1) — kunci katalog `apiErrors` (docs/arsitektur-i18n-frontend.md §6.8). */
+export function memberProblem(r: Exclude<GroupedMemberResult, { ok: true }>, packageName: (key: string) => string): ItemNotBookableError {
+  if (r.reason === 'mixed_groups') return new ItemNotBookableError('membersMixed')
+  if (r.reason === 'too_few_pilgrims') return new ItemNotBookableError('membersTooFew', { pilgrims: r.pilgrims, needed: r.needed, what: r.what })
+  return new ItemNotBookableError('memberVisaIncluded', { number: r.pilgrimIndex + 1, package: packageName(r.packageKey) })
 }

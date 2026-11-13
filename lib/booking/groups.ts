@@ -1,6 +1,7 @@
 import type { BookingItemInput } from '@/lib/validators/booking'
 import type { BookingInput } from './create'
 import { ItemNotBookableError } from './errors'
+import { groupLabel } from './groupNames'
 
 // Rombongan dalam satu booking (docs/arsitektur-booking-engine-v2.md §10.8, Fase 11d). MURNI — dipakai mesin pesan (create/lineItems/ruleContext).
 // Booking tanpa `groups` = satu rombongan (perilaku lama, tak ada yang berubah). Dengan `groups` (≥ 2): jamaah dibagi ke rombongan, item menunjuk satu
@@ -32,14 +33,8 @@ export function plannedTravelFor(
   return dates[0] ?? (group !== undefined ? groups?.[group]?.plannedTravelDate : undefined) ?? fallback
 }
 
-/** Nama tampilan rombongan: nama dari pemesan, selain itu "Rombongan A/B/…" (posisi 0 → A; lewat Z → nomor). */
-export function groupLabel(label: string | null | undefined, index: number, unnamed: (mark: string) => string = m => `Rombongan ${m}`): string {
-  if (label) return label
-  return unnamed(groupMark(index))
-}
-
-/** Penanda rombongan tanpa nama: posisi 0 → "A" … 25 → "Z", sesudahnya nomor. */
-export const groupMark = (index: number): string => (index < 26 ? String.fromCharCode(65 + index) : String(index + 1))
+// Nama tampilan rombongan ada di groupNames.ts (bebas galat berkode — dipakai komponen klien admin); diteruskan dari sini untuk pemakai lama.
+export { groupLabel, groupMark } from './groupNames'
 
 /** Teks bawaan dalam bahasa halaman (halaman jamaah); tanpa ini = Indonesia (admin, invoice, ZIP). Nama yang diberi pemesan tak diterjemahkan. */
 export type GroupNames = { all: string; unnamed: (mark: string) => string }
@@ -60,16 +55,16 @@ function setPeople(item: BookingItemInput, n: number): BookingItemInput {
 export function normalizeGroups(data: BookingInput): BookingInput {
   const n = data.groups?.length ?? 0
   if (n === 0) {
-    if (data.items.some(i => i.group !== undefined) || data.pilgrims.some(p => p.group !== undefined)) throw new ItemNotBookableError('Rombongan tidak dikenal')
+    if (data.items.some(i => i.group !== undefined) || data.pilgrims.some(p => p.group !== undefined)) throw new ItemNotBookableError('groupUnknown')
     return data
   }
-  if (n < 2) throw new ItemNotBookableError('Rombongan dipakai bila lebih dari satu')
-  if (data.pilgrims.some(p => p.group === undefined || p.group < 0 || p.group >= n)) throw new ItemNotBookableError('Setiap jamaah harus masuk satu rombongan')
-  if (data.items.some(i => i.group !== undefined && (i.group < 0 || i.group >= n))) throw new ItemNotBookableError('Rombongan item tidak dikenal')
+  if (n < 2) throw new ItemNotBookableError('groupNeedsTwo')
+  if (data.pilgrims.some(p => p.group === undefined || p.group < 0 || p.group >= n)) throw new ItemNotBookableError('groupEveryPilgrim')
+  if (data.items.some(i => i.group !== undefined && (i.group < 0 || i.group >= n))) throw new ItemNotBookableError('groupItemUnknown')
   const full = { ...data, totalPilgrims: data.pilgrims.length, groupSizes: undefined } // ukuran dihitung dari jamaah LENGKAP, bukan masukan
   const sizes = groupSizes(full)
   const empty = sizes.findIndex(s => s === 0)
-  if (empty >= 0) throw new ItemNotBookableError(`${groupLabel(data.groups![empty]!.label, empty)} belum punya jamaah`)
+  if (empty >= 0) throw new ItemNotBookableError('groupEmpty', { group: groupLabel(data.groups![empty]!.label, empty) })
   return { ...full, items: data.items.map(i => setPeople(i, targetSize(full, i.group))) }
 }
 

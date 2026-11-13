@@ -19,7 +19,7 @@ import { bookingCoverage, visaRuleViolations } from '@/lib/booking/ruleContext'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import { recomputeBookingDates } from '@/lib/booking/dates'
 import { cancelBooking } from '@/lib/booking/cancel'
-import { ItemNotBookableError } from '@/lib/booking/errors'
+import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
 import { reserveFlightQuota } from '@/lib/quota'
 import { quotaAdapters } from '@/lib/quota/adapters'
 import { visaRequiredComponentsSchema, parseRequiredComponents, visaSalesModel, REQUIRED_COMPONENT_TYPES, type RequiredComponentType } from '@/lib/validators/visa'
@@ -191,11 +191,11 @@ await t('TIKET: tanggal di luar periode jadwal / jadwal nonaktif → 422 (ItemNo
   await rejectsNotBookable(() => book(data([{ itemType: 'flight', flightScheduleId: flight.id, departureDate: '2090-06-07', numPassengers: 1 }])), /tidak tersedia/)
   await prisma.flightSchedule.update({ where: { id: flight.id }, data: { isActive: true } })
 })
-await t('KURSI: ditahan (pending) → dikonfirmasi (booked) → dilepas saat batal; kursi habis → "insufficient" (409), tanpa menahan', async () => {
+await t('KURSI: ditahan (pending) → dikonfirmasi (booked) → dilepas saat batal; kursi habis → QuotaExhaustedError (409), tanpa menahan', async () => {
   const before = await seats()
   await prisma.$transaction(tx => reserveFlightQuota(tx, flight.id, 4))
   assert.equal((await seats()).pendingSeats, before.pendingSeats + 4)
-  await assert.rejects(() => prisma.$transaction(tx => reserveFlightQuota(tx, flight.id, 7)), /insufficient/)
+  await assert.rejects(() => prisma.$transaction(tx => reserveFlightQuota(tx, flight.id, 7)), (e: unknown) => e instanceof QuotaExhaustedError && e.code === 'quotaFlight')
   assert.equal((await seats()).pendingSeats, before.pendingSeats + 4, 'gagal tak menahan apa pun')
   const row = { id: 'x', bookingId: 'x', flightScheduleId: flight.id, departureDate: new Date(), numPassengers: 4, unitPrice: 0, totalPrice: 0 } as never
   await prisma.$transaction(tx => quotaAdapters.flight.confirm(tx, row))
@@ -378,8 +378,8 @@ await t('PENJAGA: aturan visa hanya di rules.ts (validator tak lagi membaca requ
   assert.ok(place.indexOf('prepareBooking(') < place.indexOf('withBookingCode(async'), 'aturan dievaluasi (prepareBooking) sebelum kuota ditahan')
   assert.match(engine, /if \(violations\.length > 0\) throw new RuleViolationError\(violations\)/)
   // Pemeta galat bersama pratinjau & pesan: aturan visa → 422 + daftar pelanggaran di meta.
-  assert.match(sim, /if \(e instanceof RuleViolationError\) return \{ ok: false, status: 422, message: e\.message, violations: e\.violations \}/)
-  assert.match(route, /const f = bookingFailure\(error\)/); assert.match(route, /meta: \{ violations: f\.violations \}/)
+  assert.match(sim, /if \(e instanceof RuleViolationError\) \{[\s\S]{0,300}?status: 422, message: e\.message, code: [\s\S]{0,200}?violations: e\.violations \}/)
+  assert.match(route, /bookingFailureJson\(bookingFailure\(error\)\)/); assert.match(sim, /\.\.\.\(f\.violations \? \{ violations: f\.violations \} : \{\}\)/)
   assert.match(engine, /case 'flight':\s*\n\s*await reserveFlightQuota\(tx, item\.flightScheduleId, item\.numPassengers\)/)
   assert.match(engine, /if \(r\.flightScheduleId\) await reserveFlightQuota\(tx, r\.flightScheduleId, item\.numPeople\)/)
   for (const f of ['lib/booking/cancel.ts', 'lib/payments/process.ts']) {

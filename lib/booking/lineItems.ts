@@ -76,12 +76,12 @@ export async function writeBookingItems(
             select: { isActive: true, period: { select: { isActive: true, periodStart: true, periodEnd: true, hotel: { select: { name: true, isActive: true } } } }, roomType: { select: { name: true } } }, // 404 bila jadwal tak ada
           })
           // Kamar/periode/hotel yang dinonaktifkan (mis. hapus-aman karena dirujuk) tidak dijual lagi — sama dengan tiket pesawat. Item lama yang tak diubah di revisi tak ditulis ulang.
-          if (!sch.isActive || !sch.period.isActive || !sch.period.hotel.isActive) throw new ItemNotBookableError('Kamar hotel ini tidak dijual lagi')
+          if (!sch.isActive || !sch.period.isActive || !sch.period.hotel.isActive) throw new ItemNotBookableError('itemHotelRoomUnavailable')
           // Tanggal menginap harus berada di periode harga jadwal yang dipilih (jadwal periode murah tak boleh dipakai untuk tanggal musim ramai).
           if (new Date(item.checkIn) < sch.period.periodStart || new Date(item.checkOut) > sch.period.periodEnd) {
-            throw new ItemNotBookableError('Tanggal menginap di luar periode harga kamar yang dipilih')
+            throw new ItemNotBookableError('itemStayOutsidePeriod')
           }
-          const point = await takePoint(tx, 'hotel', item.hotelRoomScheduleId, '', 'kamar hotel')
+          const point = await takePoint(tx, 'hotel', item.hotelRoomScheduleId, '', 'hotelRoom')
           const label = `${sch.period.hotel.name} — ${sch.roomType.name}`
           const line = lineFromPoint(point, { description: label, qty: item.nights * item.numRooms, unit: 'room_night' })
           const row = await tx.bookingHotel.create({
@@ -119,7 +119,7 @@ export async function writeBookingItems(
         case 'muthowif': {
           // muthowifId TIDAK diisi — admin assign belakangan (docs/arsitektur-muthowif.md §9).
           const service = await tx.muthowifServicePrice.findFirstOrThrow({ select: { id: true } })
-          const point = await takePoint(tx, 'muthowif', service.id, '', 'layanan muthowif')
+          const point = await takePoint(tx, 'muthowif', service.id, '', 'muthowif')
           const line = lineFromPoint(point, { description: 'Layanan Muthowif', qty: item.numDays * item.numPeople, unit: 'person_day' })
           const row = await tx.bookingMuthowif.create({
             data: {
@@ -153,13 +153,13 @@ export async function writeBookingItems(
           const tour = await tx.tourPackage.findUniqueOrThrow({ where: { id: item.tourPackageId }, select: { name: true } })
           const lines = await tourPackageLines(tx, item, tour.name, breakdown, transportQuotaId)
           const totalPrice = sumSell(lines)
-          if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket ziarah belum ditetapkan')
+          if (!(totalPrice > 0)) throw new ItemNotBookableError('itemPriceNotSet', { what: 'tourPackage' })
           let tourDate: Date
           if (transportQuotaId) {
             tourDate = (await tx.transportQuota.findUniqueOrThrow({ where: { id: transportQuotaId }, select: { travelDate: true } })).travelDate
           } else {
             const d = item.tourDate ?? data.departureDate
-            if (!d) throw new ItemNotBookableError('Tanggal paket ziarah wajib diisi')
+            if (!d) throw new ItemNotBookableError('itemTourDateRequired')
             tourDate = new Date(d)
           }
           const row = await tx.bookingTourPackage.create({
@@ -176,9 +176,9 @@ export async function writeBookingItems(
         }
         case 'haji': {
           const haji = await tx.hajiProduct.findUniqueOrThrow({ where: { id: item.hajiProductId }, select: { name: true } })
-          const lines = await compositeLines(tx, { ownerType: 'haji', ownerId: item.hajiProductId, what: 'produk haji', label: haji.name, multiplier: item.numPersons })
+          const lines = await compositeLines(tx, { ownerType: 'haji', ownerId: item.hajiProductId, what: 'haji', label: haji.name, multiplier: item.numPersons })
           const totalPrice = sumSell(lines)
-          if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga produk haji belum ditetapkan')
+          if (!(totalPrice > 0)) throw new ItemNotBookableError('itemPriceNotSet', { what: 'haji' })
           const row = await tx.bookingHaji.create({
             data: { bookingId, groupId: gid(item), hajiProductId: item.hajiProductId, numPersons: item.numPersons, totalPrice },
           })
@@ -191,12 +191,12 @@ export async function writeBookingItems(
             where: { id: item.flightScheduleId },
             select: { isActive: true, departureFrom: true, departureTo: true, route: { select: { origin: true, destination: true } } },
           })
-          if (!sch || !sch.isActive) throw new ItemNotBookableError('Jadwal tiket pesawat tidak tersedia')
+          if (!sch || !sch.isActive) throw new ItemNotBookableError('itemFlightUnavailable')
           // Tanggal terbang harus di periode harga/kuota jadwal yang dipilih (jadwal periode murah tak boleh dipakai di luar periodenya).
           if (item.departureDate < calendarDateOf(sch.departureFrom) || item.departureDate > calendarDateOf(sch.departureTo)) {
-            throw new ItemNotBookableError(`Tanggal terbang di luar periode jadwal tiket (${day(sch.departureFrom)} – ${day(sch.departureTo)})`)
+            throw new ItemNotBookableError('itemFlightOutsidePeriod', { fromDate: calendarDateOf(sch.departureFrom), toDate: calendarDateOf(sch.departureTo) })
           }
-          const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'tiket pesawat')
+          const point = await takePoint(tx, 'flight', item.flightScheduleId, '', 'flight')
           flightDates.push({ date: item.departureDate, group: item.group })
           const label = `Tiket ${sch.route.origin} → ${sch.route.destination}`
           const line = lineFromPoint(point, { description: label, qty: item.numPassengers, unit: 'person' })
@@ -213,7 +213,7 @@ export async function writeBookingItems(
           const r = packageResolved[packageIdx++]!
           const lines = await packageLines(tx, item.packageId, r, item.numPeople)
           const totalPrice = sumSell(lines)
-          if (!(totalPrice > 0)) throw new ItemNotBookableError('Harga paket umroh belum ditetapkan')
+          if (!(totalPrice > 0)) throw new ItemNotBookableError('itemPriceNotSet', { what: 'umrahPackage' })
           const row = await tx.bookingPackage.create({
             data: {
               bookingId, groupId: gid(item), packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
@@ -252,7 +252,7 @@ export async function writeBookingItems(
     if (!p.visaProductId) {
       if (fromPackage) {
         const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
-        if (!vp) throw new ItemNotBookableError('Produk visa paket tidak tersedia')
+        if (!vp) throw new ItemNotBookableError('itemPackageVisaUnavailable')
         // Tanpa baris harga: visa ini sudah dibayar lewat baris paket (Σ snapshot tetap = total).
         await tx.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaProductId: fromPackage, visaType: vp.visaType, status: 'pending_documents', plannedTravelDate } })
       }
@@ -260,7 +260,7 @@ export async function writeBookingItems(
     }
 
     const visaProduct = await tx.visaProduct.findUnique({ where: { id: p.visaProductId }, select: { name: true, visaType: true, isActive: true } })
-    if (!visaProduct || !visaProduct.isActive) throw new ItemNotBookableError('Produk visa tidak tersedia')
+    if (!visaProduct || !visaProduct.isActive) throw new ItemNotBookableError('itemVisaUnavailable')
     const point = await takeVisaTier(tx, p.visaProductId, p.selectedDurationDays ?? DEFAULT_DURATION_PROBE_DAY, 'visa')
     const label = /visa/i.test(visaProduct.name) ? visaProduct.name : `Visa ${visaProduct.name}`
     const line = lineFromPoint(point, { description: label, qty: 1, unit: 'person' })
@@ -293,7 +293,7 @@ function assignByGroup(
   hajiRows: ReadonlyArray<{ key: string; numPeople: number; group?: number }>,
 ): MemberAssignment[] {
   const r = assignInGroups(packageRows, hajiRows, data.pilgrims.map(p => ({ ...blankMember(p), group: p.group })), data.groups?.length ?? 0)
-  if (!r.ok) throw new ItemNotBookableError(memberProblem(r, k => packageRows.find(x => x.key === k)?.name ?? 'paket'))
+  if (!r.ok) throw memberProblem(r, k => packageRows.find(x => x.key === k)?.name ?? 'paket')
   return r.members
 }
 
@@ -303,7 +303,12 @@ async function createPilgrim(
   links: { bookingPackageId: string | null; bookingHajiId: string | null; groupId: string | null },
 ) {
   const sealed = await sealNewPilgrim(tx, visaProductId, values)
-  if (!sealed.ok) throw new ItemNotBookableError(Object.values(sealed.errors)[0] ?? 'Data jamaah tidak valid')
+  if (!sealed.ok) {
+    // Isian jamaah tak sah: label kolom (data admin) untuk pelanggan, rincian Indonesia untuk admin (pola `fieldInvalid` I6a).
+    const [key, detail] = Object.entries(sealed.errors)[0] ?? []
+    const label = key ? sealed.labels?.[key] : undefined
+    throw label ? new ItemNotBookableError('fieldInvalid', { label }, detail) : new ItemNotBookableError('pilgrimDataInvalid', undefined, detail)
+  }
   return tx.bookingPilgrim.create({ data: { bookingId, fieldValues: sealed.values as Prisma.InputJsonValue, ...sealed.columns, ...links }, select: { id: true } })
 }
 
@@ -328,19 +333,19 @@ async function tourPackageLines(
       })
     }
   }
-  const lines = await compositeLines(tx, { ownerType: 'tour_package', ownerId: item.tourPackageId, what: 'paket ziarah', label: name, multiplier: 1, parts })
+  const lines = await compositeLines(tx, { ownerType: 'tour_package', ownerId: item.tourPackageId, what: 'tourPackage', label: name, multiplier: 1, parts })
 
   if (breakdown.transportMode === 'user_choice' && transportQuotaId) {
     const quota = await tx.transportQuota.findUniqueOrThrow({ where: { id: transportQuotaId }, select: { pricingId: true } })
     const option = breakdown.vehicleOptions.find(v => v.transportPricingId === quota.pricingId)
-    if (!option) throw new ItemNotBookableError('Kendaraan yang dipilih tidak tersedia untuk paket ini')
-    const point = await takePoint(tx, 'transport', quota.pricingId, '', 'kendaraan pilihan')
+    if (!option) throw new ItemNotBookableError('itemChoiceNotOffered', { choice: 'transport' })
+    const point = await takePoint(tx, 'transport', quota.pricingId, '', 'chosenVehicle')
     lines.push(lineFromPoint(point, { lineKey: 'kendaraan-pilihan', description: `Kendaraan pilihan: ${option.vehicleName}`, qty: 1, unit: 'vehicle' }))
   }
   if (breakdown.hotelMode === 'user_choice' && item.chosenHotelRoomScheduleId && item.chosenHotelNumRooms) {
     const option = breakdown.hotelOptions.find(o => o.hotelRoomScheduleId === item.chosenHotelRoomScheduleId)
-    if (!option) throw new ItemNotBookableError('Hotel yang dipilih tidak tersedia untuk paket ini')
-    const point = await takePoint(tx, 'hotel', item.chosenHotelRoomScheduleId, '', 'hotel pilihan')
+    if (!option) throw new ItemNotBookableError('itemChoiceNotOffered', { choice: 'hotel' })
+    const point = await takePoint(tx, 'hotel', item.chosenHotelRoomScheduleId, '', 'chosenHotel')
     lines.push(lineFromPoint(point, {
       lineKey: 'hotel-pilihan', description: `Hotel pilihan: ${option.hotelName} — ${option.roomTypeName}`, qty: option.nights * item.chosenHotelNumRooms, unit: 'room_night',
     }))

@@ -23,7 +23,11 @@ export type RuleViolation = {
   visaProductId: string
   visaName: string
   missing: RequiredComponentType | 'rule'
+  /** Teks Indonesia (admin, `/id`) — rincian kategori transport hanya di sini. */
   message: string
+  /** Kunci katalog `apiErrors` + parameter untuk pelanggan berbahasa lain (docs/arsitektur-i18n-frontend.md §6.8). */
+  code: 'visaRequires' | 'visaRuleInvalid'
+  params: { visa: string; component?: RequiredComponentType }
 }
 
 function satisfied(c: RequiredComponent, cov: BookingCoverage): boolean {
@@ -65,12 +69,12 @@ export function evaluateVisaRules(visas: readonly VisaRuleSubject[], coverage: B
     seen.add(v.visaProductId)
     const { components, invalid } = parseRequiredComponents(v.requiredComponents)
     if (invalid) {
-      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: 'rule', message: `Aturan produk ${v.visaName} tidak valid — hubungi admin` })
+      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: 'rule', message: `Aturan produk ${v.visaName} tidak valid — hubungi admin`, code: 'visaRuleInvalid', params: { visa: v.visaName } })
       continue
     }
     for (const c of components) {
       if (satisfied(c, coverage)) continue
-      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: c.type, message: `${v.visaName} mewajibkan ${describe(c)} dalam booking yang sama` })
+      out.push({ visaProductId: v.visaProductId, visaName: v.visaName, missing: c.type, message: `${v.visaName} mewajibkan ${describe(c)} dalam booking yang sama`, code: 'visaRequires', params: { visa: v.visaName, component: c.type } })
     }
   }
   return out

@@ -5,7 +5,7 @@ import type { BookingItemInput } from '@/lib/validators/booking'
 import { computePackageBreakdown, perPersonShare, type PackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import { compositeLines, lineFromPoint, peekCost, takePoint, takeVisaTier, type CompositePart, type SnapshotLine } from '@/lib/pricing/engine/snapshot'
-import { addDays, calendarDateOf, daysBetween, dbDateOf, formatCalendarDate, type CalendarDate } from '@/lib/time'
+import { addDays, calendarDateOf, daysBetween, dbDateOf, type CalendarDate } from '@/lib/time'
 
 // Item Paket Umroh (docs/arsitektur-booking-engine-v2.md §10.2): dijual PER ORANG (P1), satu item booking yang di invoice diurai satu baris per komponen × jumlah orang (P2),
 // tanggal berangkat dipilih saat booking (P3). Resolusi (validasi pilihan + tanggal + cakupan aturan) dilakukan SEKALI sebelum transaksi; harga dibaca di dalam transaksi.
@@ -28,30 +28,31 @@ export type PackageResolved = {
   coverage: { flight: boolean; hotelMakkah: boolean; hotelMadinah: boolean; transport: { tripId: string; category: string } | null; muthowif: boolean; catering: boolean }
 }
 
-const notApplicable = (what: string) => new ItemNotBookableError(`Pilihan ${what} tidak berlaku untuk paket ini`)
-const notInOptions = (what: string) => new ItemNotBookableError(`${what} yang dipilih tidak tersedia untuk paket ini`)
+type Choice = 'hotel_makkah' | 'hotel_madinah' | 'transport' | 'visa' | 'flight' | 'catering'
+const notApplicable = (choice: Choice) => new ItemNotBookableError('itemChoiceNotApplicable', { choice })
+const notInOptions = (choice: Choice) => new ItemNotBookableError('itemChoiceNotOffered', { choice })
 
 export async function resolvePackageItem(item: PackageInput): Promise<PackageResolved> {
   const pkg = await prisma.package.findUnique({ where: { id: item.packageId }, select: { name: true, isActive: true } })
-  if (!pkg || !pkg.isActive) throw new ItemNotBookableError('Paket umroh tidak tersedia')
+  if (!pkg || !pkg.isActive) throw new ItemNotBookableError('itemPackageUnavailable')
   const b = await computePackageBreakdown(item.packageId)
   const c = item.choices
-  if (b.muthowifMode === 'user_choice') throw new ItemNotBookableError('Paket ini memakai muthowif pilihan — belum dapat dipesan, hubungi admin')
+  if (b.muthowifMode === 'user_choice') throw new ItemNotBookableError('itemPackageMuthowifChoice')
 
   // Pilihan hanya berlaku untuk komponen `user_choice` dan harus ada di daftar opsi paket (dulu diam-diam bernilai 0 di Paket Ziarah — §12).
-  const pick = <T,>(mode: string, value: T | undefined, what: string, ok: (v: T) => boolean): T | undefined => {
+  const pick = <T,>(mode: string, value: T | undefined, what: Choice, ok: (v: T) => boolean): T | undefined => {
     if (value === undefined) return undefined
     if (mode !== 'user_choice') throw notApplicable(what)
     if (!ok(value)) throw notInOptions(what)
     return value
   }
   const choices: PackageChoices = {
-    hotelMakkahScheduleId: pick(b.hotelMakkahMode, c.hotelMakkahScheduleId, 'Hotel Makkah', v => b.hotelMakkahOptions.some(o => o.hotelRoomScheduleId === v)),
-    hotelMadinahScheduleId: pick(b.hotelMadinahMode, c.hotelMadinahScheduleId, 'Hotel Madinah', v => b.hotelMadinahOptions.some(o => o.hotelRoomScheduleId === v)),
-    transportPricingId: pick(b.transportMode, c.transportPricingId, 'Kendaraan', v => b.vehicleOptions.some(o => o.transportPricingId === v)),
-    visaProductId: pick(b.visaMode, c.visaProductId, 'Visa', v => b.visaOptions.some(o => o.visaProductId === v)),
-    flightScheduleId: pick(b.flightMode, c.flightScheduleId, 'Tiket pesawat', v => b.flightOptions.some(o => o.flightScheduleId === v)),
-    cateringOptionId: pick(b.cateringMode, c.cateringOptionId, 'Katering', v => b.cateringOptions.some(o => o.cateringOptionId === v)),
+    hotelMakkahScheduleId: pick(b.hotelMakkahMode, c.hotelMakkahScheduleId, 'hotel_makkah', v => b.hotelMakkahOptions.some(o => o.hotelRoomScheduleId === v)),
+    hotelMadinahScheduleId: pick(b.hotelMadinahMode, c.hotelMadinahScheduleId, 'hotel_madinah', v => b.hotelMadinahOptions.some(o => o.hotelRoomScheduleId === v)),
+    transportPricingId: pick(b.transportMode, c.transportPricingId, 'transport', v => b.vehicleOptions.some(o => o.transportPricingId === v)),
+    visaProductId: pick(b.visaMode, c.visaProductId, 'visa', v => b.visaOptions.some(o => o.visaProductId === v)),
+    flightScheduleId: pick(b.flightMode, c.flightScheduleId, 'flight', v => b.flightOptions.some(o => o.flightScheduleId === v)),
+    cateringOptionId: pick(b.cateringMode, c.cateringOptionId, 'catering', v => b.cateringOptions.some(o => o.cateringOptionId === v)),
   }
   for (const k of Object.keys(choices) as Array<keyof PackageChoices>) if (choices[k] === undefined) delete choices[k]
 
@@ -59,9 +60,9 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
   const flightScheduleId = b.flightMode === 'included' ? b.includedFlightScheduleId : (choices.flightScheduleId ?? null)
   if (flightScheduleId) {
     const s = await prisma.flightSchedule.findUnique({ where: { id: flightScheduleId }, select: { isActive: true, departureFrom: true, departureTo: true } })
-    if (!s || !s.isActive) throw new ItemNotBookableError('Tiket pesawat paket ini tidak tersedia')
+    if (!s || !s.isActive) throw new ItemNotBookableError('itemPackageFlightUnavailable')
     if (departureDate < calendarDateOf(s.departureFrom) || departureDate > calendarDateOf(s.departureTo)) {
-      throw new ItemNotBookableError(`Tanggal berangkat paket harus di antara ${formatCalendarDate(s.departureFrom)} dan ${formatCalendarDate(s.departureTo)} (periode tiket pesawat)`)
+      throw new ItemNotBookableError('itemPackageDepartureOutside', { fromDate: calendarDateOf(s.departureFrom), toDate: calendarDateOf(s.departureTo) })
     }
   }
 
@@ -80,7 +81,7 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
     const periods = await prisma.hotelRoomSchedule.findMany({ where: { id: { in: hotelIds } }, select: { period: { select: { periodStart: true, periodEnd: true, hotel: { select: { name: true } } } } } })
     for (const { period } of periods) {
       if (departureDate < calendarDateOf(period.periodStart) || returnDate > calendarDateOf(period.periodEnd)) {
-        throw new ItemNotBookableError(`Tanggal menginap di luar periode harga ${period.hotel.name} (${formatCalendarDate(period.periodStart)} – ${formatCalendarDate(period.periodEnd)})`)
+        throw new ItemNotBookableError('itemPackageStayOutside', { hotel: period.hotel.name, fromDate: calendarDateOf(period.periodStart), toDate: calendarDateOf(period.periodEnd) })
       }
     }
   }
@@ -88,7 +89,7 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
   // Visa paket (included atau dipilih) harus aktif — sama dengan visa yang dipilih jamaah sendiri (SEC-127).
   const visaProductId = b.visaMode === 'included' ? b.includedVisaProductId : (choices.visaProductId ?? null)
   if (visaProductId && !(await prisma.visaProduct.findUnique({ where: { id: visaProductId }, select: { isActive: true } }))?.isActive) {
-    throw new ItemNotBookableError('Visa paket ini tidak tersedia')
+    throw new ItemNotBookableError('itemPackageVisaUnavailable')
   }
 
   const hotelMakkah = (b.hotelMakkahMode === 'included' && b.hotelMakkah != null) || choices.hotelMakkahScheduleId !== undefined
@@ -150,14 +151,14 @@ export async function packageLines(tx: Prisma.TransactionClient, packageId: stri
       unitSellIdr: b.includedCateringPrice!, unitCostIdr: null, ref: null,
     })
   }
-  const lines = await compositeLines(tx, { ownerType: 'package', ownerId: packageId, what: 'paket umroh', label: r.name, multiplier: numPeople, parts })
+  const lines = await compositeLines(tx, { ownerType: 'package', ownerId: packageId, what: 'umrahPackage', label: r.name, multiplier: numPeople, parts })
 
   // ── pilihan pelanggan (user_choice) — harga hidup dari titik harga sub-modul ──
   const c = r.choices
   for (const [slot, id, options] of [['Makkah', c.hotelMakkahScheduleId, b.hotelMakkahOptions], ['Madinah', c.hotelMadinahScheduleId, b.hotelMadinahOptions]] as const) {
     if (!id) continue
     const o = options.find(x => x.hotelRoomScheduleId === id)!
-    const p = await takePoint(tx, 'hotel', id, '', `hotel ${slot} pilihan`)
+    const p = await takePoint(tx, 'hotel', id, '', slot === 'Makkah' ? 'chosenHotelMakkah' : 'chosenHotelMadinah')
     lines.push({
       ...lineFromPoint(p, { lineKey: `hotel-${slot.toLowerCase()}-pilihan`, description: `Hotel ${slot} pilihan: ${o.hotelName} — ${o.roomTypeName} (${o.nights} malam, ${o.occupancy} orang/kamar)`, qty: numPeople, unit: 'person' }),
       unitSellIdr: perPersonShare(o.nights * p.sellIdr, o.occupancy),
@@ -168,15 +169,15 @@ export async function packageLines(tx: Prisma.TransactionClient, packageId: stri
   if (c.visaProductId) {
     const name = b.visaOptions.find(o => o.visaProductId === c.visaProductId)!.name
     const days = Math.max(1, daysBetween(r.departureDate, r.returnDate))
-    lines.push(lineFromPoint(await takeVisaTier(tx, c.visaProductId, days, 'visa pilihan'), { lineKey: 'visa-pilihan', description: `Visa pilihan: ${name}`, qty: numPeople, unit: 'person' }))
+    lines.push(lineFromPoint(await takeVisaTier(tx, c.visaProductId, days, 'chosenVisa'), { lineKey: 'visa-pilihan', description: `Visa pilihan: ${name}`, qty: numPeople, unit: 'person' }))
   }
   if (c.flightScheduleId) {
     const label = b.flightOptions.find(o => o.flightScheduleId === c.flightScheduleId)!.label
-    lines.push(lineFromPoint(await takePoint(tx, 'flight', c.flightScheduleId, '', 'tiket pilihan'), { lineKey: 'tiket-pilihan', description: `Tiket pesawat pilihan: ${label}`, qty: numPeople, unit: 'person' }))
+    lines.push(lineFromPoint(await takePoint(tx, 'flight', c.flightScheduleId, '', 'chosenFlight'), { lineKey: 'tiket-pilihan', description: `Tiket pesawat pilihan: ${label}`, qty: numPeople, unit: 'person' }))
   }
   if (c.transportPricingId) {
     const name = b.vehicleOptions.find(o => o.transportPricingId === c.transportPricingId)!.vehicleName
-    lines.push(lineFromPoint(await takePoint(tx, 'transport', c.transportPricingId, '', 'kendaraan pilihan'), { lineKey: 'kendaraan-pilihan', description: `Kendaraan pilihan: ${name}`, qty: 1, unit: 'vehicle' }))
+    lines.push(lineFromPoint(await takePoint(tx, 'transport', c.transportPricingId, '', 'chosenVehicle'), { lineKey: 'kendaraan-pilihan', description: `Kendaraan pilihan: ${name}`, qty: 1, unit: 'vehicle' }))
   }
   if (c.cateringOptionId) {
     const o = b.cateringOptions.find(x => x.cateringOptionId === c.cateringOptionId)!

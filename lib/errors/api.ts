@@ -40,12 +40,43 @@ for (const [k, v] of Object.entries(CATALOG) as [ApiErrorCode, string][]) if (!v
 
 export const codeOfText = (text: string): ApiErrorCode | undefined => BY_TEXT.get(text)
 
+// Pesan Zod bertemplat (mis. `Maksimal ${CHECKOUT_MAX_PEOPLE} orang per pesanan`): pola katalog dengan argumen SEDERHANA `{nama}` (tanpa select/plural)
+// dicocokkan sebagai regex; argumen bilangan bulat dikembalikan sebagai angka. Teks statis tetap lewat `codeOfText`.
+const PATTERNS: { code: ApiErrorCode; re: RegExp; names: string[] }[] = []
+for (const [k, v] of Object.entries(CATALOG) as [ApiErrorCode, string][]) {
+  if (!v.includes('{') || /\{\w+,/.test(v)) continue
+  const names: string[] = []
+  const parts = v.split(/\{(\w+)\}/)
+  // Dua argumen tanpa teks pemisah = pola ambigu (backtracking berlipat) — tak dicocokkan; dijaga scripts/test-api-errors.ts.
+  if (parts.some((part, i) => i % 2 === 0 && part === '' && i > 0 && i < parts.length - 1)) continue
+  const re = parts.map((part, i) => (i % 2 ? (names.push(part), '(.+?)') : part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))).join('')
+  PATTERNS.push({ code: k, re: new RegExp(`^${re}$`), names })
+}
+
+/** Pesan Zod di proyek ini pendek; teks lebih panjang tak pernah dicocokkan ke pola (batas kerja regex atas masukan tak tepercaya). */
+export const MATCH_TEXT_MAX = 300
+
+/** Teks (statis atau dari pola katalog berargumen sederhana) → kode + parameter. */
+export function matchText(text: string): { code: ApiErrorCode; params?: ApiErrorParams } | undefined {
+  const code = BY_TEXT.get(text)
+  if (code) return { code }
+  if (text.length > MATCH_TEXT_MAX) return undefined
+  for (const p of PATTERNS) {
+    const m = p.re.exec(text)
+    if (!m) continue
+    const params: ApiErrorParams = {}
+    p.names.forEach((n, i) => { const v = m[i + 1]!; params[n] = /^\d{1,9}$/.test(v) ? Number(v) : v })
+    return { code: p.code, params }
+  }
+  return undefined
+}
+
 /** Galat Zod → 400. Pesan dikenal → berkode; tak dikenal → teks apa adanya tanpa kode (klien `/en` memakai teks gagal bawaan, I6-1). */
 export function zodFailure(error: z.ZodError, status = 400): NextResponse {
   const issue = error.issues[0]
   const field = issue?.path.length ? issue.path.join('.') : undefined
-  const code = issue ? codeOfText(issue.message) : 'invalidInput'
-  if (code) return apiErrorJson(code, status, { ...(field ? { field } : {}) })
+  const hit = issue ? matchText(issue.message) : { code: 'invalidInput' as const }
+  if (hit) return apiErrorJson(hit.code, status, { ...(hit.params ? { params: hit.params } : {}), ...(field ? { field } : {}) })
   return NextResponse.json({ success: false, error: issue?.message ?? apiErrorText('invalidInput'), ...(field ? { meta: { field } } : {}) }, { status })
 }
 

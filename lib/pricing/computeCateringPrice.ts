@@ -26,12 +26,12 @@ export async function computeCateringBookingPrice(
   db: Pick<Prisma.TransactionClient, 'cateringOption' | 'pricePoint' | 'priceSnapshot' | 'season'> = prisma,
 ): Promise<CateringBookingPrice> {
   const option = await db.cateringOption.findUnique({ where: { id: input.cateringOptionId }, select: { isActive: true } })
-  if (!option || !option.isActive) throw new ItemNotBookableError('Paket katering tidak tersedia.')
+  if (!option || !option.isActive) throw new ItemNotBookableError('itemCateringUnavailable')
   const season = await detectSeason(input.startDate, db)
   const point = await readPoint(db, 'catering', input.cateringOptionId, `season:${season}`)
   const pricePerPersonPerDay = point?.sellIdr ?? 0
   if (!point || !Number.isFinite(pricePerPersonPerDay) || pricePerPersonPerDay <= 0) {
-    throw new ItemNotBookableError('Paket katering ini belum berharga untuk periode tersebut — hubungi admin.')
+    throw new ItemNotBookableError('itemCateringNoPrice')
   }
   const totalPrice = Math.round(pricePerPersonPerDay * input.numDays * input.numPeople * 100) / 100
   return { season, pricePerPersonPerDay, totalPrice, point }

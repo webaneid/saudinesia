@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
-import { assignMuthowifToBooking } from '@/lib/muthowif/assign'
+import { assignMuthowifToBooking, MuthowifAssignError } from '@/lib/muthowif/assign'
+import { QuotaExhaustedError } from '@/lib/booking/errors'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
 
@@ -54,8 +55,8 @@ export async function POST(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Muthowif tidak ditemukan'), { status: 404 })
-    // Galat domain (sudah di-assign, nonaktif, kapasitas) = Error polos → 409 dengan pesannya; galat Prisma (ber-`code`) tak pernah dibocorkan.
-    if (e instanceof Error && !('code' in e)) {
+    // Galat domain dikenali dari KELASNYA (sudah di-assign, nonaktif, kapasitas) → 409 dengan pesannya; galat lain (termasuk Prisma) → 500 tanpa bocor.
+    if (e instanceof MuthowifAssignError || e instanceof QuotaExhaustedError) {
       return NextResponse.json(err(e.message), { status: 409 })
     }
     console.error('[admin/bookings/[id]/muthowif/assign/POST]', e)

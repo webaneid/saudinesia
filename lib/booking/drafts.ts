@@ -7,7 +7,7 @@ import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
-import { ItemNotBookableError, itemIndexOf } from './errors'
+import { ItemNotBookableError, QuotaExhaustedError, itemIndexOf } from './errors'
 import { isSerializationConflict, retrySerializable } from './serializable'
 import { partialItemTotals } from './partialTotals'
 import { simulateBooking, type BookingPreview } from './simulate'
@@ -169,7 +169,7 @@ function failureOf(e: unknown): DraftError {
   if (e instanceof RuleViolationError) return { ok: false, status: 422, message: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError) return { ok: false, status: 422, message: e.message }
   if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message }
-  if (e instanceof Error && (e.message.includes('insufficient') || e.message.includes('capacity'))) return { ok: false, status: 409, message: e.message }
+  if (e instanceof QuotaExhaustedError) return { ok: false, status: 409, message: e.message }
   // Bentrok serialisasi yang masih tersisa setelah diulang (retrySerializable) — mis. tiga terbit serentak pada kursi yang sama.
   if (isSerializationConflict(e)) {
     return { ok: false, status: 409, message: 'Draf sedang diproses di tempat lain — muat ulang lalu coba lagi' }

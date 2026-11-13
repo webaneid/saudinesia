@@ -1,6 +1,6 @@
 # Arsitektur — Bahasa (id/en) di seluruh front-end pelanggan
 
-> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11, I5 SELESAI 2026-11-12 (§6); I6a SELESAI 2026-11-13 (§6.7); I6b belum.**
+> **Status: RENCANA DISETUJUI (2026-11-11): K1 = (a) selalu Indonesia, K2 = (a) URL saja, K4 = (a) bertahap di I6, K5 = ditunda (Indonesia dulu); K3 dan K6 mengikuti usulan. I1, I2, I3, dan I4 SELESAI 2026-11-11, I5 SELESAI 2026-11-12 (§6); I6a SELESAI 2026-11-13 (§6.7), I6b SELESAI 2026-11-13 (§6.9) — seluruh rencana I1–I6 tuntas.**
 > Pemicu: audit front-end 2026-11-11 (`docs/arsitektur-frontend-publik.md` §8.2 butir 1) dan arahan pemilik:
 > *"kita seriusi dulu bahasa ya di front-end.. default-nya bahasa Indonesia bro.. kita blm bikin select bahasa di menu.."*
 
@@ -279,4 +279,38 @@ Cakupan: auth (masuk, daftar, aktivasi, Google, lupa/atur ulang password, kontak
 **Ikut diperbaiki:** `GET /bookings/[id]/invoice` — booking akun lain kini 404 seragam (sebelumnya 401 = oracle keberadaan, dan kini akan tampil "Sesi Anda berakhir", SEC-227).
 
 **Diketahui:** label kolom data jamaah di param (`fieldInvalid{label}`) adalah data admin → tetap seperti diisi; galat tanpa kode di `/en` jatuh ke teks bawaan formulir.
+
+### 6.8 I6b — rencana rinci (recheck 2026-11-13)
+
+Recheck: klien tersisa `CheckoutForm`, `CartView`, `useCheckoutPreview` (+ `CheckoutSummary` menampilkan `violations[].message`). Route: `POST /bookings`, `POST /bookings/preview` (teks `err(...)` + `bookingFailure`). Sumber galat mesin pesan:
+
+| Sumber | Jumlah | Rencana |
+|---|---|---|
+| `ItemNotBookableError(teks)` | 37 titik di `lib/booking/*`, `lib/quota`, `lib/pricing` | Konstruktor menjadi `(kode, params?, rinci?)`; `message` = `rinci` ?? teks `id` katalog (admin dan log tak berubah). Label harga (`'kamar hotel'`, `'paket umroh'`…) jadi KUNCI `what` yang dipilih ICU `select` di kedua bahasa. Tanggal periode = param `…Date` (`YYYY-MM-DD`). |
+| Galat kuota (`Error('Hotel quota insufficient…')`, 6) | `lib/quota/index.ts`, `adapters/haji.ts` | Kelas `QuotaExhaustedError(kode, params)` berpesan Indonesia; pemeta 409 memakai `instanceof`, bukan pencocokan kata `insufficient` (`simulate.ts`, `drafts.ts`, `revise.ts`). Admin ikut mendapat pesan Indonesia. |
+| Pelanggaran aturan visa | `lib/booking/rules.ts` | Setiap pelanggaran membawa `code` (`visaRequires`/`visaRuleInvalid`) + `params` (`visa`, `component` = kunci jenis); `message` Indonesia tetap (rincian kategori transport hanya di `/id`). |
+| `memberProblem`, rombongan, data jamaah (`sealNewPilgrim`) | `members.ts`, `groups.ts`, `lineItems.ts` | Kode berparameter; data jamaah = `fieldInvalid{label}` dengan teks rinci (pola I6a). |
+| `bookingFailure` | `simulate.ts` | Mengembalikan `code` + `params`; bentrok serialisasi / P2025 / invoice = kode. Route menjawab `meta: { code, params, violations }`. |
+| Route & tanggal | `bookings/route.ts`, `preview/route.ts`, `lib/checkout/dates.ts` | `apiErrorJson`/`zodFailure`; pesan Zod `lib/validators/checkout.ts` masuk katalog. |
+| Klien | 3 berkas | `useApiError` untuk galat utama dan SETIAP pelanggaran; `CLIENT_PENDING_I6B` dihapus dari penjaga. |
+
+Penjaga `scripts/test-api-errors.ts` diperluas: `ItemNotBookableError`/`QuotaExhaustedError` hanya menerima kunci katalog; tidak ada lagi `throw new Error('… insufficient …')`; pemeta 409 tidak mencocokkan teks; validator checkout di katalog.
+
+### 6.9 I6b (2026-11-13) — as-built
+
+| Bagian | As-built | Berkas |
+|---|---|---|
+| Galat item | `ItemNotBookableError(kode, params?, rinci?)` — `message` = rinci ?? teks `id` katalog. Barang yang dihargai = `PriceSubject` (kunci, dipilih ICU `select`); pilihan paket = kunci jenis (`hotel_makkah`, `transport`…); tanggal periode = param `fromDate`/`toDate` (kalender, diformat sesuai bahasa). Rombongan, anggota paket (`memberProblem` kini mengembalikan galat berkode), dan data jamaah (`fieldInvalid{label}`, label dari `sealNewPilgrim`) berkode. | `lib/booking/errors.ts`, `lineItems.ts`, `packageItem.ts`, `groups.ts`, `members.ts`, `create.ts`, `lib/pricing/engine/{read,snapshot}.ts`, `computeCateringPrice.ts`, `lib/pilgrims/bookingLink.ts` |
+| Galat kuota | `QuotaExhaustedError(kode, {need, have})` berpesan Indonesia (sebelumnya "Hotel quota insufficient: need 10, have 0" — juga untuk admin). 409 dikenali lewat `instanceof` di `simulate.ts`, `drafts.ts`, `revise.ts`. | `lib/quota/index.ts`, `lib/quota/adapters/haji.ts` |
+| Aturan visa | Setiap `RuleViolation` membawa `code` (`visaRequires`/`visaRuleInvalid`) + `params {visa, component}`; `message` Indonesia tetap (rincian kategori transport hanya di `/id`). | `lib/booking/rules.ts` |
+| Pemeta | `bookingFailure` → `{ status, message, code, params?, violations? }`; `bookingFailureJson` = satu bentuk respons untuk `POST /bookings` dan pratinjau. Setelan invoice rusak → `orderNotIssuable`: `message` membawa rincian untuk admin, `bookingFailureJson` mengirim teks katalog saja ke pelanggan (SEC-230). | `lib/booking/simulate.ts` |
+| Pemakai lain galat kuota | Rute assign muthowif admin mengenali galat domain dari KELASNYA (`MuthowifAssignError`, `QuotaExhaustedError`) → 409; dulu `!('code' in e)` sehingga `QuotaExhaustedError` (ber-`code`) jadi 500 (SEC-229). | `lib/muthowif/assign.ts`, `app/api/v1/admin/bookings/[id]/muthowif/assign/route.ts` |
+| Route & Zod | `apiErrorJson`/`zodFailure`; pesan Zod bertemplat (`Maksimal ${N} …`) dikenali lewat `matchText` (pola katalog berargumen sederhana → kode + params; teks > `MATCH_TEXT_MAX` = 300 tak dicocokkan, pola dengan argumen berdempet dilewati — SEC-231). | `app/api/v1/bookings/{route,preview/route}.ts`, `lib/checkout/dates.ts`, `lib/errors/api.ts` |
+| Klien | `CheckoutForm`, `CartView`, `useCheckoutPreview` memakai `useApiError` — juga untuk SETIAP pelanggaran visa. | `app/[locale]/(public)/{checkout,keranjang}` |
+| Batas klien | `groupLabel`/`groupMark` dipindah ke `lib/booking/groupNames.ts` (murni) supaya editor draf admin (klien) tak menarik katalog pesan + `next/server` lewat `groups.ts → errors.ts`. | `lib/booking/groupNames.ts` |
+| Penjaga | `scripts/test-api-errors.ts` + : `ItemNotBookableError`/`QuotaExhaustedError` hanya kunci katalog di seluruh `lib/`+`app/`; tak ada galat kuota tanpa kode atau pencocokan teks `insufficient`; opsi ICU `select` = daftar kunci di kode (`PriceSubject`, `Choice`, `REQUIRED_COMPONENT_TYPES`); `bookingFailure` berkode; pesan Zod bertemplat berkode; tak ada berkas `'use client'` yang menjangkau `lib/errors/api.ts` lewat rantai impor. Pengecualian klien `CLIENT_PENDING_I6B` dihapus. Mutasi M1–M6 semua merah. | |
+
+**Bukti (2026-11-13, salinan DB audit, port 6270):** keranjang dua entri kamar yang sama → `/en` "Not enough hotel rooms: 10 needed, 0 left.", `/id` "Kamar hotel tidak cukup: dibutuhkan 10, tersisa 0" (409); visa berkomponen wajib (dipasang sementara di salinan audit, lalu dikembalikan) → `/en` "Visa Umroh Istidhofah requires a flight ticket / a Makkah hotel in the same booking.", `/id` teks server; curl pratinjau: 60 kamar → `maxRooms{max:50}`, tanggal lampau → `dateInPast`, di luar periode → `itemStayOutsidePeriod`, id tak ada → `productNotFound`, check-out sebelum check-in → `checkOutAfterCheckIn`. Tampilan HP 375 px tanpa geser horizontal. Suite penuh lulus di DB sekali pakai; build 0 error.
+
+**Diketahui:** pesan Zod bawaan (mis. kolom wajib hilang dari permintaan buatan) tak berkode → `/en` memakai teks gagal bawaan formulir (I6-1); nama produk/rombongan/label kolom di params = data admin, tampil seperti diisi.
 
