@@ -10,7 +10,7 @@ import { NextResponse } from 'next/server'
 import { apiErrorText, type ApiErrorCode } from '@/lib/errors/api'
 import type { ApiErrorParams } from '@/lib/errors/params'
 import { ItemNotBookableError, QuotaExhaustedError, itemIndexOf } from './errors'
-import { isSerializationConflict } from './serializable'
+import { isRetryableConflict } from './serializable'
 import type { RuleViolation } from './rules'
 
 // Pratinjau pesan (docs/arsitektur-booking-engine-v2.md §10.3, §10.5): akibat terbit TANPA terbit — mesin yang SAMA (`prepareBooking` → `writeBooking`) dijalankan di
@@ -103,7 +103,7 @@ function failureOf(e: unknown): BookingFailure {
   // Setelan invoice bermasalah = urusan admin: rinciannya di `message` (admin), pelanggan menerima kode umum.
   if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message, code: 'orderNotIssuable' }
   // Bentrok serialisasi yang masih tersisa setelah diulang (retrySerializable) — mis. beberapa pesanan serentak pada kursi yang sama.
-  if (isSerializationConflict(e)) return { status: 409, ...coded('orderConflict') }
+  if (isRetryableConflict(e)) return { status: 409, ...coded('orderConflict') }
   // Id produk/jadwal yang (sudah) tidak ada — masukan, bukan galat server (SEC-130).
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') return { status: 422, ...coded('productNotFound') }
   throw e

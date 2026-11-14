@@ -78,7 +78,8 @@ export function rowFromItem(it: DraftItem, extra: Partial<ItemRow> = {}): ItemRo
     case 'muthowif': return r('muthowif', 'muthowif', { people: String(it.numPeople), start: it.startDate, end: it.endDate })
     case 'catering': return r('catering', it.cateringOptionId, { people: String(it.numPeople), start: it.startDate, end: it.endDate })
     case 'tourPackage': return r('tourPackage', it.tourPackageId, { people: String(it.numPeople), start: it.tourDate ?? '', rooms: String(it.chosenHotelNumRooms ?? 1), extra: { quota: it.transportQuotaId ?? '', hotel: it.chosenHotelRoomScheduleId ?? '' } })
-    case 'package': return r('package', it.packageId, { people: String(it.numPeople), start: it.departureDate, extra: {
+    case 'package': return r('package', it.packageId, { people: String(it.numPeople), extra: {
+      departure: it.departureId,
       hotelMakkah: it.choices.hotelMakkahScheduleId ?? '', hotelMadinah: it.choices.hotelMadinahScheduleId ?? '', transport: it.choices.transportPricingId ?? '',
       visa: it.choices.visaProductId ?? '', flight: it.choices.flightScheduleId ?? '', catering: it.choices.cateringOptionId ?? '',
     } })
@@ -153,13 +154,13 @@ function rowToItemBase(row: ItemRow, catalog: Catalog): { item: DraftItem } | { 
       } }
     }
     case 'package': {
-      if (!f.start) return { error: 'Isi tanggal berangkat' }
+      if (!f.extra.departure) return { error: 'Pilih keberangkatan' }
       if (n < 1) return { error: 'Jumlah orang minimal 1' }
       const choices = Object.fromEntries(Object.entries({
         hotelMakkahScheduleId: f.extra.hotelMakkah, hotelMadinahScheduleId: f.extra.hotelMadinah, transportPricingId: f.extra.transport,
         visaProductId: f.extra.visa, flightScheduleId: f.extra.flight, cateringOptionId: f.extra.catering,
       }).filter(([, v]) => !!v))
-      return { item: { itemType: 'package', packageId: f.pick, departureDate: f.start, numPeople: n, choices } }
+      return { item: { itemType: 'package', packageId: f.pick, departureId: f.extra.departure, numPeople: n, choices } }
     }
     case 'visa':
       if (!f.pick) return { error: 'Pilih produk visa' }
@@ -316,7 +317,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                     placeholder={hsel.hotel ? '— pilih tipe kamar —' : 'Pilih hotel dulu'} onChange={v => setHotel(i, { room: v })} />
                 </> : (
                   <ChoiceSelect size="sm" ariaLabel={`Produk baris ${i + 1}`} value={f.pick} disabled={!row.module || visaLocked > 0} options={optionsFor(row)}
-                    placeholder={row.module ? (optionsFor(row).length ? '— pilih produk —' : 'Memuat / belum ada produk') : 'Pilih jenis dulu'} onChange={v => setF(i, { pick: v })} />
+                    placeholder={row.module ? (optionsFor(row).length ? '— pilih produk —' : 'Memuat / belum ada produk') : 'Pilih jenis dulu'} onChange={v => setF(i, row.module === 'package' ? { pick: v, extra: { ...f.extra, departure: '' } } : { pick: v })} />
                 )}
               </div>
 
@@ -334,7 +335,17 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                   {days > 0 && <p className="m-0 text-[11px] text-admin-muted">{days} hari</p>}
                 </>}
                 {row.module === 'tourPackage' && date('Tanggal tur', 'start')}
-                {row.module === 'package' && date('Berangkat', 'start')}
+                {row.module === 'package' && <>
+                  {/* K1: paket dipesan per keberangkatan (dikelola di editor paket); tanggal pulang = berangkat + durasi paket − 1. */}
+                  <ChoiceSelect size="sm" ariaLabel={`Keberangkatan baris ${i + 1}`} value={f.extra.departure ?? ''} disabled={!pkg}
+                    placeholder={!pkg ? 'Pilih paket dulu' : pkg.departures.length ? '— pilih keberangkatan —' : 'Belum ada keberangkatan'}
+                    options={[
+                      ...(pkg?.departures ?? []).map(d => ({ id: d.id, label: `${fmt(d.departureDate)} – ${fmt(d.returnDate)}`, hint: d.seatsLeft > 0 ? `sisa ${d.seatsLeft} kursi` : 'penuh' })),
+                      // Keberangkatan item lama yang tak lagi bisa dipilih (lewat/nonaktif) tetap tampil supaya revisi tidak mengosongkannya.
+                      ...(f.extra.departure && pkg && !pkg.departures.some(d => d.id === f.extra.departure) ? [{ id: f.extra.departure, label: 'Keberangkatan sebelumnya (tidak tersedia lagi)' }] : []),
+                    ]}
+                    onChange={v => setX(i, 'departure', v)} />
+                </>}
                 {row.module === 'visa' && <>
                   <label className="flex items-center gap-2"><span className="w-14 shrink-0 whitespace-nowrap text-[11px] text-admin-muted">Tinggal</span><input type="number" min={1} className="admin-inp-xs min-w-0 flex-1" aria-label={`Lama tinggal baris ${i + 1}`} placeholder="hari" disabled={visaLocked > 0} value={f.extra.days ?? ''} onChange={e => setX(i, 'days', e.target.value)} /></label>
                   {visa && (() => { const m = visaSalesModel(parseRequiredComponents(visa.requiredComponents).components); return <p className="m-0 text-[11px] text-admin-muted">{m.plus ? `Visa plus — wajib: ${m.parts.join(', ')}` : m.label}</p> })()}

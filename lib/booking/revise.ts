@@ -13,7 +13,7 @@ import { prepareBooking, reserveItems, RuleViolationError, type BookingInput, ty
 import { writeBookingItems } from './lineItems'
 import { recomputeBookingDates } from './dates'
 import { recordRevision, type RevisionChange } from './revisionLog'
-import { isSerializationConflict, retrySerializable } from './serializable'
+import { isRetryableConflict, retrySerializable } from './serializable'
 import { ItemNotBookableError, QuotaExhaustedError, itemIndexOf, remapItemIndex } from './errors'
 import { partialItemTotals } from './partialTotals'
 import type { RuleViolation } from './rules'
@@ -85,7 +85,7 @@ function currentItems(b: State, groupOf: GroupIndexOf = storedGroupIndex(b)): Cu
     chosenHotelRoomScheduleId: r.chosenHotelRoomScheduleId ?? undefined, chosenHotelNumRooms: r.chosenHotelNumRooms ?? undefined,
   })
   for (const r of b.flights) push('flight', r.id, { itemType: 'flight', flightScheduleId: r.flightScheduleId, departureDate: cal(r.departureDate), numPassengers: r.numPassengers })
-  for (const r of b.packages) push('package', r.id, { itemType: 'package', packageId: r.packageId, departureDate: cal(r.departureDate), numPeople: r.numPeople, choices: (r.choices ?? {}) as Extract<BookingItemInput, { itemType: 'package' }>['choices'] })
+  for (const r of b.packages) push('package', r.id, { itemType: 'package', packageId: r.packageId, departureId: r.departureId ?? '', numPeople: r.numPeople, choices: (r.choices ?? {}) as Extract<BookingItemInput, { itemType: 'package' }>['choices'] })
   return out
 }
 
@@ -358,9 +358,16 @@ async function apply(tx: Tx, bookingId: string, input: BookingRevisionInput, byU
   await tx.bookingGroup.deleteMany({ where: { bookingId, id: { notIn: groupIds } } })
 
   // 3. tambah / ganti (versi baru) + visa jamaah baru/ganti — mesin pesan yang sama
-  const flightOf = (i: BookingItemInput) => (i.itemType === 'flight' || i.itemType === 'package' ? [{ date: i.departureDate, group: i.group }] : [])
-  const keptFlights = p.kept.flatMap(k => flightOf(p.full.items[k.index]!))
-  const allFlights = [...keptFlights, ...p.writes.flatMap(w => flightOf(w.item))]
+  // Tanggal tiket paket = tanggal keberangkatannya (K1) — dibaca dari resolusi isi LENGKAP (urut item paket), hanya paket bertiket (sama dengan lineItems).
+  const packageFlightDate = new Map<number, string>()
+  { let i = 0; p.full.items.forEach((it, index) => { if (it.itemType !== 'package') return; const r = prepared.full.packages[i++]!; if (r.flightScheduleId) packageFlightDate.set(index, r.departureDate) }) }
+  const flightOf = (index: number, i: BookingItemInput) => {
+    if (i.itemType === 'flight') return [{ date: i.departureDate, group: i.group }]
+    const date = i.itemType === 'package' ? packageFlightDate.get(index) : undefined
+    return date ? [{ date, group: i.group }] : []
+  }
+  const keptFlights = p.kept.flatMap(k => flightOf(k.index, p.full.items[k.index]!))
+  const allFlights = [...keptFlights, ...p.writes.flatMap(w => flightOf(w.index, w.item))]
   const grouped = groupIds.length > 0
   // Tanpa rombongan: tiket paling awal di booking (perilaku lama). Berrombongan: per rombongan (tiketnya ∪ tiket semua, lalu rencana rombongan) — tiket rombongan lain tak dipakai.
   const plannedTravel = grouped ? undefined : plannedTravelFor(allFlights, undefined, undefined, undefined)
@@ -543,7 +550,7 @@ function revisionFailureOf(e: unknown): { status: number; error: string; violati
   if (e instanceof RuleViolationError) return { status: 422, error: e.message, violations: e.violations }
   if (e instanceof ItemNotBookableError || e instanceof InvoiceError) return { status: 422, error: e.message }
   if (e instanceof QuotaExhaustedError) return { status: 409, error: 'Kuota tidak mencukupi untuk perubahan ini' }
-  if (isSerializationConflict(e)) return { status: 409, error: 'Booking sedang diproses di tempat lain — muat ulang lalu coba lagi' }
+  if (isRetryableConflict(e)) return { status: 409, error: 'Booking sedang diproses di tempat lain — muat ulang lalu coba lagi' }
   if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2025') return { status: 422, error: 'Ada produk yang tidak ditemukan lagi — pilih ulang' }
   return null
 }

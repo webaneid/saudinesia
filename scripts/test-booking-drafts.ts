@@ -221,6 +221,7 @@ await t('HAPUS draf: hapus sungguhan (baris hilang); id booking aktif → 404; C
 await t('TERBIT terikat versi yang dipratinjau: expectedUpdatedAt basi (tab lain menyimpan) → 409 tanpa menahan kursi; versi terkini → terbit', async () => {
   const did = await newDraft()
   const seen = (await prisma.booking.findUniqueOrThrow({ where: { id: did }, select: { updatedAt: true } })).updatedAt.toISOString()
+  await new Promise(r => setTimeout(r, 5)) // versi = updatedAt beresolusi milidetik; simpan di milidetik yang sama tak menggeser versi (uji flaky di pool 1 koneksi)
   assert.ok((await saveDraft(did, { ...DRAFT, dueDays: 7 })).ok) // tab lain
   const s0 = await seats()
   const stale = await publishDraft(did, { expectedUpdatedAt: seen, byUserId: staff.id })

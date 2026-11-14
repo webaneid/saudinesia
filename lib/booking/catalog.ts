@@ -3,6 +3,7 @@ import { cateringSeasonPrices, sellPrices, visaFeeRules } from '@/lib/pricing/en
 import { computePackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
 import { calendarDateOf, dbDateOf, todayInApp } from '@/lib/time'
+import { bookableDepartures } from '@/lib/packages/departures'
 
 // Pilihan produk untuk form booking admin (docs/arsitektur-booking-engine-v2.md §10.3): satu pembaca per modul, HANYA harga jual (titik harga yang sama dengan
 // katalog dan mesin pesan — pratinjau tetap sumber angka yang mengikat). Tanpa modal/HPP. Hanya produk aktif; jadwal yang sudah lewat tidak ditampilkan.
@@ -78,11 +79,12 @@ export async function bookingCatalog(module: BookingModule): Promise<unknown> {
     }
     case 'package': {
       const rows = await prisma.package.findMany({ where: { isActive: true }, orderBy: [{ name: 'asc' }, { id: 'asc' }], select: { id: true, name: true } })
-      const price = await sellPrices('package', rows.map(r => r.id))
+      const [price, departures] = await Promise.all([sellPrices('package', rows.map(r => r.id)), bookableDepartures(rows.map(r => r.id))])
       return Promise.all(rows.map(async r => {
         const b = await computePackageBreakdown(r.id)
         return {
           id: r.id, name: r.name, pricePerPerson: price.get(r.id) ?? 0,
+          departures: departures.get(r.id) ?? [], // K1: pesan per keberangkatan (tanpa catatan internal)
           modes: { hotelMakkah: b.hotelMakkahMode, hotelMadinah: b.hotelMadinahMode, transport: b.transportMode, muthowif: b.muthowifMode, visa: b.visaMode, flight: b.flightMode, catering: b.cateringMode },
           options: {
             hotelMakkah: b.hotelMakkahOptions.map(o => ({ id: o.hotelRoomScheduleId, name: `${o.hotelName} — ${o.roomTypeName} (${o.nights} malam)`, perPerson: o.perPersonPrice })),

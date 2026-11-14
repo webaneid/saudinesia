@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import type { BookingGroupInput, BookingItemInput } from '@/lib/validators/booking'
 import { normalizeGroups } from './groups'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
-import { reserveFlightQuota } from '@/lib/quota'
+import { reserveFlightQuota, reservePackageDepartureQuota } from '@/lib/quota'
 import { reserveHotel, reserveTransport, reserveMuthowifPool, reserveHaji } from '@/lib/quota/adapters'
 import { writeBookingItems, type TourPackageResolved } from './lineItems'
 import type { ItemMeta } from '@/lib/pricing/engine/snapshot'
@@ -124,7 +124,9 @@ export async function reserveItems(tx: Prisma.TransactionClient, p: PreparedBook
           break
         case 'package': {
           const r = p.packages[packageIdx++]!
-          if (r.flightScheduleId) await reserveFlightQuota(tx, r.flightScheduleId, item.numPeople) // hanya kursi tiket yang ditahan untuk paket (§10.2)
+          // Urutan kunci tetap: keberangkatan → tiket (hotel/transport paket tidak ditahan — §10.2).
+          await reservePackageDepartureQuota(tx, r.departureId, item.numPeople, r.departureDate)
+          if (r.flightScheduleId) await reserveFlightQuota(tx, r.flightScheduleId, item.numPeople)
           break
         }
       }

@@ -1,3 +1,4 @@
+import { bookableDepartures, type BookableDeparture } from '@/lib/packages/departures'
 import { prisma } from '@/lib/db'
 import { computePackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
@@ -19,7 +20,7 @@ export type Cover = { src: string; alt: string | null } | null
 /** Satu opsi pilihan. `hint` = harga jual untuk ditampilkan di samping label (per orang / per kendaraan), 0 = tanpa angka. */
 export type Choice = { id: string; label: string; hint: number; nights?: number; days?: number }
 /** Alasan produk tak dapat dipesan online — kunci `checkout.blocked.*`. */
-export type BlockedReason = 'packageMuthowifChoice' | 'packageFlightPast' | 'tourUnpriced' | 'tourNoVehicle' | 'flightUnpriced' | 'flightPast' | 'flightSoldOut'
+export type BlockedReason = 'packageMuthowifChoice' | 'packageFlightPast' | 'packageNoDeparture' | 'tourUnpriced' | 'tourNoVehicle' | 'flightUnpriced' | 'flightPast' | 'flightSoldOut'
 /** Isi paket yang sudah termasuk — kunci `checkout.package.includedItem.*` (+ malam untuk hotel). */
 export type IncludedItem = { key: 'flight' | 'hotelMakkah' | 'hotelMadinah' | 'visa' | 'transport' | 'muthowif' | 'catering'; nights?: number }
 
@@ -28,6 +29,10 @@ export type PackageCheckout = {
   /** Alasan paket tak dapat dipesan online (mis. muthowif pilihan), null = dapat. */
   blocked: BlockedReason | null
   nights: number
+  /** Durasi paket (hari); pulang = berangkat + durasi − 1. */
+  durationDays: number | null
+  /** Keberangkatan yang bisa dipilih (K1) — termasuk yang penuh (tampil mati). Tanpa catatan internal. */
+  departures: BookableDeparture[]
   /** Periode tiket yang menentukan tanggal berangkat: tiket `included`, atau per opsi tiket (`user_choice`). Label null = tanpa nama (halaman memakai teks umum). */
   includedFlight: { label: string | null; from: CalendarDate; to: CalendarDate } | null
   choices: {
@@ -118,9 +123,10 @@ export async function loadCheckoutProduct(kind: CheckoutKind, id: string): Promi
 }
 
 async function loadPackage(id: string): Promise<PackageCheckout | null> {
-  const pkg = await prisma.package.findUnique({ where: { id }, select: { id: true, name: true, description: true, isActive: true } })
+  const pkg = await prisma.package.findUnique({ where: { id }, select: { id: true, name: true, description: true, isActive: true, durationDays: true } })
   if (!pkg?.isActive) return null
-  const [b, price, covers] = await Promise.all([computePackageBreakdown(id), sellPrices('package', [id]), getFeaturedCards('package', [id])])
+  const [b, price, covers, departures] = await Promise.all([computePackageBreakdown(id), sellPrices('package', [id]), getFeaturedCards('package', [id]), bookableDepartures([id])])
+  const deps = departures.get(id) ?? []
   const today = todayInApp()
 
   const flightIds = [b.includedFlightScheduleId, ...b.flightOptions.map(o => o.flightScheduleId)].filter((x): x is string => !!x)
@@ -148,8 +154,10 @@ async function loadPackage(id: string): Promise<PackageCheckout | null> {
   const inc = b.flightMode === 'included' ? window(b.includedFlightScheduleId) : null
   return {
     kind: 'package', id: pkg.id, name: pkg.name, description: pkg.description, cover: covers.get(id) ?? null, pricePerPerson: price.get(id) ?? 0,
-    blocked: b.muthowifMode === 'user_choice' ? 'packageMuthowifChoice' : b.flightMode === 'included' && !inc ? 'packageFlightPast' : null,
+    blocked: b.muthowifMode === 'user_choice' ? 'packageMuthowifChoice' : deps.length === 0 ? 'packageNoDeparture' : b.flightMode === 'included' && !inc ? 'packageFlightPast' : null,
     nights: makkahNights + madinahNights,
+    durationDays: pkg.durationDays,
+    departures: deps,
     includedFlight: inc ? { label: b.includedFlightLabel || null, ...inc } : null,
     included,
     choices: {

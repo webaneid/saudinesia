@@ -8,7 +8,7 @@ import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { prepareBooking, writeBooking, RuleViolationError, type BookingInput } from './create'
 import { ItemNotBookableError, QuotaExhaustedError, itemIndexOf } from './errors'
-import { isSerializationConflict, retrySerializable } from './serializable'
+import { isRetryableConflict, retrySerializable } from './serializable'
 import { partialItemTotals } from './partialTotals'
 import { simulateBooking, type BookingPreview } from './simulate'
 import type { RuleViolation } from './rules'
@@ -171,7 +171,7 @@ function failureOf(e: unknown): DraftError {
   if (e instanceof InvoiceError) return { ok: false, status: 422, message: e.message }
   if (e instanceof QuotaExhaustedError) return { ok: false, status: 409, message: e.message }
   // Bentrok serialisasi yang masih tersisa setelah diulang (retrySerializable) — mis. tiga terbit serentak pada kursi yang sama.
-  if (isSerializationConflict(e)) {
+  if (isRetryableConflict(e)) {
     return { ok: false, status: 409, message: 'Draf sedang diproses di tempat lain — muat ulang lalu coba lagi' }
   }
   // Id produk/jadwal di draf yang (sudah) tidak ada — draf disimpan bebas, jadi ini masukan, bukan galat server (SEC-130 untuk jalur draf).

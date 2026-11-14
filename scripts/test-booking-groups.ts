@@ -84,9 +84,9 @@ await t('scopeToGroup: item rombongan + item semua; paket/ziarah tersaring sejal
     groups: [{}, {}],
     pilgrims: [{ group: 0 }, { group: 1 }, { group: 1 }],
     items: [
-      { itemType: 'package', packageId: U, departureDate: '2090-06-05', numPeople: 1, choices: {}, group: 0 },
+      { itemType: 'package', packageId: U, departureId: U, numPeople: 1, choices: {}, group: 0 },
       { itemType: 'flight', flightScheduleId: U, departureDate: '2090-06-05', numPassengers: 3 },
-      { itemType: 'package', packageId: U, departureDate: '2090-06-08', numPeople: 2, choices: {}, group: 1 },
+      { itemType: 'package', packageId: U, departureId: U, numPeople: 2, choices: {}, group: 1 },
     ],
   }
   const s = scopeToGroup(data, ['P0', 'P1'], [], 1)
@@ -120,7 +120,8 @@ const van = await prisma.transportVehicle.create({ data: { name: `${tag} van`, v
 const pricing = await prisma.transportPricing.create({ data: { tripId: trip.id, vehicleId: van.id } })
 await addCost('transport', pricing.id, 'sewa', 800_000); await repriceOwner('transport', pricing.id)
 const quota = await prisma.transportQuota.create({ data: { pricingId: pricing.id, travelDate: new Date('2090-06-08'), totalSeats: 10 } })
-const pkg = await prisma.package.create({ data: { name: `${tag} Paket` } })
+const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, durationDays: 9 } })
+const pkgDep = await prisma.packageDeparture.create({ data: { packageId: pkg.id, departureDate: new Date('2090-06-05'), totalSeats: 100 } }) // K1 (DB uji)
 await addCost('package', pkg.id, 'handling', 500_000); await repriceOwner('package', pkg.id)
 
 async function place(input: BookingInput): Promise<string> {
@@ -253,7 +254,7 @@ await t('mesin memeriksa ulang bentuk rombongan sebelum resolusi/kuota: rombonga
 })
 
 await t('anggota Paket per rombongan: paket rombongan A → hanya jamaah A anggotanya (jumlah = ukuran A); campuran paket "semua" + "per rombongan" ditolak 422', async () => {
-  const PKG = (group?: number) => ({ itemType: 'package' as const, packageId: pkg.id, departureDate: '2090-06-05', numPeople: 1, choices: {}, ...(group === undefined ? {} : { group }) })
+  const PKG = (group?: number) => ({ itemType: 'package' as const, packageId: pkg.id, departureId: pkgDep.id, numPeople: 1, choices: {}, ...(group === undefined ? {} : { group }) })
   const id = await place({ groups: [{}, {}], pilgrims: [{ group: 0 }, { group: 1 }, { group: 0 }], items: [PKG(0)] })
   const rows = await prisma.bookingPackage.findMany({ where: { bookingId: id }, select: { id: true, numPeople: true } })
   assert.equal(rows.length, 1); assert.equal(rows[0]!.numPeople, 2, 'jumlah = ukuran rombongan A')
@@ -379,6 +380,7 @@ await t('revisi: rombongan ditiadakan → semua baris rombongan terhapus, item/j
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────
 await prisma.booking.deleteMany({ where: { userId: user.id } }) // cascade: item, jamaah, rombongan, visa, snapshot
 const starts = { startsWith: tag }
+await prisma.packageDeparture.deleteMany({ where: { package: { name: starts } } }) // FK Restrict (K1)
 await prisma.package.deleteMany({ where: { name: starts } })
 await prisma.visaProduct.deleteMany({ where: { name: starts } })
 await prisma.flightSchedule.deleteMany({ where: { route: { origin: starts } } })

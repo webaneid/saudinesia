@@ -4,11 +4,15 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
+import { retrySerializable } from '@/lib/booking/serializable'
 import { addDays, dbDateOf, todayInApp } from '@/lib/time'
 import { packageReturnDate, seatsLeft } from '@/lib/packages/dates'
 import { departureWarnings } from '@/lib/packages/warnings'
-import { createDeparture, deleteOrDeactivateDeparture, DepartureError, listDepartures, updateDeparture } from '@/lib/packages/departures'
+import { confirmPackageDepartureQuota, releasePackageDepartureQuota, reservePackageDepartureQuota } from '@/lib/quota'
+import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
+import { bookableDepartures, createDeparture, deleteOrDeactivateDeparture, DepartureError, listDepartures, updateDeparture } from '@/lib/packages/departures'
 import { departureCreateSchema, departureUpdateSchema, packageDetailSchema, readExclusions, readItinerary } from '@/lib/validators/package'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -137,6 +141,40 @@ await t('hapus aman: belum dipesan → dihapus; sudah dipesan → dinonaktifkan 
   assert.equal(await code(deleteOrDeactivateDeparture(pkg.id, free.id)), 'departureNotFound')
 })
 
+await t('kursi (F3, lib/quota): tahan dikunci — habis 409 berkode, nonaktif/lewat 422; konfirmasi/lepas memindahkan pending/booked; daftar yang bisa dipilih', async () => {
+  const dep = await createDeparture(pkg.id, { departureDate: addDays(today, 60), totalSeats: 3 })
+  const seats = () => prisma.packageDeparture.findUniqueOrThrow({ where: { id: dep.id }, select: { pendingSeats: true, bookedSeats: true } })
+  // tanggal yang dibaca saat resolve berbeda di dalam kunci (SEC-232) → ditolak tanpa menahan
+  await assert.rejects(prisma.$transaction(tx => reservePackageDepartureQuota(tx, dep.id, 1, addDays(dep.departureDate, 1))), (e: unknown) => e instanceof ItemNotBookableError && e.code === 'itemPackageDepartureUnavailable')
+  await prisma.$transaction(tx => reservePackageDepartureQuota(tx, dep.id, 2, dep.departureDate))
+  await assert.rejects(prisma.$transaction(tx => reservePackageDepartureQuota(tx, dep.id, 2)), (e: unknown) => e instanceof QuotaExhaustedError && e.code === 'quotaPackageDeparture' && e.params?.have === 1)
+  assert.deepEqual(await seats(), { pendingSeats: 2, bookedSeats: 0 }, 'penolakan tak menahan apa pun')
+  await prisma.$transaction(tx => confirmPackageDepartureQuota(tx, dep.id, 2))
+  assert.deepEqual(await seats(), { pendingSeats: 0, bookedSeats: 2 })
+  await prisma.$transaction(tx => releasePackageDepartureQuota(tx, dep.id, 2, true))
+  assert.deepEqual(await seats(), { pendingSeats: 0, bookedSeats: 0 })
+  await updateDeparture(pkg.id, dep.id, { isActive: false })
+  await assert.rejects(prisma.$transaction(tx => reservePackageDepartureQuota(tx, dep.id, 1)), (e: unknown) => e instanceof ItemNotBookableError && e.code === 'itemPackageDepartureUnavailable')
+  const past = await prisma.packageDeparture.create({ data: { packageId: pkg.id, departureDate: dbDateOf(addDays(today, -2)), totalSeats: 5 } })
+  await assert.rejects(prisma.$transaction(tx => reservePackageDepartureQuota(tx, past.id, 1)), (e: unknown) => e instanceof ItemNotBookableError && e.code === 'itemPackageDeparturePast')
+  // dapat dipilih: aktif + belum lewat + paket berdurasi; yang penuh tetap tampil (sisa 0); tanpa catatan internal
+  const bookable = (await bookableDepartures([pkg.id])).get(pkg.id) ?? []
+  assert.ok(!bookable.some(d => d.id === dep.id || d.id === past.id), 'nonaktif/lewat tidak ditawarkan')
+  assert.ok(bookable.every(d => d.departureDate >= today && d.returnDate === addDays(d.departureDate, 8) && !('note' in d)))
+  const noDur = await prisma.package.findFirstOrThrow({ where: { name: `${tag} Tanpa Durasi` } })
+  assert.equal((await bookableDepartures([noDur.id])).get(noDur.id), undefined, 'paket tanpa durasi tak punya keberangkatan yang bisa dipilih')
+})
+
+await t('deadlock (SEC-233): transaksi booking yang kena 40P01 diulang, bukan 500', async () => {
+  const deadlock = () => new Prisma.PrismaClientKnownRequestError('deadlock detected', { code: 'P2010', clientVersion: Prisma.prismaVersion.client, meta: { code: '40P01' } })
+  let runs = 0
+  assert.equal(await retrySerializable(async () => { if (++runs === 1) throw deadlock(); return 'ok' }), 'ok')
+  assert.equal(runs, 2)
+  let other = 0
+  await assert.rejects(retrySerializable(async () => { other++; throw new Error('lain') }), /lain/)
+  assert.equal(other, 1, 'galat lain tidak diulang')
+})
+
 await t('CHECK database: kursi negatif / ditahan + terjual > total / durasi di luar 1..60 / JSON bukan array ditolak', async () => {
   const dep = (await listDepartures(pkg.id))[0]!
   for (const sql of [
@@ -150,7 +188,7 @@ await t('CHECK database: kursi negatif / ditahan + terjual > total / durasi di l
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
-await t('penjaga: tabel package_departures hanya ditulis lib/packages/departures.ts (dan kelak lib/quota untuk kursi)', () => {
+await t('penjaga: tabel package_departures hanya ditulis lib/packages/departures.ts (dan lib/quota untuk kursi)', () => {
   const root = new URL('..', import.meta.url).pathname
   const files: string[] = []
   const walk = (dir: string) => { for (const f of readdirSync(dir)) { const p = join(dir, f); if (statSync(p).isDirectory()) walk(p); else if (/\.tsx?$/.test(f)) files.push(p) } }

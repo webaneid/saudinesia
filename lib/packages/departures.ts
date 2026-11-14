@@ -148,3 +148,26 @@ function deleteOrDeactivateInTx(packageId: string, id: string): Promise<Departur
 export async function dropDeparturesOf(tx: Prisma.TransactionClient, packageId: string): Promise<void> {
   await tx.packageDeparture.deleteMany({ where: { packageId } })
 }
+
+export type BookableDeparture = { id: string; departureDate: CalendarDate; returnDate: CalendarDate; seatsLeft: number }
+
+/**
+ * Keberangkatan yang bisa DIPILIH (checkout pelanggan, form booking admin): aktif, belum lewat, paket berdurasi; urut tanggal. Termasuk yang penuh (sisa 0) supaya
+ * pelanggan melihatnya mati, bukan hilang. Hanya baca — kursi diperiksa ulang di dalam kunci saat ditahan (lib/quota). Tanpa catatan internal.
+ */
+export async function bookableDepartures(packageIds: readonly string[], db: Db = prisma): Promise<Map<string, BookableDeparture[]>> {
+  const out = new Map<string, BookableDeparture[]>()
+  if (packageIds.length === 0) return out
+  const rows = await db.packageDeparture.findMany({
+    where: { packageId: { in: [...packageIds] }, isActive: true, departureDate: { gte: dbDateOf(todayInApp()) }, package: { durationDays: { not: null } } },
+    select: { id: true, packageId: true, departureDate: true, totalSeats: true, pendingSeats: true, bookedSeats: true, package: { select: { durationDays: true } } },
+    orderBy: [{ departureDate: 'asc' }, { id: 'asc' }],
+  })
+  for (const r of rows) {
+    const departureDate = calendarDateOf(r.departureDate)
+    const list = out.get(r.packageId) ?? []
+    list.push({ id: r.id, departureDate, returnDate: packageReturnDate(departureDate, r.package.durationDays!), seatsLeft: seatsLeft(r) })
+    out.set(r.packageId, list)
+  }
+  return out
+}

@@ -1,7 +1,7 @@
 // All quota helpers MUST be called inside prisma.$transaction() to prevent race conditions.
 import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
 import type { Prisma } from '@prisma/client'
-import { calendarDateOf } from '@/lib/time'
+import { calendarDateOf, todayInApp } from '@/lib/time'
 
 type Tx = Prisma.TransactionClient
 
@@ -87,6 +87,35 @@ export async function confirmFlightQuota(tx: Tx, scheduleId: string, seats: numb
 export async function releaseFlightQuota(tx: Tx, scheduleId: string, seats: number, confirmed = false): Promise<void> {
   await tx.flightSchedule.update({
     where: { id: scheduleId },
+    data: confirmed ? { bookedSeats: { decrement: seats } } : { pendingSeats: { decrement: seats } },
+  })
+}
+
+// ── Kursi keberangkatan Paket Umroh (K1, docs/arsitektur-paket-umroh.md §8) ─────────────────────────────────────────────
+// Baris dikunci `FOR UPDATE` (Prisma ORM tak punya penguncian baris) supaya sisa kursi dibaca ulang di dalam kunci; ditahan → dikonfirmasi → dilepas
+// mengikuti status per baris item (`quotaConfirmed`). Tabel `package_departures` selain kolom kursi hanya ditulis lib/packages/departures.ts.
+
+/** `expectedDate` = tanggal yang dibaca saat item di-resolve; berbeda di dalam kunci (admin mengubahnya sebelum pesanan pertama) → tolak, jangan simpan salinan basi. */
+export async function reservePackageDepartureQuota(tx: Tx, departureId: string, seats: number, expectedDate?: string): Promise<void> {
+  const rows = await tx.$queryRaw<Array<{ totalSeats: number; pendingSeats: number; bookedSeats: number; isActive: boolean; departureDate: Date }>>`
+    SELECT "totalSeats", "pendingSeats", "bookedSeats", "isActive", "departureDate" FROM "package_departures" WHERE "id" = ${departureId} FOR UPDATE`
+  const d = rows[0]
+  if (!d || !d.isActive) throw new ItemNotBookableError('itemPackageDepartureUnavailable')
+  if (expectedDate !== undefined && calendarDateOf(d.departureDate) !== expectedDate) throw new ItemNotBookableError('itemPackageDepartureUnavailable')
+  // Hanya item baru/diganti yang menahan kursi — di sinilah keberangkatan lewat ditolak (item lama tetap boleh ikut revisi).
+  if (calendarDateOf(d.departureDate) < todayInApp()) throw new ItemNotBookableError('itemPackageDeparturePast')
+  const available = d.totalSeats - d.pendingSeats - d.bookedSeats
+  if (available < seats) throw new QuotaExhaustedError('quotaPackageDeparture', { need: seats, have: Math.max(0, available) })
+  await tx.packageDeparture.update({ where: { id: departureId }, data: { pendingSeats: { increment: seats } } })
+}
+
+export async function confirmPackageDepartureQuota(tx: Tx, departureId: string, seats: number): Promise<void> {
+  await tx.packageDeparture.update({ where: { id: departureId }, data: { pendingSeats: { decrement: seats }, bookedSeats: { increment: seats } } })
+}
+
+export async function releasePackageDepartureQuota(tx: Tx, departureId: string, seats: number, confirmed = false): Promise<void> {
+  await tx.packageDeparture.update({
+    where: { id: departureId },
     data: confirmed ? { bookedSeats: { decrement: seats } } : { pendingSeats: { decrement: seats } },
   })
 }

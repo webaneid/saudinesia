@@ -18,7 +18,7 @@ import { processPayment } from '@/lib/payments/process'
 import { billOf } from '@/lib/invoice/bill'
 import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
 import { bookingRevisionSchema, type BookingDraft, type BookingRevisionInput } from '@/lib/validators/booking'
-import { addDays, todayInApp } from '@/lib/time'
+import { addDays, calendarDateOf, todayInApp } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -64,9 +64,11 @@ const visa = await prisma.visaProduct.create({ data: { name: `${tag} Visa`, visa
 await addCost('visa', visa.id, 'visa', 1_000_000); await repriceOwner('visa', visa.id) // jual 1.200.000
 
 // Paket Umroh bervisa (visa termasuk) tanpa tiket/hotel — cukup untuk menguji anggota paket (docs/rencana-visa-produk.md §3.3).
-const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, visaMode: 'included', includedVisaProductId: visa.id, includedVisaPrice: 2_000_000 } })
+const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, durationDays: 9, visaMode: 'included', includedVisaProductId: visa.id, includedVisaPrice: 2_000_000 } })
 await addCost('package', pkg.id, 'layanan', 500_000); await repriceOwner('package', pkg.id)
-const PK = (n: number) => ({ itemType: 'package' as const, packageId: pkg.id, departureDate: '2090-06-10', numPeople: n, choices: {} })
+// Keberangkatan uji (K1) — dibuat langsung di DB uji; penulis produksi = lib/packages/departures.ts.
+const dep = await prisma.packageDeparture.create({ data: { packageId: pkg.id, departureDate: new Date('2090-06-10'), totalSeats: 100 } })
+const PK = (n: number) => ({ itemType: 'package' as const, packageId: pkg.id, departureId: dep.id, numPeople: n, choices: {} })
 const FL = (n: number) => ({ itemType: 'flight' as const, flightScheduleId: flight.id, departureDate: '2090-06-10', numPassengers: n })
 const HT = (rooms: number) => ({ itemType: 'hotel' as const, hotelRoomScheduleId: room.id, checkIn: '2090-06-10', checkOut: '2090-06-13', nights: 3, numRooms: rooms })
 const TR = { itemType: 'transport' as const, transportQuotaId: tq.id, numPassengers: 2 }
@@ -235,6 +237,27 @@ await t('ANGGOTA PAKET (V4a): terbit → anggota tertaut + visa paket; revisi na
   await i4(id)
 })
 
+await t('KEBERANGKATAN (K1): ganti keberangkatan lewat revisi melepas kursi lama dan menahan yang baru; item lama yang keberangkatannya sudah lewat tetap ikut revisi', async () => {
+  const dep2 = await prisma.packageDeparture.create({ data: { packageId: pkg.id, departureDate: new Date('2090-06-20'), totalSeats: 100 } })
+  const ds = async (d: string) => prisma.packageDeparture.findUniqueOrThrow({ where: { id: d }, select: { pendingSeats: true, bookedSeats: true } })
+  const a0 = await ds(dep.id), b0 = await ds(dep2.id)
+  const id = await published({ items: [PK(2)], pilgrims: [{}, {}], dueDays: 3 })
+  assert.equal((await ds(dep.id)).pendingSeats, a0.pendingSeats + 2, 'terbit menahan kursi keberangkatan')
+  const mv = await base(id); mv.items[0] = { ...mv.items[0]!, item: { ...PK(2), departureId: dep2.id } }
+  await reviseBooking(id, mv, staff.id)
+  assert.deepEqual([(await ds(dep.id)).pendingSeats, (await ds(dep2.id)).pendingSeats], [a0.pendingSeats, b0.pendingSeats + 2])
+  const bp = await prisma.bookingPackage.findFirstOrThrow({ where: { bookingId: id }, select: { departureId: true, departureDate: true, returnDate: true } })
+  assert.deepEqual([bp.departureId, calendarDateOf(bp.departureDate), calendarDateOf(bp.returnDate)], [dep2.id, '2090-06-20', '2090-06-28'])
+  // keberangkatan menjadi lewat (simulasi) → item dipertahankan apa adanya, revisi bagian lain tetap jalan; memilih keberangkatan lewat untuk item baru ditolak
+  await prisma.packageDeparture.update({ where: { id: dep2.id }, data: { departureDate: new Date('2020-01-10') } })
+  const more = await base(id); more.pilgrims.push({})
+  await reviseBooking(id, more, staff.id)
+  const past = await base(id); past.items.push({ item: { ...PK(1), departureId: dep2.id } }); past.pilgrims.push({})
+  await assert.rejects(() => reviseBooking(id, past, staff.id), (e: unknown) => /Keberangkatan paket yang dipilih sudah lewat/.test((e as Error).message))
+  await prisma.packageDeparture.update({ where: { id: dep2.id }, data: { departureDate: new Date('2090-06-20') } })
+  await i4(id)
+})
+
 await t('ATURAN VISA atas isi SESUDAH revisi: menghapus tiket padahal visa mewajibkan tiket → 422 berisi pelanggaran, tak ada yang berubah', async () => {
   const id = await published(DRAFT)
   const s0 = await seats()
@@ -361,6 +384,7 @@ await prisma.bookingPilgrim.updateMany({ where: { booking: { userId: customer.id
 await prisma.payment.deleteMany({ where: { booking: { userId: customer.id } } })
 await prisma.refund.deleteMany({ where: { booking: { userId: customer.id } } })
 await prisma.booking.deleteMany({ where: { userId: customer.id } })
+await prisma.packageDeparture.deleteMany({ where: { package: { name: { startsWith: tag } } } }) // FK Restrict (K1)
 await prisma.package.deleteMany({ where: { name: { startsWith: tag } } })
 await prisma.visaProduct.deleteMany({ where: { name: { startsWith: tag } } })
 await prisma.savedPilgrim.deleteMany({ where: { ownerId: customer.id } })

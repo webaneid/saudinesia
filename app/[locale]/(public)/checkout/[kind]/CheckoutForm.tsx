@@ -72,7 +72,7 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro, prefill
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
       <div className="min-w-0 space-y-5">
         {intro}
-        {product.kind === 'package' && <PackageFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
+        {product.kind === 'package' && <PackageFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} initial={prefill} />}
         {product.kind === 'visa' && <VisaFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'transport' && <TransportFields product={product} maxPeople={maxPeople} onChange={onChange} />}
         {product.kind === 'haji' && <HajiFields product={product} maxPeople={maxPeople} onChange={onChange} />}
