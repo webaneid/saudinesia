@@ -27,13 +27,19 @@ type Props<T extends { id: string; isActive: boolean }, F> = {
   toBody?: (form: F) => unknown
   /** Dipanggil setelah daftar berubah (tambah/ubah/hapus/aktif) — induk dapat memperbarui peringatan. */
   onChanged?: (rows: T[]) => void
+  /** `meta` respons daftar (mis. peringatan editor keberangkatan paket) — dipanggil setiap daftar dimuat. */
+  onMeta?: (meta: Record<string, unknown> | undefined) => void
+  /** Isi di atas daftar (mis. peringatan). */
+  header?: ReactNode
+  /** Label tombol tambah. Bawaan "Tambah". */
+  addLabel?: string
 }
 
 /**
  * Kotak daftar kecil dengan CRUD lengkap (rekening bank, akun QRIS, aturan pajak): tambah/ubah lewat modal, aktif/nonaktif dan hapus lewat aksi ikon berkonfirmasi.
  * Tersimpan LANGSUNG ke server (bukan bagian tombol Simpan halaman); setiap galat server ditampilkan.
  */
-export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ title, icon, description, apiBase, noun, emptyText, summary, blank, toForm, renderFields, precheck, toBody, onChanged }: Props<T, F>) {
+export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ title, icon, description, apiBase, noun, emptyText, summary, blank, toForm, renderFields, precheck, toBody, onChanged, onMeta, header, addLabel = 'Tambah' }: Props<T, F>) {
   const [rows, setRows] = useState<T[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editing, setEditing] = useState<{ id: string | null; form: F } | null>(null)
@@ -43,11 +49,11 @@ export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ ti
   const load = useCallback(async () => {
     try {
       const r = await fetch(apiBase)
-      const j: { data?: T[]; error?: string } | null = await r.json().catch(() => null)
+      const j: { data?: T[]; error?: string; meta?: Record<string, unknown> } | null = await r.json().catch(() => null)
       if (!r.ok || !j?.data) { setError(j?.error ?? `${title} gagal dimuat.`); return }
-      setError(null); setRows(j.data); onChanged?.(j.data)
+      setError(null); setRows(j.data); onChanged?.(j.data); onMeta?.(j.meta)
     } catch { setError('Tidak dapat menghubungi server.') }
-  }, [apiBase, title, onChanged])
+  }, [apiBase, title, onChanged, onMeta])
   useEffect(() => { void load() }, [load])
 
   async function save() {
@@ -70,8 +76,9 @@ export function ListCrudBox<T extends { id: string; isActive: boolean }, F>({ ti
   return (
     <MetaBox
       title={title} icon={icon} description={description}
-      aside={<button type="button" onClick={() => { setFormError(null); setEditing({ id: null, form: blank }) }} className="admin-btn-sm"><Plus className="size-3.5" /> Tambah</button>}
+      aside={<button type="button" onClick={() => { setFormError(null); setEditing({ id: null, form: blank }) }} className="admin-btn-sm"><Plus className="size-3.5" /> {addLabel}</button>}
     >
+      {header}
       {error && <p role="alert" className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
       {rows === null && !error && <p className="m-0 flex items-center gap-2 text-sm text-admin-muted"><Loader2 className="size-4 animate-spin" /> Memuat…</p>}
       {rows?.length === 0 && <p className="m-0 text-sm text-admin-muted">{emptyText}</p>}

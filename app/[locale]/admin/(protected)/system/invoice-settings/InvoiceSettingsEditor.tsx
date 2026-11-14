@@ -16,7 +16,7 @@ import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { formatInvoiceNumber } from '@/lib/invoice/numberPattern'
 import { DATETIME_MEDIUM, DEFAULT_APP_TIMEZONE, dateInApp, formatInstant, zoneLabel } from '@/lib/time'
 import type { InvoiceSettingsDto } from '@/lib/invoice/settings'
-import { ListCrudBox } from './ListCrudBox'
+import { ListCrudBox } from '@/components/admin/editor/ListCrudBox'
 
 // Bentuk formulir: angka disimpan sebagai TEKS supaya pengetikan "2." atau kolom kosong tak "dibetulkan" paksa; dikonversi saat simpan.
 type Form = {

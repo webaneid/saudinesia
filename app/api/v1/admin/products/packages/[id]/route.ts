@@ -10,6 +10,7 @@ import { deletePackage } from '@/lib/admin/productDelete'
 import { cateringSeasonPrices, sellPrice, sellPrices, visaPriceSummary } from '@/lib/pricing/engine/read'
 import { documentRequirementListSchema } from '@/lib/validators/documents'
 import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
+import { packageDetailFields, readExclusions, readItinerary } from '@/lib/validators/package'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -52,6 +53,11 @@ const updateSchema = z.object({
   includedCateringNumDays:   z.number().int().min(1).nullable().optional(),
 
   requirements: documentRequirementListSchema.optional(), // ganti-semua syarat dokumen (lib/documents/requirements.ts)
+
+  // K1 (docs/arsitektur-paket-umroh.md §8): durasi + isi halaman detail. Bentuk dari lib/validators/package.ts (satu sumber).
+  durationDays: packageDetailFields.durationDays,
+  itinerary:    packageDetailFields.itinerary,
+  exclusions:   packageDetailFields.exclusions,
 })
 
 // Field yang mempengaruhi harga jual paket dasar (docs/arsitektur-paket-umroh.md §5) — perubahan
@@ -102,7 +108,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const p = (m: Map<string, number>, row: { id: string }) => ({ ...row, price: m.get(row.id) ?? 0 })
     const visaFrom = (v: { id: string }) => ({ ...v, price: visa.get(v.id)?.from ?? 0 })
     return NextResponse.json(ok({
-      ...pkg, price: self, documentRequirements,
+      ...pkg, price: self, documentRequirements, itinerary: readItinerary(pkg.itinerary), exclusions: readExclusions(pkg.exclusions),
       transportTrip: pkg.transportTrip && { ...pkg.transportTrip, pricing: pkg.transportTrip.pricing.map(x => p(transport, x)) },
       includedTransportPricing: pkg.includedTransportPricing && p(transport, pkg.includedTransportPricing),
       includedHotelMakkahSchedule: pkg.includedHotelMakkahSchedule && p(hotel, pkg.includedHotelMakkahSchedule),
@@ -131,6 +137,14 @@ export async function PUT(req: Request, { params }: Ctx) {
 
     const { requirements, ...fields } = parsed.data
     const data: Record<string, unknown> = { ...fields }
+    // Rencana perjalanan tak boleh melewati durasi — dinilai atas nilai GABUNGAN (yang dikirim + yang tersimpan), karena keduanya bisa dikirim terpisah.
+    if (parsed.data.durationDays !== undefined || parsed.data.itinerary !== undefined) {
+      const cur = await prisma.package.findUnique({ where: { id }, select: { durationDays: true, itinerary: true } })
+      if (!cur) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
+      const duration = parsed.data.durationDays !== undefined ? parsed.data.durationDays : cur.durationDays
+      const days = parsed.data.itinerary ?? readItinerary(cur.itinerary)
+      if (duration && days.some(d => d.day > duration)) return NextResponse.json(err(`Rencana perjalanan melebihi durasi paket (${duration} hari)`), { status: 400 })
+    }
     if (parsed.data.description !== undefined) data.description = emptyToNull(parsed.data.description)
 
     // Hotel Makkah — snapshot server-side ke includedHotelMakkahPrice (pola sama

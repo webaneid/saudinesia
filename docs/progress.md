@@ -955,8 +955,8 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] Evaluasi sistem 2026-11-14 (`docs/evaluasi-sistem-2026-11-14.md`) K3: tanpa rekening aktif checkout/keranjang pelanggan ditolak (409 `checkoutNoBank`) + pemberitahuan, unggah bukti ditolak (409 `paymentNoDestination`) + formulir disembunyikan; T4: Katering di menu atas/HP/footer/beranda — selesai 2026-11-14 (uji `test-checkout` K3, browser checkout/keranjang/booking/API, header 1280/1366 /id /en satu baris, suite + build)
 - [x] K1 Paket per keberangkatan — rencana `docs/arsitektur-paket-umroh.md` §8 DISETUJUI 2026-11-14 (K1-1..K1-6 sesuai saran)
   - [x] F1 skema + migrasi `package_departures` + penulis tunggal `lib/packages/departures.ts` + validator — selesai 2026-11-14 (suite di DB sekali pakai, build, skema sinkron)
-  - [ ] F2 editor admin (durasi, rencana perjalanan, tidak termasuk, keberangkatan + harga khusus)
-  - [ ] F3 mesin pesan (`departureId`, kursi keberangkatan + tiket, harga varian, revisi, draf, invoice)
+  - [x] F2 editor admin (durasi, rencana perjalanan, tidak termasuk, keberangkatan + peringatan) — selesai 2026-11-14 (browser admin 1280/375 px, suite di DB sekali pakai, build); harga khusus per keberangkatan dipindah ke F3
+  - [ ] F3 mesin pesan (`departureId`, kursi keberangkatan + tiket, harga khusus per keberangkatan = varian, revisi, draf, invoice)
   - [ ] F4 checkout pilih keberangkatan
   - [ ] F5 halaman detail publik + kartu katalog
   - [ ] F6 verifikasi menyeluruh + dokumentasi
