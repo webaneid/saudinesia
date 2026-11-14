@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
+import { legacyInsert } from './lib/legacyInsert'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -117,7 +118,7 @@ async function legacyWorld(db: PrismaClient): Promise<Record<string, string>> {
   const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090 } })
   await setLegacy(db, 'haji_products', haji.id, { price: 4_200_000 })
   const haji0 = await db.hajiProduct.create({ data: { name: 'HJ0', hajiType: 'reguler', year: 2091 } })
-  const pkg = await db.package.create({ data: { name: 'P' }, select: { id: true } })
+  const pkg = await legacyInsert(db, 'packages', { name: 'P' }) // INSERT mentah: klien terbaru mengirim kolom K1 (itinerary/exclusions) yang belum ada di DB pra-migrasi
   await setLegacy(db, 'packages', pkg.id, { price: 6_600_000 })
   const tour = await db.tourPackage.create({ data: { name: 'Z' } })
   await setLegacy(db, 'tour_packages', tour.id, { price: 350_000 })

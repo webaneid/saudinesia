@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client'
+import { dropDeparturesOf } from '@/lib/packages/departures'
 import { prisma } from '@/lib/db'
 import { purgeProductMedia } from '@/lib/media/service'
 import type { MediaProductType } from '@/lib/media/owners'
@@ -147,7 +148,7 @@ export function deletePackage(id: string): Promise<DeleteOutcome> {
   return run({
     table: 'packages', id, mediaType: 'package',
     count: db => db.bookingPackage.count({ where: { packageId: id } }),
-    drop: async tx => { await dropPolymorphic(tx, 'package', [id]); await tx.package.delete({ where: { id } }) }, // opsi hotel/visa/katering ikut (CASCADE)
+    drop: async tx => { await dropPolymorphic(tx, 'package', [id]); await dropDeparturesOf(tx, id); await tx.package.delete({ where: { id } }) }, // opsi hotel/visa/katering ikut (CASCADE); keberangkatan FK Restrict → dihapus eksplisit (belum pernah dipesan, dijamin `count`)
     deactivate: () => prisma.package.update({ where: { id }, data: { isActive: false } }),
     usedBy: n => `Paket umroh dipesan di ${n} booking`,
   })

@@ -10,9 +10,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PrismaClient } from '@prisma/client'
 import { LEGACY_DEFAULTS_SQL, setLegacy } from './lib/legacyPriceColumns'
+import { legacyInsert } from './lib/legacyInsert'
 import { assertThrowawayDb } from './lib/testDb'
 import { legacyUser } from './lib/legacyUser'
-import { legacyInsert } from './lib/legacyInsert'
 
 await assertThrowawayDb()
 
@@ -132,7 +132,7 @@ async function world(db: PrismaClient, withPoints: boolean, skip?: string) {
   await setLegacy(db, 'muthowif_service_price', muth.id, { price: 450_000 }); ids.muthowif_service_price = muth.id
   const haji = await db.hajiProduct.create({ data: { name: 'HJ', hajiType: 'reguler', year: 2090 } })
   await setLegacy(db, 'haji_products', haji.id, { price: 4_200_000 }); ids.haji_products = haji.id
-  const pkg = await db.package.create({ data: { name: 'P' }, select: { id: true } })
+  const pkg = await legacyInsert(db, 'packages', { name: 'P' }) // INSERT mentah: klien terbaru mengirim kolom K1 (itinerary/exclusions) yang belum ada di DB pra-migrasi
   await setLegacy(db, 'packages', pkg.id, { price: 6_600_000 }); ids.packages = pkg.id
   const tour = await db.tourPackage.create({ data: { name: 'Z' } })
   await setLegacy(db, 'tour_packages', tour.id, { price: 350_000 }); ids.tour_packages = tour.id
