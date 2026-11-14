@@ -112,9 +112,11 @@ export type CompositePart = { lineKey: string; description: string; qty: number;
  * `multiplier` = jumlah satuan yang dibeli (Haji dan Paket Umroh: orang; paket ziarah: 1 — harga per paket).
  * Titik harga tak ada → `ItemNotBookableError`. Jual titik 0 diizinkan (paket yang seluruhnya pilihan pilgrim); pemanggil menolak item bertotal 0.
  */
-export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat `itemPriceNotSet` */ what: PriceSubject; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[] }): Promise<SnapshotLine[]> {
-  const point = await readPoint(db, o.ownerType, o.ownerId, '')
-  if (!point) throw new ItemNotBookableError('itemPriceNotSet', { what: o.what })
+export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 'tour_package' | 'haji' | 'package'; ownerId: string; /** untuk pesan galat `itemPriceNotSet` */ what: PriceSubject; /** judul baris bila seluruh harga berupa satu penyesuaian */ label: string; multiplier: number; parts?: CompositePart[]; /** varian harga khusus (keberangkatan Paket Umroh, K1 F4) — dipakai bila ada, selain itu harga dasar */ variantKey?: string }): Promise<SnapshotLine[]> {
+  const base = await readPoint(db, o.ownerType, o.ownerId, '')
+  if (!base) throw new ItemNotBookableError('itemPriceNotSet', { what: o.what })
+  const special = o.variantKey ? await readPoint(db, o.ownerType, o.ownerId, o.variantKey) : null
+  const point = special ?? base
   const { components } = await computeCostComponents(o.ownerType, o.ownerId, db)
 
   const lines: SnapshotLine[] = components.map(c => ({
@@ -135,12 +137,13 @@ export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 
   if (gapCents !== 0) {
     const only = lines.length === 0
     // Rekomendasi total paket = harga OTOMATIS titik × pengali; baris selisih membawa sisanya (nol bila otomatis, selisih manual bila ditimpa) sehingga Σ rekomendasi baris = rekomendasi paket.
-    const recTargetCents = cents(point.autoSellIdr != null && point.autoSellIdr > 0 ? point.autoSellIdr : point.sellIdr) * o.multiplier
+    // Harga khusus keberangkatan: rekomendasi tetap harga otomatis PAKET (varian tak punya rumus sendiri).
+    const recTargetCents = cents(base.autoSellIdr != null && base.autoSellIdr > 0 ? base.autoSellIdr : base.sellIdr) * o.multiplier
     const recGapCents = recTargetCents - lines.reduce((s, l) => s + Math.round(lineTotalRecommended(l) * 100), 0)
     lines.push({
-      lineKey: only ? 'main' : 'penyesuaian', description: only ? o.label : 'Penyesuaian harga paket', qty: o.multiplier, unit: 'package',
+      lineKey: only ? 'main' : 'penyesuaian', description: only ? o.label : special ? 'Harga khusus keberangkatan' : 'Penyesuaian harga paket', qty: o.multiplier, unit: 'package',
       unitCostIdr: null, unitSellIdr: gapCents / 100 / o.multiplier, recommendedUnitSellIdr: recGapCents / 100 / o.multiplier, mode: point.mode,
-      ref: { ownerType: o.ownerType, ownerId: o.ownerId, variantKey: '' }, fxRateIds: [], vendorIds: [],
+      ref: { ownerType: o.ownerType, ownerId: o.ownerId, variantKey: point.variantKey }, fxRateIds: [], vendorIds: [],
     })
   }
   return lines

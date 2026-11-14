@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { priceOwner } from './owners'
 import { lockOwnerPoints } from './lock'
 import { toView } from './view'
+import { departureVariantKey } from './variantKeys'
 import type { PriceOwnerType, PriceUnit, PriceView } from './types'
 
 // HARGA MANUAL (docs/arsitektur-harga-terpadu.md §2 I2/I6, §16): admin menetapkan harga jual sendiri; margin default hanyalah saran. Hidup di `price_points`
@@ -42,11 +43,14 @@ export async function setManualSell(input: PointKey & Actor & { sellIdr: number;
   const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null
   await ensureOwner(ownerType, ownerId)
   const owner = priceOwner(ownerType)
+  // Varian dinamis dibaca SEBELUM transaksi (klien global di dalam transaksi = SEC-212).
+  const dynamic = variantKey ? (await owner.variants?.(ownerId))?.find(v => v.key === variantKey) : undefined
 
   const view = await prisma.$transaction(async tx => {
     await lockOwnerPoints(tx, ownerType, ownerId)
     const existing = await tx.pricePoint.findUnique({ where: { ownerType_ownerId_variantKey: { ownerType, ownerId, variantKey } } })
     const creatable = owner.creatableVariants.find(v => v.key === variantKey)
+      ?? (dynamic?.creatable ? dynamic : undefined)
     if (!existing && !creatable) throw new PriceInputError('Rentang/varian harga ini belum ada — simpan tarif modalnya lebih dulu')
     const cost = num(existing?.costIdr)
     const oldSell = num(existing?.sellIdr)
@@ -69,11 +73,22 @@ export async function clearManualSell(input: PointKey & Actor & { note?: string 
   const note = input.note?.trim() ? input.note.trim().slice(0, 500) : null
   await ensureOwner(ownerType, ownerId)
   const owner = priceOwner(ownerType)
+  const inheritsBase = !!variantKey && !!(await owner.variants?.(ownerId))?.some(v => v.key === variantKey && v.inheritsBase) // sebelum transaksi (SEC-212)
 
   return prisma.$transaction(async tx => {
     await lockOwnerPoints(tx, ownerType, ownerId)
     const existing = await tx.pricePoint.findUnique({ where: { ownerType_ownerId_variantKey: { ownerType, ownerId, variantKey } } })
     if (!existing || existing.manualSellIdr == null) throw new PriceInputError('Harga ini tidak sedang diatur manual')
+    // Varian yang mengikuti harga dasar (harga khusus keberangkatan): kembali = hapus titiknya; tampilannya = titik dasar.
+    if (inheritsBase) {
+      await tx.pricePoint.delete({ where: { id: existing.id } })
+      const base = await tx.pricePoint.findUnique({ where: { ownerType_ownerId_variantKey: { ownerType, ownerId, variantKey: '' } } })
+      await tx.priceChange.create({
+        data: { ownerType, ownerId, variantKey, kind: 'manual_clear', oldSellIdr: num(existing.sellIdr), newSellIdr: num(base?.sellIdr), oldCostIdr: num(existing.costIdr), newCostIdr: num(base?.costIdr), note, byUserId },
+      })
+      if (!base) throw new PriceInputError('Harga paket belum ada')
+      return toView(base)
+    }
     if (existing.autoSellIdr == null) throw new PriceInputError('Belum ada harga otomatis untuk kembali (modal belum diisi) — atur harga baru atau isi modal lebih dulu')
     const auto = Number(existing.autoSellIdr)
     const row = await tx.pricePoint.update({ where: { id: existing.id }, data: { manualSellIdr: null, sellIdr: auto, manualNote: null, manualBy: null, manualAt: null } })
@@ -121,3 +136,8 @@ export async function listPriceChanges(ownerType: PriceOwnerType, ownerId: strin
   }))
 }
 
+
+/** Penghapus keberangkatan paket (lib/packages/departures.ts) membuang harga khususnya di transaksi penghapusan yang sama (K1 F4). */
+export async function dropDepartureVariant(tx: Tx, packageId: string, departureId: string): Promise<void> {
+  await tx.pricePoint.deleteMany({ where: { ownerType: 'package', ownerId: packageId, variantKey: departureVariantKey(departureId) } })
+}

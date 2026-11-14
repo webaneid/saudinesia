@@ -18,7 +18,7 @@ type Choice = { id: string; name: string; perPerson?: number; price?: number }
 export type PackageOpt = {
   id: string; name: string; pricePerPerson: number
   /** Keberangkatan yang bisa dipilih (lib/packages/departures.ts `bookableDepartures`). */
-  departures: Array<{ id: string; departureDate: string; returnDate: string; seatsLeft: number }>
+  departures: Array<{ id: string; departureDate: string; returnDate: string; seatsLeft: number; priceIdr: number | null }>
   modes: Record<'hotelMakkah' | 'hotelMadinah' | 'transport' | 'muthowif' | 'visa' | 'flight' | 'catering', string>
   options: Record<'hotelMakkah' | 'hotelMadinah' | 'transport' | 'visa' | 'flight' | 'catering', Choice[]>
 }

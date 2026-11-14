@@ -1,4 +1,6 @@
 import { prisma } from '@/lib/db'
+import { calendarDateOf, formatCalendarDate, todayInApp } from '@/lib/time'
+import { departureIdOfKey, departureVariantKey } from '../variantKeys'
 import { resolveMarginRule } from '../../pricingHelpers'
 import { computeCostComponents, type ComponentBreakdown } from '../../costComponents'
 import { computePackageBreakdown, baseTotal as packageBaseTotal } from '../../computePackagePrice'
@@ -94,8 +96,30 @@ export const packageOwner: PriceOwner = {
       { price: included(b.flightMode, b.includedFlightPrice), cost: () => (b.includedFlightScheduleId ? pointCost('flight', b.includedFlightScheduleId) : Promise.resolve(null)) },
       { price: included(b.cateringMode, b.includedCateringPrice), cost: async () => null }, // katering belum bermodal (Fase 3)
     ]
-    return build('package', b.components, packageBaseTotal(b), parts)
+    const base = await build('package', b.components, packageBaseTotal(b), parts)
+    return [...base, ...(await departureVariants(id, base[0]!))]
   },
+  // Harga khusus per keberangkatan (K1 F4): semua keberangkatan paket berlabel; yang boleh DIBUAT hanya yang aktif dan belum lewat.
+  variants: async id => {
+    const today = todayInApp()
+    const rows = await prisma.packageDeparture.findMany({ where: { packageId: id }, select: { id: true, departureDate: true, isActive: true }, orderBy: [{ departureDate: 'asc' }, { id: 'asc' }] })
+    return rows.map(r => {
+      const open = r.isActive && calendarDateOf(r.departureDate) >= today
+      return { key: departureVariantKey(r.id), unit: 'package' as const, label: `Keberangkatan ${formatCalendarDate(r.departureDate)}${open ? '' : ' (tidak dijual)'}`, creatable: open, inheritsBase: true }
+    })
+  },
+}
+
+/**
+ * Varian keberangkatan yang SUDAH ada (harga khusus manual) disegarkan bersama paket: modal = modal paket, otomatis = jual paket saat ini (acuan + peringatan);
+ * jual tetap harga manualnya. Tak pernah membuat varian baru — hanya `setManualSell` yang membuatnya.
+ */
+async function departureVariants(packageId: string, base: ResolvedVariant): Promise<ResolvedVariant[]> {
+  const rows = await prisma.pricePoint.findMany({ where: { ownerType: 'package', ownerId: packageId, variantKey: { startsWith: departureVariantKey('') } }, select: { variantKey: true } })
+  if (rows.length === 0) return []
+  const point = await prisma.pricePoint.findUnique({ where: { ownerType_ownerId_variantKey: { ownerType: 'package', ownerId: packageId, variantKey: '' } }, select: { manualSellIdr: true } })
+  const baseSell = point?.manualSellIdr != null ? Number(point.manualSellIdr) : base.autoSellIdr
+  return rows.filter(r => departureIdOfKey(r.variantKey)).map(r => ({ ...base, variantKey: r.variantKey, autoSellIdr: baseSell }))
 }
 
 export const tourPackageOwner: PriceOwner = {

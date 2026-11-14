@@ -5,6 +5,7 @@ import { AlertTriangle, CalendarDays } from 'lucide-react'
 import { ListCrudBox } from '@/components/admin/editor/ListCrudBox'
 import { Badge } from '@/components/admin/ui/Badge'
 import { formatCalendarDate, todayInApp } from '@/lib/time'
+import { formatRupiah } from '@/lib/utils'
 import type { DepartureView } from '@/lib/packages/departures'
 import type { DepartureWarnings } from '@/lib/packages/warnings'
 
@@ -24,7 +25,7 @@ export function DeparturesBox({ packageId }: { packageId: string }) {
   return (
     <ListCrudBox<DepartureView, Form>
       title="Keberangkatan" icon={CalendarDays}
-      description="Pelanggan memilih tanggal dari daftar ini; tanggal pulang dari durasi paket. Setelah dipesan, tanggal terkunci dan hapus = nonaktif."
+      description="Pelanggan memilih tanggal dari daftar ini; tanggal pulang dari durasi paket. Setelah dipesan, tanggal terkunci dan hapus = nonaktif. Harga khusus per keberangkatan diatur di kartu Harga."
       apiBase={`/api/v1/admin/products/packages/${packageId}/departures`}
       noun="keberangkatan" emptyText="Belum ada keberangkatan — paket belum bisa dipesan."
       onMeta={onMeta}
@@ -47,6 +48,7 @@ export function DeparturesBox({ packageId }: { packageId: string }) {
               {row.isActive && row.seatsLeft === 0 && <Badge tone="danger">Penuh</Badge>}
               {row.isActive && row.seatsLeft > 0 && row.seatsLeft <= FEW_SEATS && <Badge tone="warning">Hampir penuh</Badge>}
               {row.departureDate < todayInApp() && <Badge tone="neutral">Sudah lewat</Badge>}
+              {row.specialPriceIdr != null && <Badge tone="accent">Harga khusus {formatRupiah(row.specialPriceIdr)}</Badge>}
             </p>
             {row.note && <p className="m-0 text-xs text-admin-muted">Catatan internal: {row.note}</p>}
             {ws.map(w => <p key={w} className="m-0 flex gap-1.5 text-xs text-admin-warning"><AlertTriangle className="size-3.5 shrink-0" aria-hidden /> {w}</p>)}

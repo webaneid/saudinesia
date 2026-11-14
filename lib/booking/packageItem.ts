@@ -4,6 +4,7 @@ import { ItemNotBookableError } from './errors'
 import type { BookingItemInput } from '@/lib/validators/booking'
 import { computePackageBreakdown, perPersonShare, type PackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
+import { departureVariantKey } from '@/lib/pricing/engine/variantKeys'
 import { compositeLines, lineFromPoint, peekCost, takePoint, takeVisaTier, type CompositePart, type SnapshotLine } from '@/lib/pricing/engine/snapshot'
 import { calendarDateOf, daysBetween, dbDateOf, type CalendarDate } from '@/lib/time'
 import { packageReturnDate } from '@/lib/packages/dates'
@@ -155,7 +156,7 @@ export async function packageLines(tx: Prisma.TransactionClient, packageId: stri
       unitSellIdr: b.includedCateringPrice!, unitCostIdr: null, ref: null,
     })
   }
-  const lines = await compositeLines(tx, { ownerType: 'package', ownerId: packageId, what: 'umrahPackage', label: r.name, multiplier: numPeople, parts })
+  const lines = await compositeLines(tx, { ownerType: 'package', ownerId: packageId, what: 'umrahPackage', label: r.name, multiplier: numPeople, parts, variantKey: departureVariantKey(r.departureId) })
 
   // ── pilihan pelanggan (user_choice) — harga hidup dari titik harga sub-modul ──
   const c = r.choices

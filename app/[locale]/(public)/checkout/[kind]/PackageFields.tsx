@@ -86,6 +86,7 @@ export function PackageFields({ product, today, maxPeople, onChange, initial = {
                   <button key={d.id} type="button" disabled={full} aria-pressed={on} onClick={() => setDepartureId(d.id)}
                     className={`rounded-xl border px-3 py-2.5 text-left text-sm transition disabled:cursor-not-allowed disabled:opacity-50 ${on ? 'border-brand bg-brand-light' : 'border-border hover:border-brand'}`}>
                     <span className="block font-semibold text-brand-dark">{t('package.departureOption', { from: day(d.departureDate), to: day(d.returnDate) })}</span>
+                    {d.priceIdr != null && d.priceIdr > 0 && <span className="block text-sm font-bold text-brand">{priceHint(d.priceIdr, t('common.perPersonShort'))}</span>}
                     <span className="block text-xs text-muted-foreground">{full ? t('package.soldOut') : t('package.seatsLeft', { seats: d.seatsLeft })}</span>
                   </button>
                 )

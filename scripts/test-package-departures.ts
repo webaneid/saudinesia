@@ -7,6 +7,8 @@ import { join } from 'node:path'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { retrySerializable } from '@/lib/booking/serializable'
+import { clearManualSell, departureVariantKey, PriceInputError, repriceOwner, setManualSell } from '@/lib/pricing/engine'
+import { packageDeparturePrices, sellPrices } from '@/lib/pricing/engine/read'
 import { addDays, dbDateOf, todayInApp } from '@/lib/time'
 import { packageReturnDate, seatsLeft } from '@/lib/packages/dates'
 import { departureWarnings } from '@/lib/packages/warnings'
@@ -163,6 +165,44 @@ await t('kursi (F3, lib/quota): tahan dikunci — habis 409 berkode, nonaktif/le
   assert.ok(bookable.every(d => d.departureDate >= today && d.returnDate === addDays(d.departureDate, 8) && !('note' in d)))
   const noDur = await prisma.package.findFirstOrThrow({ where: { name: `${tag} Tanpa Durasi` } })
   assert.equal((await bookableDepartures([noDur.id])).get(noDur.id), undefined, 'paket tanpa durasi tak punya keberangkatan yang bisa dipilih')
+})
+
+await t('harga khusus (F4): varian hanya untuk keberangkatan milik paket yang dijual; "mulai dari" = termurah yang bisa dipesan; hitung ulang menyegarkan acuan; hapus keberangkatan membuang varian', async () => {
+  const staff = await prisma.user.create({ data: { email: `${tag}-harga@example.test`, passwordHash: 'x', fullName: 'Staf Harga', role: 'admin', isActive: true } })
+  try {
+    const p2 = await prisma.package.create({ data: { name: `${tag} Paket Harga`, durationDays: 5, isActive: true } })
+    const other = await prisma.package.create({ data: { name: `${tag} Paket Lain`, durationDays: 5 } })
+    const a = await createDeparture(p2.id, { departureDate: addDays(today, 30), totalSeats: 5 })
+    const b = await createDeparture(p2.id, { departureDate: addDays(today, 40), totalSeats: 5 })
+    const foreign = await createDeparture(other.id, { departureDate: addDays(today, 30), totalSeats: 5 })
+    const set = (depId: string, sellIdr: number) => setManualSell({ ownerType: 'package', ownerId: p2.id, variantKey: departureVariantKey(depId), sellIdr, byUserId: staff.id })
+    await setManualSell({ ownerType: 'package', ownerId: p2.id, sellIdr: 30_000_000, byUserId: staff.id })
+    await assert.rejects(set(foreign.id, 1), PriceInputError, 'keberangkatan paket lain')
+    await set(a.id, 28_000_000)
+    await set(b.id, 35_000_000)
+    assert.deepEqual(Object.fromEntries(await packageDeparturePrices([p2.id])), { [a.id]: 28_000_000, [b.id]: 35_000_000 })
+    assert.equal((await sellPrices('package', [p2.id])).get(p2.id), 28_000_000, 'termurah di antara keberangkatan')
+    assert.equal((await listDepartures(p2.id)).find(d => d.id === a.id)?.specialPriceIdr, 28_000_000)
+    assert.equal(((await bookableDepartures([p2.id])).get(p2.id) ?? []).find(d => d.id === b.id)?.priceIdr, 35_000_000)
+    // nonaktif → tak lagi "mulai dari"; varian tetap ada; buat varian baru ditolak
+    await updateDeparture(p2.id, a.id, { isActive: false })
+    assert.equal((await sellPrices('package', [p2.id])).get(p2.id), 35_000_000)
+    await assert.rejects(clearManualSell({ ownerType: 'package', ownerId: p2.id, variantKey: departureVariantKey(a.id), byUserId: staff.id }).then(() => set(a.id, 1)), PriceInputError, 'tidak dijual')
+    // hitung ulang: modal/otomatis varian = paket, jual manual tetap
+    await repriceOwner('package', p2.id)
+    const v = await prisma.pricePoint.findUniqueOrThrow({ where: { ownerType_ownerId_variantKey: { ownerType: 'package', ownerId: p2.id, variantKey: departureVariantKey(b.id) } } })
+    assert.deepEqual([Number(v.sellIdr), Number(v.autoSellIdr)], [35_000_000, 30_000_000])
+    // ikut harga paket lagi = titik varian hilang; hapus keberangkatan membuang variannya
+    await clearManualSell({ ownerType: 'package', ownerId: p2.id, variantKey: departureVariantKey(b.id), byUserId: staff.id })
+    assert.equal((await packageDeparturePrices([p2.id])).get(b.id), 30_000_000)
+    await set(b.id, 33_000_000)
+    assert.deepEqual(await deleteOrDeactivateDeparture(p2.id, b.id), { deleted: true })
+    assert.equal(await prisma.pricePoint.count({ where: { ownerType: 'package', ownerId: p2.id, variantKey: { not: '' } } }), 0)
+    await prisma.pricePoint.deleteMany({ where: { ownerType: 'package', ownerId: { in: [p2.id, other.id] } } })
+  } finally {
+    await prisma.priceChange.deleteMany({ where: { byUserId: staff.id } })
+    await prisma.user.delete({ where: { id: staff.id } })
+  }
 })
 
 await t('deadlock (SEC-233): transaksi booking yang kena 40P01 diulang, bukan 500', async () => {

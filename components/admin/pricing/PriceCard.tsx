@@ -25,6 +25,8 @@ type Payload = {
   rule: { marginPercent: number; roundingIncrement: number; warnBelowPercent: number }
   manualOnly: boolean
   creatable: string[]
+  labels: Record<string, string>
+  inherits: string[]
   changes: Change[]
 }
 
@@ -92,7 +94,7 @@ export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, unt
         <p className="m-0 rounded-xl border border-dashed border-admin-line-strong px-4 py-5 text-center text-xs text-admin-muted">Belum ada harga. Isi modal (biaya) produk ini, atau atur harga jual manual.</p>
       )}
       {rows.map(({ key, point }) => (
-        <VariantRow key={key} ownerType={ownerType} ownerId={ownerId} variantKey={key} point={point} rule={data.rule} manualOnly={data.manualOnly} canCreate={data.creatable.includes(key)} onChanged={afterChange} />
+        <VariantRow key={key} ownerType={ownerType} ownerId={ownerId} variantKey={key} label={data.labels[key] ?? variantLabel(key)} inherits={data.inherits.includes(key)} point={point} rule={data.rule} manualOnly={data.manualOnly} canCreate={data.creatable.includes(key)} onChanged={afterChange} />
       ))}
 
       <ChangeHistory changes={data.changes} />
@@ -100,8 +102,10 @@ export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, unt
   )
 }
 
-function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, canCreate, onChanged }: {
-  ownerType: PriceOwnerKind; ownerId: string; variantKey: string; point: Point | null
+function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, rule, manualOnly, canCreate, onChanged }: {
+  ownerType: PriceOwnerKind; ownerId: string; variantKey: string; label: string | null
+  /** Varian yang mengikuti harga dasar bila kosong (harga khusus keberangkatan) — kosong bukan "belum berharga". */
+  inherits: boolean; point: Point | null
   rule: Payload['rule']; manualOnly: boolean; canCreate: boolean; onChanged: () => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -110,7 +114,6 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
   const [cost, setCost] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const label = variantLabel(variantKey)
 
   function open() {
     setSell(point ? String(point.sellIdr) : '')
@@ -171,7 +174,9 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
           />
         </div>
       ) : (
-        <p className="m-0 text-xs text-admin-muted">Belum berharga{canCreate ? ' — atur harga jual agar bisa dipesan.' : '.'}</p>
+        <p className="m-0 text-xs text-admin-muted">
+          {inherits ? `Mengikuti harga paket${canCreate ? ' — atur harga khusus bila keberangkatan ini berbeda.' : '.'}` : `Belum berharga${canCreate ? ' — atur harga jual agar bisa dipesan.' : '.'}`}
+        </p>
       )}
 
       {loss && <Warn>Harga jual di bawah modal — produk dijual rugi.</Warn>}
@@ -180,7 +185,7 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
       {unpriced && <Warn>Harga jual 0 — produk ini belum bisa dipesan.</Warn>}
       {point?.mode === 'manual' && !manualOnly && (
         <p className="m-0 text-[11px] text-admin-muted">
-          Harga manual{point.manualNote ? <> — “{point.manualNote}”</> : null}.{point.autoSellIdr != null && <> Harga otomatis saat ini: <b>{formatRupiah(point.autoSellIdr)}</b>.</>}
+          Harga manual{point.manualNote ? <> — “{point.manualNote}”</> : null}.{point.autoSellIdr != null && <> {inherits ? 'Harga paket' : 'Harga otomatis'} saat ini: <b>{formatRupiah(point.autoSellIdr)}</b>.</>}
         </p>
       )}
 
@@ -203,7 +208,7 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
             <input className="admin-inp mt-1" maxLength={500} value={note} onChange={e => setNote(e.target.value)} placeholder="mis. promo musim, negosiasi grup" />
           </label>
           {point?.autoSellIdr != null && !manualOnly && (
-            <button type="button" className="text-[11px] font-semibold text-admin-accent underline" onClick={() => setSell(String(point.autoSellIdr))}>Pakai harga otomatis ({formatRupiah(point.autoSellIdr)})</button>
+            <button type="button" className="text-[11px] font-semibold text-admin-accent underline" onClick={() => setSell(String(point.autoSellIdr))}>{inherits ? 'Pakai harga paket' : 'Pakai harga otomatis'} ({formatRupiah(point.autoSellIdr)})</button>
           )}
           {belowCost && <Warn>Di bawah modal ({formatRupiah(point!.costIdr!)}) — rugi {formatRupiah(point!.costIdr! - typed)} per satuan. Peringatan internal; tetap bisa disimpan.</Warn>}
           {belowAuto && <Warn>Di bawah harga otomatis ({formatRupiah(point!.autoSellIdr!)}) — lebih rendah dari rekomendasi. Peringatan internal; tetap bisa disimpan.</Warn>}
@@ -215,9 +220,9 @@ function VariantRow({ ownerType, ownerId, variantKey, point, rule, manualOnly, c
         </div>
       ) : (
         <div className="flex flex-wrap items-center gap-2">
-          {(point || canCreate) && <Button size="sm" variant="outline" onClick={open}><Pencil className="size-4" /> {point ? 'Atur harga manual' : 'Atur harga jual'}</Button>}
-          {point?.mode === 'manual' && !manualOnly && point.autoSellIdr != null && (
-            <Button size="sm" variant="ghost" onClick={revert} loading={busy}><RotateCcw className="size-4" /> Kembalikan ke otomatis</Button>
+          {(point || canCreate) && <Button size="sm" variant="outline" onClick={open}><Pencil className="size-4" /> {inherits ? 'Atur harga khusus' : point ? 'Atur harga manual' : 'Atur harga jual'}</Button>}
+          {point?.mode === 'manual' && !manualOnly && (inherits || point.autoSellIdr != null) && (
+            <Button size="sm" variant="ghost" onClick={revert} loading={busy}><RotateCcw className="size-4" /> {inherits ? 'Ikuti harga paket' : 'Kembalikan ke otomatis'}</Button>
           )}
           {error && <span className="text-xs font-medium text-admin-danger">{error}</span>}
         </div>

@@ -25,6 +25,9 @@ export type PriceOwner = {
   unit: PriceUnit
   /** Varian yang boleh DIBUAT lewat harga manual saat titiknya belum ada (mis. "" untuk produk berharga tunggal). Varian turunan (tier Visa) tidak termasuk. */
   creatableVariants: ReadonlyArray<{ key: string; unit: PriceUnit }>
+  /** Varian DINAMIS milik satu pemilik (harga khusus per keberangkatan Paket Umroh, K1 F4): `creatable` = boleh dibuat lewat harga manual sekarang;
+   *  `inheritsBase` = varian tanpa titik mengikuti harga dasar, jadi "kembali ke otomatis" menghapus titiknya. Label untuk PriceCard. */
+  variants?: (ownerId: string) => Promise<OwnerVariant[]>
   /** Harga seluruhnya diisi admin (katering, layanan hotel): tidak ada perhitungan dari modal — hitung-ulang tak menyentuhnya; modal opsional diisi manual. */
   manualOnly?: boolean
   /** Modal/jualnya membaca titik harga modul lain (hotel, kendaraan, visa, tiket) → ikut dihitung ulang pada setiap putaran kurs dan dihitung SETELAH modul dasar. */
@@ -39,6 +42,8 @@ export type PriceOwner = {
   existing: (ids: string[]) => Promise<string[]>
   resolve: (id: string) => Promise<ResolvedVariant[]>
 }
+
+export type OwnerVariant = { key: string; unit: PriceUnit; label: string; creatable: boolean; inheritsBase: boolean }
 
 /** Pembaca: satu titik harga + turunannya. `profitIdr` null bila modal belum lengkap. */
 export type PriceView = {
