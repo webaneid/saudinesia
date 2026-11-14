@@ -203,3 +203,73 @@ Semua 6 fase dieksekusi berurutan, tiap fase digerbangi `bun run build` 0 error 
 - Katalog publik (`/packages`) dikonfirmasi menampilkan state kosong dengan benar ("Paket lengkap akan segera tersedia") tanpa error server, setelah data test dihapus.
 
 > **Pembaruan 2026-10-25:** `Package.description` kini **teks kaya** (JSON dokumen Tiptap di kolom `String?` yang sama; teks polos lama tetap sah). Form buat/edit admin memakai `RichTextEditor`; `POST/PUT /admin/products/packages[/id]` memvalidasi lewat `richTextField()`; kartu publik memakai `RichTextView`. Lihat `docs/arsitektur-editor-teks.md` §9.
+
+---
+
+## 8. K1 — Keberangkatan, durasi, kursi, dan halaman detail paket (RENCANA 2026-11-14, DISETUJUI pemilik 2026-11-14 — semua saran K1-1..K1-6)
+
+Sumber: `docs/evaluasi-sistem-2026-11-14.md` K1. Rencana ini mengikuti Fase Eksekusi SOP; belum ada kode yang ditulis.
+
+### 8.1 Masalah
+
+- Pelanggan memilih **tanggal berangkat bebas** dari kalender (`PackageFields.tsx`), dibatasi hanya oleh periode jadwal tiket/hotel bila ada. Ini keputusan lama P3 (`docs/arsitektur-booking-engine-v2.md` §10.2, 2026-10-31) — rencana ini **menggantikannya**.
+- Paket tidak punya **durasi**: tanggal pulang = berangkat + Σ malam hotel (`lib/booking/packageItem.ts`), jadi paket tanpa hotel tampil "15-12-2026 – 15-12-2026".
+- Paket tidak punya **kursi**: hanya kursi tiket yang ditahan (`packageAdapter`, `lib/quota/adapters/flight.ts`); paket tanpa tiket bisa terjual tanpa batas.
+- Tidak ada **halaman detail**: kartu katalog langsung ke checkout. Hotel (nama, bintang, jarak), maskapai, rencana perjalanan, dan "tidak termasuk" tak terlihat.
+
+### 8.2 Recheck dokumen vs kode (SOP langkah 1)
+
+Dokumen ini akurat untuk komponen 3-mode dan Komponen Biaya; selisih yang ditemukan, semuanya sudah dicakup banner di atas atau tak berdampak ke K1:
+- §4 masih menulis kolom `price`, `images`, `included*NumRooms`, dan `items PackageItem[]`. Kodenya: harga hanya di `price_points` (harga terpadu Fase 5), foto di `ProductImage` (mode `featured`, satu foto — `lib/media/owners.ts`), `included*Occupancy` (banner 2026-10-31), `PackageItem` sudah dihapus. Ditambah `bookings BookingPackage[]`.
+- §6 "booking tidak disentuh" sudah usang: `BookingPackage` (`prisma/schema.prisma` model `BookingPackage`) dibuat di booking engine v2 Fase 4, dengan `departureDate`/`returnDate` `@db.Date`, `flightScheduleId?`, `choices Json`, `quotaConfirmed`, `groupId`.
+- Belum tercatat di sini: syarat dokumen paket (`REQUIREMENT_OWNERS` `package`, bawaan paspor/KTP/KK/vaksin), deskripsi teks kaya + `highlights` (daftar teks), penghapusan lewat `lib/admin/productDelete.ts`.
+- Titik sentuh item `package` hari ini: `lib/validators/booking.ts` (`departureDate`), `lib/validators/checkout.ts`, `lib/booking/{packageItem,lineItems,create,dates,groups,revise}.ts`, `lib/checkout/options.ts` (`loadPackage`, `packageReturn`), `lib/payments/process.ts`, `lib/quota/adapters/flight.ts` (`packageAdapter`), `lib/documents/requirements.ts`, `lib/admin/productDelete.ts`, `PackageFields.tsx`, editor draf admin (`ItemRows`), dan 9 skrip uji (`test-checkout`, `test-booking-engine-core`, `test-booking-revisions`, `test-booking-groups`, `test-booking-members*`, `test-cost-components`, `test-pilgrim-requirements`).
+
+### 8.3 Keputusan pemilik (DISETUJUI 2026-11-14: K1-1 = b, K1-2 = a, K1-3 = a, K1-4 = a, K1-5 = b, K1-6 = a)
+
+| # | Pertanyaan | Pilihan | Saran |
+|---|---|---|---|
+| K1-1 | Harga per keberangkatan | (a) satu harga paket untuk semua keberangkatan · (b) harga khusus **opsional** per keberangkatan (kosong = harga paket), mis. Ramadan lebih mahal | **(b)** — musim mengubah harga umroh; disimpan sebagai varian titik harga paket (`variantKey`), jadi tetap lewat mesin harga, snapshot, dan laporan laba yang sama |
+| K1-2 | Kursi | (a) kursi per keberangkatan diisi admin; bila paket bertiket, kursi tiket **juga** harus cukup · (b) hanya dari kursi tiket | **(a)** — paket tanpa tiket pun punya batas; tiket tetap dijaga agar tak oversell |
+| K1-3 | Hotel & pesawat per keberangkatan | (a) tetap dari template paket; keberangkatan hanya tanggal, kursi, harga, aktif · (b) tiap keberangkatan boleh ganti hotel/jadwal pesawat | **(a)** — beda hotel = paket berbeda (lebih jelas untuk pelanggan); admin diingatkan bila tanggal keberangkatan di luar periode tiket/hotel |
+| K1-4 | Durasi | (a) durasi di paket (hari), sama untuk semua keberangkatan; pulang = berangkat + durasi − 1 · (b) durasi per keberangkatan | **(a)** — "Paket 9 Hari" adalah sifat paket |
+| K1-5 | Rencana perjalanan | (a) satu teks kaya (`RichTextEditor`, admin menulis "Hari 1 …" sendiri) · (b) terstruktur per hari (hari ke-, judul, keterangan) | **(b)** — mudah dibaca di HP dan seragam antarpaket; tetap teks polos per hari |
+| K1-6 | Pesan dari admin (draf) | (a) admin juga memilih dari daftar keberangkatan · (b) admin boleh tanggal bebas | **(a)** — satu sumber kursi dan harga; pengecualian = buat keberangkatan baru |
+
+Ikut dibangun tanpa perlu keputusan: daftar **"Tidak termasuk"** (teks per baris, di samping `highlights` sebagai "Termasuk/Keunggulan"), dan bagian "Termasuk" otomatis dari komponen `included` (hotel, tiket, visa, transport, muthowif, katering).
+
+### 8.4 Rancangan teknis (dengan saran di atas)
+
+**Skema (satu migrasi, fail-closed):**
+- `Package`: `durationDays Int?` (wajib > 0 untuk dapat dipesan), `itinerary Json @default("[]")` (`[{ day, title, body }]`, divalidasi Zod, teks polos), `exclusions Json @default("[]")` (daftar teks).
+- Model baru `PackageDeparture` — `id`, `packageId` (Cascade dari paket hanya bila tak pernah dipesan; lewat `productDelete`), `departureDate @db.Date`, `totalSeats Int`, `pendingSeats Int @default(0)`, `bookedSeats Int @default(0)`, `isActive Boolean`, `note String?` (internal), `createdAt/updatedAt @db.Timestamptz(3)`; `@@unique([packageId, departureDate])`; CHECK `pendingSeats ≥ 0 AND bookedSeats ≥ 0`. Tanggal pulang **tidak disimpan** — turunan `departureDate + durationDays − 1` lewat satu fungsi murni.
+- `BookingPackage.departureId String?` FK Restrict ke `PackageDeparture` (nullable hanya untuk baris lama; jalur pesan baru selalu mengisinya). Migrasi berhenti bila ada draf (`bookings.draft`) berisi item paket — draf tanpa `departureId` tak bisa diterbitkan lagi (DB dev: dicek dulu, dibuang bila ada).
+- Harga khusus keberangkatan = titik harga `package` dengan `variantKey = <departureId>` (manual saja, lewat `setManualSell`; tak ada → harga paket). Dibaca hanya lewat `lib/pricing/engine`.
+
+**Satu penulis:** `lib/packages/departures.ts` (buat/ubah/nonaktif/hapus-aman — dihapus bila tak pernah dipesan, selain itu dinonaktifkan; total kursi tak boleh di bawah `pending + booked`) + validator `lib/validators/package.ts`. Dijaga skrip uji baru `scripts/test-package-departures.ts` (penemu sumber: tak ada penulis lain `packageDeparture.*`).
+
+**Mesin pesan:**
+- Item `package`: `departureDate` diganti `departureId` (checkout, booking, draf, revisi). `resolvePackageItem` membaca keberangkatan (aktif, belum lewat, paket aktif, `durationDays` terisi) → `departureDate`/`returnDate` turunan; pemeriksaan periode tiket/hotel tetap (SEC-126).
+- Kursi: `packageAdapter` + reserve menahan **kursi keberangkatan dan kursi tiket** dalam transaksi yang sama (urutan kunci tetap: keberangkatan → tiket); `confirm`/`release` memakai `quotaConfirmed` per baris seperti sekarang. Habis → `QuotaExhaustedError('quotaPackageDeparture', …)` 409.
+- Harga: `compositeLines` paket memakai varian keberangkatan bila ada (baris penyesuaian seperti harga manual sekarang); invoice menulis "berangkat 15 Des 2026 · 9 hari".
+
+**Admin (editor paket, tata letak `EditorShell`):** kotak "Durasi & rencana perjalanan" (durasi, baris per hari, tidak termasuk) dan kotak "Keberangkatan" (tabel `DataTable`: tanggal, pulang turunan, kursi total/terjual/ditahan, harga khusus, status; aksi `RowActions` + `ConfirmDialog`). Peringatan (tidak menolak) bila tanggal di luar periode tiket/hotel atau malam hotel > durasi − 1. Draf admin: kolom paket di `ItemRows` memilih keberangkatan.
+
+**Publik:**
+- Halaman detail baru `/{locale}/packages/[id]` — foto, ringkasan (durasi, kota, maskapai bila ada), kartu hotel (nama, bintang, jarak ke Masjid), rencana perjalanan per hari, termasuk / tidak termasuk, syarat dokumen (`RequiredDocuments`), daftar keberangkatan (tanggal, pulang, sisa kursi "tinggal N" bila sedikit, harga per orang) dengan tombol Pesan → checkout terisi. Metadata + `localizedAlternates`, masuk sitemap, teks lewat pesan id/en (`catalog.packages.detail.*`), 404 bila nonaktif. Tak ada HPP/vendor di halaman (penjaga `test-public-home`).
+- Kartu katalog → halaman detail (tombol "Lihat detail"), menampilkan durasi + keberangkatan terdekat.
+- Checkout: `PackageFields` memilih dari daftar keberangkatan (yang habis/lewat tampil mati), bukan kalender; kunci isian awal baru `departure` (UUID) di `PREFILL_KEYS` → otomatis ikut jalur kembali login (`safeNextPath`).
+
+**Di luar K1 (dicatat):** T2 (checkout paket menampilkan rincian komponen internal) dikerjakan terpisah; hotel/transport paket tetap tidak menahan kuota (gap lama §10.2); muthowif `user_choice` paket tetap 422.
+
+### 8.5 Fase
+
+1. **F1 — Skema + migrasi + penulis keberangkatan** (`lib/packages/departures.ts`, validator, uji migrasi fail-closed di DB pra-migrasi berisi data).
+   **As-built F1 (2026-11-14):** migrasi `20261122090000_package_departures` (aditif; CHECK kursi `pending + booked ≤ total` dan tak negatif, durasi 1–60, `itinerary`/`exclusions` array). `Package.durationDays`/`itinerary`/`exclusions`; `PackageDeparture` (FK paket **Restrict** — penghapus paket memanggil `dropDeparturesOf` untuk paket yang belum pernah dipesan); `BookingPackage.departureId` (Restrict). Penulis tunggal `lib/packages/departures.ts` (`listDepartures`, `createDeparture`, `updateDeparture`, `deleteOrDeactivateDeparture`; galat berkode `DepartureError`: `packageNotFound`, `departureNotFound`, `departureDuplicate`, `departurePast`, `departureSeatsBelowSold`, `departureDateLocked`; baris dikunci `FOR UPDATE`; tanggal terkunci setelah dipesan; hapus = nonaktif bila dirujuk, cadangan P2003). Rumus murni `lib/packages/dates.ts` (`packageReturnDate`, `seatsLeft`). Validator `lib/validators/package.ts` (`departureCreate/UpdateSchema`, `packageDetailSchema`, `readItinerary`/`readExclusions`). Uji `scripts/test-package-departures.ts` (masuk `bun run test`) + `test-admin-delete` (FK baru, keberangkatan ikut terhapus). Pemeriksaan fail-closed draf berisi item paket dipindah ke F3 (bentuk item baru berubah di sana).
+2. **F2 — Admin editor paket** (durasi, rencana perjalanan, tidak termasuk, keberangkatan + harga khusus; hapus aman).
+3. **F3 — Mesin pesan** (item `departureId`, kursi keberangkatan + tiket, harga varian, revisi, draf admin, invoice; uji kursi tahan/konfirmasi/lepas/hangus dan harga = pratinjau).
+4. **F4 — Checkout publik** (pilih keberangkatan, isian awal `departure`).
+5. **F5 — Halaman detail publik + kartu katalog** (id/en, SEO, sitemap, 375 px).
+6. **F6 — Verifikasi menyeluruh & dokumentasi** (browser admin → publik → checkout → booking; suite di DB sekali pakai; build; security review; `docs/progress.md`, `docs/decisions.md` keputusan pengganti P3, CLAUDE.md aturan "keberangkatan paket hanya lewat `lib/packages/departures.ts`").
+
+Setiap fase satu PR, build 0 error + security review sebelum lanjut.

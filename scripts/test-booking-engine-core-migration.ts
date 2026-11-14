@@ -161,7 +161,7 @@ await t('pelanggan: kolom pelonggaran ditambahkan lalu dibuang lagi oleh migrasi
   assert.equal(await colExists(r.name, 'users', 'allowVisaWithoutBundle'), false)
   assert.equal(Number((await one(r.name, `select count(*)::int as n from users where email = 'lama@example.test'`)).n), 1)
   const fks = await query(r.name, `select conname, confdeltype from pg_constraint where conrelid = 'booking_packages'::regclass and contype = 'f' order by conname`)
-  assert.deepEqual(fks.map(f => [f.conname, f.confdeltype]), [['booking_packages_bookingId_fkey', 'c'], ['booking_packages_flightScheduleId_fkey', 'r'], ['booking_packages_groupId_bookingId_fkey', 'a'], ['booking_packages_packageId_fkey', 'r']]) // rombongan (11d-1): NO ACTION, terhapus bersama booking
+  assert.deepEqual(fks.map(f => [f.conname, f.confdeltype]), [['booking_packages_bookingId_fkey', 'c'], ['booking_packages_departureId_fkey', 'r'], ['booking_packages_flightScheduleId_fkey', 'r'], ['booking_packages_groupId_bookingId_fkey', 'a'], ['booking_packages_packageId_fkey', 'r']]) // rombongan (11d-1): NO ACTION, terhapus bersama booking; keberangkatan (K1): Restrict
   const db = new PrismaClient({ datasourceUrl: dbUrl(r.name) })
   try {
     const u = await seedUser(db)

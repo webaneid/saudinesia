@@ -584,9 +584,16 @@ model Package {
   includedCateringNumDays   Int?
   includedCateringPrice     Decimal?          @db.Decimal(14, 2)
 
+  // K1 (docs/arsitektur-paket-umroh.md §8): durasi paket (hari, sama untuk semua keberangkatan; pulang = berangkat + durasi − 1),
+  // rencana perjalanan per hari `[{ day, title, body }]` dan daftar "tidak termasuk" (teks polos) — bentuk divalidasi lib/validators/package.ts.
+  durationDays Int?
+  itinerary    Json @default("[]")
+  exclusions   Json @default("[]")
+
   hotelOptions    PackageHotelOption[]
   visaOptions     PackageVisaOption[]
   cateringOptions PackageCateringOption[]
+  departures      PackageDeparture[]
   bookings        BookingPackage[]
 
   transportTrip                TransportTrip?     @relation(fields: [transportTripId], references: [id])
@@ -599,6 +606,28 @@ model Package {
   includedHotelMadinahSchedule HotelRoomSchedule? @relation("PackageHotelMadinah", fields: [includedHotelMadinahScheduleId], references: [id])
 
   @@map("packages")
+}
+
+// Keberangkatan Paket Umroh (K1, docs/arsitektur-paket-umroh.md §8): paket dipesan dari daftar ini, bukan tanggal bebas.
+// Ditulis HANYA oleh lib/packages/departures.ts; kursi hanya lewat lib/quota. Tanggal pulang tidak disimpan (turunan durasi paket).
+// Harga khusus = titik harga `package` ber-variantKey = id keberangkatan (mesin harga), bukan kolom di sini.
+model PackageDeparture {
+  id            String   @id @default(uuid())
+  packageId     String
+  departureDate DateTime @db.Date
+  totalSeats    Int
+  pendingSeats  Int      @default(0)
+  bookedSeats   Int      @default(0)
+  isActive      Boolean  @default(true)
+  note          String?  @db.VarChar(500) // catatan internal admin — tidak pernah tampil ke pelanggan
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  package  Package          @relation(fields: [packageId], references: [id], onDelete: Restrict)
+  bookings BookingPackage[]
+
+  @@unique([packageId, departureDate])
+  @@map("package_departures")
 }
 
 // Kurasi manual opsi Hotel saat mode='user_choice' (pola sama TourPackageHotelOption, + slot Makkah/Madinah)
@@ -1434,6 +1463,8 @@ model BookingPackage {
   /// tetap `pending` sampai pembayarannya diverifikasi. Pelepasan kuota membaca kolom ini (docs/arsitektur-booking-engine-v2.md §10.4 6b koreksi).
   quotaConfirmed   Boolean  @default(false)
   packageId        String
+  /// Keberangkatan yang dipesan (K1). NULL hanya untuk baris sebelum K1; jalur pesan baru selalu mengisinya. Tanggal di bawah = salinan turunan saat dipesan.
+  departureId      String?
   departureDate    DateTime @db.Date
   returnDate       DateTime @db.Date
   numPeople        Int
@@ -1441,14 +1472,16 @@ model BookingPackage {
   choices          Json     @default("{}") // id pilihan komponen user_choice (tanpa data pribadi)
   totalPrice       Decimal  @db.Decimal(14, 2)
 
-  booking        Booking          @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  group          BookingGroup?    @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
-  package        Package          @relation(fields: [packageId], references: [id])
-  flightSchedule FlightSchedule?  @relation(fields: [flightScheduleId], references: [id], onDelete: Restrict)
+  booking        Booking           @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  group          BookingGroup?     @relation(fields: [groupId, bookingId], references: [id, bookingId], onDelete: NoAction)
+  package        Package           @relation(fields: [packageId], references: [id])
+  departure      PackageDeparture? @relation(fields: [departureId], references: [id], onDelete: Restrict)
+  flightSchedule FlightSchedule?   @relation(fields: [flightScheduleId], references: [id], onDelete: Restrict)
   members        BookingPilgrim[]
 
   @@index([bookingId])
   @@index([packageId])
+  @@index([departureId])
   @@index([groupId])
   @@map("booking_packages")
 }

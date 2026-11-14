@@ -6,6 +6,8 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { prisma } from '@/lib/db'
+import { createDeparture } from '@/lib/packages/departures'
+import { addDays, todayInApp } from '@/lib/time'
 import { deleteHotel, deleteMuthowif, deletePackage, deleteTourPackage, deleteTourismSite, deleteVisaProduct } from '@/lib/admin/productDelete'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -116,9 +118,11 @@ await t('Paket Umroh: dihapus beserta opsi (CASCADE), biaya & foto polimorfik; m
   const v = await prisma.visaProduct.create({ data: { name: `${tag} v-opt`, visaType: 'Umroh' } })
   const p = await prisma.package.create({ data: { name: `${tag} pk1` } })
   await prisma.packageVisaOption.create({ data: { packageId: p.id, visaProductId: v.id } })
+  await createDeparture(p.id, { departureDate: addDays(todayInApp(), 30), totalSeats: 10 }) // K1: keberangkatan belum dipesan ikut terhapus (FK Restrict, bukan CASCADE)
   await poly('package', p.id); await img('package', p.id)
   assert.deepEqual(await deletePackage(p.id), { deleted: true })
   assert.equal(await prisma.packageVisaOption.count({ where: { packageId: p.id } }), 0)
+  assert.equal(await prisma.packageDeparture.count({ where: { packageId: p.id } }), 0)
   assert.equal(await polyCount('package', p.id), 0); assert.equal(await imgCount('package', p.id), 0)
   assert.equal(await polyCount('package', bystander.id), 4, 'baris milik produk lain harus utuh')
   assert.equal((await deleteVisaProduct(v.id)).deleted, true, 'visa bebas setelah opsi paket hilang')
@@ -203,7 +207,7 @@ const EXPECTED_FK: Record<string, string[]> = {
   muthowif: ['booking_muthowif.muthowifId n', 'muthowif_availability.muthowifId c'],
   tourism_sites: ['tour_package_sites.tourismSiteId r'],
   tour_packages: ['booking_tour_packages.tourPackageId r', 'tour_package_hotel_options.tourPackageId c', 'tour_package_hotels.tourPackageId c', 'tour_package_sites.tourPackageId c'],
-  packages: ['booking_packages.packageId r', 'package_catering_options.packageId c', 'package_hotel_options.packageId c', 'package_visa_options.packageId c'],
+  packages: ['booking_packages.packageId r', 'package_catering_options.packageId c', 'package_departures.packageId r', 'package_hotel_options.packageId c', 'package_visa_options.packageId c'],
   visa_products: ['package_visa_options.visaProductId r', 'packages.includedVisaProductId n', 'visa_applications.visaProductId n'],
   hotels: ['hotel_price_periods.hotelId c', 'hotel_services.hotelId c'],
   hotel_room_schedules: [
