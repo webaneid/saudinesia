@@ -5,10 +5,11 @@ import type { BookingItemInput } from '@/lib/validators/booking'
 import { computePackageBreakdown, perPersonShare, type PackageBreakdown } from '@/lib/pricing/computePackagePrice'
 import { computeCateringBookingPrice } from '@/lib/pricing/computeCateringPrice'
 import { compositeLines, lineFromPoint, peekCost, takePoint, takeVisaTier, type CompositePart, type SnapshotLine } from '@/lib/pricing/engine/snapshot'
-import { addDays, calendarDateOf, daysBetween, dbDateOf, type CalendarDate } from '@/lib/time'
+import { calendarDateOf, daysBetween, dbDateOf, type CalendarDate } from '@/lib/time'
+import { packageReturnDate } from '@/lib/packages/dates'
 
 // Item Paket Umroh (docs/arsitektur-booking-engine-v2.md §10.2): dijual PER ORANG (P1), satu item booking yang di invoice diurai satu baris per komponen × jumlah orang (P2),
-// tanggal berangkat dipilih saat booking (P3). Resolusi (validasi pilihan + tanggal + cakupan aturan) dilakukan SEKALI sebelum transaksi; harga dibaca di dalam transaksi.
+// tanggal = KEBERANGKATAN yang dikelola admin (K1, docs/arsitektur-paket-umroh.md §8 — menggantikan tanggal bebas P3); pulang = berangkat + durasi paket − 1. Resolusi (validasi pilihan + tanggal + cakupan aturan) dilakukan SEKALI sebelum transaksi; harga dibaca di dalam transaksi.
 
 type PackageInput = Extract<BookingItemInput, { itemType: 'package' }>
 export type PackageChoices = PackageInput['choices']
@@ -16,6 +17,7 @@ export type PackageChoices = PackageInput['choices']
 export type PackageResolved = {
   name: string
   breakdown: PackageBreakdown
+  departureId: string
   departureDate: CalendarDate
   returnDate: CalendarDate
   /** Kursi tiket yang ditahan (included atau dipilih), null bila paket tanpa tiket. */
@@ -33,8 +35,16 @@ const notApplicable = (choice: Choice) => new ItemNotBookableError('itemChoiceNo
 const notInOptions = (choice: Choice) => new ItemNotBookableError('itemChoiceNotOffered', { choice })
 
 export async function resolvePackageItem(item: PackageInput): Promise<PackageResolved> {
-  const pkg = await prisma.package.findUnique({ where: { id: item.packageId }, select: { name: true, isActive: true } })
+  const pkg = await prisma.package.findUnique({ where: { id: item.packageId }, select: { name: true, isActive: true, durationDays: true } })
   if (!pkg || !pkg.isActive) throw new ItemNotBookableError('itemPackageUnavailable')
+  if (!pkg.durationDays) throw new ItemNotBookableError('itemPackageNoDuration')
+  if (!item.departureId) throw new ItemNotBookableError('itemPackageDepartureMissing') // baris lama sebelum K1 (revisi)
+  // Keberangkatan milik paket ITU (id paket lain = tidak tersedia). Aktif dan belum lewat diperiksa SAAT KURSI DITAHAN (lib/quota, di dalam kunci) — hanya untuk
+  // item baru/diganti, sehingga item lama yang keberangkatannya sudah lewat/dinonaktifkan tetap bisa ikut revisi booking.
+  const dep = await prisma.packageDeparture.findUnique({ where: { id: item.departureId }, select: { packageId: true, departureDate: true } })
+  if (!dep || dep.packageId !== item.packageId) throw new ItemNotBookableError('itemPackageDepartureUnavailable')
+  const departureDate = calendarDateOf(dep.departureDate)
+  const returnDate = packageReturnDate(departureDate, pkg.durationDays)
   const b = await computePackageBreakdown(item.packageId)
   const c = item.choices
   if (b.muthowifMode === 'user_choice') throw new ItemNotBookableError('itemPackageMuthowifChoice')
@@ -56,7 +66,6 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
   }
   for (const k of Object.keys(choices) as Array<keyof PackageChoices>) if (choices[k] === undefined) delete choices[k]
 
-  const departureDate = item.departureDate as CalendarDate
   const flightScheduleId = b.flightMode === 'included' ? b.includedFlightScheduleId : (choices.flightScheduleId ?? null)
   if (flightScheduleId) {
     const s = await prisma.flightSchedule.findUnique({ where: { id: flightScheduleId }, select: { isActive: true, departureFrom: true, departureTo: true } })
@@ -65,11 +74,6 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
       throw new ItemNotBookableError('itemPackageDepartureOutside', { fromDate: calendarDateOf(s.departureFrom), toDate: calendarDateOf(s.departureTo) })
     }
   }
-
-  const makkahNights = b.hotelMakkahMode === 'included' ? (b.hotelMakkah?.nights ?? 0) : (b.hotelMakkahOptions.find(o => o.hotelRoomScheduleId === choices.hotelMakkahScheduleId)?.nights ?? 0)
-  const madinahNights = b.hotelMadinahMode === 'included' ? (b.hotelMadinah?.nights ?? 0) : (b.hotelMadinahOptions.find(o => o.hotelRoomScheduleId === choices.hotelMadinahScheduleId)?.nights ?? 0)
-
-  const returnDate = addDays(departureDate, makkahNights + madinahNights)
 
   // Tanggal menginap harus di periode harga setiap hotel yang dipakai (sama dengan item hotel mandiri — SEC-126: jadwal periode murah tak boleh dipakai di musim lain).
   // Urutan kota belum ada di template, jadi seluruh rentang berangkat–pulang harus tercakup periode tiap hotel.
@@ -102,7 +106,7 @@ export async function resolvePackageItem(item: PackageInput): Promise<PackageRes
     : choices.transportPricingId && b.transportTripId ? { tripId: b.transportTripId, category: b.tripCategory ?? '' } : null
 
   return {
-    name: pkg.name, breakdown: b, departureDate, returnDate,
+    name: pkg.name, breakdown: b, departureId: item.departureId, departureDate, returnDate,
     flightScheduleId,
     visaProductId,
     choices,

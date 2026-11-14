@@ -1119,7 +1119,6 @@
       "tooLong": "Maksimal {max} hari per pesanan"
     },
     "entry": {
-      "package": "Berangkat {date} · {people} orang",
       "visa": "Rencana berangkat {date} · {people} orang",
       "visaDuration": "Rencana berangkat {date} · {days}+ hari · {people} orang",
       "people": "{people} orang",
@@ -1131,6 +1130,7 @@
     },
     "blocked": {
       "packageMuthowifChoice": "Paket ini memakai muthowif pilihan — belum dapat dipesan online, hubungi kami.",
+      "packageNoDeparture": "Belum ada jadwal keberangkatan untuk paket ini — hubungi kami.",
       "packageFlightPast": "Jadwal tiket paket ini sudah lewat — belum dapat dipesan.",
       "tourUnpriced": "Harga paket ini belum ditetapkan — belum dapat dipesan.",
       "tourNoVehicle": "Belum ada jadwal kendaraan untuk paket ini — hubungi kami.",
@@ -1152,9 +1152,12 @@
       "schedule": "Jadwal & jumlah jamaah",
       "flight": "Tiket pesawat",
       "pickFlight": "Pilih jadwal tiket",
-      "departure": "Tanggal berangkat",
-      "available": "Tersedia {from} – {to}",
-      "fromToday": "Pilih tanggal mulai hari ini",
+      "departure": "Keberangkatan",
+      "pickDeparture": "Pilih keberangkatan",
+      "departureOption": "{from} – {to}",
+      "seatsLeft": "Sisa {seats} kursi",
+      "soldOut": "Penuh",
+      "duration": "{days} hari",
       "people": "Jumlah jamaah",
       "choices": "Pilihan paket",
       "choicesHint": "Pilih sesuai kebutuhan; kosongkan bila tidak perlu. Harga di samping adalah perkiraan per orang (kendaraan: per unit).",
@@ -1174,8 +1177,7 @@
       },
       "missing": {
         "pickFlight": "Pilih jadwal tiket pesawat",
-        "pickDate": "Pilih tanggal berangkat",
-        "outOfPeriod": "Tanggal berangkat di luar periode yang tersedia"
+        "pickDeparture": "Pilih keberangkatan"
       }
     },
     "visa": {
@@ -1784,6 +1786,10 @@
     "itemChoiceNotApplicable": "Pilihan {choice, select, hotel_makkah {Hotel Makkah} hotel_madinah {Hotel Madinah} transport {kendaraan} visa {visa} flight {tiket pesawat} catering {katering} hotel {hotel} other {produk}} tidak berlaku untuk paket ini",
     "itemPackageUnavailable": "Paket umroh tidak tersedia",
     "itemPackageMuthowifChoice": "Paket ini memakai muthowif pilihan — belum dapat dipesan, hubungi admin",
+    "itemPackageDepartureUnavailable": "Keberangkatan paket yang dipilih tidak tersedia",
+    "itemPackageDeparturePast": "Keberangkatan paket yang dipilih sudah lewat",
+    "itemPackageNoDuration": "Durasi paket ini belum diatur — belum dapat dipesan, hubungi admin",
+    "itemPackageDepartureMissing": "Item paket lama ini belum punya keberangkatan — hapus lalu tambahkan ulang dengan keberangkatan",
     "itemPackageFlightUnavailable": "Tiket pesawat paket ini tidak tersedia",
     "itemPackageDepartureOutside": "Tanggal berangkat paket harus di antara {fromDate} dan {toDate} (periode tiket pesawat)",
     "itemPackageStayOutside": "Tanggal menginap di luar periode harga {hotel} ({fromDate} – {toDate})",
@@ -1802,6 +1808,7 @@
     "pilgrimDataInvalid": "Data jamaah tidak valid",
     "quotaHotel": "Kamar hotel tidak cukup: dibutuhkan {need}, tersisa {have}",
     "quotaTransport": "Kursi kendaraan tidak cukup: dibutuhkan {need}, tersisa {have}",
+    "quotaPackageDeparture": "Kursi keberangkatan paket tidak cukup: dibutuhkan {need}, tersisa {have}",
     "quotaFlight": "Kursi pesawat tidak cukup: dibutuhkan {need}, tersisa {have}",
     "quotaHaji": "Kuota haji tidak cukup: dibutuhkan {need}, tersisa {have}",
     "quotaMuthowif": "Kapasitas muthowif tidak cukup pada tanggal yang dipilih",

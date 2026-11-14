@@ -83,7 +83,8 @@ await t('checkoutSchema: ketat — harga/total/jamaah/pemilik dari klien ditolak
   for (const extra of [{ totalPrice: 1 }, { totalAmount: 1 }, { pilgrims: [] }, { userId: U }, { departureDate: '2090-01-01' }, { status: 'confirmed' }]) {
     assert.equal(ok({ kind: 'haji', hajiProductId: U, numPeople: 1, ...extra }), false, JSON.stringify(extra))
   }
-  assert.equal(ok({ kind: 'package', packageId: U, departureDate: '2090-06-05', numPeople: 1, choices: { price: 1 } }), false, 'pilihan paket liar')
+  assert.equal(ok({ kind: 'package', packageId: U, departureId: U, numPeople: 1, choices: { price: 1 } }), false, 'pilihan paket liar')
+  assert.equal(ok({ kind: 'package', packageId: U, departureDate: '2090-06-05', numPeople: 1, choices: {} }), false, 'K1: tanggal bebas tak diterima')
   assert.equal(ok({ kind: 'hotel', id: U }), false)
   // Muthowif & Katering (11b-2): jumlah hari TIDAK dari klien (termasuk hari mulai dan selesai); muthowif tanpa memilih orang (K11b-3).
   const M = { kind: 'muthowif', startDate: '2090-06-01', endDate: '2090-06-04', numPeople: 2 }
@@ -196,7 +197,8 @@ const flightBack = await prisma.flightSchedule.create({ data: { routeId: routeBa
 const flightOther = await prisma.flightSchedule.create({ data: { routeId: routeOther.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-07-31'), totalSeats: 10 } })
 const flightUnpriced = await prisma.flightSchedule.create({ data: { routeId: routeBack.id, departureFrom: new Date('2090-06-01'), departureTo: new Date('2090-07-31'), totalSeats: 10 } })
 for (const f of [flightOut, flightBack, flightOther]) { await addCost('flight', f.id, 'tiket', 5_000_000); await repriceOwner('flight', f.id) }
-const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, hotelMadinahMode: 'user_choice' } })
+const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, durationDays: 9, hotelMadinahMode: 'user_choice' } })
+const pkgDep = await prisma.packageDeparture.create({ data: { packageId: pkg.id, departureDate: new Date('2090-06-05'), totalSeats: 100 } }) // K1 (DB uji)
 await prisma.packageHotelOption.create({ data: { packageId: pkg.id, slot: 'madinah', hotelRoomScheduleId: room.id, nights: 2 } })
 await addCost('package', pkg.id, 'handling', 500_000); await repriceOwner('package', pkg.id)
 
@@ -229,7 +231,7 @@ const testBank = await prisma.bankAccount.create({ data: { bankName: `${tag} BSI
 const VISA: CheckoutInput = { kind: 'visa', visaProductId: visa.id, numPeople: 2, plannedTravelDate: '2090-06-01' }
 const HAJI: CheckoutInput = { kind: 'haji', hajiProductId: haji.id, numPeople: 2 }
 const TRANSPORT: CheckoutInput = { kind: 'transport', transportQuotaId: quota.id, numPassengers: 4, pickupDetail: 'GA 980' }
-const PACKAGE: CheckoutInput = { kind: 'package', packageId: pkg.id, departureDate: '2090-06-05', numPeople: 2, choices: { hotelMadinahScheduleId: room.id } }
+const PACKAGE: CheckoutInput = { kind: 'package', packageId: pkg.id, departureId: pkgDep.id, numPeople: 2, choices: { hotelMadinahScheduleId: room.id } }
 const HOTEL: CheckoutInput = { kind: 'hotel', hotelRoomScheduleId: room.id, checkIn: '2090-06-05', checkOut: '2090-06-08', numRooms: 2, numGuests: 5 }
 const TOUR_INCL: CheckoutInput = { kind: 'tour', tourPackageId: tourIncl.id, tourDate: '2090-07-01', numPeople: 3 }
 const TOUR_CHOICE: CheckoutInput = { kind: 'tour', tourPackageId: tourChoice.id, tourDate: '2090-06-02', numPeople: 2, transportQuotaId: quota.id, chosenHotelRoomScheduleId: room.id, chosenHotelNumRooms: 1 }
@@ -389,7 +391,10 @@ await t('keranjang campur: Visa Plus + Tiket + Hotel = SATU booking + SATU invoi
 await t('tanggal lampau ditolak 400 (paket, visa, kuota transport lampau); hari ini boleh', async () => {
   const yesterday = addDays(todayInApp(), -1)
   assert.equal((await checkoutDateRefusal({ ...VISA, plannedTravelDate: yesterday } as CheckoutInput))?.status, 400)
-  assert.equal((await checkoutDateRefusal({ ...PACKAGE, departureDate: yesterday } as CheckoutInput))?.status, 400)
+  // Paket: tanggal dari keberangkatan (server) — keberangkatan lewat ditolak mesin saat kursi ditahan (422), bukan oleh pemeriksa tanggal.
+  const pastDep = await prisma.packageDeparture.create({ data: { packageId: pkg.id, departureDate: new Date(yesterday), totalSeats: 100 } })
+  const pf = await failOf({ ...PACKAGE, choices: {}, departureId: pastDep.id } as CheckoutInput) // tanpa hotel pilihan (periode hotel menolak lebih dulu)
+  assert.equal(pf.status, 422); assert.equal(pf.code, 'itemPackageDeparturePast', JSON.stringify(pf))
   assert.equal((await checkoutDateRefusal({ ...TRANSPORT, transportQuotaId: pastQuota.id } as CheckoutInput))?.status, 400)
   assert.equal((await checkoutDateRefusal({ ...HOTEL, checkIn: yesterday, checkOut: todayInApp() } as CheckoutInput))?.status, 400)
   assert.equal((await checkoutDateRefusal({ ...TOUR_INCL, tourDate: yesterday } as CheckoutInput))?.status, 400)
@@ -467,6 +472,7 @@ await t('PENJAGA tombol katalog: Hotel, Paket Ziarah, Muthowif, Katering, Tiket 
 // ── pembersihan (test-seed-guard sesudahnya butuh DB tanpa jamaah/booking) ───────────────────────────────────────────
 await prisma.booking.deleteMany({ where: { userId: { in: [user.id] } } }) // cascade: item, jamaah, visa, snapshot, invoice
 const starts = { startsWith: tag }
+await prisma.packageDeparture.deleteMany({ where: { package: { name: starts } } }) // FK Restrict (K1)
 await prisma.package.deleteMany({ where: { name: starts } })
 await prisma.tourPackage.deleteMany({ where: { name: starts } }) // sebelum harga transport & hotel (FK opsi/kendaraan termasuk)
 await prisma.visaProduct.deleteMany({ where: { name: starts } })

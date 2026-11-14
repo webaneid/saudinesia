@@ -216,7 +216,7 @@ export async function writeBookingItems(
           if (!(totalPrice > 0)) throw new ItemNotBookableError('itemPriceNotSet', { what: 'umrahPackage' })
           const row = await tx.bookingPackage.create({
             data: {
-              bookingId, groupId: gid(item), packageId: item.packageId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
+              bookingId, groupId: gid(item), packageId: item.packageId, departureId: r.departureId, departureDate: dbDateOf(r.departureDate), returnDate: dbDateOf(r.returnDate),
               numPeople: item.numPeople, flightScheduleId: r.flightScheduleId, choices: r.choices as Prisma.InputJsonValue, totalPrice,
             },
           })

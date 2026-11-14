@@ -84,7 +84,8 @@ const bookingItemSchema = z.discriminatedUnion('itemType', [
     itemType: z.literal('package'),
     group: groupIndex,
     packageId:     z.string().uuid(),
-    departureDate: z.string().date(),
+    // Keberangkatan yang dipilih (K1, docs/arsitektur-paket-umroh.md §8): tanggal berangkat/pulang TURUNAN keberangkatan + durasi paket, bukan dari klien.
+    departureId:   z.string().uuid(),
     numPeople:     z.number().int().min(1).max(2000),
     choices: z.object({
       hotelMakkahScheduleId:  z.string().uuid().optional(),

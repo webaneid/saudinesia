@@ -17,6 +17,8 @@ export type TourOpt = { id: string; name: string; price: number; transportMode: 
 type Choice = { id: string; name: string; perPerson?: number; price?: number }
 export type PackageOpt = {
   id: string; name: string; pricePerPerson: number
+  /** Keberangkatan yang bisa dipilih (lib/packages/departures.ts `bookableDepartures`). */
+  departures: Array<{ id: string; departureDate: string; returnDate: string; seatsLeft: number }>
   modes: Record<'hotelMakkah' | 'hotelMadinah' | 'transport' | 'muthowif' | 'visa' | 'flight' | 'catering', string>
   options: Record<'hotelMakkah' | 'hotelMadinah' | 'transport' | 'visa' | 'flight' | 'catering', Choice[]>
 }
@@ -62,7 +64,8 @@ export function describeItem(item: DraftItem, c: Catalog): { title: string; deta
     }
     case 'package': {
       const o = c.package?.find(x => x.id === item.packageId)
-      return o ? { title: `Paket Umroh ${o.name}`, detail: `${d(item.departureDate)} · ${item.numPeople} orang · ${formatRupiah(o.pricePerPerson)}/orang (dasar)` } : missing
+      const dep = o?.departures.find(x => x.id === item.departureId)
+      return o ? { title: `Paket Umroh ${o.name}`, detail: `${dep ? `${d(dep.departureDate)} – ${d(dep.returnDate)}` : 'keberangkatan'} · ${item.numPeople} orang · ${formatRupiah(o.pricePerPerson)}/orang (dasar)` } : missing
     }
     case 'haji':
       return { title: 'Haji', detail: `${item.numPersons} orang` }

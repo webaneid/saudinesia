@@ -28,18 +28,18 @@ export function serviceDays(rawStart: string, rawEnd: string, today: string, max
 }
 
 /** Ringkasan satu baris pilihan pesanan — kunci `checkout.entry.*` + nilainya (tanggal sudah diformat dalam bahasa halaman). */
-export type EntrySummary = { key: 'package' | 'visa' | 'visaDuration' | 'people' | 'hotel' | 'tour' | 'range' | 'flight' | 'flightReturn'; values: Record<string, string | number> }
+export type EntrySummary = { key: 'visa' | 'visaDuration' | 'people' | 'hotel' | 'tour' | 'range' | 'flight' | 'flightReturn'; values: Record<string, string | number> }
 
 /** Ringkasan satu baris pilihan pesanan untuk kartu keranjang (tanggal + jumlah orang) — tanpa harga, tanpa data pribadi. */
 export function entrySummary(c: CheckoutInput, locale: string): EntrySummary {
   const day = (d: string) => formatCalendarDate(d, undefined, locale)
   const people = entryPeople(c)
   switch (c.kind) {
-    case 'package': return { key: 'package', values: { date: day(c.departureDate), people } }
+    // Paket: tanggal ada di keberangkatan (server) — keranjang tidak menyimpan teks/tanggal tampilan, jadi hanya jumlah orang; rincian tanggal tampil di ringkasan pesanan.
+    case 'transport': case 'haji': case 'package': return { key: 'people', values: { people } }
     case 'visa': return c.selectedDurationDays
       ? { key: 'visaDuration', values: { date: day(c.plannedTravelDate), days: c.selectedDurationDays, people } }
       : { key: 'visa', values: { date: day(c.plannedTravelDate), people } }
-    case 'transport': case 'haji': return { key: 'people', values: { people } }
     case 'hotel': return { key: 'hotel', values: { checkIn: day(c.checkIn), checkOut: day(c.checkOut), rooms: c.numRooms, people } }
     case 'tour': return { key: 'tour', values: { date: day(c.tourDate), people } }
     case 'muthowif': case 'catering': return { key: 'range', values: { start: day(c.startDate), end: day(c.endDate), people } }

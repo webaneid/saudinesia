@@ -10,12 +10,15 @@ const COUNT_RE = /^[1-9]\d{0,2}$/
 
 export type FlightPrefill = { date?: CalendarDate; pax?: number; ret?: string; retDate?: CalendarDate }
 export type HotelPrefill = { room?: string; checkIn?: CalendarDate; checkOut?: CalendarDate; rooms?: number; guests?: number }
-export type CheckoutPrefill = FlightPrefill | HotelPrefill
+export type PackagePrefill = { departure?: string; pax?: number }
+export type CheckoutPrefill = FlightPrefill | HotelPrefill | PackagePrefill
 
 type Kind = 'date' | 'count' | 'uuid'
 /** Kunci per jenis, dalam URUTAN kanonik (urutan ini juga yang diterima jalur kembali login). */
 export const PREFILL_KEYS = {
   flight: [['date', 'date'], ['pax', 'count'], ['ret', 'uuid'], ['retDate', 'date']],
+  // Paket Umroh (K1): keberangkatan dari halaman detail paket — tetap diperiksa terhadap daftar keberangkatan yang bisa dipilih.
+  package: [['departure', 'uuid'], ['pax', 'count']],
   hotel: [['room', 'uuid'], ['checkIn', 'date'], ['checkOut', 'date'], ['rooms', 'count'], ['guests', 'count']],
 } as const satisfies Partial<Record<CheckoutKind, ReadonlyArray<readonly [string, Kind]>>>
 

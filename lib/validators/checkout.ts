@@ -23,7 +23,7 @@ export const checkoutSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('package'),
     packageId: uuid,
-    departureDate: date,
+    departureId: uuid,
     numPeople: people,
     // Hanya komponen `user_choice` paket; di luar daftar opsi → 422 dari mesin (lib/booking/packageItem.ts).
     choices: z.object({
@@ -125,7 +125,7 @@ export type CheckoutInput = z.infer<typeof checkoutSchema>
 /** Tanggal yang dipilih pelanggan (untuk penolakan tanggal lampau di route). */
 export function checkoutDate(c: CheckoutInput): string | null {
   switch (c.kind) {
-    case 'package': return c.departureDate
+    case 'package': return null // tanggal dari keberangkatan (server); keberangkatan lewat ditolak mesin
     case 'visa': return c.plannedTravelDate
     case 'hotel': return c.checkIn
     case 'tour': return c.tourDate
@@ -144,7 +144,7 @@ export function checkoutInput(c: CheckoutInput): BookingInput {
   const blank = (n: number) => Array.from({ length: n }, () => ({ fieldValues: {} }))
   switch (c.kind) {
     case 'package': {
-      const item: BookingItemInput = { itemType: 'package', packageId: c.packageId, departureDate: c.departureDate, numPeople: c.numPeople, choices: c.choices }
+      const item: BookingItemInput = { itemType: 'package', packageId: c.packageId, departureId: c.departureId, numPeople: c.numPeople, choices: c.choices }
       return { items: [item], pilgrims: blank(c.numPeople), totalPilgrims: c.numPeople }
     }
     case 'visa':

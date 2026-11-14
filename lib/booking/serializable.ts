@@ -6,13 +6,14 @@ export function isSerializationConflict(e: unknown): boolean {
   return e instanceof Prisma.PrismaClientKnownRequestError && (e.code === 'P2034' || (e.code === 'P2010' && (e.meta as { code?: string } | undefined)?.code === '40001'))
 }
 
-/** Jalankan `run` (satu transaksi utuh); bentrok serialisasi → ulang sampai `attempts` kali dengan jeda acak pendek. Galat lain dilempar apa adanya. */
+/** Jalankan `run` (satu transaksi utuh); bentrok serialisasi ATAU deadlock (`FOR UPDATE` mentah atas baris kursi, mis. keberangkatan paket K1 — SEC-233)
+ *  → ulang sampai `attempts` kali dengan jeda acak pendek. Galat lain dilempar apa adanya. */
 export async function retrySerializable<T>(run: () => Promise<T>, attempts = 3): Promise<T> {
   for (let i = 1; ; i++) {
     try {
       return await run()
     } catch (e) {
-      if (!isSerializationConflict(e) || i >= attempts) throw e
+      if (!isRetryableConflict(e) || i >= attempts) throw e
       await new Promise(r => setTimeout(r, 20 + Math.floor(Math.random() * 60) * i))
     }
   }

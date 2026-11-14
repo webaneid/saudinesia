@@ -1119,7 +1119,6 @@
       "tooLong": "Maximum {max, plural, one {# day} other {# days}} per order"
     },
     "entry": {
-      "package": "Departs {date} · {people, plural, one {# person} other {# people}}",
       "visa": "Planned departure {date} · {people, plural, one {# person} other {# people}}",
       "visaDuration": "Planned departure {date} · {days}+ days · {people, plural, one {# person} other {# people}}",
       "people": "{people, plural, one {# person} other {# people}}",
@@ -1131,6 +1130,7 @@
     },
     "blocked": {
       "packageMuthowifChoice": "This package uses a chosen muthowif — it cannot be ordered online yet, please contact us.",
+      "packageNoDeparture": "There is no departure scheduled for this package yet — please contact us.",
       "packageFlightPast": "This package's flight schedule has passed — it cannot be ordered.",
       "tourUnpriced": "This package has no price yet — it cannot be ordered.",
       "tourNoVehicle": "There is no vehicle schedule for this package yet — please contact us.",
@@ -1152,9 +1152,12 @@
       "schedule": "Schedule & number of pilgrims",
       "flight": "Flight ticket",
       "pickFlight": "Select a flight schedule",
-      "departure": "Departure date",
-      "available": "Available {from} – {to}",
-      "fromToday": "Select a date from today",
+      "departure": "Departure",
+      "pickDeparture": "Select a departure",
+      "departureOption": "{from} – {to}",
+      "seatsLeft": "{seats, plural, one {# seat} other {# seats}} left",
+      "soldOut": "Sold out",
+      "duration": "{days, plural, one {# day} other {# days}}",
       "people": "Number of pilgrims",
       "choices": "Package options",
       "choicesHint": "Choose what you need; leave empty if not needed. Prices shown are estimates per person (vehicles: per unit).",
@@ -1174,8 +1177,7 @@
       },
       "missing": {
         "pickFlight": "Select a flight schedule",
-        "pickDate": "Select a departure date",
-        "outOfPeriod": "The departure date is outside the available period"
+        "pickDeparture": "Select a departure"
       }
     },
     "visa": {
@@ -1784,6 +1786,10 @@
     "itemChoiceNotApplicable": "A {choice, select, hotel_makkah {Makkah hotel} hotel_madinah {Madinah hotel} transport {vehicle} visa {visa} flight {flight ticket} catering {catering} hotel {hotel} other {product}} choice does not apply to this package.",
     "itemPackageUnavailable": "This Umrah package is not available.",
     "itemPackageMuthowifChoice": "This package uses a chosen muthowif and cannot be ordered online yet — please contact us.",
+    "itemPackageDepartureUnavailable": "The selected package departure is not available.",
+    "itemPackageDeparturePast": "The selected package departure has already passed.",
+    "itemPackageNoDuration": "This package has no duration set yet and cannot be ordered — please contact us.",
+    "itemPackageDepartureMissing": "This older package item has no departure — remove it and add it again with a departure.",
     "itemPackageFlightUnavailable": "The flight ticket for this package is not available.",
     "itemPackageDepartureOutside": "The package departure date must be between {fromDate} and {toDate} (flight ticket period).",
     "itemPackageStayOutside": "The stay dates are outside the price period of {hotel} ({fromDate} – {toDate}).",
@@ -1802,6 +1808,7 @@
     "pilgrimDataInvalid": "The pilgrim data is not valid.",
     "quotaHotel": "Not enough hotel rooms: {need} needed, {have} left.",
     "quotaTransport": "Not enough vehicle seats: {need} needed, {have} left.",
+    "quotaPackageDeparture": "Not enough seats on this package departure: {need} needed, {have} left.",
     "quotaFlight": "Not enough flight seats: {need} needed, {have} left.",
     "quotaHaji": "Not enough Hajj quota: {need} needed, {have} left.",
     "quotaMuthowif": "Not enough muthowif capacity on the selected dates.",
