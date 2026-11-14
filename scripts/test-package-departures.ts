@@ -7,6 +7,7 @@ import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { addDays, dbDateOf, todayInApp } from '@/lib/time'
 import { packageReturnDate, seatsLeft } from '@/lib/packages/dates'
+import { departureWarnings } from '@/lib/packages/warnings'
 import { createDeparture, deleteOrDeactivateDeparture, DepartureError, listDepartures, updateDeparture } from '@/lib/packages/departures'
 import { departureCreateSchema, departureUpdateSchema, packageDetailSchema, readExclusions, readItinerary } from '@/lib/validators/package'
 import { assertThrowawayDb } from './lib/testDb'
@@ -63,6 +64,23 @@ await t('validator detail: hari unik berurutan, tak melewati durasi, tidak terma
   assert.deepEqual(readExclusions('x'), [])
 })
 
+await t('peringatan: hanya mengingatkan — durasi kosong, malam hotel > durasi − 1, tak ada yang aktif, di luar periode tiket/hotel', () => {
+  const dep = (id: string, departureDate: string, isActive = true) => ({ id, departureDate, isActive })
+  assert.deepEqual(departureWarnings({ durationDays: 9, includedNights: 8, periods: [], departures: [dep('a', '2026-12-15')] }), { package: [], byDeparture: {} })
+  assert.match(departureWarnings({ durationDays: null, includedNights: 0, periods: [], departures: [] }).package.join(), /Durasi paket belum diisi/)
+  assert.match(departureWarnings({ durationDays: 9, includedNights: 9, periods: [], departures: [] }).package.join(), /melebihi durasi paket − 1 \(8 malam\)/)
+  assert.match(departureWarnings({ durationDays: 9, includedNights: 0, periods: [], departures: [dep('a', '2026-12-15', false)] }).package.join(), /Tidak ada keberangkatan aktif/)
+  // tiket: hanya tanggal berangkat; hotel: seluruh berangkat–pulang (15–23 Des)
+  const periods = [
+    { label: 'Tiket X', from: '2026-12-01', to: '2026-12-15', covers: 'departure' as const },
+    { label: 'Hotel Y', from: '2026-12-01', to: '2026-12-22', covers: 'stay' as const },
+  ]
+  const w = departureWarnings({ durationDays: 9, includedNights: 0, periods, departures: [dep('a', '2026-12-15'), dep('b', '2026-12-10'), dep('c', '2026-11-30')] })
+  assert.deepEqual(w.byDeparture.a, ['Di luar periode Hotel Y (2026-12-01 s.d. 2026-12-22).'])
+  assert.equal(w.byDeparture.b, undefined)
+  assert.equal(w.byDeparture.c?.length, 2)
+})
+
 // ── penulis ──────────────────────────────────────────────────────────────────────────────────────────────────────────
 const pkg = await prisma.package.create({ data: { name: `${tag} Paket`, durationDays: 9 } })
 const user = await prisma.user.create({ data: { email: `${tag}@example.test`, fullName: tag, passwordHash: 'x', role: 'pilgrim' } })
@@ -91,29 +109,32 @@ await t('daftar: urut tanggal; paket tanpa durasi → tanggal pulang null', asyn
 await t('ubah: kursi tak boleh di bawah ditahan + terjual; tanggal terkunci setelah dipesan; ke masa lalu ditolak', async () => {
   const dep = (await listDepartures(pkg.id)).find(d => d.departureDate === d1)!
   await prisma.$executeRaw`UPDATE "package_departures" SET "pendingSeats" = 3, "bookedSeats" = 4 WHERE "id" = ${dep.id}` // simulasi kursi (F3: lib/quota)
-  assert.equal(await code(updateDeparture(dep.id, { totalSeats: 6 })), 'departureSeatsBelowSold')
-  assert.equal((await updateDeparture(dep.id, { totalSeats: 7 })).seatsLeft, 0)
-  assert.equal(await code(updateDeparture(dep.id, { departureDate: addDays(today, -3) })), 'departurePast')
-  const moved = await updateDeparture(dep.id, { departureDate: addDays(d1, 1), totalSeats: 50, note: null })
+  assert.equal(await code(updateDeparture(pkg.id, dep.id, { totalSeats: 6 })), 'departureSeatsBelowSold')
+  assert.equal((await updateDeparture(pkg.id, dep.id, { totalSeats: 7 })).seatsLeft, 0)
+  assert.equal(await code(updateDeparture(pkg.id, dep.id, { departureDate: addDays(today, -3) })), 'departurePast')
+  const moved = await updateDeparture(pkg.id, dep.id, { departureDate: addDays(d1, 1), totalSeats: 50, note: null })
   assert.equal(moved.departureDate, addDays(d1, 1)); assert.equal(moved.note, null)
-  assert.equal(await code(updateDeparture(dep.id, { departureDate: today })), 'departureDuplicate')
+  assert.equal(await code(updateDeparture(pkg.id, dep.id, { departureDate: today })), 'departureDuplicate')
   const b = await prisma.booking.create({ data: { bookingCode: `${tag}-1`, userId: user.id, season: 'regular', totalAmount: 1 } })
   await prisma.bookingPackage.create({ data: { bookingId: b.id, packageId: pkg.id, departureId: dep.id, departureDate: dbDateOf(addDays(d1, 1)), returnDate: dbDateOf(addDays(d1, 9)), numPeople: 2, totalPrice: 1 } })
-  assert.equal(await code(updateDeparture(dep.id, { departureDate: addDays(d1, 5) })), 'departureDateLocked')
-  assert.equal((await updateDeparture(dep.id, { departureDate: addDays(d1, 1), isActive: false })).isActive, false, 'tanggal sama tak dianggap perubahan')
-  assert.equal(await code(updateDeparture('00000000-0000-4000-8000-000000000000', { totalSeats: 5 })), 'departureNotFound')
+  assert.equal(await code(updateDeparture(pkg.id, dep.id, { departureDate: addDays(d1, 5) })), 'departureDateLocked')
+  assert.equal((await updateDeparture(pkg.id, dep.id, { departureDate: addDays(d1, 1), isActive: false })).isActive, false, 'tanggal sama tak dianggap perubahan')
+  assert.equal(await code(updateDeparture(pkg.id, '00000000-0000-4000-8000-000000000000', { totalSeats: 5 })), 'departureNotFound')
+  const other = await prisma.package.create({ data: { name: `${tag} Paket Lain` } })
+  assert.equal(await code(updateDeparture(other.id, dep.id, { totalSeats: 99 })), 'departureNotFound', 'id keberangkatan paket lain ditolak')
+  assert.equal(await code(deleteOrDeactivateDeparture(other.id, dep.id)), 'departureNotFound')
 })
 
 await t('hapus aman: belum dipesan → dihapus; sudah dipesan → dinonaktifkan dan tetap ada', async () => {
   const list = await listDepartures(pkg.id)
   const free = list.find(d => d.bookingCount === 0)!
   const used = list.find(d => d.bookingCount > 0)!
-  assert.deepEqual(await deleteOrDeactivateDeparture(free.id), { deleted: true })
+  assert.deepEqual(await deleteOrDeactivateDeparture(pkg.id, free.id), { deleted: true })
   assert.equal(await prisma.packageDeparture.count({ where: { id: free.id } }), 0)
-  await updateDeparture(used.id, { isActive: true })
-  assert.deepEqual(await deleteOrDeactivateDeparture(used.id), { deleted: false, bookingCount: 1 })
+  await updateDeparture(pkg.id, used.id, { isActive: true })
+  assert.deepEqual(await deleteOrDeactivateDeparture(pkg.id, used.id), { deleted: false, bookingCount: 1 })
   assert.equal((await prisma.packageDeparture.findUniqueOrThrow({ where: { id: used.id } })).isActive, false)
-  assert.equal(await code(deleteOrDeactivateDeparture(free.id)), 'departureNotFound')
+  assert.equal(await code(deleteOrDeactivateDeparture(pkg.id, free.id)), 'departureNotFound')
 })
 
 await t('CHECK database: kursi negatif / ditahan + terjual > total / durasi di luar 1..60 / JSON bukan array ditolak', async () => {

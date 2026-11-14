@@ -34,12 +34,15 @@ export type Itinerary = z.infer<typeof itinerarySchema>
 
 export const exclusionsSchema = z.array(plain(200, 'Butir')).max(30, 'Maksimal 30 butir')
 
-/** Isi detail paket yang diedit admin bersama durasi. Rencana perjalanan tak boleh melewati durasi (dicek bila keduanya ada). */
-export const packageDetailSchema = z.object({
-  durationDays: z.number().int().min(1, 'Durasi minimal 1 hari').max(MAX_PACKAGE_DAYS, `Durasi maksimal ${MAX_PACKAGE_DAYS} hari`).nullish(),
+/** Kolom detail paket — dipakai skema PUT paket admin (yang juga memeriksa rencana vs durasi TERSIMPAN) dan `packageDetailSchema`. */
+export const packageDetailFields = {
+  durationDays: z.number().int('Durasi harus bilangan bulat').min(1, 'Durasi minimal 1 hari').max(MAX_PACKAGE_DAYS, `Durasi maksimal ${MAX_PACKAGE_DAYS} hari`).nullish(),
   itinerary: itinerarySchema.optional(),
   exclusions: exclusionsSchema.optional(),
-}).strict().refine(v => !v.durationDays || !v.itinerary || v.itinerary.every(d => d.day <= v.durationDays!), {
+}
+
+/** Isi detail paket yang diedit admin bersama durasi. Rencana perjalanan tak boleh melewati durasi (dicek bila keduanya ada). */
+export const packageDetailSchema = z.object(packageDetailFields).strict().refine(v => !v.durationDays || !v.itinerary || v.itinerary.every(d => d.day <= v.durationDays!), {
   error: 'Rencana perjalanan melebihi durasi paket', path: ['itinerary'],
 })
 export type PackageDetailInput = z.infer<typeof packageDetailSchema>

@@ -17,6 +17,8 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import type { RequirementView } from '@/lib/documents/completeness'
+import { DeparturesBox } from './DeparturesBox'
+import { TripPlanBox, type TripPlanForm } from './TripPlanBox'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -39,11 +41,12 @@ type PackageVisaOptionRow = { id: string; visaProductId: string; visaProduct: { 
 type PackageCateringOptionRow = { id: string; cateringOptionId: string; numPeople: number; numDays: number; cateringOption: { name: string } }
 
 /** Bagian yang disimpan tombol Terbitkan (bukan kotak komponen yang tersimpan sendiri). */
-type InfoForm = { name: string; description: string; priceLabel: string; highlights: string; isFeatured: boolean; isActive: boolean; reqs: RequirementRow[] }
+type InfoForm = { name: string; description: string; priceLabel: string; highlights: string; isFeatured: boolean; isActive: boolean; reqs: RequirementRow[] } & TripPlanForm
 
 type PackageDetail = {
   documentRequirements: RequirementView[]
   id: string; name: string; description: string | null; priceLabel: string | null; highlights: string[]; isActive: boolean; isFeatured: boolean
+  durationDays: number | null; itinerary: Array<{ day: number; title: string; body: string }>; exclusions: string[]
 
   hotelMakkahMode: Mode
   includedHotelMakkahScheduleId: string | null; includedHotelMakkahNights: number | null; includedHotelMakkahOccupancy: number | null; includedHotelMakkahPrice: string | null
@@ -125,7 +128,7 @@ export default function PackageBuilderPage({ params }: Props) {
 
   const [pkg, setPkg] = useState<PackageDetail | null>(null)
   const [priceTick, setPriceTick] = useState(0) // naik setiap biaya/harga berubah → PriceCard memuat ulang
-  const EMPTY_FORM: InfoForm = { name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true, reqs: [] }
+  const EMPTY_FORM: InfoForm = { name: '', description: '', priceLabel: '', highlights: '', isFeatured: false, isActive: true, reqs: [], durationDays: '', itinerary: [], exclusions: '' }
   const [form, setForm] = useState(EMPTY_FORM)
   // Baseline info yang tersimpan — dasar penanda "belum disimpan" dan agar muat-ulang akibat kotak komponen TIDAK menimpa ketikan yang belum disimpan.
   const [baseline, setBaseline] = useState(EMPTY_FORM)
@@ -179,6 +182,7 @@ export default function PackageBuilderPage({ params }: Props) {
         const info = {
           name: p.name, description: p.description ?? '', priceLabel: p.priceLabel ?? '',
           highlights: (p.highlights ?? []).join('\n'), isFeatured: p.isFeatured, isActive: p.isActive, reqs: p.documentRequirements.map(rowFromView),
+          durationDays: p.durationDays ? String(p.durationDays) : '', itinerary: p.itinerary.map(d => ({ day: String(d.day), title: d.title, body: d.body })), exclusions: p.exclusions.join('\n'),
         }
         setForm(info); setBaseline(info)
       }
@@ -221,6 +225,7 @@ export default function PackageBuilderPage({ params }: Props) {
 
   async function refreshAll() {
     await Promise.all([loadPackage(id), loadBreakdown(id)])
+    setPriceTick(t => t + 1) // komponen/info berubah → harga dan peringatan keberangkatan dimuat ulang
   }
 
   // Satu pintu simpan: respons diperiksa dan galat server ditampilkan (dulu ditelan). Mengembalikan sukses/gagal.
@@ -249,6 +254,9 @@ export default function PackageBuilderPage({ params }: Props) {
       name: form.name, description: form.description || null, priceLabel: form.priceLabel || null,
       highlights: form.highlights.split('\n').map(s => s.trim()).filter(Boolean),
       isFeatured: form.isFeatured, isActive: form.isActive, requirements: bodyFromRows(form.reqs),
+      durationDays: form.durationDays.trim() ? Number(form.durationDays) : null,
+      itinerary: [...form.itinerary].map(d => ({ day: Number(d.day), title: d.title.trim(), body: d.body.trim() })).sort((a, b) => a.day - b.day),
+      exclusions: form.exclusions.split('\n').map(s => s.trim()).filter(Boolean),
     })
     setSaving(false)
     if (!okSaved) return
@@ -468,6 +476,11 @@ export default function PackageBuilderPage({ params }: Props) {
         <textarea className="admin-inp" rows={3} value={form.highlights} onChange={e => setForm(f => ({ ...f, highlights: e.target.value }))}
           placeholder={"Hotel bintang 5 Makkah & Madinah\nVisa Umroh termasuk\nMuthowif berpengalaman"} />
       </MetaBox>
+
+      <TripPlanBox value={form} onChange={patch => setForm(f => ({ ...f, ...patch }))} />
+
+      {/* Dimuat ulang (peringatan periode/durasi) setiap durasi tersimpan atau komponen paket berubah. */}
+      <DeparturesBox key={`${baseline.durationDays}-${priceTick}`} packageId={pkg.id} />
 
       <RequirementsEditor rows={form.reqs} onChange={reqs => setForm(f => ({ ...f, reqs }))} productNoun="paket ini" />
 

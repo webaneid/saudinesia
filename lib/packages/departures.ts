@@ -76,9 +76,12 @@ export async function createDeparture(packageId: string, input: DepartureCreateI
   }
 }
 
-/** Kunci baris keberangkatan (kursi dan tanggal dibaca ulang di dalam kunci). `$queryRaw` karena Prisma ORM tak punya `FOR UPDATE`. */
-async function lockDeparture(tx: Prisma.TransactionClient, id: string): Promise<boolean> {
-  const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "package_departures" WHERE "id" = ${id} FOR UPDATE`)
+/**
+ * Kunci baris keberangkatan MILIK paket itu (kursi dan tanggal dibaca ulang di dalam kunci) — id keberangkatan paket lain = tidak ditemukan.
+ * `$queryRaw` karena Prisma ORM tak punya `FOR UPDATE`.
+ */
+async function lockDeparture(tx: Prisma.TransactionClient, packageId: string, id: string): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT "id" FROM "package_departures" WHERE "id" = ${id} AND "packageId" = ${packageId} FOR UPDATE`)
   return rows.length > 0
 }
 
@@ -86,10 +89,10 @@ async function lockDeparture(tx: Prisma.TransactionClient, id: string): Promise<
  * Ubah keberangkatan. Total kursi tak boleh di bawah yang ditahan + terjual; tanggal hanya boleh diubah selama belum pernah dipesan
  * (booking menyimpan salinan tanggalnya) dan tak boleh ke masa lalu.
  */
-export async function updateDeparture(id: string, input: DepartureUpdateInput): Promise<DepartureView> {
+export async function updateDeparture(packageId: string, id: string, input: DepartureUpdateInput): Promise<DepartureView> {
   try {
     return await prisma.$transaction(async tx => {
-      if (!(await lockDeparture(tx, id))) throw new DepartureError('departureNotFound')
+      if (!(await lockDeparture(tx, packageId, id))) throw new DepartureError('departureNotFound')
       const cur = await tx.packageDeparture.findUniqueOrThrow({ where: { id }, select: { ...SELECT, package: { select: { durationDays: true } } } })
       if (input.departureDate !== undefined && input.departureDate !== calendarDateOf(cur.departureDate)) {
         if (cur._count.bookings > 0) throw new DepartureError('departureDateLocked')
@@ -117,9 +120,9 @@ export async function updateDeparture(id: string, input: DepartureUpdateInput): 
 export type DepartureDeleteResult = { deleted: true } | { deleted: false; bookingCount: number }
 
 /** Hapus aman: belum pernah dipesan → dihapus; selain itu dinonaktifkan (booking dan invoice tak boleh yatim). */
-export async function deleteOrDeactivateDeparture(id: string): Promise<DepartureDeleteResult> {
+export async function deleteOrDeactivateDeparture(packageId: string, id: string): Promise<DepartureDeleteResult> {
   try {
-    return await deleteOrDeactivateInTx(id)
+    return await deleteOrDeactivateInTx(packageId, id)
   } catch (e) {
     // Booking yang masuk di antara hitung dan hapus ditangkap FK Restrict (P2003) → jalur nonaktif (pola lib/haji/delete.ts).
     if (!(e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003')) throw e
@@ -128,9 +131,9 @@ export async function deleteOrDeactivateDeparture(id: string): Promise<Departure
   }
 }
 
-function deleteOrDeactivateInTx(id: string): Promise<DepartureDeleteResult> {
+function deleteOrDeactivateInTx(packageId: string, id: string): Promise<DepartureDeleteResult> {
   return prisma.$transaction(async tx => {
-    if (!(await lockDeparture(tx, id))) throw new DepartureError('departureNotFound')
+    if (!(await lockDeparture(tx, packageId, id))) throw new DepartureError('departureNotFound')
     const bookingCount = await tx.bookingPackage.count({ where: { departureId: id } })
     if (bookingCount > 0) {
       await tx.packageDeparture.update({ where: { id }, data: { isActive: false } })
