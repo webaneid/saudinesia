@@ -10,6 +10,7 @@ import { DocumentFileRejected, prepareDocumentFile } from '@/lib/documents/file'
 import { docIpLimited, readSingleFile } from '@/lib/documents/http'
 import { buildObjectKey, deleteObject, uploadBuffer } from '@/lib/storage/minio'
 import { apiErrorJson } from '@/lib/errors/api'
+import { bookingPayTo } from '@/lib/invoice/banks'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -22,12 +23,14 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const booking = await prisma.booking.findFirst({
       where: { id, userId: session.userId, status: { not: 'draft' } }, // draf = 404, sama seperti GET
-      select: { id: true, status: true, confirmedAt: true },
+      select: { id: true, status: true, confirmedAt: true, invoice: { select: { bankSnapshot: true } } },
     })
     if (!booking) return apiErrorJson('bookingNotFound', 404)
     if (booking.status !== 'active' || booking.confirmedAt !== null) {
       return apiErrorJson('bookingNotAwaitingPayment', 422)
     }
+    // Tanpa rekening tujuan, bukti transfer tak punya arti (pelanggan bisa saja mentransfer ke rekening yang salah) — K3, evaluasi 2026-11-14.
+    if ((await bookingPayTo(booking.invoice)).length === 0) return apiErrorJson('paymentNoDestination', 409)
 
     // Satu bukti menunggu verifikasi pada satu waktu (perilaku v1: dulu dijaga status `payment_review`, kini diturunkan dari adanya payment `pending`).
     if (await prisma.payment.count({ where: { bookingId: id, status: 'pending' } }) > 0) {

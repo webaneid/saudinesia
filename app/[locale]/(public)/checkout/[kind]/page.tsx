@@ -10,6 +10,7 @@ import { requireCatalog, type CatalogKey } from '@/lib/catalog/availability'
 import { checkoutPath, isCheckoutKind, type CheckoutKind } from '@/lib/checkout/kinds'
 import { readPrefill } from '@/lib/checkout/prefill'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
+import { hasActiveBankAccount } from '@/lib/invoice/banks'
 import { CHECKOUT_MAX_PEOPLE } from '@/lib/validators/checkout'
 import { safeLocale } from '@/lib/utils/locale'
 import { todayInApp } from '@/lib/time'
@@ -48,7 +49,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
     if (state && !isOnboardingComplete(state)) redirect(withNext(`/${locale}/lengkapi-data`, here))
   }
 
-  const product = await loadCheckoutProduct(kind, id)
+  const [product, canOrder] = await Promise.all([loadCheckoutProduct(kind, id), hasActiveBankAccount()])
   if (!product) notFound()
   const t = await getTranslations({ locale, namespace: 'checkout' })
   // Nama layanan muthowif bukan data produk (satu layanan umum) — tampil dalam bahasa halaman.
@@ -72,7 +73,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
           </p>
         </div>
       ) : (
-        <CheckoutForm locale={locale} product={product} prefill={prefill} today={todayInApp()} maxPeople={CHECKOUT_MAX_PEOPLE} intro={<ProductIntro product={product} />} />
+        <CheckoutForm locale={locale} product={product} prefill={prefill} orderBlocked={!canOrder} today={todayInApp()} maxPeople={CHECKOUT_MAX_PEOPLE} intro={<ProductIntro product={product} />} />
       )}
     </div>
   )

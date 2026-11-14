@@ -68,7 +68,8 @@
         "hotels": "Hotel di Makkah dan Madinah",
         "transport": "Antar kota dan antar jemput",
         "muthowif": "Pembimbing ibadah",
-        "tours": "Ziarah ke situs bersejarah"
+        "tours": "Ziarah ke situs bersejarah",
+        "catering": "Menu makan selama di Tanah Suci"
       }
     },
     "packages": {
@@ -1099,7 +1100,8 @@
       "submit": "Pesan & terbitkan invoice",
       "afterTitle": "Setelah memesan",
       "afterPilgrims": "Isi data jamaah — pilih dari Jamaah Saya atau tambah baru.",
-      "afterPay": "Bayar sesuai invoice dan unggah bukti transfer. Pesanan dikonfirmasi setelah pembayaran diverifikasi."
+      "afterPay": "Bayar sesuai invoice dan unggah bukti transfer. Pesanan dikonfirmasi setelah pembayaran diverifikasi.",
+      "noBank": "Pesanan belum bisa dibuat karena rekening tujuan pembayaran belum tersedia. Mohon hubungi tim Saudinesia."
     },
     "stepper": {
       "decrease": "Kurangi",
@@ -1832,6 +1834,8 @@
     "oneVisaType": "Satu pesanan hanya dapat memuat satu jenis visa",
     "samePeopleCount": "Jumlah jamaah setiap produk di keranjang harus sama (satu rombongan)",
     "cartEmpty": "Keranjang kosong",
-    "maxCartItems": "Maksimal {max} produk per pesanan"
+    "maxCartItems": "Maksimal {max} produk per pesanan",
+    "checkoutNoBank": "Pesanan belum bisa diterima karena rekening tujuan pembayaran belum tersedia. Mohon hubungi tim Saudinesia.",
+    "paymentNoDestination": "Rekening tujuan pembayaran belum tersedia, jadi bukti transfer belum bisa dikirim. Mohon hubungi tim Saudinesia."
   }
 }

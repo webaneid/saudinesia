@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { requireSession } from '@/lib/auth/session'
 import { checkoutCartSchema } from '@/lib/validators/checkout'
-import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
+import { CheckoutAccountError, CheckoutNoBankError, placeCheckout } from '@/lib/checkout/place'
 import { cartDateRefusal } from '@/lib/checkout/dates'
 import { isBookingCodeBusy } from '@/lib/utils/bookingCode'
 import { onboardingRefusal } from '@/lib/auth/contact'
@@ -75,6 +75,7 @@ export async function POST(request: Request) {
       return apiErrorJson('orderNotIssuable', 422)
     }
     if (error instanceof CheckoutAccountError) return apiErrorJson('accountCannotOrder', 409)
+    if (error instanceof CheckoutNoBankError) return apiErrorJson('checkoutNoBank', 409)
     if (isBookingCodeBusy(error)) return apiErrorJson('orderBusy', 409)
     try {
       // Aturan visa (422 + daftar pelanggaran), item tak dapat dijual / tak ditemukan (422), kuota habis / bentrok (409) — satu pemeta dengan pratinjau.

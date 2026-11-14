@@ -13,14 +13,16 @@ type Props = {
   submitting: boolean
   submitError: string
   onSubmit: () => void
+  /** Pesanan baru tak bisa diterima (belum ada rekening tujuan bayar, K3): tombol pesan mati dan alasannya tampil. */
+  orderBlocked?: boolean
   /** Tombol tambahan di bawah tombol pesan (mis. "Tambah ke keranjang"). */
   children?: React.ReactNode
 }
 
 // Ringkasan pesanan dari PRATINJAU SERVER (harga jual saja). Tombol pesan hanya aktif bila pratinjau berhasil — angka yang dilihat = angka di invoice.
-export function CheckoutSummary({ preview, missing, submitting, submitError, onSubmit, children }: Props) {
+export function CheckoutSummary({ preview, missing, submitting, submitError, onSubmit, orderBlocked = false, children }: Props) {
   const t = useTranslations('checkout.summary')
-  const ready = preview.status === 'ok' && !missing
+  const ready = preview.status === 'ok' && !missing && !orderBlocked
   return (
     <div className="checkout-panel lg:sticky lg:top-24">
       <h2 className="flex items-center gap-2 text-base font-bold text-brand-dark"><FileText className="h-4 w-4 text-brand" aria-hidden /> {t('title')}</h2>
@@ -75,6 +77,11 @@ export function CheckoutSummary({ preview, missing, submitting, submitError, onS
         </div>
       )}
 
+      {orderBlocked && (
+        <p className="flex items-start gap-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm text-amber-900" role="alert">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {t('noBank')}
+        </p>
+      )}
       {submitError && <p className="rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2.5 text-sm text-destructive" role="alert">{submitError}</p>}
 
       <button type="button" onClick={onSubmit} disabled={!ready || submitting} className="btn-brand-solid w-full disabled:opacity-50">

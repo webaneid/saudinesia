@@ -7,6 +7,7 @@ import { prepareBooking, writeBooking } from '@/lib/booking/create'
 import { issueInvoice } from '@/lib/invoice/issue'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { retrySerializable } from '@/lib/booking/serializable'
+import { hasActiveBankAccount } from '@/lib/invoice/banks'
 
 /**
  * Pesan dari checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5; keranjang §10.7 — satu produk = keranjang satu entri) — satu-satunya jalur `POST /bookings`.
@@ -16,6 +17,8 @@ import { retrySerializable } from '@/lib/booking/serializable'
  */
 /** Akun pemesan terhapus (UU PDP) atau nonaktif di antara cek sesi dan commit — dipetakan route ke 409. */
 export class CheckoutAccountError extends Error {}
+/** Belum ada rekening aktif: invoice yang terbit tak punya tujuan transfer, jadi pesanan pelanggan ditolak (evaluasi 2026-11-14 K3) — route → 409. */
+export class CheckoutNoBankError extends Error { override name = 'CheckoutNoBankError' }
 
 export async function placeCheckout(userId: string, cart: CheckoutCart, dueDays: number): Promise<{ id: string; bookingCode: string }> {
   const prepared = await prepareBooking(cartInput(cart))
@@ -26,6 +29,8 @@ export async function placeCheckout(userId: string, cart: CheckoutCart, dueDays:
       Prisma.sql`SELECT "email", "isActive" FROM "users" WHERE "id" = ${userId} FOR SHARE`,
     )
     if (!owner[0] || isDeletedAccount(owner[0].email) || !owner[0].isActive) throw new CheckoutAccountError('Akun tidak aktif')
+    // Diperiksa di dalam transaksi yang sama dengan penerbitan invoice (rekening dibekukan di sana): rekening yang dinonaktifkan sebelum commit ikut terlihat.
+    if (!(await hasActiveBankAccount(tx))) throw new CheckoutNoBankError('Belum ada rekening aktif')
     const bk = await tx.booking.create({
       data: { bookingCode, userId, status: 'active', season: 'regular', totalAmount: 0 },
     })
