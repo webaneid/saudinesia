@@ -21,7 +21,7 @@ const CATALOG_FOR: Record<RequiredComponentType, CatalogKey> = {
 
 // Isi keranjang (perangkat) + satu jumlah jamaah untuk semua produk (satu rombongan, K11c-2) + ringkasan dari pratinjau server. Pesan = POST /bookings
 // dengan seluruh isi; sukses → keranjang dikosongkan, ke detail booking untuk mengisi data jamaah dan membayar.
-export function CartView({ locale, maxPeople, available }: { locale: string; maxPeople: number; available: CatalogKey[] }) {
+export function CartView({ locale, maxPeople, available, orderBlocked = false }: { locale: string; maxPeople: number; available: CatalogKey[]; orderBlocked?: boolean }) {
   const router = useRouter()
   const t = useTranslations('cart')
   const tc = useTranslations('checkout')
@@ -107,7 +107,7 @@ export function CartView({ locale, maxPeople, available }: { locale: string; max
         )}
       </div>
       <aside className="min-w-0">
-        <CheckoutSummary preview={preview} missing={null} submitting={submitting} submitError={submitError} onSubmit={submit} />
+        <CheckoutSummary preview={preview} missing={null} submitting={submitting} submitError={submitError} onSubmit={submit} orderBlocked={orderBlocked} />
       </aside>
     </div>
   )

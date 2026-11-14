@@ -9,16 +9,14 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
-import { payableBanks } from '@/lib/invoice/banks'
+import { bookingPayTo } from '@/lib/invoice/banks'
 import { itemSellTotals, visaTierRanges } from '@/lib/pricing/engine/snapshot'
 import { getTranslations } from 'next-intl/server'
-import type { BankSnapshot } from '@/lib/invoice/issue'
 import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, Landmark, Package, Plane, Stamp, UserRound, UtensilsCrossed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
-import { getPaymentConfig } from '@/lib/constants/payment'
 import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
 import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
 import { PilgrimSlotsTable } from '@/components/shared/pilgrims/PilgrimSlotsTable'
@@ -38,7 +36,6 @@ export async function generateMetadata({ params }: Pick<Props, 'params'>) {
 export default async function BookingDetailPage({ params, searchParams }: Props) {
   const { locale, id } = await params
   const justBooked = (await searchParams).baru === '1' // datang dari checkout (docs/arsitektur-booking-engine-v2.md §10.5)
-  const { banks } = getPaymentConfig()
   const lang = safeLocale(locale)
   const t = await getTranslations({ locale: lang, namespace: 'pilgrimArea' })
   const ts = await getTranslations({ locale: lang, namespace: 'shared.bookingStatus' })
@@ -68,10 +65,8 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.
   const [sells, tiers] = await Promise.all([itemSellTotals(prisma, booking.id), visaTierRanges(prisma, booking.id)])
   const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
-  // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF; lib/invoice/banks.ts); setelan env lama hanya cadangan untuk booking tanpa invoice.
-  const payTo = booking.invoice
-    ? await payableBanks(booking.invoice.bankSnapshot as BankSnapshot[])
-    : banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null }))
+  // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF dan route unggah bukti; lib/invoice/banks.ts `bookingPayTo`).
+  const payTo = await bookingPayTo(booking.invoice)
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
@@ -182,7 +177,8 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
               <AlertCircle className="h-4 w-4 shrink-0" /> {t('booking.proofRejected')}
             </p>
           )}
-          {st === 'awaiting_payment' && <PaymentProofUpload bookingId={booking.id} />}
+          {/* Tanpa rekening tujuan tak ada unggah bukti — pesan "hubungi tim" di atas yang tampil (K3; route unggah juga menolak). */}
+          {st === 'awaiting_payment' && payTo.length > 0 && <PaymentProofUpload bookingId={booking.id} />}
           {st === 'payment_review' && (
             <div className="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle className="h-4 w-4" /> {t('booking.proofSent')}

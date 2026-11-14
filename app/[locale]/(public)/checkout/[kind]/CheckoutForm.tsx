@@ -22,12 +22,12 @@ import { useApiError } from '@/components/shared/useApiError'
 import { addToCart } from '@/lib/checkout/cartStore'
 import { CART_MAX_ITEMS } from '@/lib/validators/checkout'
 
-type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode; prefill?: Record<string, string | number> }
+type Props = { locale: string; product: CheckoutProduct; today: string; maxPeople: number; intro: React.ReactNode; prefill?: Record<string, string | number>; orderBlocked?: boolean }
 
 // Orkestrator checkout (docs/arsitektur-booking-engine-v2.md §10.5): isian per jenis → masukan checkout → pratinjau server → pesan (POST /bookings).
 // Sukses → detail booking (`?baru=1`) untuk mengisi data jamaah dan membayar. "Pesan sekarang" = keranjang satu entri; "Tambah ke keranjang" menyimpan
 // pilihan yang sama di perangkat (lib/checkout/cartStore.ts, §10.7) untuk digabung dengan produk lain — Haji selalu dipesan sendiri.
-export function CheckoutForm({ locale, product, today, maxPeople, intro, prefill = {} }: Props) {
+export function CheckoutForm({ locale, product, today, maxPeople, intro, prefill = {}, orderBlocked = false }: Props) {
   const router = useRouter()
   const t = useTranslations('checkout')
   const errorText = useApiError()
@@ -83,7 +83,7 @@ export function CheckoutForm({ locale, product, today, maxPeople, intro, prefill
         {product.kind === 'flight' && <FlightFields product={product} today={today} maxPeople={maxPeople} onChange={onChange} initial={prefill} />}
       </div>
       <aside className="min-w-0">
-        <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit}>
+        <CheckoutSummary preview={preview} missing={missing} submitting={submitting} submitError={submitError} onSubmit={submit} orderBlocked={orderBlocked}>
           {product.kind !== 'haji' && (
             <>
               <button type="button" onClick={addCart} disabled={!input || !!missing} className="btn-brand-outline w-full disabled:opacity-50">

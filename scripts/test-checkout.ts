@@ -17,7 +17,7 @@ import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { checkoutPath } from '@/lib/checkout/kinds'
 import { readPrefill } from '@/lib/checkout/prefill'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
-import { CheckoutAccountError, placeCheckout } from '@/lib/checkout/place'
+import { CheckoutAccountError, CheckoutNoBankError, placeCheckout } from '@/lib/checkout/place'
 import { cartDateRefusal, checkoutDateRefusal } from '@/lib/checkout/dates'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
 import { CART_MAX_ITEMS, cartInput, checkoutCartSchema, checkoutInput, checkoutSchema, type CheckoutCart, type CheckoutInput } from '@/lib/validators/checkout'
@@ -206,6 +206,25 @@ const failOf = async (c: CheckoutInput) => {
   assert.fail('seharusnya ditolak')
 }
 const bookingsOfUser = () => prisma.booking.count({ where: { userId: user.id } })
+
+// K3 (evaluasi 2026-11-14): tanpa rekening aktif pesanan pelanggan DITOLAK (invoice tak boleh terbit tanpa tujuan bayar).
+// Rekening aktif yang ada dinonaktifkan sementara, lalu dipulihkan; rekening uji dibuat untuk sisa tes.
+const activeBanks = await prisma.bankAccount.findMany({ where: { isActive: true }, select: { id: true } })
+await prisma.bankAccount.updateMany({ where: { id: { in: activeBanks.map(b => b.id) } }, data: { isActive: false } })
+await t('K3: tanpa rekening aktif → CheckoutNoBankError, tak ada booking/kuota tertahan', async () => {
+  const before = await bookingsOfUser()
+  const q0 = await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id } })
+  await assert.rejects(() => place({ kind: 'transport', transportQuotaId: quota.id, numPassengers: 2, pickupDetail: 'GA 980' }), (e: unknown) => e instanceof CheckoutNoBankError)
+  assert.equal(await bookingsOfUser(), before)
+  const q1 = await prisma.transportQuota.findUniqueOrThrow({ where: { id: quota.id } })
+  assert.equal(q1.pendingSeats, q0.pendingSeats)
+  const route = read('app/api/v1/bookings/route.ts')
+  assert.match(route, /CheckoutNoBankError\) return apiErrorJson\('checkoutNoBank', 409\)/)
+  const bukti = read('app/api/v1/bookings/[id]/payment/bukti/route.ts')
+  assert.match(bukti, /bookingPayTo\(booking\.invoice\)\)\.length === 0\) return apiErrorJson\('paymentNoDestination', 409\)/)
+})
+await prisma.bankAccount.updateMany({ where: { id: { in: activeBanks.map(b => b.id) } }, data: { isActive: true } })
+const testBank = await prisma.bankAccount.create({ data: { bankName: `${tag} BSI`, accountNumber: '7101', accountHolder: 'PT Uji Checkout', isActive: true } })
 
 const VISA: CheckoutInput = { kind: 'visa', visaProductId: visa.id, numPeople: 2, plannedTravelDate: '2090-06-01' }
 const HAJI: CheckoutInput = { kind: 'haji', hajiProductId: haji.id, numPeople: 2 }
@@ -470,6 +489,7 @@ if (createdSvc) await prisma.muthowifServicePrice.delete({ where: { id: svc.id }
 else await repriceOwner('muthowif', svc.id)
 await sweepOrphanPricePoints()
 await prisma.vendor.delete({ where: { id: vendor.id } })
+await prisma.bankAccount.delete({ where: { id: testBank.id } })
 await prisma.user.deleteMany({ where: { email: { contains: tag } } })
 await prisma.pricingRule.deleteMany({})
 for (const r of savedRules) await prisma.pricingRule.create({ data: { productType: r.productType, defaultMarginPercent: r.defaultMarginPercent, roundingIncrement: r.roundingIncrement, warnBelowPercent: r.warnBelowPercent } })

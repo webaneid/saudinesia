@@ -68,7 +68,8 @@
         "hotels": "Hotels in Makkah and Madinah",
         "transport": "Intercity and transfers",
         "muthowif": "Worship guides",
-        "tours": "Visits to historic sites"
+        "tours": "Visits to historic sites",
+        "catering": "Meals during your stay in the Holy Land"
       }
     },
     "packages": {
@@ -1099,7 +1100,8 @@
       "submit": "Order & issue invoice",
       "afterTitle": "After ordering",
       "afterPilgrims": "Fill in pilgrim details — choose from My Pilgrims or add a new one.",
-      "afterPay": "Pay according to the invoice and upload the transfer receipt. The order is confirmed once the payment is verified."
+      "afterPay": "Pay according to the invoice and upload the transfer receipt. The order is confirmed once the payment is verified.",
+      "noBank": "Orders can’t be placed yet because no payment account is available. Please contact the Saudinesia team."
     },
     "stepper": {
       "decrease": "Decrease",
@@ -1832,6 +1834,8 @@
     "oneVisaType": "One order can contain only one visa type.",
     "samePeopleCount": "Every product in the cart must have the same number of pilgrims (one group).",
     "cartEmpty": "The cart is empty.",
-    "maxCartItems": "At most {max} products per order."
+    "maxCartItems": "At most {max} products per order.",
+    "checkoutNoBank": "We can’t accept orders yet because no payment account is available. Please contact the Saudinesia team.",
+    "paymentNoDestination": "No payment account is available yet, so the transfer proof can’t be sent. Please contact the Saudinesia team."
   }
 }

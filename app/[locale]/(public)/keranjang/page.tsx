@@ -8,6 +8,7 @@ import { getOnboardingState, isOnboardingComplete } from '@/lib/auth/contact'
 import { withNext } from '@/lib/auth/nextPath'
 import { availableCatalogs, isCatalogKey } from '@/lib/catalog/availability'
 import { CHECKOUT_MAX_PEOPLE } from '@/lib/validators/checkout'
+import { hasActiveBankAccount } from '@/lib/invoice/banks'
 import { safeLocale } from '@/lib/utils/locale'
 import { CartView } from './CartView'
 
@@ -31,6 +32,7 @@ export default async function CartPage({ params }: Props) {
     if (state && !isOnboardingComplete(state)) redirect(withNext(`/${locale}/lengkapi-data`, here))
   }
   const available = [...await availableCatalogs()].filter(isCatalogKey)
+  const canOrder = await hasActiveBankAccount()
   const t = await getTranslations({ locale, namespace: 'cart' })
   const tp = await getTranslations({ locale, namespace: 'checkout.page' })
 
@@ -47,7 +49,7 @@ export default async function CartPage({ params }: Props) {
           {tp.rich('staffNote', { link: chunks => <Link href={`/${locale}/admin/bookings`} className="font-semibold text-brand hover:underline">{chunks}</Link> })}
         </p>
       ) : (
-        <CartView locale={locale} maxPeople={CHECKOUT_MAX_PEOPLE} available={available} />
+        <CartView locale={locale} maxPeople={CHECKOUT_MAX_PEOPLE} available={available} orderBlocked={!canOrder} />
       )}
     </div>
   )

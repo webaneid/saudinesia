@@ -13,7 +13,7 @@ export async function PublicFooter({ locale }: { locale: string }) {
   const headingClass = 'text-sm font-semibold text-white'
   // Hanya layanan yang punya produk aktif (§7); Katering hanya di footer, bukan menu utama.
   const available = await availableCatalogs()
-  const services = [...PUBLIC_NAV.map(n => n.key), 'catering'].filter(k => available.has(k))
+  const services = PUBLIC_NAV.map(n => n.key).filter(k => available.has(k))
 
   return (
     <footer className="mt-16 bg-brand-dark text-brand-light">
