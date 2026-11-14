@@ -1,6 +1,8 @@
 import { prisma } from '@/lib/db'
 import { ItemNotBookableError, type PriceSubject } from '@/lib/booking/errors'
 import type { PriceOwnerType } from './types'
+import { dbDateOf, todayInApp } from '@/lib/time'
+import { departureIdOfKey, departureVariantKey } from './variantKeys'
 
 // PEMBACA TUNGGAL harga jual (invarian I3, docs/arsitektur-harga-terpadu.md §15): katalog, booking, kuota, dan komputasi paket membaca `price_points` lewat
 // sini — bukan kolom `*.price` lama. Yang keluar hanya HARGA JUAL (invarian I5); modal/untung hanya lewat `getPricePoint(s)` di service.ts untuk sisi admin.
@@ -10,6 +12,7 @@ import type { PriceOwnerType } from './types'
 export async function sellPrices(ownerType: PriceOwnerType, ids: readonly string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>()
   if (ids.length === 0) return out
+  if (ownerType === 'package') return packageFromPrices(ids)
   const rows = await prisma.pricePoint.findMany({
     where: { ownerType, ownerId: { in: [...ids] } },
     select: { ownerId: true, sellIdr: true },
@@ -95,4 +98,53 @@ export async function cateringSeasonPrices(ids: readonly string[]): Promise<Map<
     if (entry && (season === 'regular' || season === 'ramadan' || season === 'hajj')) entry[season] = Number(r.sellIdr)
   }
   return out
+}
+
+/**
+ * Harga per orang tiap keberangkatan Paket Umroh yang BISA DIPESAN (aktif, belum lewat): harga khusus keberangkatan bila ada, selain itu harga paket (K1 F4).
+ * Keberangkatan paket yang belum berharga tidak masuk peta.
+ */
+export async function packageDeparturePrices(packageIds: readonly string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>()
+  if (packageIds.length === 0) return out
+  const [deps, points] = await Promise.all([
+    prisma.packageDeparture.findMany({ where: { packageId: { in: [...packageIds] }, isActive: true, departureDate: { gte: dbDateOf(todayInApp()) } }, select: { id: true, packageId: true } }),
+    prisma.pricePoint.findMany({ where: { ownerType: 'package', ownerId: { in: [...packageIds] } }, select: { ownerId: true, variantKey: true, sellIdr: true } }),
+  ])
+  const base = new Map<string, number>()
+  const special = new Map<string, number>()
+  for (const p of points) {
+    if (p.variantKey === '') base.set(p.ownerId, Number(p.sellIdr))
+    else if (departureIdOfKey(p.variantKey)) special.set(p.variantKey, Number(p.sellIdr))
+  }
+  for (const d of deps) {
+    const v = special.get(departureVariantKey(d.id)) ?? base.get(d.packageId)
+    if (v !== undefined) out.set(d.id, v)
+  }
+  return out
+}
+
+/** "Mulai dari" paket = termurah di antara keberangkatan yang bisa dipesan; tanpa keberangkatan = harga paket. Harga khusus keberangkatan lewat/nonaktif tak pernah ikut. */
+async function packageFromPrices(ids: readonly string[]): Promise<Map<string, number>> {
+  const [base, deps, perDep] = await Promise.all([
+    prisma.pricePoint.findMany({ where: { ownerType: 'package', ownerId: { in: [...ids] }, variantKey: '' }, select: { ownerId: true, sellIdr: true } }),
+    prisma.packageDeparture.findMany({ where: { packageId: { in: [...ids] }, isActive: true, departureDate: { gte: dbDateOf(todayInApp()) } }, select: { id: true, packageId: true } }),
+    packageDeparturePrices(ids),
+  ])
+  const out = new Map(base.map(r => [r.ownerId, Number(r.sellIdr)]))
+  const cheapest = new Map<string, number>()
+  for (const d of deps) {
+    const v = perDep.get(d.id)
+    if (v === undefined) continue
+    const prev = cheapest.get(d.packageId)
+    if (prev === undefined || v < prev) cheapest.set(d.packageId, v)
+  }
+  for (const [id, v] of cheapest) out.set(id, v)
+  return out
+}
+
+/** Harga khusus yang DIATUR per keberangkatan satu paket (admin; tanpa harga paket sebagai pengganti). */
+export async function packageDepartureSpecials(packageId: string): Promise<Map<string, number>> {
+  const rows = await prisma.pricePoint.findMany({ where: { ownerType: 'package', ownerId: packageId, variantKey: { startsWith: departureVariantKey('') } }, select: { variantKey: true, sellIdr: true } })
+  return new Map(rows.flatMap(r => { const id = departureIdOfKey(r.variantKey); return id ? [[id, Number(r.sellIdr)] as const] : [] }))
 }

@@ -20,17 +20,21 @@ export async function GET(req: Request) {
     if (!parsed.success) return NextResponse.json(err('Parameter tidak valid'), { status: 400 })
     const { ownerType, ownerId } = parsed.data
     const points = await getPricePoints(ownerType, ownerId)
-    const [rule, changes, warn] = await Promise.all([
+    const [rule, changes, warn, variants] = await Promise.all([
       resolveMarginRule(ownerType),
       listPriceChanges(ownerType, ownerId, 10),
       prisma.pricingRule.findUnique({ where: { productType: 'global' }, select: { warnBelowPercent: true } }),
+      PRICE_OWNERS[ownerType].variants?.(ownerId) ?? Promise.resolve([]),
     ])
     return NextResponse.json(ok({
       points,
       rule: { marginPercent: rule.defaultMarginPercent, roundingIncrement: rule.roundingIncrement, warnBelowPercent: warn ? Number(warn.warnBelowPercent) : 0 },
       manualOnly: PRICE_OWNERS[ownerType].manualOnly === true,
       // Varian yang boleh dibuat lewat harga manual (mis. musim katering yang belum diisi) — agar PriceCard dapat menampilkan baris "belum berharga".
-      creatable: PRICE_OWNERS[ownerType].creatableVariants.map(v => v.key),
+      creatable: [...PRICE_OWNERS[ownerType].creatableVariants.map(v => v.key), ...variants.filter(v => v.creatable).map(v => v.key)],
+      // Varian dinamis (harga khusus keberangkatan): label tampilan + yang mengikuti harga dasar bila kosong.
+      labels: Object.fromEntries(variants.map(v => [v.key, v.label])),
+      inherits: variants.filter(v => v.inheritsBase).map(v => v.key),
       changes,
     }))
   } catch (e) {

@@ -3,6 +3,8 @@ import { prisma } from '@/lib/db'
 import { calendarDateOf, dbDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import type { DepartureCreateInput, DepartureUpdateInput } from '@/lib/validators/package'
 import { packageReturnDate, seatsLeft } from './dates'
+import { dropDepartureVariant } from '@/lib/pricing/engine'
+import { packageDepartureSpecials, packageDeparturePrices } from '@/lib/pricing/engine/read'
 
 // Keberangkatan Paket Umroh (K1, docs/arsitektur-paket-umroh.md §8) — SATU-SATUNYA penulis tabel `package_departures`
 // (kursi ditahan/terjual kelak hanya lewat lib/quota; dijaga scripts/test-package-departures.ts). Masukan sudah diparse
@@ -29,9 +31,10 @@ export type DepartureView = {
   note: string | null
   /** Jumlah item booking yang merujuk — > 0 berarti tanggal terkunci dan hapus = nonaktif. */
   bookingCount: number
+  /** Harga khusus per orang (K1 F4, diatur di kartu Harga); null = mengikuti harga paket. Hanya diisi `listDepartures` (admin). */
+  specialPriceIdr: number | null
 }
 
-type Db = Prisma.TransactionClient | typeof prisma
 type Row = { id: string; departureDate: Date; totalSeats: number; pendingSeats: number; bookedSeats: number; isActive: boolean; note: string | null; _count: { bookings: number } }
 
 const SELECT = {
@@ -44,16 +47,20 @@ function view(r: Row, durationDays: number | null): DepartureView {
   return {
     id: r.id, departureDate, returnDate: durationDays ? packageReturnDate(departureDate, durationDays) : null,
     totalSeats: r.totalSeats, pendingSeats: r.pendingSeats, bookedSeats: r.bookedSeats, seatsLeft: seatsLeft(r),
-    isActive: r.isActive, note: r.note, bookingCount: r._count.bookings,
+    isActive: r.isActive, note: r.note, bookingCount: r._count.bookings, specialPriceIdr: null,
   }
 }
 
 /** Semua keberangkatan satu paket (admin), urut tanggal. Paket tak ada → `packageNotFound`. */
-export async function listDepartures(packageId: string, db: Db = prisma): Promise<DepartureView[]> {
-  const pkg = await db.package.findUnique({ where: { id: packageId }, select: { durationDays: true } })
+/** Di luar transaksi saja (harga khusus dibaca lewat klien global). */
+export async function listDepartures(packageId: string): Promise<DepartureView[]> {
+  const pkg = await prisma.package.findUnique({ where: { id: packageId }, select: { durationDays: true } })
   if (!pkg) throw new DepartureError('packageNotFound')
-  const rows = await db.packageDeparture.findMany({ where: { packageId }, select: SELECT, orderBy: [{ departureDate: 'asc' }, { id: 'asc' }] })
-  return rows.map(r => view(r, pkg.durationDays))
+  const [rows, specials] = await Promise.all([
+    prisma.packageDeparture.findMany({ where: { packageId }, select: SELECT, orderBy: [{ departureDate: 'asc' }, { id: 'asc' }] }),
+    packageDepartureSpecials(packageId),
+  ])
+  return rows.map(r => ({ ...view(r, pkg.durationDays), specialPriceIdr: specials.get(r.id) ?? null }))
 }
 
 const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
@@ -140,6 +147,7 @@ function deleteOrDeactivateInTx(packageId: string, id: string): Promise<Departur
       return { deleted: false, bookingCount }
     }
     await tx.packageDeparture.delete({ where: { id } })
+    await dropDepartureVariant(tx, packageId, id) // harga khususnya ikut hilang (K1 F4)
     return { deleted: true }
   })
 }
@@ -149,24 +157,30 @@ export async function dropDeparturesOf(tx: Prisma.TransactionClient, packageId: 
   await tx.packageDeparture.deleteMany({ where: { packageId } })
 }
 
-export type BookableDeparture = { id: string; departureDate: CalendarDate; returnDate: CalendarDate; seatsLeft: number }
+export type BookableDeparture = {
+  id: string; departureDate: CalendarDate; returnDate: CalendarDate; seatsLeft: number
+  /** Harga per orang (harga khusus keberangkatan ?? harga paket); null = belum berharga. Harga jual saja. */
+  priceIdr: number | null
+}
 
 /**
  * Keberangkatan yang bisa DIPILIH (checkout pelanggan, form booking admin): aktif, belum lewat, paket berdurasi; urut tanggal. Termasuk yang penuh (sisa 0) supaya
  * pelanggan melihatnya mati, bukan hilang. Hanya baca — kursi diperiksa ulang di dalam kunci saat ditahan (lib/quota). Tanpa catatan internal.
  */
-export async function bookableDepartures(packageIds: readonly string[], db: Db = prisma): Promise<Map<string, BookableDeparture[]>> {
+/** Di luar transaksi saja (membaca harga lewat klien global). */
+export async function bookableDepartures(packageIds: readonly string[]): Promise<Map<string, BookableDeparture[]>> {
   const out = new Map<string, BookableDeparture[]>()
   if (packageIds.length === 0) return out
-  const rows = await db.packageDeparture.findMany({
+  const rows = await prisma.packageDeparture.findMany({
     where: { packageId: { in: [...packageIds] }, isActive: true, departureDate: { gte: dbDateOf(todayInApp()) }, package: { durationDays: { not: null } } },
     select: { id: true, packageId: true, departureDate: true, totalSeats: true, pendingSeats: true, bookedSeats: true, package: { select: { durationDays: true } } },
     orderBy: [{ departureDate: 'asc' }, { id: 'asc' }],
   })
+  const prices = await packageDeparturePrices(packageIds)
   for (const r of rows) {
     const departureDate = calendarDateOf(r.departureDate)
     const list = out.get(r.packageId) ?? []
-    list.push({ id: r.id, departureDate, returnDate: packageReturnDate(departureDate, r.package.durationDays!), seatsLeft: seatsLeft(r) })
+    list.push({ id: r.id, departureDate, returnDate: packageReturnDate(departureDate, r.package.durationDays!), seatsLeft: seatsLeft(r), priceIdr: prices.get(r.id) ?? null })
     out.set(r.packageId, list)
   }
   return out

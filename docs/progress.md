@@ -957,6 +957,6 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] F1 skema + migrasi `package_departures` + penulis tunggal `lib/packages/departures.ts` + validator — selesai 2026-11-14 (suite di DB sekali pakai, build, skema sinkron)
   - [x] F2 editor admin (durasi, rencana perjalanan, tidak termasuk, keberangkatan + peringatan) — selesai 2026-11-14 (browser admin 1280/375 px, suite di DB sekali pakai, build); harga khusus per keberangkatan dipindah ke F3
   - [x] F3 mesin pesan + checkout memilih keberangkatan (`departureId`, kursi keberangkatan + tiket, revisi, draf admin, invoice, isian awal `departure`; menyerap F4 lama) — selesai 2026-11-14 (uji skrip kursi/revisi/checkout, browser draf admin + checkout /id /en 375 px, suite + build)
-  - [ ] F4 harga khusus per keberangkatan (varian titik harga)
+  - [x] F4 harga khusus per keberangkatan (varian `dep:<id>` manual di PriceCard paket, dipakai mesin pesan, "mulai dari" = termurah yang bisa dipesan, harga per keberangkatan di checkout/draf admin) — selesai 2026-11-15 (uji skrip mesin/booking, pool satu koneksi, suite 1368 PASS, build; browser menyusul di F6)
   - [ ] F5 halaman detail publik + kartu katalog
   - [ ] F6 verifikasi menyeluruh + dokumentasi

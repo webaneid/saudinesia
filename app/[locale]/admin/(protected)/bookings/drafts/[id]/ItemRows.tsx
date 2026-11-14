@@ -340,7 +340,7 @@ export function ItemRows({ rows, onChange, catalog, load, defaultPeople, totals,
                   <ChoiceSelect size="sm" ariaLabel={`Keberangkatan baris ${i + 1}`} value={f.extra.departure ?? ''} disabled={!pkg}
                     placeholder={!pkg ? 'Pilih paket dulu' : pkg.departures.length ? '— pilih keberangkatan —' : 'Belum ada keberangkatan'}
                     options={[
-                      ...(pkg?.departures ?? []).map(d => ({ id: d.id, label: `${fmt(d.departureDate)} – ${fmt(d.returnDate)}`, hint: d.seatsLeft > 0 ? `sisa ${d.seatsLeft} kursi` : 'penuh' })),
+                      ...(pkg?.departures ?? []).map(d => ({ id: d.id, label: `${fmt(d.departureDate)} – ${fmt(d.returnDate)}`, hint: `${d.seatsLeft > 0 ? `sisa ${d.seatsLeft} kursi` : 'penuh'}${d.priceIdr ? ` · ${formatRupiah(d.priceIdr)}/orang` : ''}` })),
                       // Keberangkatan item lama yang tak lagi bisa dipilih (lewat/nonaktif) tetap tampil supaya revisi tidak mengosongkannya.
                       ...(f.extra.departure && pkg && !pkg.departures.some(d => d.id === f.extra.departure) ? [{ id: f.extra.departure, label: 'Keberangkatan sebelumnya (tidak tersedia lagi)' }] : []),
                     ]}

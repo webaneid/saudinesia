@@ -21,6 +21,7 @@ import { recomputeBookingDates } from '@/lib/booking/dates'
 import { cancelBooking } from '@/lib/booking/cancel'
 import { ItemNotBookableError, QuotaExhaustedError } from '@/lib/booking/errors'
 import { reserveFlightQuota, reservePackageDepartureQuota } from '@/lib/quota'
+import { departureVariantKey } from '@/lib/pricing/engine/variantKeys'
 import { quotaAdapters } from '@/lib/quota/adapters'
 import { visaRequiredComponentsSchema, parseRequiredComponents, visaSalesModel, REQUIRED_COMPONENT_TYPES, type RequiredComponentType } from '@/lib/validators/visa'
 import { createBookingSchema, type CreateBookingInput } from '@/lib/validators/booking'
@@ -241,6 +242,19 @@ await t('PAKET: harga MANUAL per orang menang lewat baris "Penyesuaian harga pak
   assert.deepEqual([n(adj.qty), n(adj.unitSellIdr)], [2, 500_000])
   assert.equal(b.total, 22_000_000)
   await clearManualSell({ ownerType: 'package', ownerId: pkg.id, byUserId: staff.id })
+})
+await t('PAKET: harga KHUSUS keberangkatan (K1 F4) menang — baris "Harga khusus keberangkatan"; rekomendasi tetap harga paket; ikut harga paket lagi = titik varian dihapus', async () => {
+  const key = departureVariantKey(D_PKG)
+  await setManualSell({ ownerType: 'package', ownerId: pkg.id, variantKey: key, sellIdr: 12_000_000, byUserId: staff.id })
+  const b = await book(data([pkgItem()]), [await resolvePackageItem(pkgItem())])
+  assert.equal(b.total, 24_000_000)
+  const adj = (await snaps(b.id)).find(x => x.lineKey === 'penyesuaian')!
+  assert.deepEqual([adj.description, n(adj.qty), n(adj.unitSellIdr), adj.variantKey], ['Harga khusus keberangkatan', 2, 1_500_000, key])
+  assert.equal(n(adj.recommendedTotalIdr!), 0, 'rekomendasi = harga otomatis paket')
+  await clearManualSell({ ownerType: 'package', ownerId: pkg.id, variantKey: key, byUserId: staff.id })
+  assert.equal(await prisma.pricePoint.count({ where: { ownerType: 'package', ownerId: pkg.id, variantKey: key } }), 0)
+  const b2 = await book(data([pkgItem()]), [await resolvePackageItem(pkgItem())])
+  assert.equal(b2.total, 21_000_000, 'kembali ke harga paket')
 })
 await t('PAKET: pilihan user_choice (hotel Madinah) = baris per orang (malam × harga kamar ÷ isi tipe kamar); pulang tetap dari durasi paket (K1)', async () => {
   const item = pkgItem({ choices: { hotelMadinahScheduleId: room2.id } })
