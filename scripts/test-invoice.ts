@@ -155,11 +155,11 @@ await t('KONFIRMASI PEMBAYARAN memakai TAGIHAN (termasuk pajak): jumlah = subtot
   const did = await newDraft(DRAFT(1)) // 6.000.000 + PPN 11% = 6.660.000
   assert.ok((await publishDraft(did, { byUserId: staff.id })).ok)
   const p1 = await prisma.payment.create({ data: { bookingId: did, amount: 0, method: 'transfer', status: 'pending' } })
-  const r1 = await processPayment(p1.id, { action: 'confirm', amount: 6_000_000, byUserId: staff.id })
+  const r1 = await processPayment(p1.id, { action: 'confirm', amount: 6_000_000, cashAccount: { kind: 'cash' }, byUserId: staff.id })
   assert.ok(r1.kind === 'done' && r1.balance === 660_000, JSON.stringify(r1))
-  assert.equal((await processPayment(p1.id, { action: 'confirm', byUserId: staff.id })).kind, 'conflict', 'pembayaran yang sama tak diproses dua kali')
+  assert.equal((await processPayment(p1.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'conflict', 'pembayaran yang sama tak diproses dua kali')
   const p2 = await prisma.payment.create({ data: { bookingId: did, amount: 0, method: 'transfer', status: 'pending' } })
-  const done = await processPayment(p2.id, { action: 'confirm', byUserId: staff.id })
+  const done = await processPayment(p2.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })
   assert.ok(done.kind === 'done' && done.balance === 0)
   assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { id: p2.id } })).amount), 660_000)
 })
@@ -182,7 +182,7 @@ await t('PENYESUAIAN TOTAL sesudah terbit → pajak DIHITUNG ULANG dengan tarif 
 await t('KONFIRMASI tanpa invoice → konflik (tak menebak pajak 0); NOMOR BENTROK dengan nomor lama → 422 jelas, penghitung tak maju, booking tetap draf', async () => {
   const lone = await prisma.booking.create({ data: { bookingCode: `${tag}-X`, userId: customer.id, status: 'active', season: 'regular', totalAmount: 100 } })
   const pay = await prisma.payment.create({ data: { bookingId: lone.id, amount: 0, method: 'transfer', status: 'pending' } })
-  assert.equal((await processPayment(pay.id, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
+  assert.equal((await processPayment(pay.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'conflict')
   const s0 = await seqNow()
   const clash = `UJI-${year}-${String(s0 + 1).padStart(4, '0')}`
   await prisma.invoice.create({ data: { bookingId: lone.id, number: clash, sequenceKey: 'uji', sequence: 1, issuedAt: new Date(), invoiceDate: new Date(), dueDate: new Date(), companySnapshot: {} } })

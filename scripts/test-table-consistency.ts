@@ -35,6 +35,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'app/[locale]/admin/(protected)/reports/page.tsx': { count: 3, reason: 'ringkasan per produk/vendor/bulan = agregat berukuran tetap; daftar per booking berpaginasi' },
   'app/[locale]/admin/(protected)/identitas-jamaah/[id]/page.tsx': { count: 2, reason: 'daftar bersarang milik SATU identitas: kartu yang menautnya (sedikit, satu orang) + 50 jamaah booking terbaru (jumlah total ditampilkan)' },
   'components/shared/pilgrims/PilgrimSlotsTable.tsx': { count: 1, reason: 'jamaah SATU booking (daftar bersarang milik satu induk; jumlah = slot yang ditagih), dipakai halaman booking jamaah dan admin' },
+  'app/[locale]/admin/(protected)/finance/cash-book/page.tsx': { count: 1, reason: 'ringkasan per akun kas = agregat berukuran tetap (jumlah akun kas); daftar entri berpaginasi' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },
 }
 

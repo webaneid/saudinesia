@@ -13,6 +13,8 @@ export const canSetSellPrice = (role: UserRole): boolean => ADMIN_ROLES.includes
 export const canAdjustBooking = (role: UserRole): boolean => ADMIN_ROLES.includes(role)
 /** Mencatat/mengubah/membatalkan pengeluaran ke vendor: manager+ (admin biasa tak dapat memilih vendor — daftar vendor manager+). MELIHAT catatan/laporan tetap `canViewCost` (semua admin, sama dengan laporan untung per vendor). */
 export const canRecordCost = (role: UserRole): boolean => MANAGER_ROLES.includes(role)
+/** Melihat buku kas (Fase 7b-1): semua peran admin, baca saja (docs/arsitektur-booking-engine-v2.md §10.10). */
+export const canViewCashBook = (role: UserRole): boolean => ADMIN_ROLES.includes(role)
 export const canChangeMarginRule = (role: UserRole): boolean => SUPERADMIN_ROLES.includes(role)
 
 async function guard(allowed: (role: UserRole) => boolean): Promise<SessionPayload> {
@@ -31,3 +33,5 @@ export const requireMarginRuleEdit = () => guard(canChangeMarginRule)
 export const requireBookingAdjust = () => guard(canAdjustBooking)
 /** Mencatat/mengubah/membatalkan pengeluaran aktual vendor. */
 export const requireCostRecord = () => guard(canRecordCost)
+/** Melihat buku kas. */
+export const requireCashView = () => guard(canViewCashBook)

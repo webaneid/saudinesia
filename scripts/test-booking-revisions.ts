@@ -282,7 +282,7 @@ await t('BASI: expectedRevision lama → 409; booking BATAL → 409', async () =
 await t('TERKONFIRMASI (R2): tanpa alasan → 422; dengan alasan: hapus hotel melepas BOOKED (bukan pending), tambah transport DITAHAN PENDING (tidak langsung booked); batal sesudahnya melepas masing-masing sesuai status barisnya', async () => {
   const id = await published({ ...DRAFT, items: [FL(2), HT(1)] })
   const pay = await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'transfer', status: 'pending' } })
-  assert.equal((await processPayment(pay.id, { action: 'confirm', byUserId: staff.id })).kind, 'done')
+  assert.equal((await processPayment(pay.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'done')
   const r0 = await rooms(); const v0 = await vseats()
   const input = await base(id)
   input.items = input.items.filter(i => i.item.itemType !== 'hotel')
@@ -306,7 +306,7 @@ await t('TERKONFIRMASI (R2): tanpa alasan → 422; dengan alasan: hapus hotel me
 await t('BATAL booking TERKONFIRMASI melepas kursi BOOKED (bug lama: pending dikurangi → minus, kursi tak kembali)', async () => {
   const id = await published(DRAFT)
   const pay = await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'transfer', status: 'pending' } })
-  await processPayment(pay.id, { action: 'confirm', byUserId: staff.id })
+  await processPayment(pay.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })
   const s0 = await seats()
   await prisma.$transaction(async tx => {
     const b = await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })
@@ -318,7 +318,7 @@ await t('BATAL booking TERKONFIRMASI melepas kursi BOOKED (bug lama: pending dik
 await t('ATUR TOTAL dilonggarkan (R2): booking terkonfirmasi tanpa catatan → 422; dengan catatan → revisi invoice +1, riwayat jenis total, pajak beku ikut', async () => {
   const id = await published(DRAFT)
   const pay = await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'transfer', status: 'pending' } })
-  await processPayment(pay.id, { action: 'confirm', byUserId: staff.id })
+  await processPayment(pay.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })
   await assert.rejects(() => setBookingTotal({ bookingId: id, totalIdr: 10_000_000, byUserId: staff.id }), (e: unknown) => e instanceof AdjustmentError && e.status === 422)
   await setBookingTotal({ bookingId: id, totalIdr: 10_000_000, reason: 'nego setelah konfirmasi', byUserId: staff.id })
   const inv = await prisma.invoice.findUniqueOrThrow({ where: { bookingId: id } })
@@ -332,7 +332,7 @@ await t('PASCA-AUDIT: kelebihan bayar & bukti menunggu → PENGINGAT (tak menola
   const id = await published({ ...DRAFT, items: [FL(2), HT(1)] })
   const b0 = await full(id)
   const pay = await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'transfer', status: 'pending' } })
-  await processPayment(pay.id, { action: 'confirm', byUserId: staff.id }) // lunas = tagihan penuh
+  await processPayment(pay.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id }) // lunas = tagihan penuh
   await prisma.payment.create({ data: { bookingId: id, amount: 1000, method: 'transfer', status: 'pending' } })
   const input = await base(id); input.items = input.items.filter(i => i.item.itemType !== 'hotel'); input.reason = 'hotel batal'
   const r = await reviseBooking(id, input, staff.id)

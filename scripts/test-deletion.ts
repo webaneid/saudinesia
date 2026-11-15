@@ -641,6 +641,7 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'AccountDeletionRequest.processedById': 'dipertahankan (staf yang memproses permintaan hapus)',
     'Booking.confirmedById': 'dipertahankan (staf yang mengonfirmasi booking; tak pernah dikirim ke jamaah)',
     'Payment.confirmedById': 'dipertahankan (staf yang memverifikasi pembayaran)',
+    'CashEntry.createdById': 'dipertahankan (staf yang memosting entri buku kas; append-only, tanpa data pribadi)',
     'Refund.approvedById': 'dipertahankan (staf yang menyetujui refund)',
     'InvoiceSettings.updatedById': 'dipertahankan (staf terakhir yang mengubah pengaturan)',
     'Invoice.issuedById': 'dipertahankan (staf yang menerbitkan invoice; NULL untuk jalur jamaah — tak pernah menunjuk akun jamaah)',

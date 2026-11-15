@@ -165,3 +165,6 @@ Migrasi memuat perbaikan data: pembayaran **terkonfirmasi bernilai 0** diisi tot
 - Migrasi menjalankan `CREATE EXTENSION IF NOT EXISTS pg_trgm` (indeks trigram pencarian nama di gudang identitas).
 - **Tidak perlu tindakan manual di production.** Image `postgres:16-alpine` (`docker-compose.prod.yml`, sama dengan CI) membawa modul contrib; `pg_trgm` adalah ekstensi *trusted* sejak PG13, jadi cukup pemilik database (tak harus superuser) — dan `POSTGRES_USER=saudinesia` buatan entrypoint memang superuser. Dibuktikan 2026-11-03 dengan peran `NOSUPERUSER` pemilik database sekali pakai di PG 16: `CREATE EXTENSION pg_trgm` berhasil (v1.6).
 - Bila kelak DB dipindah ke Postgres terkelola yang membatasi ekstensi, pastikan `pg_trgm` ada di daftar izinnya SEBELUM deploy (tanpa itu kontainer `migrate` gagal dan web tidak naik).
+
+### Buku kas append-only (Fase 7b-1, 2026-11-16)
+Migrasi `20261125090000_cash_book` memasang trigger `cash_entries_no_update` (UPDATE/DELETE) dan `cash_entries_no_truncate`. Pasca-deploy periksa `select tgname, tgenabled from pg_trigger where tgname like 'cash_entries_no_%'` = `'O'` untuk keduanya. Trigger hanya melindungi dari kode aplikasi: peran pemilik tabel dapat menonaktifkannya (pola sama dengan `price_snapshots`, SEC-88) — kredensial DB tetap rahasia tingkat tertinggi.

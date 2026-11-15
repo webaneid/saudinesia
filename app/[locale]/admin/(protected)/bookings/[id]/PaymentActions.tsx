@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { CheckCircle, XCircle, FileSearch } from 'lucide-react'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { FileViewerDialog } from '@/components/shared/documents/FileViewerDialog'
 import { formatRupiah } from '@/lib/utils'
 
@@ -17,6 +18,8 @@ type PendingPayment = {
   senderAccountName: string | null
   destination: string | null
   payerNote: string | null
+  /** Akun kas tujuan dari bukti (`bank:<id>` | `cash` | '' = belum diketahui). */
+  cashAccount: string
 }
 
 interface PaymentActionsProps {
@@ -28,19 +31,24 @@ interface PaymentActionsProps {
   seatConfirmed: boolean
   /** Terbayar minimal yang mengonfirmasi kursi (`paymentLimits.confirmThreshold`). */
   dpThreshold: number
+  /** Pilihan akun kas penerima (rekening aktif + kas tunai), Fase 7b-1. */
+  cashOptions: Array<{ value: string; label: string }>
 }
 
 const cents = (n: number) => Math.round(n * 100)
 
 // Verifikasi pembayaran bertahap (Fase 7a F3): jumlah bawaan = nominal pelanggan (atau sisa); kurang dari sisa = cicilan (boleh), kurang dari DP hanya
 // diingatkan (P2 — kursi baru dikonfirmasi saat terbayar ≥ DP), lebih dari sisa wajib bercatatan. Aturan sungguhan di lib/payments (server).
-export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold }: PaymentActionsProps) {
+export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold, cashOptions }: PaymentActionsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [done,    setDone]    = useState<{ action: 'confirm' | 'reject'; seat?: boolean; balance?: number } | null>(null)
   const [error,   setError]   = useState('')
   const [amount,  setAmount]  = useState(String(payment?.claimed ?? bill.balance))
   const [notes,   setNotes]   = useState('')
+  // Terisi dari rekening bukti bila masih aktif; rekening bukti yang kini nonaktif tetap sah (server memakainya bila admin tak memilih lain).
+  const [account, setAccount] = useState(payment?.cashAccount && cashOptions.some(o => o.value === payment.cashAccount) ? payment.cashAccount : '')
+  const hasDest = !!payment?.cashAccount
   const [viewing, setViewing] = useState(false) // bukti transfer dilihat di popup, bukan tab baru
   const n = Number(amount)
   const valid = Number.isFinite(n) && n > 0
@@ -55,7 +63,7 @@ export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold }: Pa
     const res  = await fetch(`/api/v1/admin/payments/${id}/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(action === 'confirm' ? { action, amount: n, ...(notes.trim() ? { notes: notes.trim() } : {}) } : { action, ...(notes.trim() ? { notes: notes.trim() } : {}) }),
+      body: JSON.stringify(action === 'confirm' ? { action, amount: n, ...(account ? { cashAccount: account } : {}), ...(notes.trim() ? { notes: notes.trim() } : {}) } : { action, ...(notes.trim() ? { notes: notes.trim() } : {}) }),
     }).catch(() => null)
     const json = res ? await res.json().catch(() => null) as { success?: boolean; error?: string; data?: { seatConfirmed?: boolean; balance?: number } } | null : null
     setLoading(false)
@@ -110,11 +118,14 @@ export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold }: Pa
         {partial && !belowDp && <p className="m-0 text-[11px] text-admin-muted">Pembayaran sebagian — sisa {formatRupiah(bill.balance - n)} setelah dikonfirmasi.</p>}
         {belowDp && <p className="m-0 text-[11px] text-admin-warning">Terbayar akan {formatRupiah(paidAfter)}, di bawah DP {formatRupiah(dpThreshold)} — pembayaran tetap dicatat, tetapi kursi belum dikonfirmasi.</p>}
         {over && <p className="m-0 text-[11px] text-admin-warning">Lebih dari sisa tagihan — catatan wajib (mis. lebih bayar, rencana pengembalian).</p>}
+        <label className="block text-[12px] font-medium text-admin-muted">Diterima di akun kas</label>
+        <ChoiceSelect options={cashOptions.map(o => ({ id: o.value, label: o.label }))} value={account} onChange={setAccount} placeholder="Pilih rekening / kas tunai" ariaLabel="Akun kas penerima" clearable={false} />
+        {!account && <p className="m-0 text-[11px] text-admin-warning">{hasDest ? 'Rekening tujuan bukti sudah nonaktif — biarkan kosong untuk mencatat ke rekening itu, atau pilih akun lain.' : 'Rekening tujuan bukti tidak dikenali — pilih akun kas yang menerima uang ini.'}</p>}
         <textarea className="admin-inp w-full" rows={2} maxLength={500} placeholder={over ? 'Catatan (wajib)' : 'Catatan (opsional)'} value={notes} onChange={e => setNotes(e.target.value)} />
       </div>
       {error && <p className="text-[12px] text-admin-danger">{error}</p>}
       <div className="flex gap-2">
-        <button onClick={() => act(payment.id, 'confirm')} disabled={loading || !valid}
+        <button onClick={() => act(payment.id, 'confirm')} disabled={loading || !valid || (!account && !hasDest)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-admin-ok hover:bg-admin-ok text-sm text-white font-medium disabled:opacity-50 transition-colors">
           <CheckCircle className="h-4 w-4" /> Konfirmasi
         </button>
