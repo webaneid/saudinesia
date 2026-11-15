@@ -1509,11 +1509,15 @@ model Payment {
   senderAccountName String?   @db.VarChar(100)
   destinationLabel  String?   @db.VarChar(200)
   payerNote         String?   @db.VarChar(500)
+  /// Akun kas tujuan (Fase 7b-1): diisi route unggah dari rekening yang dipilih pelanggan (dicocokkan ke BankAccount), dapat diganti admin saat verifikasi. Ditulis HANYA lib/cash + process.ts.
+  destinationCashAccountId String?
 
   booking     Booking @relation(fields: [bookingId], references: [id])
+  destinationCashAccount CashAccount? @relation(fields: [destinationCashAccountId], references: [id], onDelete: Restrict)
   confirmedBy User?   @relation("ConfirmedBy", fields: [confirmedById], references: [id])
 
   @@index([bookingId])
+  @@index([destinationCashAccountId])
   @@map("payments")
 }
 
@@ -2060,6 +2064,8 @@ model BankAccount {
   createdAt     DateTime @default(now()) @db.Timestamptz(3)
   updatedAt     DateTime @updatedAt @db.Timestamptz(3)
 
+  cashAccount CashAccount?
+
   @@unique([bankName, accountNumber])
   @@map("bank_accounts")
 }
@@ -2170,4 +2176,75 @@ model SettingsAudit {
   @@index([entity, entityId, at])
   @@index([at])
   @@map("settings_audit")
+}
+
+// ── Buku kas (docs/arsitektur-booking-engine-v2.md §3.5, §10.10 Fase 7b-1) ─────────────────────────────────────────────
+// Akun kas = tempat uang berada (rekening bank, kas tunai; QRIS/gateway menyusul Fase 8–10). Dibuat HANYA lib/cash/accounts.ts, saat pertama dipakai
+// (rekening yang belum pernah menerima uang tetap dapat dihapus). Entri kas APPEND-ONLY (trigger DB menolak UPDATE/DELETE; koreksi = entri pembalik),
+// ditulis HANYA lib/cash/ledger.ts. Tak ada teks bebas dari staf/pelanggan di entri (tak ada data pribadi yang harus dihapus).
+
+enum CashAccountKind {
+  bank
+  cash
+
+  @@map("cash_account_kind")
+}
+
+enum CashDirection {
+  in
+  out
+
+  @@map("cash_direction")
+}
+
+enum CashComponent {
+  pokok
+  ppn
+  kode_unik
+  kelebihan
+  refund
+  biaya_vendor
+  koreksi
+
+  @@map("cash_component")
+}
+
+model CashAccount {
+  id            String          @id @default(uuid())
+  kind          CashAccountKind
+  name          String          @db.VarChar(200) // nama saat dibuat (rekening: bank + nomor); tampilan rekening memakai BankAccount terkini
+  bankAccountId String?         @unique // kind = bank
+  systemKey     String?         @unique @db.VarChar(40) // kind = cash: 'cash:main'
+  createdAt     DateTime        @default(now()) @db.Timestamptz(3)
+
+  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  entries     CashEntry[]
+  payments    Payment[]
+
+  @@map("cash_accounts")
+}
+
+model CashEntry {
+  id              String        @id @default(uuid())
+  entryDate       DateTime      @db.Timestamptz(3) // kapan uang bergerak (waktu transfer bila diketahui)
+  direction       CashDirection
+  amountIdr       Decimal       @db.Decimal(14, 2) // > 0 (CHECK)
+  component       CashComponent
+  cashAccountId   String
+  refType         String        @db.VarChar(40) // 'payment' | 'refund' | 'cost_actual' | 'reversal'
+  refId           String
+  bookingId       String? // tanpa FK: buku kas tetap utuh walau booking dihapus
+  reversesEntryId String?       @unique
+  createdById     String? // staf (null = sistem/cron)
+  createdAt       DateTime      @default(now()) @db.Timestamptz(3)
+
+  cashAccount CashAccount @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  reverses    CashEntry?  @relation("CashReversal", fields: [reversesEntryId], references: [id], onDelete: Restrict)
+  reversedBy  CashEntry?  @relation("CashReversal")
+
+  @@unique([refType, refId, component])
+  @@index([cashAccountId, entryDate])
+  @@index([bookingId])
+  @@index([entryDate, id])
+  @@map("cash_entries")
 }

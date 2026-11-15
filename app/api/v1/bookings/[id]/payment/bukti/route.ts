@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { cashAccountForSnapshot } from '@/lib/cash/accounts'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
@@ -94,6 +95,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (fresh.payments.some(p => p.status === 'pending')) return 'closed'
       const refused = claimRefusal(paymentLimits(billOf(fresh), minimumFirstPaymentPercent), input.amount)
       if (refused) return refused
+      const destinationCashAccountId = await cashAccountForSnapshot(tx, dest) // Fase 7b-1: rekening tujuan → akun kas (null bila rekening sudah dihapus; admin memilih saat verifikasi)
       await tx.payment.create({
         data: {
           bookingId:               id,
@@ -103,6 +105,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           senderBank:              input.senderBank,
           senderAccountName:       input.senderAccountName,
           destinationLabel,
+          destinationCashAccountId,
           payerNote:               input.note ?? null,
           method:                  'bank_transfer',
           status:                  'pending',

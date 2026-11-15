@@ -7,6 +7,7 @@ import { paymentLimits } from '@/lib/payments/limits'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
 import { ArrowLeft, FileDown, Pencil, UserCog } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
+import { cashTargetOptions } from '@/lib/cash/accounts'
 import { InvoiceBox } from './InvoiceBox'
 import { RevisionHistory } from './RevisionHistory'
 import { billOf } from '@/lib/invoice/bill'
@@ -50,7 +51,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
       flights:    { include: { flightSchedule: { include: { route: true } } } },
       packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
-      payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }] },
+      payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], include: { destinationCashAccount: { select: { kind: true, bankAccountId: true } } } },
       invoice:    true,
       groups:     { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true, plannedTravelDate: true } },
     },
@@ -144,7 +145,9 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
           transferredAt: pendingPayment.transferredAt ? formatInstant(pendingPayment.transferredAt, DATETIME_FULL) : null,
           senderBank: pendingPayment.senderBank, senderAccountName: pendingPayment.senderAccountName,
           destination: pendingPayment.destinationLabel, payerNote: pendingPayment.payerNote,
+          cashAccount: pendingPayment.destinationCashAccount ? (pendingPayment.destinationCashAccount.kind === 'cash' ? 'cash' : `bank:${pendingPayment.destinationCashAccount.bankAccountId}`) : '',
         } : null}
+        cashOptions={pendingPayment ? await cashTargetOptions() : []}
         bill={{ grandTotal: bill.grandTotal, paid: bill.paid, balance: limits.balance }}
         seatConfirmed={booking.confirmedAt !== null}
         dpThreshold={limits.confirmThreshold}

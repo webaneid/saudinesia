@@ -210,7 +210,7 @@ const snap = async (bookingId: string, payId: string) => {
 }
 await t('KONFIRMASI: bawaan jumlah = total pesanan, status payment confirmed + booking confirmed, siapa/kapan tercatat; jumlah tersimpan dibaca invoice (sisa tagihan 0)', async () => {
   const { id, pay } = await mkPaid()
-  const r = await processPayment(pay, { action: 'confirm', byUserId: staff.id })
+  const r = await processPayment(pay, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })
   assert.equal(r.kind, 'done')
   const s2 = await snap(id, pay)
   assert.deepEqual([s2.booking, s2.pay, s2.amount], ['confirmed', 'confirmed', 1_500_000])
@@ -228,32 +228,32 @@ await t('invoice: pembayaran PENDING → sisa tagihan = total penuh; jumlah terk
 })
 await t('CICILAN (Fase 7a F3, DP 0%): kurang dari sisa SAH — pembayaran pertama mengonfirmasi kursi, sisa dibayar bukti kedua; LEBIH dari sisa tanpa catatan ditolak, dengan catatan sah', async () => {
   const a = await mkPaid()
-  const r1 = await processPayment(a.pay, { action: 'confirm', amount: 1_000_000, byUserId: staff.id })
+  const r1 = await processPayment(a.pay, { action: 'confirm', amount: 1_000_000, cashAccount: { kind: 'cash' }, byUserId: staff.id })
   assert.ok(r1.kind === 'done' && r1.seatConfirmed && r1.balance === 500_000, JSON.stringify(r1))
   assert.deepEqual([(await snap(a.id, a.pay)).booking, (await snap(a.id, a.pay)).amount], ['confirmed', 1_000_000])
   const second = await prisma.payment.create({ data: { bookingId: a.id, amount: 0, method: 'bank_transfer', status: 'pending', claimedAmountIdr: 500_000 } })
-  await assert.rejects(() => processPayment(second.id, { action: 'confirm', amount: 700_000, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
-  const r2 = await processPayment(second.id, { action: 'confirm', byUserId: staff.id }) // bawaan = nominal pelanggan
+  await assert.rejects(() => processPayment(second.id, { action: 'confirm', amount: 700_000, cashAccount: { kind: 'cash' }, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
+  const r2 = await processPayment(second.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id }) // bawaan = nominal pelanggan
   assert.ok(r2.kind === 'done' && !r2.seatConfirmed && r2.balance === 0, JSON.stringify(r2))
   assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { id: second.id } })).amount), 500_000)
   const b = await mkPaid()
-  await assert.rejects(() => processPayment(b.pay, { action: 'confirm', amount: 1_700_000, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
+  await assert.rejects(() => processPayment(b.pay, { action: 'confirm', amount: 1_700_000, cashAccount: { kind: 'cash' }, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
   assert.deepEqual(await snap(b.id, b.pay), { booking: 'payment_review', pay: 'pending', amount: 0, notes: null, confirmedAt: null })
-  assert.equal((await processPayment(b.pay, { action: 'confirm', amount: 1_700_000, notes: 'lebih bayar 200 rb', byUserId: staff.id })).kind, 'done')
+  assert.equal((await processPayment(b.pay, { action: 'confirm', amount: 1_700_000, notes: 'lebih bayar 200 rb', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'done')
   assert.deepEqual([(await snap(b.id, b.pay)).amount, (await snap(b.id, b.pay)).notes], [1_700_000, 'lebih bayar 200 rb'])
 })
 await t('DP 30% (P1/P2, Fase 7a F3): pembayaran di bawah DP DICATAT tapi kursi belum dikonfirmasi; begitu terbayar ≥ DP kursi dikonfirmasi tepat sekali', async () => {
   await prisma.invoiceSettings.update({ where: { id: 'global' }, data: { minimumFirstPaymentPercent: 30 } })
   try {
     const a = await mkPaid() // tagihan 1.500.000 → DP 450.000
-    const r1 = await processPayment(a.pay, { action: 'confirm', amount: 200_000, byUserId: staff.id })
+    const r1 = await processPayment(a.pay, { action: 'confirm', amount: 200_000, cashAccount: { kind: 'cash' }, byUserId: staff.id })
     assert.ok(r1.kind === 'done' && !r1.seatConfirmed && r1.balance === 1_300_000, JSON.stringify(r1))
     assert.equal((await snap(a.id, a.pay)).booking, 'awaiting_payment', 'kursi belum dikonfirmasi, tak ada bukti menunggu')
     const p2 = await prisma.payment.create({ data: { bookingId: a.id, amount: 0, method: 'bank_transfer', status: 'pending' } })
-    const r2 = await processPayment(p2.id, { action: 'confirm', amount: 250_000, byUserId: staff.id }) // 450.000 = DP tepat
+    const r2 = await processPayment(p2.id, { action: 'confirm', amount: 250_000, cashAccount: { kind: 'cash' }, byUserId: staff.id }) // 450.000 = DP tepat
     assert.ok(r2.kind === 'done' && r2.seatConfirmed && r2.balance === 1_050_000, JSON.stringify(r2))
     const p3 = await prisma.payment.create({ data: { bookingId: a.id, amount: 0, method: 'bank_transfer', status: 'pending' } })
-    const r3 = await processPayment(p3.id, { action: 'confirm', byUserId: staff.id })
+    const r3 = await processPayment(p3.id, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })
     assert.ok(r3.kind === 'done' && !r3.seatConfirmed && r3.balance === 0, JSON.stringify(r3))
     assert.equal((await snap(a.id, p3.id)).booking, 'confirmed')
   } finally {
@@ -262,26 +262,26 @@ await t('DP 30% (P1/P2, Fase 7a F3): pembayaran di bawah DP DICATAT tapi kursi b
 })
 await t('GANDA/BASI ditolak (conflict, tak ada yang berubah): konfirmasi dua kali, tolak setelah konfirmasi, konfirmasi payment yang sudah ditolak, pesanan batal, id tak ada; bukti pelunasan booking terkonfirmasi tetap diproses', async () => {
   const a = await mkPaid()
-  assert.equal((await processPayment(a.pay, { action: 'confirm', byUserId: staff.id })).kind, 'done')
+  assert.equal((await processPayment(a.pay, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'done')
   const before = await snap(a.id, a.pay)
-  assert.equal((await processPayment(a.pay, { action: 'confirm', amount: 1_900_000, notes: 'timpa jumlah', byUserId: staff.id })).kind, 'conflict')
+  assert.equal((await processPayment(a.pay, { action: 'confirm', amount: 1_900_000, notes: 'timpa jumlah', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'conflict')
   assert.equal((await processPayment(a.pay, { action: 'reject', notes: 'tolak setelah bayar', byUserId: staff.id })).kind, 'conflict')
   assert.deepEqual(await snap(a.id, a.pay), before, 'jumlah final tak tertimpa; booking tetap confirmed')
   const r = await mkPaid()
   assert.equal((await processPayment(r.pay, { action: 'reject', notes: 'bukti buram', byUserId: staff.id })).kind, 'done')
   assert.deepEqual([(await snap(r.id, r.pay)).booking, (await snap(r.id, r.pay)).pay], ['awaiting_payment', 'rejected'])
-  assert.equal((await processPayment(r.pay, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
+  assert.equal((await processPayment(r.pay, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'conflict')
   const c = await mkPaid('cancelled')
-  assert.equal((await processPayment(c.pay, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
+  assert.equal((await processPayment(c.pay, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'conflict')
   assert.equal((await snap(c.id, c.pay)).booking, 'cancelled', 'booking batal tak dihidupkan kembali')
   const w = await mkPaid('confirmed') // kursi sudah dikonfirmasi lalu ada bukti pelunasan → DIPROSES (Fase 7a F3), kursi tak dikonfirmasi dua kali
-  const rw = await processPayment(w.pay, { action: 'confirm', byUserId: staff.id })
+  const rw = await processPayment(w.pay, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })
   assert.ok(rw.kind === 'done' && !rw.seatConfirmed, JSON.stringify(rw))
-  assert.equal((await processPayment('00000000-0000-4000-8000-000000000000', { action: 'confirm', byUserId: staff.id })).kind, 'not_found')
+  assert.equal((await processPayment('00000000-0000-4000-8000-000000000000', { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })).kind, 'not_found')
 })
 await t('PARALEL: 6 konfirmasi serentak pada payment yang sama → TEPAT satu berhasil (sisanya conflict), jumlah/status tunggal', async () => {
   const a = await mkPaid()
-  const res = await Promise.all(Array.from({ length: 6 }, () => processPayment(a.pay, { action: 'confirm', byUserId: staff.id })))
+  const res = await Promise.all(Array.from({ length: 6 }, () => processPayment(a.pay, { action: 'confirm', cashAccount: { kind: 'cash' }, byUserId: staff.id })))
   assert.deepEqual([res.filter(r => r.kind === 'done').length, res.filter(r => r.kind === 'conflict').length], [1, 5])
   assert.deepEqual(await snap(a.id, a.pay).then(x => [x.booking, x.pay, x.amount]), ['confirmed', 'confirmed', 1_500_000])
 })

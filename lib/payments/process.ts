@@ -5,6 +5,8 @@ import { resolveVerifiedAmount } from './confirmAmount'
 import { paymentLimits } from './limits'
 import { billOf } from '@/lib/invoice/bill'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
+import { resolveCashTarget, type CashTarget } from '@/lib/cash/accounts'
+import { postEntries, splitPaymentCredit } from '@/lib/cash/ledger'
 
 // Konfirmasi / penolakan pembayaran oleh admin (satu-satunya pemroses). Dalam SATU transaksi yang mengunci baris booking, status payment/booking DIBACA ULANG di dalam kunci: konfirmasi/penolakan
 // ganda atau paralel (dua admin, dobel klik) tak boleh menimpa jumlah yang sudah final, menjalankan konfirmasi kuota dua kali, menghidupkan booking yang sudah batal, atau membuka penyesuaian total
@@ -12,10 +14,12 @@ import { getInvoiceSettings } from '@/lib/invoice/settings'
 // Pembayaran bertahap (Fase 7a F3, §10.7 P1–P3): setiap konfirmasi MENAMBAH terbayar; kursi (kuota → booked, `confirmedAt`) dikonfirmasi SEKALI,
 // saat terbayar terverifikasi pertama kali mencapai ambang DP (`paymentLimits`, DP 0% = pembayaran pertama berapa pun). Pembayaran sesudahnya hanya menambah terbayar.
 
-export type ProcessInput = { action: 'confirm' | 'reject'; amount?: number | null; notes?: string | null; byUserId: string }
+// Fase 7b-1: konfirmasi MEMOSTING uang masuk ke buku kas (lib/cash/ledger.ts) di transaksi yang sama — akun kas = pilihan admin (`cashAccount`) atau rekening tujuan bukti.
+export type ProcessInput = { action: 'confirm' | 'reject'; amount?: number | null; notes?: string | null; cashAccount?: CashTarget | null; byUserId: string }
 export type ProcessResult =
   | { kind: 'not_found' }
   | { kind: 'conflict' }
+  | { kind: 'needs_account' }
   | { kind: 'done'; userId: string; bookingId: string; code: string; seatConfirmed: boolean; balance: number }
 
 export async function processPayment(paymentId: string, input: ProcessInput): Promise<ProcessResult> {
@@ -37,7 +41,13 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       // Patokan = TAGIHAN (subtotal + pajak ditambahkan, lib/invoice/bill.ts) dikurangi yang SUDAH terverifikasi; terbayar dibaca di dalam kunci.
       const before = billOf(booking)
       const verified = resolveVerifiedAmount(before.balance, payment.claimedAmountIdr === null ? null : Number(payment.claimedAmountIdr), { amount: input.amount, notes: input.notes })
-      await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: verified, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: new Date() } })
+      // Akun kas penerima: pilihan admin menang; selain itu rekening yang dipilih pelanggan. Tanpa keduanya (bukti lama / rekening sudah dihapus) admin wajib memilih.
+      const cashAccountId = input.cashAccount ? await resolveCashTarget(tx, input.cashAccount) : payment.destinationCashAccountId
+      if (!cashAccountId) return { kind: 'needs_account' }
+      const now = new Date()
+      await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: verified, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: now, destinationCashAccountId: cashAccountId } })
+      await postEntries(tx, { refType: 'payment', refId: payment.id, direction: 'in', cashAccountId, entryDate: payment.transferredAt ?? now, bookingId: booking.id, createdById: input.byUserId },
+        splitPaymentCredit({ amount: verified, balanceBefore: before.balance, grandTotal: before.grandTotal, taxAdded: before.taxAdded }))
       const after = paymentLimits({ grandTotal: before.grandTotal, paid: before.paid + verified }, minimumFirstPaymentPercent)
       balance = after.balance
       if (booking.confirmedAt === null && after.dpMet) {

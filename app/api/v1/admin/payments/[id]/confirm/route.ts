@@ -6,10 +6,11 @@ import { notify } from '@/lib/notifications/notify'
 import { z } from 'zod'
 import { PaymentAmountError } from '@/lib/payments/confirmAmount'
 import { processPayment } from '@/lib/payments/process'
+import { parseCashTarget } from '@/lib/cash/accounts'
 
 // `amount` = jumlah yang benar-benar diterima (bawaan: nominal pelanggan, lalu sisa tagihan); kurang dari sisa = cicilan/DP, lebih dari sisa wajib bercatatan (lib/payments/confirmAmount.ts).
 // Pemrosesan (kunci booking, status dibaca ulang, kuota) ada di lib/payments/process.ts.
-const schema = z.object({ action: z.enum(['confirm', 'reject']), notes: z.string().max(500).optional(), amount: z.number().positive().optional() }).strict()
+const schema = z.object({ action: z.enum(['confirm', 'reject']), notes: z.string().max(500).optional(), amount: z.number().positive().optional(), cashAccount: z.string().max(60).optional() }).strict()
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,9 +19,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const parsed  = schema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err('Input tidak valid'), { status: 400 })
     const { action } = parsed.data
+    // Akun kas penerima (Fase 7b-1): `bank:<id>` | `cash`; kosong = rekening tujuan yang dipilih pelanggan.
+    const cashAccount = parsed.data.cashAccount ? parseCashTarget(parsed.data.cashAccount) : null
+    if (parsed.data.cashAccount && !cashAccount) return NextResponse.json(err('Akun kas tidak valid'), { status: 400 })
 
-    const result = await processPayment(id, { action, amount: parsed.data.amount, notes: parsed.data.notes, byUserId: session.userId })
+    const result = await processPayment(id, { action, amount: parsed.data.amount, notes: parsed.data.notes, cashAccount, byUserId: session.userId })
     if (result.kind === 'not_found') return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
+    if (result.kind === 'needs_account') return NextResponse.json(err('Pilih akun kas penerima (rekening aktif atau kas tunai)'), { status: 422 })
     if (result.kind === 'conflict') return NextResponse.json(err('Pembayaran ini sudah diproses atau pesanan tidak aktif'), { status: 409 })
     // Best-effort setelah transaksi commit, tidak memblokir respons; notify() tidak pernah melempar dan mencatat status jujur per kanal.
     void notify({ userId: result.userId, bookingId: result.bookingId, event: action === 'confirm' ? { type: 'payment_confirmed', code: result.code, balance: result.balance } : { type: 'payment_rejected', code: result.code } })
