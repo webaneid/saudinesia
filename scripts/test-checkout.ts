@@ -17,7 +17,9 @@ import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { checkoutPath } from '@/lib/checkout/kinds'
 import { readPrefill } from '@/lib/checkout/prefill'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
-import { CheckoutAccountError, CheckoutNoBankError, placeCheckout } from '@/lib/checkout/place'
+import { CheckoutAccountError, CheckoutNoBankError, CheckoutUnpaidLimitError, MAX_UNPAID_CHECKOUTS, placeCheckout } from '@/lib/checkout/place'
+import { UNPAID_ACTIVE } from '@/lib/booking/expire'
+import { cancelBooking } from '@/lib/booking/cancel'
 import { cartDateRefusal, checkoutDateRefusal } from '@/lib/checkout/dates'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
 import { CART_MAX_ITEMS, cartInput, checkoutCartSchema, checkoutInput, checkoutSchema, type CheckoutCart, type CheckoutInput } from '@/lib/validators/checkout'
@@ -202,7 +204,11 @@ const pkgDep = await prisma.packageDeparture.create({ data: { packageId: pkg.id,
 await prisma.packageHotelOption.create({ data: { packageId: pkg.id, slot: 'madinah', hotelRoomScheduleId: room.id, nights: 2 } })
 await addCost('package', pkg.id, 'handling', 500_000); await repriceOwner('package', pkg.id)
 
-const place = async (c: CheckoutInput) => { return placeCheckout(user.id, { items: [c] }, 3) }
+// SEC-221: akun uji memesan puluhan kali — pesanan lama "diparkir" dengan bukti menunggu (tak dihitung batas pesanan belum dibayar). Batas diuji tersendiri di akhir.
+const park = async (userId: string) => {
+  for (const { id } of await prisma.booking.findMany({ where: { userId, ...UNPAID_ACTIVE }, select: { id: true } })) await prisma.payment.create({ data: { bookingId: id, amount: 0, method: 'bank_transfer', status: 'pending' } })
+}
+const place = async (c: CheckoutInput) => { await park(user.id); return placeCheckout(user.id, { items: [c] }, 3) }
 const failOf = async (c: CheckoutInput) => {
   try { await place(c) } catch (e) { return bookingFailure(e) }
   assert.fail('seharusnya ditolak')
@@ -372,6 +378,7 @@ await t('keranjang campur: Visa Plus + Tiket + Hotel = SATU booking + SATU invoi
   const before = await bookingsOfUser()
   const PLUS: CheckoutInput = { ...VISA, visaProductId: visaPlus.id } as CheckoutInput
   const lacking = checkoutCartSchema.parse({ items: [PLUS, { ...HOTEL, numRooms: 1, numGuests: 2 }] })
+  await park(user.id)
   const miss = await placeCheckout(user.id, lacking, 3).then(() => assert.fail('seharusnya ditolak'), (e: unknown) => bookingFailure(e))
   assert.equal(miss.status, 422); assert.equal(miss.violations?.[0]?.missing, 'flight', 'Visa Plus tanpa tiket di keranjang')
   assert.equal(await bookingsOfUser(), before)
@@ -379,6 +386,7 @@ await t('keranjang campur: Visa Plus + Tiket + Hotel = SATU booking + SATU invoi
   const cart = checkoutCartSchema.parse({ items: [PLUS, { ...FLIGHT_ONEWAY, numPassengers: 2 }, { ...HOTEL, numRooms: 1, numGuests: 2 }] })
   const p = await simulateBooking({ userId: user.id }, cartInput(cart), 3)
   assert.equal(await bookingsOfUser(), before, 'pratinjau tidak menyimpan')
+  await park(user.id)
   const b = await placeCheckout(user.id, cart, 3)
   assert.equal(await bookingsOfUser(), before + 1, 'satu booking')
   const row = await prisma.booking.findUniqueOrThrow({ where: { id: b.id }, select: { ...billSelect, pilgrims: { select: { visaApplication: { select: { visaProductId: true } } } }, flights: { select: { id: true } }, hotels: { select: { numGuests: true, numRooms: true } } } })
@@ -420,6 +428,33 @@ await t('akun dibaca ulang di dalam kunci: nonaktif / terhapus sesudah cek sesi 
   await assert.rejects(placeCheckout(gone.id, { items: [{ kind: 'haji', hajiProductId: haji.id, numPeople: 1 }] }, 3), CheckoutAccountError)
   assert.equal(await bookingsOfUser(), before)
   assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota, held, 'kuota tak tertahan')
+})
+
+const limited = await prisma.user.create({ data: { email: `limit-${tag}@example.test`, passwordHash: 'x', fullName: 'Uji Batas', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() } })
+await t(`SEC-221 BATAS: maksimal ${MAX_UNPAID_CHECKOUTS} pesanan hidup belum dibayar per akun; ke-${MAX_UNPAID_CHECKOUTS + 1} DITOLAK tanpa booking/kuota tertahan; berbukti/dibatalkan tak dihitung; batalkan satu → bisa pesan lagi`, async () => {
+  assert.equal(MAX_UNPAID_CHECKOUTS, 5, 'keputusan pemilik 2026-11-15')
+  await prisma.hajiProduct.update({ where: { id: haji.id }, data: { totalQuota: { increment: 20 } } }) // kuota cukup: yang diuji batas akun, bukan kuota
+  const one = () => placeCheckout(limited.id, { items: [{ kind: 'haji', hajiProductId: haji.id, numPeople: 1 }] }, 3)
+  const made: string[] = []
+  for (let i = 0; i < MAX_UNPAID_CHECKOUTS; i++) made.push((await one()).id)
+  const held = (await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota
+  await assert.rejects(one(), CheckoutUnpaidLimitError)
+  assert.equal(await prisma.booking.count({ where: { userId: limited.id } }), MAX_UNPAID_CHECKOUTS, 'pesanan ditolak tak menulis booking')
+  assert.equal((await prisma.hajiProduct.findUniqueOrThrow({ where: { id: haji.id } })).pendingQuota, held, 'kuota tak tertahan')
+  // ditolak = SATU-SATUNYA pembayaran → tetap dihitung; bukti menunggu → tidak dihitung
+  await prisma.payment.create({ data: { bookingId: made[0]!, amount: 0, method: 'bank_transfer', status: 'rejected' } })
+  await assert.rejects(one(), CheckoutUnpaidLimitError)
+  await prisma.payment.create({ data: { bookingId: made[0]!, amount: 0, method: 'bank_transfer', status: 'pending' } })
+  made.push((await one()).id)
+  await assert.rejects(one(), CheckoutUnpaidLimitError)
+  // pelanggan membatalkan pesanan lama sendiri (jalur DELETE /bookings/[id]) → slot kembali
+  await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id: made[1]! }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } }), 'uji'))
+  made.push((await one()).id)
+  await assert.rejects(one(), CheckoutUnpaidLimitError)
+  // pesanan buatan admin untuk akun ini TETAP dihitung (yang diukur = tagihan terbuka akun), tetapi admin sendiri tak dibatasi (batas hanya di placeCheckout)
+  assert.match(read('lib/checkout/place.ts'), /FOR SHARE[\s\S]*hasActiveBankAccount\(tx\)[\s\S]*tx\.booking\.count\(\{ where: \{ userId, \.\.\.UNPAID_ACTIVE \} \}\)[\s\S]*CheckoutUnpaidLimitError[\s\S]*tx\.booking\.create/, 'dihitung di DALAM transaksi berkunci, sebelum booking ditulis')
+  assert.doesNotMatch(read('lib/booking/drafts.ts'), /UNPAID_ACTIVE|MAX_UNPAID_CHECKOUTS/, 'terbit draf admin tak dibatasi')
+  assert.match(read('app/api/v1/bookings/route.ts'), /CheckoutUnpaidLimitError\) return apiErrorJson\('checkoutUnpaidLimit', 409, \{ params: \{ max: MAX_UNPAID_CHECKOUTS \} \}\)/)
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -470,7 +505,8 @@ await t('PENJAGA tombol katalog: Hotel, Paket Ziarah, Muthowif, Katering, Tiket 
 })
 
 // ── pembersihan (test-seed-guard sesudahnya butuh DB tanpa jamaah/booking) ───────────────────────────────────────────
-await prisma.booking.deleteMany({ where: { userId: { in: [user.id] } } }) // cascade: item, jamaah, visa, snapshot, invoice
+await prisma.payment.deleteMany({ where: { booking: { userId: { in: [user.id, limited.id] } } } }) // bukti "parkir" (SEC-221) — payments tak ber-cascade
+await prisma.booking.deleteMany({ where: { userId: { in: [user.id, limited.id] } } }) // cascade: item, jamaah, visa, snapshot, invoice
 const starts = { startsWith: tag }
 await prisma.packageDeparture.deleteMany({ where: { package: { name: starts } } }) // FK Restrict (K1)
 await prisma.package.deleteMany({ where: { name: starts } })
