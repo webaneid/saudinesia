@@ -108,7 +108,7 @@ async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 
   await prisma.visaApplication.create({ data: { bookingPilgrimId: pilgrim.id, visaType: 'umrah', notes: 'paspor kedua atas nama istri', rejectionReason: 'foto buram, hubungi 0812-RAHASIA' } })
   // Fase 6: catatan pemeriksaan data jamaah (teks bebas staf) — dikosongkan, baris riwayat tetap (append-only).
   await prisma.pilgrimReviewEvent.create({ data: { bookingPilgrimId: pilgrim.id, fromStatus: 'submitted', toStatus: 'needs_revision', note: 'foto paspor Budi buram, hubungi 0812-RAHASIA' } })
-  const payment = await prisma.payment.create({ data: { bookingId: booking.id, amount: new Decimal(12_500_000), method: 'transfer', status: 'confirmed', buktiTransferPath: `payments/${uniq()}/bukti.jpg`, notes: 'nama pengirim beda: Ahmad 0812-RAHASIA' } })
+  const payment = await prisma.payment.create({ data: { bookingId: booking.id, amount: new Decimal(12_500_000), method: 'transfer', status: 'confirmed', buktiTransferPath: `payments/${uniq()}/bukti.jpg`, notes: 'nama pengirim beda: Ahmad 0812-RAHASIA', claimedAmountIdr: new Decimal(12_500_000), senderBank: 'BCA', senderAccountName: 'Siti Aminah', payerNote: 'transfer dari rekening istri 0812-RAHASIA' } })
   const refund = await prisma.refund.create({ data: { bookingId: booking.id, amount: new Decimal(500_000), reason: 'selisih', notes: 'transfer ke rekening istri BCA 123456', status: opts.refundStatus ?? 'paid' } })
   // Fase 7: catatan staf yang menyebut nama pemesan (penyesuaian total + pengeluaran vendor) harus dibersihkan saat akun dihapus
   const adjustment = await prisma.bookingAdjustment.create({ data: { bookingId: booking.id, amountIdr: new Decimal(-100_000), label: 'Diskon', reason: 'nego dengan Budi Santoso 0812-RAHASIA', totalBefore: new Decimal(12_600_000), totalAfter: new Decimal(12_500_000), costKnownIdr: new Decimal(0), belowCost: false, byUserId: 'staf-uji' } })
@@ -233,7 +233,9 @@ await t('anonimisasi lengkap: tiap kolom PII hilang / diacak; ringkasan tercatat
   const tr = await prisma.bookingTransport.findUniqueOrThrow({ where: { id: s.transportId } })
   assert.equal((await prisma.bookingGroup.findUniqueOrThrow({ where: { id: s.groupId } })).label, null, 'nama rombongan dikosongkan')
   assert.equal(tr.pickupDetail, null); assert.equal(tr.dropoffDetail, null)
-  assert.equal((await prisma.payment.findUniqueOrThrow({ where: { id: s.paymentId } })).notes, null)
+  const pay = await prisma.payment.findUniqueOrThrow({ where: { id: s.paymentId } })
+  assert.deepEqual([pay.notes, pay.senderAccountName, pay.payerNote], [null, null, null], 'data pribadi transfer dibersihkan')
+  assert.deepEqual([Number(pay.claimedAmountIdr), pay.senderBank], [12_500_000, 'BCA'], 'nominal dan bank pengirim tetap (bukti uang masuk)')
   assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: s.refundId } })).notes, null)
   const adj = await prisma.bookingAdjustment.findUniqueOrThrow({ where: { id: s.adjustmentId } })
   assert.deepEqual([adj.reason, adj.label, Number(adj.amountIdr)], ['[dihapus]', 'Diskon', -100_000], 'catatan staf dibersihkan; angka dan label (invoice) tetap')

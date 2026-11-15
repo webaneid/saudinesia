@@ -1,0 +1,54 @@
+// Fase 7a F1 (docs/arsitektur-booking-engine-v2.md §10.7): batas nominal bertahap (P1–P3) dan validator data transfer. Murni — tanpa database.
+import assert from 'node:assert/strict'
+import { paymentLimits } from '@/lib/payments/limits'
+import { paymentTransferSchema } from '@/lib/validators/paymentTransfer'
+import { matchText } from '@/lib/errors/api'
+
+let failed = 0
+function t(name: string, fn: () => void) {
+  try { fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 6).join('\n     ')}`) }
+}
+
+t('DP 30%: pembayaran pertama minimal DP, maksimal sisa; kursi dikonfirmasi saat terbayar ≥ DP', () => {
+  const l0 = paymentLimits({ grandTotal: 6_550_000, paid: 0 }, 30)
+  assert.deepEqual(l0, { balance: 6_550_000, dpAmount: 1_965_000, confirmThreshold: 1_965_000, dpMet: false, minClaim: 1_965_000 })
+  const l1 = paymentLimits({ grandTotal: 6_550_000, paid: 1_000_000 }, 30) // admin mengonfirmasi kurang dari DP (P2: hanya peringatan)
+  assert.deepEqual([l1.dpMet, l1.minClaim, l1.balance], [false, 965_000, 5_550_000])
+  const l2 = paymentLimits({ grandTotal: 6_550_000, paid: 3_000_000 }, 30)
+  assert.deepEqual([l2.dpMet, l2.minClaim, l2.balance], [true, 1, 3_550_000])
+})
+
+t('DP 0% (P3): pembayaran pertama berapa pun > 0 sudah mengonfirmasi', () => {
+  const l = paymentLimits({ grandTotal: 1_000_000, paid: 0 }, 0)
+  assert.deepEqual([l.dpAmount, l.minClaim, l.dpMet], [0, 1, false])
+  assert.equal(paymentLimits({ grandTotal: 1_000_000, paid: 1 }, 0).dpMet, true)
+})
+
+t('DP dibulatkan ke atas ke rupiah penuh; tak melebihi tagihan; persen di luar 0..100 dijepit; lunas → sisa 0', () => {
+  assert.equal(paymentLimits({ grandTotal: 1_000_001, paid: 0 }, 33.33).dpAmount, 333_301) // 333.300,33 → 333.301
+  assert.equal(paymentLimits({ grandTotal: 500_000, paid: 0 }, 150).dpAmount, 500_000)
+  assert.equal(paymentLimits({ grandTotal: 500_000, paid: 0 }, -5).dpAmount, 0)
+  const paid = paymentLimits({ grandTotal: 500_000, paid: 500_000 }, 30)
+  assert.deepEqual([paid.balance, paid.minClaim, paid.dpMet], [0, 0, true])
+  assert.equal(paymentLimits({ grandTotal: 500_000, paid: 600_000 }, 30).balance, 0, 'kelebihan bayar tak membuat sisa negatif')
+})
+
+t('validator: semua isian wajib kecuali catatan; kunci liar ditolak; pesan = teks katalog (berkode untuk pelanggan)', () => {
+  const ok = { amount: '3000000', transferredAt: '2026-11-15T09:30', destination: 'bank-1', senderBank: 'BCA', senderAccountName: 'Siti Aminah' }
+  const r = paymentTransferSchema.safeParse(ok)
+  assert.ok(r.success); assert.equal(r.data.amount, 3_000_000)
+  const code = (v: Record<string, unknown>) => { const x = paymentTransferSchema.safeParse(v); assert.ok(!x.success); return matchText(x.error.issues[0]!.message)?.code }
+  assert.equal(code({ ...ok, amount: '0' }), 'paymentAmountInvalid')
+  assert.equal(code({ ...ok, amount: '1.5' }), 'paymentAmountInvalid')
+  assert.equal(code({ ...ok, amount: '99999999999' }), 'paymentAmountInvalid')
+  assert.equal(code({ ...ok, transferredAt: '15-11-2026 09:30' }), 'paymentTimeInvalid')
+  assert.equal(code({ ...ok, destination: '' }), 'paymentDestinationRequired')
+  assert.equal(code({ ...ok, senderBank: ' ' }), 'paymentSenderBankRequired')
+  assert.equal(code({ ...ok, senderAccountName: 'A' }), 'paymentSenderNameRequired')
+  assert.equal(code({ ...ok, note: 'x'.repeat(501) }), 'paymentNoteTooLong')
+  assert.equal(paymentTransferSchema.safeParse({ ...ok, status: 'confirmed' }).success, false, 'kunci liar (mass assignment)')
+  assert.equal(paymentTransferSchema.safeParse({ ...ok, note: 'transfer dari rekening istri' }).success, true)
+})
+
+console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
+process.exit(failed ? 1 : 0)

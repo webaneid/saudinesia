@@ -187,7 +187,8 @@ export async function executeDeletion(
       // Nama rombongan (Fase 11d, K11d-4) = teks bebas pemesan, bisa memuat nama keluarga/orang → dikosongkan (tampil kembali sebagai "Rombongan A/B").
       await tx.bookingGroup.updateMany({ where: { booking: { userId } }, data: { label: null } })
       await tx.bookingTransport.updateMany({ where: { booking: { userId } }, data: { pickupDetail: null, dropoffDetail: null } })
-      await tx.payment.updateMany({ where: { booking: { userId } }, data: { notes: null } })
+      // Data transfer (Fase 7a): nama pemilik rekening pengirim + catatan pelanggan = data pribadi; nominal/tanggal/bank/rekening tujuan dipertahankan (bukti uang masuk).
+      await tx.payment.updateMany({ where: { booking: { userId } }, data: { notes: null, senderAccountName: null, payerNote: null } })
       await tx.refund.updateMany({ where: { booking: { userId } }, data: { notes: null } })
       // Catatan staf pada penyesuaian total dan pengeluaran vendor (Fase 7) bisa menyebut nama pemesan → diganti penanda (≥ 3 karakter agar CHECK catatan-wajib tetap terpenuhi).
       // `label` penyesuaian tampil di invoice dan dibekukan di snapshot (trigger menolak UPDATE) — karena itu UI melarang data pribadi di label.

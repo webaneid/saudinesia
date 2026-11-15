@@ -902,6 +902,11 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] F3 Booking: pemilih Jenis → Hotel → Kamar, periode otomatis (`lib/booking/hotelPick.ts`), kolom "Harga jual", katalog hanya periode aktif + mesin menolak kamar/periode/hotel nonaktif (SEC-163) — selesai 2026-11-02
   - [x] 6c — invoice publik tanpa login (tautan HMAC dapat dicabut, halaman + PDF, noindex/no-store), notifikasi `invoice_issued` saat terbit admin & checkout jamaah + kirim ulang, salin/cabut di admin — selesai 2026-11-01 (§10.4); menutup K5-1
 - [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
+  - Fase 7a — data transfer + pembayaran bertahap manual (T1 + inti K2, §10.7; P1–P3 disetujui 2026-11-15):
+    - [x] F1 skema aditif data transfer (`Payment.claimedAmountIdr/transferredAt/senderBank/senderAccountName/destinationLabel/payerNote`, CHECK nominal > 0), validator `paymentTransferSchema`, batas murni `paymentLimits` (DP/sisa/ambang konfirmasi), penghapusan akun membersihkan nama pengirim + catatan — selesai 2026-11-15 (uji murni + migrasi DB sekali pakai, `test-deletion`, build)
+    - [ ] F2 formulir pelanggan + route unggah
+    - [ ] F3 verifikasi admin + aturan konfirmasi P1/P2 + label status
+    - [ ] F4 pengingat, setelan gateway disembunyikan, verifikasi browser + dokumentasi
 - [ ] Fase 8 — QRIS dinamis (porting Facport)
 - [ ] Fase 9 — iPaymu · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
 - [ ] Fase 11 — Front-end pelanggan memakai engine

@@ -652,6 +652,37 @@ Langkah:
 - **ZIP dokumen**: folder `<urutan>-<nama rombongan>/` di atas folder jamaah bila booking berrombongan.
 - **Bukti**: `scripts/test-booking-groups.ts` (`groupView`; urutan + nama bagian invoice; ganti nama hidup; snapshot tanpa nama; I4; PDF jadi; booking tanpa rombongan tanpa bagian), `scripts/test-muthowif-assign.ts` (baru, didaftarkan di `bun run test`), penjaga sumber invoice diuji dua arah (merah bila kolom harga item dimuat).
 
+### 10.7 Fase 7a — Data transfer + pembayaran bertahap manual (T1 + inti K2, RENCANA DISETUJUI 2026-11-15 — P1–P3 semua saran (a))
+
+Sumber: `docs/evaluasi-sistem-2026-11-14.md` T1 (bukti hanya gambar) dan K2 (DP ditolak). Pemilik (2026-11-15): nominal harus bisa diisi pelanggan supaya DP bisa dikirim lebih dulu sesuai setelan DP. Fase 7a = bagian Fase 7 yang dibutuhkan sekarang (D6, D7, D10, D12), TANPA kode unik (D9), QRIS (§8), gateway, buku kas (§3.5), dan refund otomatis (D11) — itu tetap Fase 7b+.
+
+**Recheck kode (2026-11-15):**
+- Unggah bukti (`api/v1/bookings/[id]/payment/bukti`) hanya berkas gambar; `Payment.amount` disimpan 0 dan diisi admin saat verifikasi; satu bukti `pending` per booking.
+- Konfirmasi (`lib/payments/process.ts` → `resolveConfirmedAmount`) MENOLAK jumlah kurang dari tagihan; satu konfirmasi langsung mengisi `confirmedAt` dan memindahkan kuota ke `booked`. Setelah `confirmedAt` terisi, unggah bukti dan konfirmasi berikutnya ditolak — cicilan mustahil.
+- `minimumFirstPaymentPercent` disimpan di Pengaturan Invoice tapi tak dibaca kode mana pun; setelan biaya iPaymu/Xendit juga belum berfungsi.
+- Sudah siap dipakai: `billOf` menghitung terbayar (Σ `confirmed`) dan sisa; hangus otomatis (`lib/booking/expire.ts`) hanya untuk booking tanpa pembayaran `pending`/`confirmed` (D12); invoice publik/PDF menampilkan terbayar dan sisa.
+
+**Rencana:**
+1. **Skema (aditif):** `Payment` + `claimedAmountIdr` (nominal yang diisi pelanggan), `transferredAt` (`timestamptz`, tanggal-jam transfer), `senderBank`, `senderAccountName`, `destinationLabel` (snapshot rekening tujuan dari invoice), `payerNote`. `amount` tetap = jumlah terverifikasi (0 selama menunggu). Tak ada kolom lama dibuang.
+2. **Pelanggan (formulir bukti di halaman booking):** nominal (bawaan = sisa tagihan; minimal = DP minimum bila belum ada pembayaran terverifikasi, selain itu > 0; maksimal = sisa), tanggal-jam transfer (`DateTimeField`, bawaan sekarang), rekening tujuan (otomatis bila satu), bank pengirim, nama pemilik rekening pengirim, bukti, catatan opsional — semua wajib kecuali catatan (D10). Divalidasi ulang di server dari isian multipart (Zod `.strict()`), batas dari `billOf` dibaca di dalam kunci booking. Cicilan berikutnya bisa diunggah selama sisa > 0, termasuk sesudah booking dikonfirmasi.
+3. **Admin (verifikasi):** panel menampilkan semua data transfer di samping bukti; "Jumlah diterima" bawaan = nominal pelanggan (bisa diubah). Kurang dari sisa = DIPERBOLEHKAN (cicilan); lebih dari sisa tetap wajib catatan (kelebihan → refund manual, D11). Satu pemroses tetap `processPayment`.
+4. **Kapan booking dikonfirmasi (kuota → `booked`):** lihat keputusan P1. Pembayaran berikutnya hanya menambah terbayar.
+5. **Tampilan status:** label turunan baru dari `billOf` — "DP diterima, sisa Rp X" / "Lunas" (pelanggan, admin, invoice); dibaca lewat satu fungsi di `lib/booking/lifecycle.ts`, tidak disimpan.
+6. **Pengingat:** pengingat jatuh tempo berlaku selama sisa > 0 (bukan hanya sebelum konfirmasi); pesan menyebut sisa.
+7. **Setelan yang belum berfungsi:** biaya iPaymu/Xendit disembunyikan dari Pengaturan Invoice sampai fase gateway; DP minimum mulai dipakai.
+
+**Keputusan pemilik:**
+
+| # | Pertanyaan | Pilihan | Saran |
+|---|---|---|---|
+| P1 | Kapan kursi/kuota dikonfirmasi | (a) saat pembayaran terverifikasi pertama yang memenuhi DP minimum · (b) hanya saat lunas | **(a)** — praktik umroh: DP mengamankan kursi; hangus otomatis sudah tak berlaku begitu ada uang masuk |
+| P2 | Pelanggan mengirim kurang dari DP minimum | (a) ditolak di formulir (pembayaran pertama ≥ DP) · (b) boleh, admin yang memutuskan | **(a)** di formulir pelanggan; admin tetap boleh mengonfirmasi jumlah apa pun dengan peringatan saja (pola "hanya mengingatkan") — kuota baru dikonfirmasi bila terbayar ≥ DP |
+| P3 | DP minimum 0% (bawaan) | (a) pembayaran pertama berapa pun > 0 sudah mengonfirmasi · (b) tanpa DP = harus lunas | **(a)** sesuai D6 (0 = tak ada aturan DP) |
+
+**As-built F1 (2026-11-15):** migrasi aditif `20261124090000_payment_transfer_details` (CHECK `payments_claimed_amount_positive`); `lib/validators/paymentTransfer.ts` (`paymentTransferSchema`, isian multipart, `.strict()`, pesan = teks katalog `apiErrors.payment*`); `lib/payments/limits.ts` (`paymentLimits`: sisa, DP dibulatkan ke atas ke rupiah penuh, ambang konfirmasi = DP atau Rp 0,01 bila DP 0%, nominal minimum pelanggan). Penghapusan akun mengosongkan `senderAccountName` dan `payerNote` (nominal, tanggal, bank, rekening tujuan dipertahankan sebagai bukti uang masuk). Uji: `scripts/test-payment-transfer.ts`, `test-deletion`. Penulis kolom data transfer (route unggah) menyusul di F2.
+
+**Fase:** F1 skema + validator + penulis tunggal data transfer; F2 formulir pelanggan + route unggah; F3 verifikasi admin + aturan konfirmasi P1/P2 + label status; F4 pengingat, setelan disembunyikan, verifikasi browser + dokumentasi. Satu PR per fase, SOP penuh.
+
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 
