@@ -1873,6 +1873,12 @@
     "cartEmpty": "Keranjang kosong",
     "maxCartItems": "Maksimal {max} produk per pesanan",
     "checkoutNoBank": "Pesanan belum bisa diterima karena rekening tujuan pembayaran belum tersedia. Mohon hubungi tim Saudinesia.",
-    "paymentNoDestination": "Rekening tujuan pembayaran belum tersedia, jadi bukti transfer belum bisa dikirim. Mohon hubungi tim Saudinesia."
+    "paymentNoDestination": "Rekening tujuan pembayaran belum tersedia, jadi bukti transfer belum bisa dikirim. Mohon hubungi tim Saudinesia.",
+    "paymentAmountInvalid": "Nominal transfer tidak valid",
+    "paymentTimeInvalid": "Tanggal dan jam transfer tidak valid",
+    "paymentDestinationRequired": "Pilih rekening tujuan",
+    "paymentSenderBankRequired": "Isi nama bank pengirim",
+    "paymentSenderNameRequired": "Isi nama pemilik rekening pengirim",
+    "paymentNoteTooLong": "Catatan terlalu panjang (maksimal 500 karakter)"
   }
 }

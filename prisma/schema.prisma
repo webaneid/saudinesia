@@ -1501,6 +1501,15 @@ model Payment {
   notes                   String?
   createdAt               DateTime      @default(now())
 
+  // Data transfer dari pelanggan (Fase 7a, docs/arsitektur-booking-engine-v2.md §10.7 / D10). `amount` tetap = jumlah TERVERIFIKASI (0 selama menunggu);
+  // `claimedAmountIdr` = nominal yang diisi pelanggan. Nama pemilik rekening + catatan = data pribadi → dibersihkan lib/account/deletion.ts.
+  claimedAmountIdr  Decimal?  @db.Decimal(14, 2)
+  transferredAt     DateTime? @db.Timestamptz(3)
+  senderBank        String?   @db.VarChar(100)
+  senderAccountName String?   @db.VarChar(100)
+  destinationLabel  String?   @db.VarChar(200)
+  payerNote         String?   @db.VarChar(500)
+
   booking     Booking @relation(fields: [bookingId], references: [id])
   confirmedBy User?   @relation("ConfirmedBy", fields: [confirmedById], references: [id])
 

@@ -1873,6 +1873,12 @@
     "cartEmpty": "The cart is empty.",
     "maxCartItems": "At most {max} products per order.",
     "checkoutNoBank": "We can’t accept orders yet because no payment account is available. Please contact the Saudinesia team.",
-    "paymentNoDestination": "No payment account is available yet, so the transfer proof can’t be sent. Please contact the Saudinesia team."
+    "paymentNoDestination": "No payment account is available yet, so the transfer proof can’t be sent. Please contact the Saudinesia team.",
+    "paymentAmountInvalid": "The transfer amount is not valid",
+    "paymentTimeInvalid": "The transfer date and time are not valid",
+    "paymentDestinationRequired": "Choose the destination account",
+    "paymentSenderBankRequired": "Enter the sender’s bank",
+    "paymentSenderNameRequired": "Enter the sender account holder’s name",
+    "paymentNoteTooLong": "The note is too long (500 characters maximum)"
   }
 }

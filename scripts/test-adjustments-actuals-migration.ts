@@ -98,7 +98,9 @@ async function world(db: PrismaClient) {
   const user = await legacyUser(db, { email: `m${Date.now()}@example.test`, passwordHash: 'x', fullName: 'Uji', role: 'pilgrim', isActive: true, emailVerifiedAt: new Date() })
   const mk = (code: string, total: number) => db.booking.create({ data: { bookingCode: code, userId: user.id, departureDate: new Date('2027-06-01'), returnDate: new Date('2027-06-10'), season: 'regular', totalAmount: total }, select: { id: true } })
   const b1 = await mk('M1', 5_000_000), b2 = await mk('M2', 3_000_000)
-  const pay = (bookingId: string, status: 'pending' | 'confirmed' | 'rejected', amount: number) => db.payment.create({ data: { bookingId, amount, method: 'bank_transfer', status } })
+  // INSERT mentah: klien Prisma mengikuti skema TERBARU (kolom data transfer Fase 7a belum ada di DB pra-migrasi ini) — pola scripts/lib/legacyInsert.ts, ditambah cast enum.
+  const pay = async (bookingId: string, status: 'pending' | 'confirmed' | 'rejected', amount: number) => (await db.$queryRaw<Array<{ id: string }>>`
+    INSERT INTO payments (id, "bookingId", amount, method, status) VALUES (gen_random_uuid(), ${bookingId}, ${amount}, 'bank_transfer', ${status}::payment_status) RETURNING id`)[0]!
   const confirmedZero = await pay(b1.id, 'confirmed', 0)       // alur lama: dikonfirmasi tanpa jumlah → total booking
   const pendingZero = await pay(b1.id, 'pending', 0)           // belum diverifikasi → tetap 0
   const rejectedZero = await pay(b2.id, 'rejected', 0)         // ditolak → tetap 0
