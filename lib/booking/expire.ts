@@ -6,33 +6,47 @@ import { cancelBooking, type CancellableBooking } from '@/lib/booking/cancel'
 import { addDays, dbDateOf, endOfDayExclusiveInApp, startOfDayInApp, todayInApp } from '@/lib/time'
 
 // Hangus & pengingat (docs/arsitektur-booking-engine-v2.md §10.1 poin 5). Jatuh tempo TIDAK mengikat (D4): ia hanya batas bayar yang ditampilkan ke jamaah; pembayaran terlambat
-// tetap diterima admin. Satu-satunya yang menghanguskan booking adalah "belum ada uang masuk sama sekali sampai N hari sebelum tanggal berangkat" (setelan `expireDaysBeforeReference`, 0 = mati).
+// tetap diterima admin. Yang menghanguskan booking: "belum ada uang masuk sama sekali sampai N hari sebelum tanggal berangkat" (setelan `expireDaysBeforeReference`, 0 = mati),
+// dan — khusus pesanan checkout pelanggan — "belum ada pembayaran/bukti sampai lewat jatuh tempo" (SEC-221).
 // Booking yang sudah ada uang masuk ATAU bukti menunggu verifikasi TIDAK PERNAH disentuh.
 
 export type ExpireResult = { expired: Array<{ id: string; userId: string; code: string }>; skipped: number }
 
 const PAYMENT_ACTIVITY = ['pending', 'confirmed'] as const
 
+/** Booking hidup yang belum menerima uang sama sekali (tanpa pembayaran `pending`/`confirmed`) — dipakai hangus dan batas pesanan checkout (SEC-221). */
+export const UNPAID_ACTIVE = { status: 'active', confirmedAt: null, payments: { none: { status: { in: [...PAYMENT_ACTIVITY] } } } } as const satisfies Prisma.BookingWhereInput
+
 /** Hanguskan booking yang memenuhi syarat pada `now`. Idempoten: yang sudah `expired` tak diambil lagi; tiap booking diproses dalam transaksinya sendiri dan diperiksa ulang di dalam kunci. */
 export async function expireOverdueBookings(now: Date = new Date()): Promise<ExpireResult> {
   const { expireDaysBeforeReference: days } = await getInvoiceSettings()
   const result: ExpireResult = { expired: [], skipped: 0 }
-  if (days <= 0) return result
+  const today = todayInApp(now)
+  const reasons = new Map<string, { reason: string; where: Prisma.BookingWhereInput }>()
 
-  const cutoff = dbDateOf(addDays(todayInApp(now), days)) // tanggal berangkat ≤ hari ini + N hari → sudah terlalu dekat tanpa uang masuk
-  const candidates = await prisma.booking.findMany({
-    where: { status: 'active', confirmedAt: null, departureDate: { not: null, lte: cutoff }, payments: { none: { status: { in: [...PAYMENT_ACTIVITY] } } } },
-    select: { id: true },
-    orderBy: [{ departureDate: 'asc' }, { id: 'asc' }],
-  })
+  // (1) Menjelang berangkat tanpa uang masuk (setelan `expireDaysBeforeReference`, 0 = mati).
+  if (days > 0) {
+    const where: Prisma.BookingWhereInput = { ...UNPAID_ACTIVE, departureDate: { not: null, lte: dbDateOf(addDays(today, days)) } } // berangkat ≤ hari ini + N hari
+    for (const { id } of await prisma.booking.findMany({ where, select: { id: true }, orderBy: [{ departureDate: 'asc' }, { id: 'asc' }] })) {
+      reasons.set(id, { reason: 'Hangus: belum ada pembayaran menjelang tanggal keberangkatan', where })
+    }
+  }
+  // (2) SEC-221 (pemilik 2026-11-15): pesanan CHECKOUT PELANGGAN (invoice diterbitkan sistem, `issuedById` NULL) yang lewat jatuh tempo tanpa pembayaran/bukti
+  // sama sekali — hangus sehari sesudah jatuh tempo supaya kuota tak tertahan. Pesanan buatan admin tak terkena (jatuh tempo tetap label, D4).
+  const overdue: Prisma.BookingWhereInput = { ...UNPAID_ACTIVE, invoice: { is: { issuedById: null, dueDate: { lt: dbDateOf(today) } } } }
+  for (const { id } of await prisma.booking.findMany({ where: overdue, select: { id: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })) {
+    if (!reasons.has(id)) reasons.set(id, { reason: 'Hangus: belum ada pembayaran sampai lewat jatuh tempo', where: overdue })
+  }
 
-  for (const { id } of candidates) {
+  for (const [id, { reason, where }] of reasons) {
     try {
       const done = await prisma.$transaction(async (tx) => {
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${id} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
+        // Syarat kandidat dinilai ULANG di dalam kunci (jatuh tempo/tanggal bisa berubah lewat revisi admin), lalu status pembayaran.
+        if ((await tx.booking.count({ where: { AND: [{ id }, where] } })) === 0) return null
         const booking = await loadForExpiry(tx, id)
         if (!booking) return null // berubah sejak daftar kandidat dibaca (dibayar / dikonfirmasi / dibatalkan)
-        await cancelBooking(tx, booking, 'Hangus: belum ada pembayaran menjelang tanggal keberangkatan', 'expired')
+        await cancelBooking(tx, booking, reason, 'expired')
         return { id: booking.id, userId: booking.userId, code: booking.bookingCode }
       })
       if (done) result.expired.push(done)

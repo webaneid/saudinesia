@@ -689,6 +689,15 @@ Sumber: `docs/evaluasi-sistem-2026-11-14.md` T1 (bukti hanya gambar) dan K2 (DP 
 
 **Fase:** F1 skema + validator + penulis tunggal data transfer; F2 formulir pelanggan + route unggah; F3 verifikasi admin + aturan konfirmasi P1/P2 + label status; F4 pengingat, setelan disembunyikan, verifikasi browser + dokumentasi. Satu PR per fase, SOP penuh.
 
+### 10.9 SEC-221 — Batas penahanan kuota checkout (SELESAI 2026-11-15)
+
+Keputusan pemilik 2026-11-15: *"maksimal 5 … tidak harus dibayar, tetapi dipastikan bisa di cancel terlebih dahulu order lama sebelum bisa melakukan order"*; hangus = lewat jatuh tempo; 100 orang per pesanan tetap.
+
+- **Batas akun:** `placeCheckout` (`lib/checkout/place.ts`) menghitung booking akun yang memenuhi `UNPAID_ACTIVE` (`lib/booking/expire.ts`: `active`, `confirmedAt` NULL, tanpa pembayaran `pending`/`confirmed` — bukti ditolak saja tetap dihitung) DI DALAM transaksi penerbitan, sesudah akun dikunci `FOR SHARE` dan sebelum booking ditulis; pembuat booking diserialkan `withBookingCode` (`LOCK TABLE`), jadi permintaan serentak tak bisa melewatinya. ≥ `MAX_UNPAID_CHECKOUTS` (5) → `CheckoutUnpaidLimitError` → 409 `checkoutUnpaidLimit` ("batalkan salah satu pesanan lama di Booking Saya"). Pesanan berbukti menunggu atau sudah ada uang masuk tidak dihitung. Draf/terbit admin TIDAK dibatasi.
+- **Hangus lewat jatuh tempo:** `expireOverdueBookings` punya aturan kedua — pesanan CHECKOUT (invoice `issuedById` NULL) yang `UNPAID_ACTIVE` dan `invoice.dueDate` < hari ini zona aplikasi (= mulai 00.00 WIB sehari sesudah jatuh tempo) dihanguskan lewat `cancelBooking(…, 'expired')` (kuota dilepas, tanpa refund, notifikasi `booking_expired` dari cron). Setiap kandidat dinilai ULANG di dalam kunci `FOR UPDATE` dengan syarat aturannya sendiri (jatuh tempo bisa berubah lewat revisi). Pesanan buatan admin tak terkena (jatuh tempo tetap label, D4); aturan "menjelang berangkat" (`expireDaysBeforeReference`) tetap berlaku untuk semua.
+- **Catatan:** invoice hasil migrasi `20261108090000_invoices` (booking sebelum Fase 6a) juga ber-`issuedById` NULL sehingga diperlakukan sebagai pesanan checkout — hanya mengenai data dev (belum ada produksi).
+- Uji: `scripts/test-checkout.ts` (batas, bukti ditolak tetap dihitung, bukti menunggu tak dihitung, batal mengembalikan slot, tanpa booking/kuota tertahan saat ditolak, penjaga urutan di transaksi), `scripts/test-booking-lifecycle.ts` (hangus jatuh tempo di 4 TZ, batas tengah malam WIB, admin/berbukti/terkonfirmasi/tanpa invoice tak terkena, idempoten, cek ulang di dalam kunci).
+
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 

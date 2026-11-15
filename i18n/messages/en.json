@@ -1887,6 +1887,7 @@
     "cartEmpty": "The cart is empty.",
     "maxCartItems": "At most {max} products per order.",
     "checkoutNoBank": "We can’t accept orders yet because no payment account is available. Please contact the Saudinesia team.",
+    "checkoutUnpaidLimit": "You still have {max} unpaid orders. Please cancel one of your older orders in My Bookings first, then try again.",
     "paymentNoDestination": "No payment account is available yet, so the transfer proof can’t be sent. Please contact the Saudinesia team.",
     "paymentAmountInvalid": "The transfer amount is not valid",
     "paymentTimeInvalid": "The transfer date and time are not valid",

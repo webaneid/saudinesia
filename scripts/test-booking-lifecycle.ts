@@ -186,6 +186,33 @@ await t('HANGUS: hanya booking hidup, belum dikonfirmasi, TANPA pembayaran pendi
   assert.deepEqual(mine(await expireOverdueBookings(new Date('2026-10-30T16:59:00Z'))), [], 'sebelum tengah malam WIB batas belum maju')
   assert.deepEqual(mine(await expireOverdueBookings(new Date('2026-10-30T17:00:00Z'))), [edge], 'tepat tengah malam WIB batas maju satu hari')
 })
+await t('HANGUS LEWAT JATUH TEMPO (SEC-221): hanya pesanan CHECKOUT (invoice issuedById NULL) tanpa pembayaran/bukti, sehari SESUDAH jatuh tempo menurut hari WIB; pesanan admin / berbukti / terkonfirmasi tidak', async () => {
+  await setExpire(0) // aturan menjelang-berangkat dimatikan: yang diuji hanya jatuh tempo
+  let seq = 0
+  const inv = async (bookingId: string, due: string, by: string | null) => prisma.invoice.create({ data: { bookingId, number: `${tag}-INV-${++seq}`, sequenceKey: `t${seq}`.slice(0, 8), sequence: seq, issuedAt: new Date(), invoiceDate: d('2026-10-20'), dueDate: d(due), companySnapshot: {}, issuedById: by } })
+  const due = '2026-10-30'
+  const overdue = await mk({ dep: '2091-01-01' }); await inv(overdue, due, null)
+  const rejected = await mk({ dep: '2091-01-01', pays: ['rejected'] }); await inv(rejected, due, null)
+  const adminMade = await mk({ dep: '2091-01-01' }); await inv(adminMade, due, staff.id)
+  const withProof = await mk({ dep: '2091-01-01', pays: ['pending'] }); await inv(withProof, due, null)
+  const seatOk = await mk({ dep: '2091-01-01', confirmed: true }); await inv(seatOk, due, null)
+  const notYet = await mk({ dep: '2091-01-01' }); await inv(notYet, '2026-10-31', null)
+  const noInvoice = await mk({ dep: '2091-01-01' })
+  // 30 Okt 23.59 WIB (= 16.59 UTC): hari jatuh tempo masih berjalan → belum hangus
+  assert.deepEqual(mine(await expireOverdueBookings(new Date('2026-10-30T16:59:00Z'))), [], 'pada hari jatuh tempo belum hangus')
+  // 31 Okt 00.00 WIB (= 30 Okt 17.00 UTC): sehari sesudah jatuh tempo
+  const r = await expireOverdueBookings(new Date('2026-10-30T17:00:00Z'))
+  assert.deepEqual(mine(r), [overdue, rejected].sort())
+  const st = async (id: string) => (await prisma.booking.findUniqueOrThrow({ where: { id } })).status
+  assert.deepEqual(await Promise.all([overdue, rejected, adminMade, withProof, seatOk, notYet, noInvoice].map(st)), ['expired', 'expired', 'active', 'active', 'active', 'active', 'active'])
+  assert.deepEqual(mine(await expireOverdueBookings(new Date('2026-10-30T17:00:00Z'))), [], 'idempoten')
+  for (const id of [adminMade, withProof, seatOk, notYet, noInvoice]) await prisma.booking.update({ where: { id }, data: { status: 'cancelled' } }) // jangan ikut uji hangus berikutnya
+  await setExpire(settings.expireDaysBeforeReference)
+})
+await t('HANGUS memeriksa ULANG syarat kandidat di dalam kunci (jatuh tempo dimundurkan di antara daftar dan kunci → tidak hangus)', () => {
+  const src = read('lib/booking/expire.ts')
+  assert.match(src, /FOR UPDATE`\)[^\n]*\n(?:\s*\/\/[^\n]*\n)*\s*if \(\(await tx\.booking\.count\(\{ where: \{ AND: \[\{ id \}, where\] \} \}\)\) === 0\) return null/)
+})
 await t('hangus = 0 hari → nonaktif sama sekali', async () => {
   await setExpire(0)
   const id = await mk({ dep: '2026-11-01' })
@@ -274,7 +301,7 @@ await t('PENJAGA: cron memakai zona aplikasi + dimuat SETELAH zona dimuat; tak a
   assert.match(job, /getAppTimezone\(\)/); assert.match(job, /\{ timezone \}/)
   assert.match(read('instrumentation-node.ts'), /await loadAppTimezone\(\)\s*\n\s*startBookingLifecycleJobs\(\)/)
   assert.ok(!/autocancelJob|startAutoCancelJob/.test(read('instrumentation-node.ts')))
-  assert.match(read('lib/booking/expire.ts'), /cancelBooking\(tx, booking, '[^']+', 'expired'\)/)
+  assert.match(read('lib/booking/expire.ts'), /cancelBooking\(tx, booking, reason, 'expired'\)/)
   assert.match(read('lib/booking/expire.ts'), /FOR UPDATE/)
   assert.match(read('lib/payments/process.ts'), /payment\.status !== 'pending' \|\| booking\.status !== 'active'\)/); assert.match(read('lib/payments/process.ts'), /booking\.confirmedAt === null && after\.dpMet/)
   assert.match(read('lib/payments/process.ts'), /confirmedAt: new Date\(\), confirmedById: input\.byUserId/)

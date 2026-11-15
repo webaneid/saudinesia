@@ -8,6 +8,7 @@ import { issueInvoice } from '@/lib/invoice/issue'
 import { isDeletedAccount } from '@/lib/customers/query'
 import { retrySerializable } from '@/lib/booking/serializable'
 import { hasActiveBankAccount } from '@/lib/invoice/banks'
+import { UNPAID_ACTIVE } from '@/lib/booking/expire'
 
 /**
  * Pesan dari checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5; keranjang §10.7 — satu produk = keranjang satu entri) — satu-satunya jalur `POST /bookings`.
@@ -19,6 +20,11 @@ import { hasActiveBankAccount } from '@/lib/invoice/banks'
 export class CheckoutAccountError extends Error {}
 /** Belum ada rekening aktif: invoice yang terbit tak punya tujuan transfer, jadi pesanan pelanggan ditolak (evaluasi 2026-11-14 K3) — route → 409. */
 export class CheckoutNoBankError extends Error { override name = 'CheckoutNoBankError' }
+/** SEC-221: akun sudah memiliki `MAX_UNPAID_CHECKOUTS` pesanan hidup tanpa pembayaran/bukti — pesanan lama dibatalkan dulu. Route → 409. */
+export class CheckoutUnpaidLimitError extends Error { override name = 'CheckoutUnpaidLimitError' }
+
+/** SEC-221 (pemilik 2026-11-15): maksimal pesanan hidup yang BELUM ada pembayaran/bukti per akun. Pesanan yang sudah berbukti/berbayar tak dihitung. */
+export const MAX_UNPAID_CHECKOUTS = 5
 
 export async function placeCheckout(userId: string, cart: CheckoutCart, dueDays: number): Promise<{ id: string; bookingCode: string }> {
   const prepared = await prepareBooking(cartInput(cart))
@@ -31,6 +37,9 @@ export async function placeCheckout(userId: string, cart: CheckoutCart, dueDays:
     if (!owner[0] || isDeletedAccount(owner[0].email) || !owner[0].isActive) throw new CheckoutAccountError('Akun tidak aktif')
     // Diperiksa di dalam transaksi yang sama dengan penerbitan invoice (rekening dibekukan di sana): rekening yang dinonaktifkan sebelum commit ikut terlihat.
     if (!(await hasActiveBankAccount(tx))) throw new CheckoutNoBankError('Belum ada rekening aktif')
+    // SEC-221: batas pesanan belum dibayar per akun, dihitung di dalam transaksi (pembuat booking diserialkan `withBookingCode`), jadi permintaan serentak tak bisa melewatinya.
+    const unpaid = await tx.booking.count({ where: { userId, ...UNPAID_ACTIVE } })
+    if (unpaid >= MAX_UNPAID_CHECKOUTS) throw new CheckoutUnpaidLimitError('Terlalu banyak pesanan belum dibayar')
     const bk = await tx.booking.create({
       data: { bookingCode, userId, status: 'active', season: 'regular', totalAmount: 0 },
     })

@@ -1887,6 +1887,7 @@
     "cartEmpty": "Keranjang kosong",
     "maxCartItems": "Maksimal {max} produk per pesanan",
     "checkoutNoBank": "Pesanan belum bisa diterima karena rekening tujuan pembayaran belum tersedia. Mohon hubungi tim Saudinesia.",
+    "checkoutUnpaidLimit": "Anda masih memiliki {max} pesanan yang belum dibayar. Batalkan salah satu pesanan lama di halaman Booking Saya terlebih dahulu, lalu coba lagi.",
     "paymentNoDestination": "Rekening tujuan pembayaran belum tersedia, jadi bukti transfer belum bisa dikirim. Mohon hubungi tim Saudinesia.",
     "paymentAmountInvalid": "Nominal transfer tidak valid",
     "paymentTimeInvalid": "Tanggal dan jam transfer tidak valid",
