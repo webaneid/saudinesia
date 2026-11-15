@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { bookingWhere } from '@/lib/booking/lifecycle'
+import { pendingPaymentWhere } from '@/lib/booking/lifecycle'
 import { formatRupiah } from '@/lib/utils'
 import { billOf, billSelect } from '@/lib/invoice/bill'
 import { escapeLike } from '@/lib/utils/search'
@@ -41,7 +41,7 @@ export default async function AdminPayments({ params, searchParams }: Props) {
   const proof = (PROOF_FILTERS as readonly string[]).includes(sp.proof as string) ? (sp.proof as (typeof PROOF_FILTERS)[number]) : undefined
 
   const where: Prisma.BookingWhereInput = {
-    ...bookingWhere.payment_review, // ada pembayaran `pending` pada booking hidup yang belum dikonfirmasi
+    ...pendingPaymentWhere, // ada pembayaran `pending` pada booking hidup — termasuk cicilan/pelunasan booking yang sudah terkonfirmasi (Fase 7a F3)
     // AND: `payments` sudah dipakai fragmen status di atas; filter bukti harus digabung, bukan menimpanya
     ...(proof ? { AND: [{ payments: proof === 'with' ? { some: { buktiTransferPath: { not: null } } } : { none: { buktiTransferPath: { not: null } } } }] } : {}),
     ...(q ? { OR: [{ bookingCode: { contains: escapeLike(q), mode: 'insensitive' } }, { user: { fullName: { contains: escapeLike(q), mode: 'insensitive' } } }] } : {}),
@@ -56,7 +56,7 @@ export default async function AdminPayments({ params, searchParams }: Props) {
       ...range,
       include: {
         user:     { select: { fullName: true, phone: true } },
-        payments: { orderBy: { createdAt: 'desc' }, take: 1 },
+        payments: { where: { status: 'pending' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 1 },
         _count:   { select: { pilgrims: true } },
         invoice:  billSelect.invoice,
       },
@@ -85,7 +85,11 @@ export default async function AdminPayments({ params, searchParams }: Props) {
         return at ? <span className="text-[12px] text-admin-muted">Diunggah {new Date(at).toLocaleString('id-ID')}</span> : <Badge tone="warning">Belum ada bukti</Badge>
       },
     },
-    { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
+    {
+      key: 'claim', header: 'Nominal dikirim', align: 'right',
+      cell: b => { const c = b.payments[0]?.claimedAmountIdr; return c != null ? <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(Number(c))}</span> : <span className="text-[12px] text-admin-muted">—</span> },
+    },
+    { key: 'total', header: 'Tagihan', hideBelowLg: true, align: 'right', cell: b => <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
     {
       key: 'actions', header: '', actions: true,
       cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Verifikasi pembayaran ${b.bookingCode}`} /></RowActions>,

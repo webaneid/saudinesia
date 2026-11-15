@@ -62,7 +62,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
     },
   })
   if (!booking) notFound()
-  // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts). Status lunas/sisa tetap mengikuti alur v1 sampai Fase 7.
+  // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts); terbayar = Σ pembayaran terverifikasi (cicilan, Fase 7a).
   const confirmedPayments = await prisma.payment.findMany({ where: { bookingId: booking.id, status: 'confirmed' }, select: { status: true, amount: true } })
   const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice, payments: confirmedPayments })
   // Batas nominal bukti transfer (Fase 7a F2): bawaan sisa, minimal DP / sisa menuju DP — sama dengan yang dinilai route unggah di dalam kunci.
@@ -129,6 +129,9 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
             <Badge variant={statusCfg.badge as 'warning' | 'secondary' | 'success' | 'default' | 'destructive' | 'muted'}>
               {ts(st)}
             </Badge>
+            {booking.status === 'active' && bill.paid > 0 && (limits.balance > 0
+              ? <Badge variant="warning">{t('booking.dpReceived', { rest: formatRupiah(limits.balance) })}</Badge>
+              : <Badge variant="success">{t('booking.paidInFull')}</Badge>)}
             <Button asChild variant="outline" size="sm">
               <a href={`/api/v1/bookings/${booking.id}/invoice`} target="_blank" rel="noopener noreferrer">
                 <FileDown className="mr-1.5 h-3.5 w-3.5" /> {t('booking.invoice')}
@@ -151,11 +154,12 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
       )}
 
       {/* Payment notice */}
-      {(st === 'awaiting_payment' || st === 'payment_review') && (
+      {/* Bagian bayar tampil selama booking hidup masih bersisa — termasuk cicilan/pelunasan sesudah kursi terkonfirmasi (Fase 7a F3). */}
+      {booking.status === 'active' && limits.balance > 0 && (
         <div id="pembayaran" className="scroll-mt-24 rounded-xl border border-amber-200 bg-amber-50 p-5 space-y-4">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-amber-600" />
-            <p className="font-semibold text-amber-800">{t('booking.payTitle')}</p>
+            <p className="font-semibold text-amber-800">{bill.paid > 0 ? t('booking.payRestTitle') : t('booking.payTitle')}</p>
           </div>
           {deadline && (
             <p className="text-sm text-amber-700">
@@ -175,18 +179,19 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
             </div>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-amber-900">{formatRupiah(bill.grandTotal)}</p>
+            <p className="text-2xl font-bold text-amber-900">{formatRupiah(bill.paid > 0 ? limits.balance : bill.grandTotal)}</p>
+            {bill.paid > 0 && <p className="text-sm text-amber-800">{t('booking.paidSoFar', { paid: formatRupiah(bill.paid), total: formatRupiah(bill.grandTotal) })}</p>}
           </div>
-          {st === 'awaiting_payment' && proofRejected && (
+          {!hasPendingPayment && proofRejected && (
             <p role="alert" className="flex items-center gap-2 text-sm font-medium text-destructive">
               <AlertCircle className="h-4 w-4 shrink-0" /> {t('booking.proofRejected')}
             </p>
           )}
           {/* Tanpa rekening tujuan tak ada unggah bukti — pesan "hubungi tim" di atas yang tampil (K3; route unggah juga menolak). */}
-          {st === 'awaiting_payment' && payTo.length > 0 && limits.balance > 0 && (
+          {!hasPendingPayment && payTo.length > 0 && (
             <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} balance={limits.balance} minClaim={limits.minClaim} />
           )}
-          {st === 'payment_review' && (
+          {hasPendingPayment && (
             <div className="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle className="h-4 w-4" /> {t('booking.proofSent')}
             </div>

@@ -259,18 +259,18 @@ await t('PENJAGA: draf tak pernah sampai ke jamaah (daftar, detail, API, invoice
   assert.match(cancel, /const \{ confirmedById: _staff, \.\.\.visible \} = booking/, 'GET: id staf tak dikirim ke jamaah (SEC-120)')
   assert.ok(!/ok\(\{ \.\.\.booking,/.test(cancel), 'GET tak lagi menyebar baris booking mentah')
   const bukti = read('app/api/v1/bookings/[id]/payment/bukti/route.ts')
-  assert.match(bukti, /FOR UPDATE/); assert.match(bukti, /fresh\.status !== 'active' \|\| fresh\.confirmedAt !== null/)
+  assert.match(bukti, /FOR UPDATE/); assert.match(bukti, /if \(fresh\.status !== 'active'\) return 'closed'/); assert.match(bukti, /claimRefusal\(paymentLimits\(billOf\(fresh\)/) // Fase 7a F3: terbuka selama ada sisa, dinilai di dalam kunci
   assert.match(bukti, /userId: session\.userId, status: \{ not: 'draft' \}/, 'bukti: draf = 404')
   assert.ok((bukti.match(/discardUpload\(filePath\)/g) ?? []).length >= 2, 'bukti: berkas dibuang bila ditolak di dalam kunci atau transaksi gagal (SEC-122)')
 })
-await t('PENJAGA: cron memakai zona aplikasi + dimuat SETELAH zona dimuat; tak ada lagi pembatalan otomatis 24 jam; hangus lewat cancelBooking(…, expired); proses pembayaran memeriksa active+belum dikonfirmasi', () => {
+await t('PENJAGA: cron memakai zona aplikasi + dimuat SETELAH zona dimuat; tak ada lagi pembatalan otomatis 24 jam; hangus lewat cancelBooking(…, expired); proses pembayaran memeriksa active + kursi dikonfirmasi sekali saat DP terpenuhi', () => {
   const job = read('lib/cron/bookingLifecycleJob.ts')
   assert.match(job, /getAppTimezone\(\)/); assert.match(job, /\{ timezone \}/)
   assert.match(read('instrumentation-node.ts'), /await loadAppTimezone\(\)\s*\n\s*startBookingLifecycleJobs\(\)/)
   assert.ok(!/autocancelJob|startAutoCancelJob/.test(read('instrumentation-node.ts')))
   assert.match(read('lib/booking/expire.ts'), /cancelBooking\(tx, booking, '[^']+', 'expired'\)/)
   assert.match(read('lib/booking/expire.ts'), /FOR UPDATE/)
-  assert.match(read('lib/payments/process.ts'), /booking\.status !== 'active' \|\| booking\.confirmedAt !== null/)
+  assert.match(read('lib/payments/process.ts'), /payment\.status !== 'pending' \|\| booking\.status !== 'active'\)/); assert.match(read('lib/payments/process.ts'), /booking\.confirmedAt === null && after\.dpMet/)
   assert.match(read('lib/payments/process.ts'), /confirmedAt: new Date\(\), confirmedById: input\.byUserId/)
 })
 

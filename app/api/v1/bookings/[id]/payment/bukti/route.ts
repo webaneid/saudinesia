@@ -33,13 +33,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const booking = await prisma.booking.findFirst({
       where: { id, userId: session.userId, status: { not: 'draft' } }, // draf = 404, sama seperti GET
-      select: { id: true, status: true, confirmedAt: true, createdAt: true, invoice: { select: { bankSnapshot: true } } },
+      select: { id: true, status: true, createdAt: true, invoice: { select: { bankSnapshot: true } } },
     })
     if (!booking) return apiErrorJson('bookingNotFound', 404)
-    // Selama F3 belum ada, booking yang sudah terkonfirmasi belum menerima pembayaran lanjutan (verifikasi admin belum mendukung cicilan).
-    if (booking.status !== 'active' || booking.confirmedAt !== null) {
-      return apiErrorJson('bookingNotAwaitingPayment', 422)
-    }
+    // Booking hidup menerima bukti selama masih ada sisa — termasuk cicilan/pelunasan sesudah kursi terkonfirmasi (Fase 7a F3; sisa dinilai di dalam kunci).
+    if (booking.status !== 'active') return apiErrorJson('bookingNotAwaitingPayment', 422)
     // Tanpa rekening tujuan, bukti transfer tak punya arti (pelanggan bisa saja mentransfer ke rekening yang salah) — K3, evaluasi 2026-11-14.
     const payTo = await bookingPayTo(booking.invoice)
     if (payTo.length === 0) return apiErrorJson('paymentNoDestination', 409)
@@ -87,12 +85,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       const fresh = await tx.booking.findUniqueOrThrow({
         where: { id },
         select: {
-          status: true, confirmedAt: true, totalAmount: true,
+          status: true, totalAmount: true,
           invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } },
           payments: { where: { status: { in: ['pending', 'confirmed'] } }, select: { status: true, amount: true } },
         },
       })
-      if (fresh.status !== 'active' || fresh.confirmedAt !== null) return 'closed'
+      if (fresh.status !== 'active') return 'closed'
       if (fresh.payments.some(p => p.status === 'pending')) return 'closed'
       const refused = claimRefusal(paymentLimits(billOf(fresh), minimumFirstPaymentPercent), input.amount)
       if (refused) return refused
