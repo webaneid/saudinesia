@@ -20,8 +20,10 @@ export const waTemplates = {
   bookingSubmitted: (code: string, deadline: string) =>
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,
 
-  paymentReminder: (code: string, deadline: string) =>
-    `Reminder: Pembayaran booking *${code}* belum kami terima.\nBatas waktu: *${deadline}*\n\nSegera lakukan pembayaran agar tempat Anda tetap aman.`,
+  paymentReminder: (code: string, deadline: string, balance?: number, partial?: boolean) =>
+    partial && balance && balance > 0
+      ? `Reminder: Booking *${code}* masih memiliki sisa tagihan *${formatRupiah(balance)}*.\nBatas waktu: *${deadline}*\n\nBukti pelunasan dapat dikirim dari halaman booking.`
+      : `Reminder: Pembayaran booking *${code}* belum kami terima.${balance && balance > 0 ? `\nTagihan: *${formatRupiah(balance)}*` : ''}\nBatas waktu: *${deadline}*\n\nSegera lakukan pembayaran agar tempat Anda tetap aman.`,
 
   paymentConfirmed: (code: string, balance?: number) =>
     balance && balance > 0

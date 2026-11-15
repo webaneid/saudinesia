@@ -175,7 +175,7 @@ export function InvoiceSettingsEditor() {
               <FormField label="Hangus bila belum ada uang masuk" htmlFor="inv-expire" hint="Hari sebelum tanggal acuan (item paling awal); 0 = nonaktif">
                 <NumberInput id="inv-expire" value={form.expireDaysBeforeReference} onChange={v => patch({ expireDaysBeforeReference: v })} suffix="hari" />
               </FormField>
-              <FormField label="Pembayaran pertama minimum" htmlFor="inv-minpay" hint="% dari tagihan; 0 = tanpa batas (hanya untuk pelanggan)">
+              <FormField label="Pembayaran pertama minimum" htmlFor="inv-minpay" hint="DP: % dari tagihan. Pelanggan wajib membayar minimal ini lebih dulu; kursi dikonfirmasi saat terbayar mencapai DP. 0 = pembayaran pertama berapa pun">
                 <NumberInput id="inv-minpay" value={form.minimumFirstPaymentPercent} onChange={v => patch({ minimumFirstPaymentPercent: v })} suffix="%" step="0.01" />
               </FormField>
             </div>
@@ -201,23 +201,9 @@ export function InvoiceSettingsEditor() {
           <MetaBox title="Metode pembayaran" icon={Wallet} description="Yang aktif tampil di halaman bayar. Kunci API gateway disimpan di environment server, bukan di sini.">
             <ToggleRow label="Transfer bank" checked={form.methodBankTransfer} onChange={v => patch({ methodBankTransfer: v })} />
             <ToggleRow label="QRIS" checked={form.methodQris} onChange={v => patch({ methodQris: v })} />
-            <ToggleRow label="iPaymu" hint="Payment gateway" checked={form.methodIpaymu} onChange={v => patch({ methodIpaymu: v })} />
-            <ToggleRow label="Xendit" hint="Payment gateway" checked={form.methodXendit} onChange={v => patch({ methodXendit: v })} />
-            <ToggleRow label="Mode uji (sandbox) gateway" checked={form.gatewaySandbox} onChange={v => patch({ gatewaySandbox: v })} />
-            <div className="grid gap-3 border-t border-admin-line pt-3 sm:grid-cols-2">
-              <FormField label="Biaya iPaymu (dibebankan ke pelanggan)" htmlFor="fee-ip" hint="Persen + biaya tetap per transaksi">
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberInput id="fee-ip" value={form.ipaymuFeePercent} onChange={v => patch({ ipaymuFeePercent: v })} suffix="%" step="0.01" />
-                  <NumberInput id="fee-ip-flat" value={form.ipaymuFeeFlatIdr} onChange={v => patch({ ipaymuFeeFlatIdr: v })} suffix="Rp" />
-                </div>
-              </FormField>
-              <FormField label="Biaya Xendit (dibebankan ke pelanggan)" htmlFor="fee-xd" hint="Persen + biaya tetap per transaksi">
-                <div className="grid grid-cols-2 gap-2">
-                  <NumberInput id="fee-xd" value={form.xenditFeePercent} onChange={v => patch({ xenditFeePercent: v })} suffix="%" step="0.01" />
-                  <NumberInput id="fee-xd-flat" value={form.xenditFeeFlatIdr} onChange={v => patch({ xenditFeeFlatIdr: v })} suffix="Rp" />
-                </div>
-              </FormField>
-            </div>
+            {/* iPaymu/Xendit (toggle, sandbox, biaya) disembunyikan sampai fase gateway (Fase 9–10, §10.7 langkah 7): belum ada yang membacanya.
+                Nilai tersimpan tetap dikirim apa adanya saat menyimpan supaya tak hilang. */}
+            <p className="m-0 text-[12px] text-admin-muted">Payment gateway (iPaymu, Xendit) tersedia pada fase berikutnya.</p>
             <div className="border-t border-admin-line pt-3">
               <ToggleRow label="Kode unik" hint="3 digit ditambahkan ke jumlah transfer/QRIS sebagai identitas transaksi (bukan kelebihan bayar)" checked={form.uniqueCodeEnabled} onChange={v => patch({ uniqueCodeEnabled: v })} />
               {form.uniqueCodeEnabled && (

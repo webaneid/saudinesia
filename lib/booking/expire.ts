@@ -1,3 +1,4 @@
+import { billOf, billSelect } from '@/lib/invoice/bill'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
@@ -56,21 +57,29 @@ async function loadForExpiry(tx: Prisma.TransactionClient, id: string): Promise<
 }
 
 export type ReminderKind = 'd1' | 'd0'
-export type DueReminder = { id: string; userId: string; code: string; deadline: Date; kind: ReminderKind }
+export type DueReminder = { id: string; userId: string; code: string; deadline: Date; kind: ReminderKind; balance: number; partial: boolean }
 
 /**
- * Booking yang perlu diingatkan hari ini (zona aplikasi): `d0` = jatuh tempo hari ini, `d1` = jatuh tempo besok. Hanya `active` yang belum dikonfirmasi, tanpa bukti yang sedang menunggu
- * (bukti sudah diunggah = tak perlu diingatkan). `paymentDeadline` = akhir hari jatuh tempo, jadi "hari jatuh tempo" = hari kalender tempat ia jatuh.
+ * Booking yang perlu diingatkan hari ini (zona aplikasi): `d0` = jatuh tempo hari ini, `d1` = jatuh tempo besok. Booking `active` yang MASIH BERSISA (Fase 7a F4: termasuk
+ * yang kursinya sudah terkonfirmasi lewat DP), tanpa bukti yang sedang menunggu (bukti sudah diunggah = tak perlu diingatkan). `paymentDeadline` = akhir hari jatuh tempo.
+ * `partial` = sudah ada pembayaran terverifikasi (pesan menyebut sisa, bukan "belum kami terima").
  */
 export async function dueReminders(now: Date = new Date()): Promise<DueReminder[]> {
   const today = todayInApp(now)
   const from = startOfDayInApp(today)
   const to = endOfDayExclusiveInApp(addDays(today, 1)) // sampai akhir BESOK
   const rows = await prisma.booking.findMany({
-    where: { status: 'active', confirmedAt: null, paymentDeadline: { gte: from, lt: to }, payments: { none: { status: 'pending' } } },
-    select: { id: true, userId: true, bookingCode: true, paymentDeadline: true },
+    where: { status: 'active', paymentDeadline: { gte: from, lt: to }, payments: { none: { status: 'pending' } } },
+    select: {
+      id: true, userId: true, bookingCode: true, paymentDeadline: true, ...billSelect,
+      payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } },
+    },
     orderBy: [{ paymentDeadline: 'asc' }, { id: 'asc' }],
   })
   const dayEnd = endOfDayExclusiveInApp(today).getTime()
-  return rows.flatMap(r => r.paymentDeadline ? [{ id: r.id, userId: r.userId, code: r.bookingCode, deadline: r.paymentDeadline, kind: (r.paymentDeadline.getTime() < dayEnd ? 'd0' : 'd1') as ReminderKind }] : [])
+  return rows.flatMap(r => {
+    const bill = billOf(r)
+    if (!r.paymentDeadline || bill.balance <= 0) return []
+    return [{ id: r.id, userId: r.userId, code: r.bookingCode, deadline: r.paymentDeadline, kind: (r.paymentDeadline.getTime() < dayEnd ? 'd0' : 'd1') as ReminderKind, balance: bill.balance, partial: bill.paid > 0 }]
+  })
 }
