@@ -162,12 +162,42 @@
         "priceFrom": "Harga mulai",
         "perPerson": "per orang",
         "addOns": "+ komponen tambahan sesuai pilihan Anda saat booking",
-        "order": "Pesan Paket Ini"
+        "order": "Pesan Paket Ini",
+        "detail": "Lihat detail",
+        "duration": "{days, plural, other {# hari}}",
+        "nextDeparture": "Berangkat terdekat {date}"
       },
       "cta": {
         "title": "Siap merencanakan Umroh?",
         "description": "Buat akun untuk menyimpan data jamaah dan memantau pesanan Anda di satu tempat.",
         "button": "Daftar Akun"
+      },
+      "detail": {
+        "back": "Kembali ke daftar paket",
+        "duration": "{days, plural, other {# hari}}",
+        "priceFrom": "Harga mulai",
+        "perPerson": "per orang",
+        "pickDeparture": "Pilih jadwal keberangkatan",
+        "notBookable": "Paket ini belum dapat dipesan online. Hubungi kami untuk informasi lebih lanjut.",
+        "included": "Sudah termasuk",
+        "excluded": "Tidak termasuk",
+        "itinerary": "Rencana perjalanan",
+        "day": "Hari {day}",
+        "departures": "Jadwal keberangkatan",
+        "noDepartures": "Belum ada jadwal keberangkatan yang dibuka.",
+        "departureRange": "{from} – {to}",
+        "seatsLeft": "{seats, plural, other {Sisa # kursi}}",
+        "soldOut": "Penuh",
+        "order": "Pesan keberangkatan ini",
+        "includedItem": {
+          "flight": "Tiket pesawat pulang-pergi",
+          "hotelMakkah": "{nights, plural, other {Hotel Makkah # malam}}",
+          "hotelMadinah": "{nights, plural, other {Hotel Madinah # malam}}",
+          "visa": "Visa Umroh",
+          "transport": "Transportasi selama di Arab Saudi",
+          "muthowif": "Muthowif pendamping",
+          "catering": "Katering"
+        }
       }
     },
     "visa": {
