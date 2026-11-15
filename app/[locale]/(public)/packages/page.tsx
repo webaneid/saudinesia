@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, Check, Package, ReceiptText, Tag } from 'lucide-react'
+import { ArrowRight, CalendarDays, Check, Clock, Package, ReceiptText, Tag } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
 import { getFeaturedCards } from '@/lib/media/urls'
@@ -10,6 +10,8 @@ import { requirementsOfMany } from '@/lib/documents/requirements'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { catalogMetadata } from '@/lib/public-content/metadata'
 import { formatRupiah } from '@/lib/utils'
+import { bookableDepartures } from '@/lib/packages/departures'
+import { formatCalendarDate } from '@/lib/time'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { RequiredDocuments } from '@/components/shared/RequiredDocuments'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
@@ -37,10 +39,13 @@ export default async function PackagesCatalogPage({ params }: Props) {
     getPageText(locale, 'packages'),
   ])
   const ids = packages.map(p => p.id)
-  const [covers, reqs] = await Promise.all([
+  const [covers, reqs, departures] = await Promise.all([
     getFeaturedCards('package', ids),
     requirementsOfMany(ids.map(id => ({ productType: 'package', productId: id }))),
+    bookableDepartures(ids),
   ])
+  // Keberangkatan terdekat yang masih punya kursi (K1 F5) — hanya tanggal, tanpa catatan internal.
+  const nextDeparture = (id: string) => (departures.get(id) ?? []).find(d => d.seatsLeft > 0)?.departureDate
   const hasAddOns = (p: (typeof packages)[number]) =>
     [p.hotelMakkahMode, p.hotelMadinahMode, p.transportMode, p.muthowifMode, p.visaMode, p.flightMode, p.cateringMode]
       .includes('user_choice')
@@ -67,13 +72,21 @@ export default async function PackagesCatalogPage({ params }: Props) {
           {packages.map(pkg => {
             const highlights = Array.isArray(pkg.highlights) ? pkg.highlights.filter((h): h is string => typeof h === 'string') : []
             const cover = covers.get(pkg.id)
+            const detail = `/${locale}/packages/${pkg.id}`
+            const next = nextDeparture(pkg.id)
             return (
               <article key={pkg.id} className={`catalog-card ${pkg.isFeatured ? 'border-brand ring-1 ring-brand' : ''}`}>
-                <ProductImage src={cover?.src} alt={cover?.alt} fallbackAlt={pkg.name} type="package" />
+                <Link href={detail} aria-label={pkg.name}><ProductImage src={cover?.src} alt={cover?.alt} fallbackAlt={pkg.name} type="package" /></Link>
                 <div className="flex flex-1 flex-col gap-4 p-5">
                   {pkg.isFeatured && <span className="catalog-chip self-start">{t('card.featured')}</span>}
                   <div className="space-y-1">
-                    <h3 className="text-lg font-semibold leading-snug text-brand-dark">{pkg.name}</h3>
+                    <h3 className="text-lg font-semibold leading-snug text-brand-dark"><Link href={detail} className="hover:underline">{pkg.name}</Link></h3>
+                    {(pkg.durationDays != null || next) && (
+                      <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        {pkg.durationDays != null && <span className="flex items-center gap-1"><Clock className="h-3.5 w-3.5 text-brand" aria-hidden /> {t('card.duration', { days: pkg.durationDays })}</span>}
+                        {next && <span className="flex items-center gap-1"><CalendarDays className="h-3.5 w-3.5 text-brand" aria-hidden /> {t('card.nextDeparture', { date: formatCalendarDate(next, undefined, locale) })}</span>}
+                      </p>
+                    )}
                     <RichTextView value={pkg.description} className="text-sm text-muted-foreground" />
                   </div>
 
@@ -98,11 +111,14 @@ export default async function PackagesCatalogPage({ params }: Props) {
                       note={hasAddOns(pkg) ? t('card.addOns') : null}
                     />
                     {/* Checkout Paket (docs/arsitektur-booking-engine-v2.md §10.5); paket belum berharga tak dapat dipesan (tak pernah gratis). */}
-                    {Number(pkg.price) > 0 && (
-                      <Link href={checkoutPath(locale, 'package', pkg.id)} className="btn-brand-solid w-full">
-                        {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
-                      </Link>
-                    )}
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Link href={detail} className="btn-brand-outline w-full">{t('card.detail')}</Link>
+                      {Number(pkg.price) > 0 && (
+                        <Link href={checkoutPath(locale, 'package', pkg.id)} className="btn-brand-solid w-full">
+                          {t('card.order')} <ArrowRight className="h-4 w-4" aria-hidden />
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               </article>

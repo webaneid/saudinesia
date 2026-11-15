@@ -23,14 +23,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }))
   )
 
-  const [hotels, muthowifs] = await Promise.all([
+  const [hotels, muthowifs, packages] = await Promise.all([
     prisma.hotel.findMany({ where: { isActive: true }, select: { id: true } }),
     prisma.muthowif.findMany({ where: { isActive: true }, select: { id: true } }),
+    available.has('packages') ? prisma.package.findMany({ where: { isActive: true }, select: { id: true } }) : Promise.resolve([]),
   ])
 
   const dynamicEntries: MetadataRoute.Sitemap = routing.locales.flatMap((locale) => [
     ...hotels.map((h) => ({ url: `${baseUrl}/${locale}/hotels/${h.id}`, lastModified: new Date() })),
     ...muthowifs.map((m) => ({ url: `${baseUrl}/${locale}/muthowif/${m.id}`, lastModified: new Date() })),
+    ...packages.map((p) => ({ url: `${baseUrl}/${locale}/packages/${p.id}`, lastModified: new Date() })),
   ])
 
   return [...staticEntries, ...dynamicEntries]

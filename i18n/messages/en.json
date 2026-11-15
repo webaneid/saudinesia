@@ -162,12 +162,42 @@
         "priceFrom": "Price from",
         "perPerson": "per person",
         "addOns": "+ optional components of your choice at booking",
-        "order": "Book This Package"
+        "order": "Book This Package",
+        "detail": "View details",
+        "duration": "{days, plural, one {# day} other {# days}}",
+        "nextDeparture": "Next departure {date}"
       },
       "cta": {
         "title": "Ready to plan your Umrah?",
         "description": "Create an account to keep pilgrim data and track your orders in one place.",
         "button": "Create Account"
+      },
+      "detail": {
+        "back": "Back to packages",
+        "duration": "{days, plural, one {# day} other {# days}}",
+        "priceFrom": "Price from",
+        "perPerson": "per person",
+        "pickDeparture": "Choose a departure",
+        "notBookable": "This package cannot be booked online yet. Contact us for more information.",
+        "included": "Included",
+        "excluded": "Not included",
+        "itinerary": "Itinerary",
+        "day": "Day {day}",
+        "departures": "Departure schedule",
+        "noDepartures": "No departures are open yet.",
+        "departureRange": "{from} – {to}",
+        "seatsLeft": "{seats, plural, one {# seat left} other {# seats left}}",
+        "soldOut": "Sold out",
+        "order": "Book this departure",
+        "includedItem": {
+          "flight": "Return flight tickets",
+          "hotelMakkah": "{nights, plural, one {Makkah hotel, # night} other {Makkah hotel, # nights}}",
+          "hotelMadinah": "{nights, plural, one {Madinah hotel, # night} other {Madinah hotel, # nights}}",
+          "visa": "Umrah visa",
+          "transport": "Transport in Saudi Arabia",
+          "muthowif": "Accompanying muthowif",
+          "catering": "Catering"
+        }
       }
     },
     "visa": {
