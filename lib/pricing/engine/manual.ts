@@ -52,12 +52,17 @@ export async function setManualSell(input: PointKey & Actor & { sellIdr: number;
     const creatable = owner.creatableVariants.find(v => v.key === variantKey)
       ?? (dynamic?.creatable ? dynamic : undefined)
     if (!existing && !creatable) throw new PriceInputError('Rentang/varian harga ini belum ada — simpan tarif modalnya lebih dulu')
-    const cost = num(existing?.costIdr)
+    // Varian baru yang mengikuti harga dasar (harga khusus keberangkatan): modal = modal dasar, otomatis = jual dasar — sama dengan yang ditulis hitung ulang,
+    // supaya untung dan peringatan langsung benar tanpa menunggu hitung ulang berikutnya.
+    const base = !existing && dynamic?.inheritsBase
+      ? await tx.pricePoint.findUnique({ where: { ownerType_ownerId_variantKey: { ownerType, ownerId, variantKey: '' } }, select: { costIdr: true, sellIdr: true } })
+      : null
+    const cost = num(existing?.costIdr ?? base?.costIdr)
     const oldSell = num(existing?.sellIdr)
     const data = { manualSellIdr: sell, sellIdr: sell, manualNote: note, manualBy: byUserId, manualAt: new Date() }
     const row = existing
       ? await tx.pricePoint.update({ where: { id: existing.id }, data })
-      : await tx.pricePoint.create({ data: { ownerType, ownerId, variantKey, unit: (creatable?.unit ?? owner.unit) as PriceUnit, ...data } })
+      : await tx.pricePoint.create({ data: { ownerType, ownerId, variantKey, unit: (creatable?.unit ?? owner.unit) as PriceUnit, ...data, ...(base && { costIdr: base.costIdr, autoSellIdr: base.sellIdr }) } })
     await tx.priceChange.create({
       data: { ownerType, ownerId, variantKey, kind: 'manual_set', oldSellIdr: oldSell, newSellIdr: sell, oldCostIdr: cost, newCostIdr: cost, note, byUserId },
     })

@@ -206,9 +206,9 @@ Semua 6 fase dieksekusi berurutan, tiap fase digerbangi `bun run build` 0 error 
 
 ---
 
-## 8. K1 — Keberangkatan, durasi, kursi, dan halaman detail paket (RENCANA 2026-11-14, DISETUJUI pemilik 2026-11-14 — semua saran K1-1..K1-6)
+## 8. K1 — Keberangkatan, durasi, kursi, dan halaman detail paket (SELESAI & TERVERIFIKASI 2026-11-15, F1–F6 — rencana disetujui pemilik 2026-11-14, semua saran K1-1..K1-6)
 
-Sumber: `docs/evaluasi-sistem-2026-11-14.md` K1. Rencana ini mengikuti Fase Eksekusi SOP; belum ada kode yang ditulis.
+Sumber: `docs/evaluasi-sistem-2026-11-14.md` K1. Rencana ini mengikuti Fase Eksekusi SOP; dieksekusi F1–F6 (PR #143–#147 + F6), catatan as-built per fase di §8.5.
 
 ### 8.1 Masalah
 
@@ -292,5 +292,6 @@ Ikut dibangun tanpa perlu keputusan: daftar **"Tidak termasuk"** (teks per baris
    - Kartu katalog: nama/foto menaut ke detail, chip durasi + keberangkatan terdekat, tombol "Lihat detail" di samping "Pesan".
    **As-built F5 (2026-11-15):** sesuai rincian. Daftar isi termasuk punya salinan teks sendiri di `catalog.packages.detail.includedItem.*` (halaman katalog hanya boleh `getTranslations` atas kosakata bersama; teks halaman bisa disunting di Konten Situs). Keberangkatan terdekat di kartu = keberangkatan pertama yang masih berkursi. Security review: 0 temuan (GET publik, id divalidasi UUID, hanya paket aktif, hanya harga jual, catatan internal keberangkatan tak terbaca; rencana perjalanan dirender sebagai teks).
 6. **F6 — Verifikasi menyeluruh & dokumentasi** (browser admin → publik → checkout → booking; suite di DB sekali pakai; build; security review; `docs/progress.md`, `docs/decisions.md` keputusan pengganti P3, CLAUDE.md aturan "keberangkatan paket hanya lewat `lib/packages/departures.ts`").
+   **As-built F6 (2026-11-15):** browser di server audit — admin: harga khusus keberangkatan diatur, dihapus ("Ikuti harga paket"), dan diatur lagi lewat PriceCard; lencana di kotak Keberangkatan; publik (pelanggan uji): katalog "mulai" dan detail menampilkan harga khusus, modal/catatan internal tak bocor, tombol pesan per keberangkatan membuka checkout dengan keberangkatan terpilih, pratinjau total = harga khusus dengan baris "Harga khusus keberangkatan". Terbit di browser tak diuji karena DB audit belum punya rekening tujuan (setelan lingkungan, bukan K1) — terbit + kursi + snapshot dibuktikan `scripts/test-booking-engine-core.ts`. Temuan F6 diperbaiki: varian baru tampil "modal belum lengkap" sampai hitung ulang → `setManualSell` kini menyalin modal dan acuan dari titik harga paket saat membuat varian keberangkatan.
 
 Setiap fase satu PR, build 0 error + security review sebelum lanjut.

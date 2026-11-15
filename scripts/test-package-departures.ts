@@ -179,6 +179,8 @@ await t('harga khusus (F4): varian hanya untuk keberangkatan milik paket yang di
     await setManualSell({ ownerType: 'package', ownerId: p2.id, sellIdr: 30_000_000, byUserId: staff.id })
     await assert.rejects(set(foreign.id, 1), PriceInputError, 'keberangkatan paket lain')
     await set(a.id, 28_000_000)
+    const created = await prisma.pricePoint.findUniqueOrThrow({ where: { ownerType_ownerId_variantKey: { ownerType: 'package', ownerId: p2.id, variantKey: departureVariantKey(a.id) } } })
+    assert.equal(Number(created.autoSellIdr), 30_000_000, 'varian baru langsung beracuan harga paket (tanpa menunggu hitung ulang)')
     await set(b.id, 35_000_000)
     assert.deepEqual(Object.fromEntries(await packageDeparturePrices([p2.id])), { [a.id]: 28_000_000, [b.id]: 35_000_000 })
     assert.equal((await sellPrices('package', [p2.id])).get(p2.id), 28_000_000, 'termurah di antara keberangkatan')
