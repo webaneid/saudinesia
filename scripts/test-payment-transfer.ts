@@ -1,7 +1,7 @@
 // Fase 7a F1 (docs/arsitektur-booking-engine-v2.md §10.7): batas nominal bertahap (P1–P3) dan validator data transfer. Murni — tanpa database.
 import assert from 'node:assert/strict'
-import { paymentLimits } from '@/lib/payments/limits'
-import { paymentTransferSchema } from '@/lib/validators/paymentTransfer'
+import { claimRefusal, paymentLimits } from '@/lib/payments/limits'
+import { paymentTransferSchema, TRANSFER_KEYS } from '@/lib/validators/paymentTransfer'
 import { matchText } from '@/lib/errors/api'
 
 let failed = 0
@@ -34,7 +34,7 @@ t('DP dibulatkan ke atas ke rupiah penuh; tak melebihi tagihan; persen di luar 0
 })
 
 t('validator: semua isian wajib kecuali catatan; kunci liar ditolak; pesan = teks katalog (berkode untuk pelanggan)', () => {
-  const ok = { amount: '3000000', transferredAt: '2026-11-15T09:30', destination: 'bank-1', senderBank: 'BCA', senderAccountName: 'Siti Aminah' }
+  const ok = { amount: '3000000', transferredAt: '2026-11-15T02:30:00.000Z', destination: '0', senderBank: 'BCA', senderAccountName: 'Siti Aminah' }
   const r = paymentTransferSchema.safeParse(ok)
   assert.ok(r.success); assert.equal(r.data.amount, 3_000_000)
   const code = (v: Record<string, unknown>) => { const x = paymentTransferSchema.safeParse(v); assert.ok(!x.success); return matchText(x.error.issues[0]!.message)?.code }
@@ -48,6 +48,29 @@ t('validator: semua isian wajib kecuali catatan; kunci liar ditolak; pesan = tek
   assert.equal(code({ ...ok, note: 'x'.repeat(501) }), 'paymentNoteTooLong')
   assert.equal(paymentTransferSchema.safeParse({ ...ok, status: 'confirmed' }).success, false, 'kunci liar (mass assignment)')
   assert.equal(paymentTransferSchema.safeParse({ ...ok, note: 'transfer dari rekening istri' }).success, true)
+})
+
+t('claimRefusal (F2): di bawah minimal / di atas sisa / lunas ditolak dengan batasnya; tepat batas diterima', () => {
+  const dp = paymentLimits({ grandTotal: 10_000_000, paid: 0 }, 30)
+  assert.deepEqual(claimRefusal(dp, 2_999_999), { code: 'paymentAmountBelowMin', min: 3_000_000 })
+  assert.equal(claimRefusal(dp, 3_000_000), null)
+  assert.equal(claimRefusal(dp, 10_000_000), null)
+  assert.deepEqual(claimRefusal(dp, 10_000_001), { code: 'paymentAmountAboveBalance', max: 10_000_000 })
+  const after = paymentLimits({ grandTotal: 10_000_000, paid: 3_000_000 }, 30)
+  assert.equal(claimRefusal(after, 1), null) // DP terpenuhi: cicilan berapa pun ≤ sisa
+  assert.deepEqual(claimRefusal(paymentLimits({ grandTotal: 1_000_000, paid: 1_000_000 }, 30), 1), { code: 'paymentNothingDue' })
+})
+t('validator F2: waktu = instan ISO (DateTimeField), rekening = urutan, daftar kolom diturunkan dari skema', () => {
+  const ok = { amount: '3000000', transferredAt: '2026-11-15T02:30:00.000Z', destination: '0', senderBank: 'BCA', senderAccountName: 'Siti Aminah' }
+  const code = (v: Record<string, unknown>) => { const x = paymentTransferSchema.safeParse(v); assert.ok(!x.success); return matchText(x.error.issues[0]!.message)?.code }
+  const r = paymentTransferSchema.safeParse(ok)
+  assert.ok(r.success && r.data.transferredAt instanceof Date && r.data.destination === 0 && r.data.amount === 3_000_000)
+  assert.equal(code({ ...ok, destination: 'bank-1' }), 'paymentDestinationRequired')
+  // Kolom wajib yang TIDAK dikirim (isian kosong dibuang pembaca multipart) tetap berpesan katalog, bukan teks Zod generik.
+  const without = (k: string) => Object.fromEntries(Object.entries(ok).filter(([x]) => x !== k))
+  assert.deepEqual(['amount', 'transferredAt', 'destination', 'senderBank', 'senderAccountName'].map(k => code(without(k))),
+    ['paymentAmountInvalid', 'paymentTimeInvalid', 'paymentDestinationRequired', 'paymentSenderBankRequired', 'paymentSenderNameRequired'])
+  assert.deepEqual([...TRANSFER_KEYS].sort(), ['amount', 'destination', 'note', 'senderAccountName', 'senderBank', 'transferredAt'])
 })
 
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')

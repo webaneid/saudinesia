@@ -904,7 +904,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
   - Fase 7a — data transfer + pembayaran bertahap manual (T1 + inti K2, §10.7; P1–P3 disetujui 2026-11-15):
     - [x] F1 skema aditif data transfer (`Payment.claimedAmountIdr/transferredAt/senderBank/senderAccountName/destinationLabel/payerNote`, CHECK nominal > 0), validator `paymentTransferSchema`, batas murni `paymentLimits` (DP/sisa/ambang konfirmasi), penghapusan akun membersihkan nama pengirim + catatan — selesai 2026-11-15 (uji murni + migrasi DB sekali pakai, `test-deletion`, build)
-    - [ ] F2 formulir pelanggan + route unggah
+    - [x] F2 formulir pelanggan + route unggah (`readFileWithFields`, nominal dinilai `claimRefusal` di dalam kunci booking; unggah sesudah terkonfirmasi dipindah ke F3) — selesai 2026-11-15 (uji murni, build, browser + 8 kasus `fetch` di server audit)
     - [ ] F3 verifikasi admin + aturan konfirmasi P1/P2 + label status
     - [ ] F4 pengingat, setelan gateway disembunyikan, verifikasi browser + dokumentasi
 - [ ] Fase 8 — QRIS dinamis (porting Facport)

@@ -47,18 +47,29 @@ export async function readUpload(req: Request): Promise<{ fields: DocumentUpload
   return { fields: parsed.data, file: Buffer.from(await file.arrayBuffer()) }
 }
 
-/** Baca unggahan yang HANYA berisi satu `file` tanpa kolom lain (bukti transfer). Batas ukuran sama dengan `readUpload`, dicek sebelum badan dibaca. */
-export async function readSingleFile(req: Request): Promise<Buffer | NextResponse> {
+/**
+ * Baca unggahan satu `file` + kolom teks dari daftar putih `keys` (bukti transfer + data transfer, Fase 7a). Kolom asing/ganda ditolak,
+ * kolom kosong dibuang (biar skema Zod yang menilai wajib/tidak). Batas ukuran sama dengan `readUpload`, dicek sebelum badan dibaca.
+ */
+export async function readFileWithFields(req: Request, keys: ReadonlySet<string>): Promise<{ raw: Record<string, string>; file: Buffer } | NextResponse> {
   const len = Number(req.headers.get('content-length') ?? NaN)
   if (!Number.isFinite(len)) return apiErrorJson('lengthRequired', 411)
-  if (len > MAX_BODY_BYTES) return apiErrorJson('fileTooLarge', 413)
+  if (len > MAX_BODY_BYTES) return apiErrorJson('fileTooLarge', 413, { field: 'file' })
   let form: FormData
   try { form = await req.formData() } catch { return apiErrorJson('formInvalid', 400) }
-  const entries = [...form.entries()]
-  const only = entries[0]
-  if (entries.length !== 1 || !only || only[0] !== 'file' || !(only[1] instanceof File)) return apiErrorJson('chooseOneFile', 400)
-  if (only[1].size > MAX_UPLOAD_BYTES) return apiErrorJson('fileTooLarge', 413)
-  return Buffer.from(await only[1].arrayBuffer())
+  const raw: Record<string, string> = {}
+  let file: File | null = null
+  for (const [k, v] of form.entries()) {
+    if (k === 'file') {
+      if (file || !(v instanceof File)) return apiErrorJson('oneFilePerUpload', 400, { field: 'file' })
+      file = v
+    } else if (!keys.has(k) || typeof v !== 'string' || Object.hasOwn(raw, k)) {
+      return apiErrorJson('unknownField', 400)
+    } else if (v.trim() !== '') raw[k] = v
+  }
+  if (!file) return apiErrorJson('chooseFile', 400, { field: 'file' })
+  if (file.size > MAX_UPLOAD_BYTES) return apiErrorJson('fileTooLarge', 413, { field: 'file' })
+  return { raw, file: Buffer.from(await file.arrayBuffer()) }
 }
 
 export const createdResponse = <T>(document: T) => NextResponse.json(ok(document), { status: 201 })

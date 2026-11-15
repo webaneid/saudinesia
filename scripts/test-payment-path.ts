@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync } from 'node:fs'
 import { NextResponse } from 'next/server'
 import { DocumentFileRejected, prepareDocumentFile } from '@/lib/documents/file'
-import { readSingleFile } from '@/lib/documents/http'
+import { readFileWithFields } from '@/lib/documents/http'
 
 const read = (p: string) => readFileSync(p, 'utf8')
 let failed = 0
@@ -47,8 +47,8 @@ await t('rincian jamaah menjumlah ke tagihan: penyesuaian total tampil terpisah'
 
 await t('route bukti tidak mempercayai MIME/nama dari klien dan tidak melewati penyimpanan di dev', () => {
   const route = read(BUKTI)
-  assert.match(route, /prepareDocumentFile\(raw\)/)
-  assert.match(route, /readSingleFile\(request\)/)
+  assert.match(route, /prepareDocumentFile\(read\.file\)/)
+  assert.match(route, /readFileWithFields\(request, TRANSFER_KEYS\)/)
   assert.ok(!/file\.type|file\.name|NODE_ENV/.test(route))
   assert.ok(!/ok\(\{ filePath/.test(route), 'kunci objek tak dikirim ke klien')
 })
@@ -66,18 +66,22 @@ const multipart = (parts: { name: string; filename?: string; value: string }[]) 
   const body = parts.map(p => `--B\r\nContent-Disposition: form-data; name="${p.name}"${p.filename ? `; filename="${p.filename}"\r\nContent-Type: text/plain` : ''}\r\n\r\n${p.value}\r\n`).join('') + '--B--\r\n'
   return new Request('http://x/u', { method: 'POST', body, headers: { 'content-type': 'multipart/form-data; boundary=B', 'content-length': String(Buffer.byteLength(body)) } })
 }
-const statusOf = (r: Buffer | NextResponse) => r instanceof NextResponse ? r.status : 'berkas'
-await t('readSingleFile: kolom tambahan dan berkas ganda ditolak, satu berkas diterima', async () => {
-  const good = await readSingleFile(multipart([{ name: 'file', filename: 'a.txt', value: 'halo' }]))
-  assert.ok(Buffer.isBuffer(good) && good.toString() === 'halo', String(statusOf(good)))
-  assert.equal(statusOf(await readSingleFile(multipart([{ name: 'file', filename: 'a', value: 'x' }, { name: 'amount', value: '1' }]))), 400)
-  assert.equal(statusOf(await readSingleFile(multipart([{ name: 'file', filename: 'a', value: 'x' }, { name: 'file', filename: 'b', value: 'y' }]))), 400)
-  assert.equal(statusOf(await readSingleFile(multipart([{ name: 'file', value: 'teks' }]))), 400)
+type Read = { raw: Record<string, string>; file: Buffer } | NextResponse
+const statusOf = (r: Read) => r instanceof NextResponse ? r.status : 'berkas'
+const KEYS = new Set(['amount', 'note'])
+await t('readFileWithFields: kolom daftar putih diterima (kosong dibuang), kolom asing/ganda dan berkas ganda ditolak', async () => {
+  const good = await readFileWithFields(multipart([{ name: 'file', filename: 'a.txt', value: 'halo' }, { name: 'amount', value: '1' }, { name: 'note', value: '  ' }]), KEYS)
+  assert.ok(!(good instanceof NextResponse) && good.file.toString() === 'halo' && good.raw.amount === '1' && !('note' in good.raw), String(statusOf(good)))
+  assert.equal(statusOf(await readFileWithFields(multipart([{ name: 'file', filename: 'a', value: 'x' }, { name: 'role', value: 'admin' }]), KEYS)), 400)
+  assert.equal(statusOf(await readFileWithFields(multipart([{ name: 'file', filename: 'a', value: 'x' }, { name: 'amount', value: '1' }, { name: 'amount', value: '2' }]), KEYS)), 400)
+  assert.equal(statusOf(await readFileWithFields(multipart([{ name: 'file', filename: 'a', value: 'x' }, { name: 'file', filename: 'b', value: 'y' }]), KEYS)), 400)
+  assert.equal(statusOf(await readFileWithFields(multipart([{ name: 'file', value: 'teks' }]), KEYS)), 400)
+  assert.equal(statusOf(await readFileWithFields(multipart([{ name: 'amount', value: '1' }]), KEYS)), 400)
 })
-await t('readSingleFile: tanpa Content-Length 411, terlalu besar 413 sebelum badan dibaca', async () => {
-  const noLen = await readSingleFile(new Request('http://x/u', { method: 'POST', body: 'x' }))
+await t('readFileWithFields: tanpa Content-Length 411, terlalu besar 413 sebelum badan dibaca', async () => {
+  const noLen = await readFileWithFields(new Request('http://x/u', { method: 'POST', body: 'x' }), KEYS)
   assert.ok(noLen instanceof NextResponse && noLen.status === 411)
-  const big = await readSingleFile(new Request('http://x/u', { method: 'POST', body: 'x', headers: { 'content-length': String(6 * 1024 * 1024) } }))
+  const big = await readFileWithFields(new Request('http://x/u', { method: 'POST', body: 'x', headers: { 'content-length': String(6 * 1024 * 1024) } }), KEYS)
   assert.ok(big instanceof NextResponse && big.status === 413)
 })
 await t('berkas palsu berlabel gambar ditolak dari isinya', async () => {

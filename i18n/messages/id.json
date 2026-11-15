@@ -1514,6 +1514,17 @@
       }
     },
     "payment": {
+      "formTitle": "Konfirmasi transfer",
+      "amount": "Nominal yang ditransfer (Rp)",
+      "amountRange": "Minimal {min}, maksimal {max} (sisa tagihan).",
+      "amountFull": "Sisa tagihan {max}.",
+      "amountPartial": "Sisa {rest} dibayar kemudian.",
+      "transferredAt": "Tanggal dan jam transfer",
+      "destination": "Rekening tujuan",
+      "destinationPlaceholder": "Pilih rekening tujuan",
+      "senderBank": "Bank pengirim",
+      "senderAccountName": "Nama pemilik rekening pengirim",
+      "note": "Catatan (opsional)",
       "label": "Bukti transfer (foto atau PDF, maksimal 5 MB)",
       "failed": "Bukti transfer gagal diunggah.",
       "network": "Tidak dapat menghubungi server.",
@@ -1722,7 +1733,6 @@
     "fileType": "Gunakan foto (JPG, PNG, WebP) atau PDF.",
     "oneFilePerUpload": "Satu berkas per unggahan",
     "chooseFile": "Pilih berkas",
-    "chooseOneFile": "Pilih satu berkas",
     "formInvalid": "Form tidak valid",
     "unknownField": "Kolom tidak dikenal",
     "lengthRequired": "Panjang permintaan wajib diketahui",
@@ -1879,6 +1889,10 @@
     "paymentDestinationRequired": "Pilih rekening tujuan",
     "paymentSenderBankRequired": "Isi nama bank pengirim",
     "paymentSenderNameRequired": "Isi nama pemilik rekening pengirim",
-    "paymentNoteTooLong": "Catatan terlalu panjang (maksimal 500 karakter)"
+    "paymentNoteTooLong": "Catatan terlalu panjang (maksimal 500 karakter)",
+    "paymentAmountBelowMin": "Nominal transfer minimal {min}",
+    "paymentAmountAboveBalance": "Nominal transfer melebihi sisa tagihan ({max})",
+    "paymentTimeFuture": "Waktu transfer tidak boleh di masa depan",
+    "paymentNothingDue": "Tagihan pesanan ini sudah lunas"
   }
 }

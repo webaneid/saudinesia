@@ -5,20 +5,23 @@ import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 // (semua teks), jadi angka diparse di sini. Pesan = teks katalog `apiErrors` (id) supaya `zodFailure` memetakannya ke kode untuk pelanggan.
 // Batas nominal yang bergantung tagihan (DP minimum, sisa) dinilai `paymentLimits` di dalam kunci booking, bukan di sini.
 
-const text = (max: number, message: string) => z.string().trim().min(2, { error: message }).max(max, { error: message })
+const text = (max: number, message: string) => z.string({ error: message }).trim().min(2, { error: message }).max(max, { error: message })
 
 export const paymentTransferSchema = z.object({
-  amount: z.string().trim()
+  amount: z.string({ error: 'Nominal transfer tidak valid' }).trim()
     .regex(/^\d{1,10}$/, { error: 'Nominal transfer tidak valid' })
     .transform(Number)
     .refine(n => n > 0 && n <= MAX_PRICE_IDR, { error: 'Nominal transfer tidak valid' }),
-  /** `YYYY-MM-DDTHH:mm` dari `DateTimeField`, ditafsirkan di zona aplikasi oleh pemanggil (`parseAppDateTime`). */
-  transferredAt: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/, { error: 'Tanggal dan jam transfer tidak valid' }),
-  /** Kunci rekening tujuan dari snapshot invoice (id rekening di setelan). */
-  destination: z.string().trim().min(1, { error: 'Pilih rekening tujuan' }).max(100, { error: 'Pilih rekening tujuan' }),
+  /** Instan UTC ISO dari `DateTimeField` (formulir menafsirkan masukan di zona aplikasi). Rentang wajar (tak di masa depan) dinilai route. */
+  transferredAt: z.iso.datetime({ error: 'Tanggal dan jam transfer tidak valid' }).transform(v => new Date(v)),
+  /** Urutan rekening tujuan dalam `bookingPayTo` (snapshot invoice tak punya id); route memetakannya ke label yang disimpan. */
+  destination: z.string({ error: 'Pilih rekening tujuan' }).trim().regex(/^\d{1,2}$/, { error: 'Pilih rekening tujuan' }).transform(Number),
   senderBank: text(100, 'Isi nama bank pengirim'),
   senderAccountName: text(100, 'Isi nama pemilik rekening pengirim'),
   note: z.string().trim().max(500, { error: 'Catatan terlalu panjang (maksimal 500 karakter)' }).optional(),
 }).strict()
 
 export type PaymentTransferInput = z.infer<typeof paymentTransferSchema>
+
+/** Kolom teks yang boleh menyertai berkas bukti (daftar putih `readFileWithFields`) — diturunkan dari skema, bukan daftar kedua. */
+export const TRANSFER_KEYS: ReadonlySet<string> = new Set(Object.keys(paymentTransferSchema.shape))
