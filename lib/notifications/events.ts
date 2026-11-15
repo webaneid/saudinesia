@@ -8,8 +8,9 @@ export type NotificationEvent =
   | { type: 'booking_submitted'; code: string; deadline: string | null }
   /** Invoice terbit (Fase 6c): tautan invoice publik (`path` relatif, mis. `/id/invoice/<token>`; null bila tautan tak dapat dibuat). Revisi TIDAK memicu ini (D13). */
   | { type: 'invoice_issued'; code: string; number: string; total: string; dueDate: string | null; path: string | null }
-  | { type: 'payment_reminder_d1'; code: string; deadline: string }
-  | { type: 'payment_reminder_d0'; code: string; deadline: string }
+  /** `balance` = sisa tagihan; `partial` = sudah ada pembayaran terverifikasi (DP/cicilan, Fase 7a F4). Opsional demi kejadian lama. */
+  | { type: 'payment_reminder_d1'; code: string; deadline: string; balance?: number; partial?: boolean }
+  | { type: 'payment_reminder_d0'; code: string; deadline: string; balance?: number; partial?: boolean }
   /** `balance` > 0 = pembayaran sebagian (DP/cicilan, Fase 7a F3): pesan menyebut sisa tagihan. */
   | { type: 'payment_confirmed'; code: string; balance?: number }
   | { type: 'payment_rejected'; code: string }
@@ -36,7 +37,7 @@ export function waMessage(e: NotificationEvent): string | null {
       return waTemplates.invoiceIssued(e.number, e.code, e.total, e.dueDate ?? '-', e.path ? `${appUrl()}${e.path}` : null)
     case 'payment_reminder_d1':
     case 'payment_reminder_d0':
-      return waTemplates.paymentReminder(e.code, e.deadline)
+      return waTemplates.paymentReminder(e.code, e.deadline, e.balance, e.partial)
     case 'payment_confirmed':
       return waTemplates.paymentConfirmed(e.code, e.balance)
     case 'payment_rejected':

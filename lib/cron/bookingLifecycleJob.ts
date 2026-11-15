@@ -23,7 +23,7 @@ export async function runReminderJob(now: Date = new Date()): Promise<void> {
   for (const r of await dueReminders(now)) {
     // Dedupe PER KANAL di dalam notify (hanya yang berstatus 'sent'): pengingat yang gagal/dilewati dicoba lagi di siklus berikutnya.
     const type = r.kind === 'd0' ? 'payment_reminder_d0' as const : 'payment_reminder_d1' as const
-    const outcomes = await notify({ userId: r.userId, bookingId: r.id, event: { type, code: r.code, deadline: formatDeadline(r.deadline) }, dedupe: true })
+    const outcomes = await notify({ userId: r.userId, bookingId: r.id, event: { type, code: r.code, deadline: formatDeadline(r.deadline), balance: r.balance, partial: r.partial }, dedupe: true })
     console.log(`[cron] ${type} ${r.code}: ${outcomes.map(o => `${o.channel}=${o.status}`).join(' ') || 'tidak ada kanal'}`)
   }
 }

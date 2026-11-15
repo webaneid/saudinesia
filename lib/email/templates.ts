@@ -71,6 +71,19 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
       }
     case 'payment_reminder_d1':
     case 'payment_reminder_d0':
+      if (e.partial && e.balance && e.balance > 0) {
+        return {
+          subject: `Pengingat pelunasan booking ${e.code}`,
+          preheader: `Sisa tagihan ${formatRupiah(e.balance)}, batas ${e.deadline}.`,
+          heading: 'Sisa pembayaran belum lunas',
+          paragraphs: [
+            `Halo ${ctx.name}, terima kasih atas pembayaran yang sudah masuk. Booking Anda masih memiliki sisa tagihan.`,
+            'Bukti pelunasan dapat dikirim dari halaman booking.',
+          ],
+          facts: [['Kode booking', e.code], ['Sisa tagihan', formatRupiah(e.balance)], ['Batas pembayaran', e.deadline]],
+          cta: bookingCta,
+        }
+      }
       return {
         subject: `Pengingat pembayaran booking ${e.code}`,
         preheader: `Batas pembayaran: ${e.deadline}.`,
@@ -79,7 +92,7 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
           `Halo ${ctx.name}, pembayaran untuk booking Anda belum kami terima.`,
           'Segera lakukan pembayaran agar tempat Anda tetap aman.',
         ],
-        facts: [['Kode booking', e.code], ['Batas pembayaran', e.deadline]],
+        facts: [['Kode booking', e.code], ...(e.balance && e.balance > 0 ? [['Tagihan', formatRupiah(e.balance)] as [string, string]] : []), ['Batas pembayaran', e.deadline]],
         cta: bookingCta,
       }
     case 'payment_confirmed':

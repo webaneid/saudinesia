@@ -232,7 +232,7 @@ await t('HANGUS melepas kuota yang ditahan: reservasi muthowif (pool, pending) k
 })
 
 // ── pengingat ────────────────────────────────────────────────────────────────────────────────────
-await t('PENGINGAT: H-0 / H-1 menurut hari kalender WIB (tepat 00.00 hari berikutnya = H-1); bukti menunggu / dikonfirmasi / batal / draf tak diingatkan', async () => {
+await t('PENGINGAT: H-0 / H-1 menurut hari kalender WIB (tepat 00.00 hari berikutnya = H-1); bukti menunggu / lunas / batal / draf tak diingatkan; kursi terkonfirmasi lewat DP yang masih bersisa DIINGATKAN dengan sisa (Fase 7a F4)', async () => {
   const now = new Date('2026-10-30T01:00:00Z') // 30 Okt 08.00 WIB
   const d0 = await mk({ deadline: new Date('2026-10-30T16:59:59.999Z') })
   const d1 = await mk({ deadline: new Date('2026-10-31T16:59:59.999Z') })
@@ -240,11 +240,17 @@ await t('PENGINGAT: H-0 / H-1 menurut hari kalender WIB (tepat 00.00 hari beriku
   await mk({ deadline: new Date('2026-11-01T16:59:59.999Z') }) // H-2: belum
   await mk({ deadline: new Date('2026-10-29T16:59:59.999Z') }) // kemarin: lewat
   await mk({ deadline: new Date('2026-10-30T16:59:59.999Z'), pays: ['pending'] })
-  await mk({ deadline: new Date('2026-10-30T16:59:59.999Z'), confirmed: true })
+  await mk({ deadline: new Date('2026-10-30T16:59:59.999Z'), confirmed: true, pays: ['confirmed'] }) // lunas
+  const dp = await mk({ deadline: new Date('2026-10-30T16:59:59.999Z'), confirmed: true })
+  await prisma.payment.create({ data: { bookingId: dp, amount: 300_000, method: 'bank_transfer', status: 'confirmed', confirmedAt: new Date() } })
   await mk({ deadline: new Date('2026-10-30T16:59:59.999Z'), status: 'cancelled' })
   await mk({ deadline: new Date('2026-10-30T16:59:59.999Z'), status: 'draft' })
-  const got = (await dueReminders(now)).filter(r => ids.includes(r.id)).map(r => [r.id, r.kind] as const).sort((a, b) => a[0].localeCompare(b[0]))
-  assert.deepEqual(got, ([[d0, 'd0'], [d1, 'd1'], [midnight, 'd1']] as const).slice().sort((a, b) => a[0].localeCompare(b[0])))
+  const all = (await dueReminders(now)).filter(r => ids.includes(r.id))
+  const got = all.map(r => [r.id, r.kind] as const).sort((a, b) => a[0].localeCompare(b[0]))
+  assert.deepEqual(got, ([[d0, 'd0'], [d1, 'd1'], [midnight, 'd1'], [dp, 'd0']] as const).slice().sort((a, b) => a[0].localeCompare(b[0])))
+  const byId = new Map(all.map(r => [r.id, r]))
+  assert.deepEqual([byId.get(dp)?.balance, byId.get(dp)?.partial], [700_000, true])
+  assert.deepEqual([byId.get(d0)?.balance, byId.get(d0)?.partial], [1_000_000, false])
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────
