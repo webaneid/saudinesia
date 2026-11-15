@@ -28,3 +28,16 @@ export function paymentLimits(bill: { grandTotal: number; paid: number }, minimu
   const minClaim = Math.min(balance, dpMet ? 100 : Math.max(100, dp - paid))
   return { balance: balance / 100, dpAmount: dp / 100, confirmThreshold: threshold / 100, dpMet, minClaim: minClaim / 100 }
 }
+
+export type ClaimRefusal =
+  | { code: 'paymentNothingDue' }
+  | { code: 'paymentAmountBelowMin'; min: number }
+  | { code: 'paymentAmountAboveBalance'; max: number }
+
+/** Nominal yang diisi pelanggan (P2): tak ada sisa → ditolak; di bawah `minClaim` atau di atas sisa → ditolak dengan batasnya. `null` = boleh. */
+export function claimRefusal(limits: PaymentLimits, amount: number): ClaimRefusal | null {
+  if (limits.balance <= 0) return { code: 'paymentNothingDue' }
+  if (cents(amount) < cents(limits.minClaim)) return { code: 'paymentAmountBelowMin', min: limits.minClaim }
+  if (cents(amount) > cents(limits.balance)) return { code: 'paymentAmountAboveBalance', max: limits.balance }
+  return null
+}

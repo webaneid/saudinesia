@@ -1514,6 +1514,17 @@
       }
     },
     "payment": {
+      "formTitle": "Transfer confirmation",
+      "amount": "Amount transferred (Rp)",
+      "amountRange": "At least {min}, at most {max} (remaining balance).",
+      "amountFull": "Remaining balance {max}.",
+      "amountPartial": "The remaining {rest} is paid later.",
+      "transferredAt": "Transfer date and time",
+      "destination": "Destination account",
+      "destinationPlaceholder": "Choose the destination account",
+      "senderBank": "Sender bank",
+      "senderAccountName": "Sender account holder name",
+      "note": "Note (optional)",
       "label": "Transfer receipt (photo or PDF, max 5 MB)",
       "failed": "The transfer receipt could not be uploaded.",
       "network": "Could not reach the server.",
@@ -1722,7 +1733,6 @@
     "fileType": "Use a photo (JPG, PNG, WebP) or a PDF.",
     "oneFilePerUpload": "One file per upload",
     "chooseFile": "Choose a file",
-    "chooseOneFile": "Choose one file",
     "formInvalid": "Invalid form",
     "unknownField": "Unknown field",
     "lengthRequired": "The request length must be known",
@@ -1879,6 +1889,10 @@
     "paymentDestinationRequired": "Choose the destination account",
     "paymentSenderBankRequired": "Enter the sender’s bank",
     "paymentSenderNameRequired": "Enter the sender account holder’s name",
-    "paymentNoteTooLong": "The note is too long (500 characters maximum)"
+    "paymentNoteTooLong": "The note is too long (500 characters maximum)",
+    "paymentAmountBelowMin": "The transfer amount must be at least {min}",
+    "paymentAmountAboveBalance": "The transfer amount exceeds the remaining balance ({max})",
+    "paymentTimeFuture": "The transfer time cannot be in the future",
+    "paymentNothingDue": "This order is already paid in full"
   }
 }

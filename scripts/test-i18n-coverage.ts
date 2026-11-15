@@ -281,7 +281,6 @@ const MIGRATED_AREAS = [
 // Berkas di folder bersama yang HANYA dipakai admin (bahasa admin = Indonesia). Pengecualian dibuktikan: uji di bawah merah bila berkas ini
 // (atau berkas yang mengimpornya) dipakai dari luar area admin. Berkas → alasan.
 const ADMIN_ONLY_SHARED: Record<string, string> = {
-  'components/shared/DateTimeField.tsx': 'formulir tanggal-jam — hanya halaman admin (setelan invoice, produk)',
   'components/shared/rich-text/RichTextEditor.tsx': 'editor teks kaya — hanya formulir produk admin',
   'components/shared/rich-text/RichTextEditorImpl.tsx': 'isi editor teks kaya (dimuat RichTextEditor)',
 }

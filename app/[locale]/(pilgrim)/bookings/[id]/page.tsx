@@ -10,6 +10,8 @@ import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
 import { billOf } from '@/lib/invoice/bill'
 import { bookingPayTo } from '@/lib/invoice/banks'
+import { getInvoiceSettings } from '@/lib/invoice/settings'
+import { paymentLimits } from '@/lib/payments/limits'
 import { itemSellTotals, visaTierRanges } from '@/lib/pricing/engine/snapshot'
 import { getTranslations } from 'next-intl/server'
 import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, Landmark, Package, Plane, Stamp, UserRound, UtensilsCrossed } from 'lucide-react'
@@ -61,7 +63,10 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   })
   if (!booking) notFound()
   // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts). Status lunas/sisa tetap mengikuti alur v1 sampai Fase 7.
-  const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice })
+  const confirmedPayments = await prisma.payment.findMany({ where: { bookingId: booking.id, status: 'confirmed' }, select: { status: true, amount: true } })
+  const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice, payments: confirmedPayments })
+  // Batas nominal bukti transfer (Fase 7a F2): bawaan sisa, minimal DP / sisa menuju DP — sama dengan yang dinilai route unggah di dalam kunci.
+  const limits = paymentLimits(bill, (await getInvoiceSettings()).minimumFirstPaymentPercent)
   // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.
   const [sells, tiers] = await Promise.all([itemSellTotals(prisma, booking.id), visaTierRanges(prisma, booking.id)])
   const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
@@ -178,7 +183,9 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
             </p>
           )}
           {/* Tanpa rekening tujuan tak ada unggah bukti — pesan "hubungi tim" di atas yang tampil (K3; route unggah juga menolak). */}
-          {st === 'awaiting_payment' && payTo.length > 0 && <PaymentProofUpload bookingId={booking.id} />}
+          {st === 'awaiting_payment' && payTo.length > 0 && limits.balance > 0 && (
+            <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} balance={limits.balance} minClaim={limits.minClaim} />
+          )}
           {st === 'payment_review' && (
             <div className="flex items-center gap-2 text-sm text-green-700">
               <CheckCircle className="h-4 w-4" /> {t('booking.proofSent')}
