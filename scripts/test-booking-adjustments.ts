@@ -11,7 +11,7 @@ import { prisma } from '@/lib/db'
 import { AdjustmentError, adjustBookingTotal, listAdjustments, reverseAdjustment, setBookingTotal, updateAdjustmentReason } from '@/lib/booking/adjustments'
 import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
 import { getProfitReport } from '@/lib/reports/profit'
-import { PaymentAmountError, resolveConfirmedAmount } from '@/lib/payments/confirmAmount'
+import { PaymentAmountError, resolveVerifiedAmount } from '@/lib/payments/confirmAmount'
 import { processPayment } from '@/lib/payments/process'
 import { assertThrowawayDb } from './lib/testDb'
 import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
@@ -186,13 +186,15 @@ await t('LAPORAN UNTUNG: penyesuaian bermodal 0 → untung ikut turun (jual 1.40
 })
 
 // ── jumlah pembayaran terkonfirmasi (7A) ─────────────────────────────────────────────────────────────────────────────
-await t('aturan jumlah (murni): bawaan = total; sama dengan total tanpa catatan; LEBIH dari total wajib catatan ≥ 3; KURANG dari total ditolak (bahkan bercatatan); 0/negatif/NaN/melebihi batas ditolak', () => {
-  assert.equal(resolveConfirmedAmount(1_500_000, {}), 1_500_000)
-  assert.equal(resolveConfirmedAmount(1_500_000, { amount: 1_500_000 }), 1_500_000)
-  assert.equal(resolveConfirmedAmount(1_500_000, { amount: 1_600_000, notes: 'lebih bayar, rencana pengembalian' }), 1_600_000)
-  for (const input of [{ amount: 1_600_000 }, { amount: 1_600_000, notes: 'ab' }, { amount: 1_600_000, notes: '  ' }]) assert.throws(() => resolveConfirmedAmount(1_500_000, input), (e: unknown) => e instanceof PaymentAmountError && /lebih dari total/.test((e as Error).message))
-  for (const input of [{ amount: 1_000_000 }, { amount: 1_499_999.99, notes: 'kurang bayar, sisa menyusul' }]) assert.throws(() => resolveConfirmedAmount(1_500_000, input), (e: unknown) => e instanceof PaymentAmountError && /kurang dari total/.test((e as Error).message))
-  for (const amount of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 6_000_000_000]) assert.throws(() => resolveConfirmedAmount(1_500_000, { amount, notes: 'catatan ok' }), PaymentAmountError)
+await t('aturan jumlah (murni, Fase 7a F3): bawaan = nominal pelanggan, lalu sisa; KURANG dari sisa = cicilan (sah); LEBIH dari sisa wajib catatan ≥ 3; 0/negatif/NaN/melebihi batas ditolak', () => {
+  assert.equal(resolveVerifiedAmount(1_500_000, null, {}), 1_500_000)
+  assert.equal(resolveVerifiedAmount(1_500_000, 450_000, {}), 450_000)
+  assert.equal(resolveVerifiedAmount(1_500_000, 450_000, { amount: 500_000 }), 500_000)
+  assert.equal(resolveVerifiedAmount(1_500_000, null, { amount: 1_000_000 }), 1_000_000)
+  assert.equal(resolveVerifiedAmount(1_500_000, null, { amount: 1_600_000, notes: 'lebih bayar, rencana pengembalian' }), 1_600_000)
+  for (const input of [{ amount: 1_600_000 }, { amount: 1_600_000, notes: 'ab' }, { amount: 1_600_000, notes: '  ' }]) assert.throws(() => resolveVerifiedAmount(1_500_000, null, input), (e: unknown) => e instanceof PaymentAmountError && /lebih dari sisa/.test((e as Error).message))
+  assert.throws(() => resolveVerifiedAmount(0, 100_000, {}), (e: unknown) => e instanceof PaymentAmountError && /lebih dari sisa/.test((e as Error).message), 'sudah lunas: pembayaran berapa pun = kelebihan')
+  for (const amount of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, 6_000_000_000]) assert.throws(() => resolveVerifiedAmount(1_500_000, null, { amount, notes: 'catatan ok' }), PaymentAmountError)
 })
 
 // ── pemrosesan pembayaran (7A + audit M1/M2): status dibaca ulang di dalam kunci ─────────────────────────────────────────
@@ -224,15 +226,41 @@ await t('invoice: pembayaran PENDING → sisa tagihan = total penuh; jumlah terk
   const inv2 = await buildInvoiceData(await prisma.booking.findUniqueOrThrow({ where: { id: p.id }, include: invoiceBookingInclude }))
   assert.equal(inv2.balanceDue, 500_000)
 })
-await t('KURANG dari total ditolak (tak ada yang berubah); LEBIH tanpa catatan ditolak, dengan catatan sah dan tersimpan', async () => {
+await t('CICILAN (Fase 7a F3, DP 0%): kurang dari sisa SAH — pembayaran pertama mengonfirmasi kursi, sisa dibayar bukti kedua; LEBIH dari sisa tanpa catatan ditolak, dengan catatan sah', async () => {
   const a = await mkPaid()
-  await assert.rejects(() => processPayment(a.pay, { action: 'confirm', amount: 1_000_000, notes: 'kurang bayar', byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
-  assert.deepEqual(await snap(a.id, a.pay), { booking: 'payment_review', pay: 'pending', amount: 0, notes: null, confirmedAt: null })
-  await assert.rejects(() => processPayment(a.pay, { action: 'confirm', amount: 1_700_000, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
-  assert.equal((await processPayment(a.pay, { action: 'confirm', amount: 1_700_000, notes: 'lebih bayar 200 rb', byUserId: staff.id })).kind, 'done')
-  assert.deepEqual([(await snap(a.id, a.pay)).amount, (await snap(a.id, a.pay)).notes], [1_700_000, 'lebih bayar 200 rb'])
+  const r1 = await processPayment(a.pay, { action: 'confirm', amount: 1_000_000, byUserId: staff.id })
+  assert.ok(r1.kind === 'done' && r1.seatConfirmed && r1.balance === 500_000, JSON.stringify(r1))
+  assert.deepEqual([(await snap(a.id, a.pay)).booking, (await snap(a.id, a.pay)).amount], ['confirmed', 1_000_000])
+  const second = await prisma.payment.create({ data: { bookingId: a.id, amount: 0, method: 'bank_transfer', status: 'pending', claimedAmountIdr: 500_000 } })
+  await assert.rejects(() => processPayment(second.id, { action: 'confirm', amount: 700_000, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
+  const r2 = await processPayment(second.id, { action: 'confirm', byUserId: staff.id }) // bawaan = nominal pelanggan
+  assert.ok(r2.kind === 'done' && !r2.seatConfirmed && r2.balance === 0, JSON.stringify(r2))
+  assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { id: second.id } })).amount), 500_000)
+  const b = await mkPaid()
+  await assert.rejects(() => processPayment(b.pay, { action: 'confirm', amount: 1_700_000, byUserId: staff.id }), (e: unknown) => e instanceof PaymentAmountError)
+  assert.deepEqual(await snap(b.id, b.pay), { booking: 'payment_review', pay: 'pending', amount: 0, notes: null, confirmedAt: null })
+  assert.equal((await processPayment(b.pay, { action: 'confirm', amount: 1_700_000, notes: 'lebih bayar 200 rb', byUserId: staff.id })).kind, 'done')
+  assert.deepEqual([(await snap(b.id, b.pay)).amount, (await snap(b.id, b.pay)).notes], [1_700_000, 'lebih bayar 200 rb'])
 })
-await t('GANDA/BASI ditolak (conflict, tak ada yang berubah): konfirmasi dua kali, tolak setelah konfirmasi, konfirmasi payment yang sudah ditolak, pesanan batal / belum waktunya, id tak ada', async () => {
+await t('DP 30% (P1/P2, Fase 7a F3): pembayaran di bawah DP DICATAT tapi kursi belum dikonfirmasi; begitu terbayar ≥ DP kursi dikonfirmasi tepat sekali', async () => {
+  await prisma.invoiceSettings.update({ where: { id: 'global' }, data: { minimumFirstPaymentPercent: 30 } })
+  try {
+    const a = await mkPaid() // tagihan 1.500.000 → DP 450.000
+    const r1 = await processPayment(a.pay, { action: 'confirm', amount: 200_000, byUserId: staff.id })
+    assert.ok(r1.kind === 'done' && !r1.seatConfirmed && r1.balance === 1_300_000, JSON.stringify(r1))
+    assert.equal((await snap(a.id, a.pay)).booking, 'awaiting_payment', 'kursi belum dikonfirmasi, tak ada bukti menunggu')
+    const p2 = await prisma.payment.create({ data: { bookingId: a.id, amount: 0, method: 'bank_transfer', status: 'pending' } })
+    const r2 = await processPayment(p2.id, { action: 'confirm', amount: 250_000, byUserId: staff.id }) // 450.000 = DP tepat
+    assert.ok(r2.kind === 'done' && r2.seatConfirmed && r2.balance === 1_050_000, JSON.stringify(r2))
+    const p3 = await prisma.payment.create({ data: { bookingId: a.id, amount: 0, method: 'bank_transfer', status: 'pending' } })
+    const r3 = await processPayment(p3.id, { action: 'confirm', byUserId: staff.id })
+    assert.ok(r3.kind === 'done' && !r3.seatConfirmed && r3.balance === 0, JSON.stringify(r3))
+    assert.equal((await snap(a.id, p3.id)).booking, 'confirmed')
+  } finally {
+    await prisma.invoiceSettings.update({ where: { id: 'global' }, data: { minimumFirstPaymentPercent: 0 } })
+  }
+})
+await t('GANDA/BASI ditolak (conflict, tak ada yang berubah): konfirmasi dua kali, tolak setelah konfirmasi, konfirmasi payment yang sudah ditolak, pesanan batal, id tak ada; bukti pelunasan booking terkonfirmasi tetap diproses', async () => {
   const a = await mkPaid()
   assert.equal((await processPayment(a.pay, { action: 'confirm', byUserId: staff.id })).kind, 'done')
   const before = await snap(a.id, a.pay)
@@ -246,8 +274,9 @@ await t('GANDA/BASI ditolak (conflict, tak ada yang berubah): konfirmasi dua kal
   const c = await mkPaid('cancelled')
   assert.equal((await processPayment(c.pay, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
   assert.equal((await snap(c.id, c.pay)).booking, 'cancelled', 'booking batal tak dihidupkan kembali')
-  const w = await mkPaid('confirmed') // sudah dikonfirmasi sebelumnya (confirmedAt terisi) lalu ada bukti kedua → tak diproses lagi
-  assert.equal((await processPayment(w.pay, { action: 'confirm', byUserId: staff.id })).kind, 'conflict')
+  const w = await mkPaid('confirmed') // kursi sudah dikonfirmasi lalu ada bukti pelunasan → DIPROSES (Fase 7a F3), kursi tak dikonfirmasi dua kali
+  const rw = await processPayment(w.pay, { action: 'confirm', byUserId: staff.id })
+  assert.ok(rw.kind === 'done' && !rw.seatConfirmed, JSON.stringify(rw))
   assert.equal((await processPayment('00000000-0000-4000-8000-000000000000', { action: 'confirm', byUserId: staff.id })).kind, 'not_found')
 })
 await t('PARALEL: 6 konfirmasi serentak pada payment yang sama → TEPAT satu berhasil (sisanya conflict), jumlah/status tunggal', async () => {
@@ -386,7 +415,7 @@ await t('I5 (Fase 8): angka internal (HPP/rekomendasi/peringatan) hanya di jalur
   ]
   assert.deepEqual(publicFiles.filter(f => internal.test(readFileSync(f, 'utf8'))).map(f => f.slice(root.length)), [])
 })
-await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar memakai resolveConfirmedAmount + skema .strict(); hanya lib/booking/adjustments.ts (+ pembersihan UU PDP) menulis booking_adjustments; catatan internal tak ada di invoice', () => {
+await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar memakai resolveVerifiedAmount + skema .strict(); hanya lib/booking/adjustments.ts (+ pembersihan UU PDP) menulis booking_adjustments; catatan internal tak ada di invoice', () => {
   for (const f of ['app/api/v1/admin/bookings/[id]/adjustments/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/reverse/route.ts', 'app/api/v1/admin/bookings/[id]/adjustments/[adjId]/route.ts', 'app/api/v1/admin/bookings/[id]/total/route.ts', 'app/api/v1/admin/bookings/[id]/pricing/route.ts']) {
     const src = read(f)
     assert.match(src, /requireBookingAdjust\(\)|requirePricingView\(\)/, f); assert.doesNotMatch(src, /requireManager|requireSuperAdmin|requireAdmin\(/, f)
@@ -395,7 +424,7 @@ await t('PENJAGA: route penyesuaian dijaga policy di awal; konfirmasi bayar mema
   const confirm = read('app/api/v1/admin/payments/[id]/confirm/route.ts')
   assert.match(confirm, /processPayment\(/); assert.match(confirm, /\.strict\(\)/)
   const proc = read('lib/payments/process.ts')
-  assert.match(proc, /FOR UPDATE/); assert.match(proc, /resolveConfirmedAmount\(/); assert.match(proc, /payment\.status !== 'pending' \|\| booking\.status !== 'active' \|\| booking\.confirmedAt !== null/)
+  assert.match(proc, /FOR UPDATE/); assert.match(proc, /resolveVerifiedAmount\(/); assert.match(proc, /payment\.status !== 'pending' \|\| booking\.status !== 'active'\) return \{ kind: 'conflict' \}/); assert.match(proc, /booking\.confirmedAt === null && after\.dpMet/)
   assert.doesNotMatch(read('app/api/v1/bookings/[id]/route.ts'), /payments:\s*\{ orderBy: \{ createdAt: 'desc' \}, take: 1 \}/, 'catatan staf pembayaran tak boleh ikut ke jamaah')
   const walk = (dir: string, out: string[] = []): string[] => { for (const f of readdirSync(dir)) { if (f === 'node_modules' || f === '.next' || f.startsWith('.')) continue; const p = join(dir, f); if (statSync(p).isDirectory()) walk(p, out); else if (/\.(ts|tsx)$/.test(f)) out.push(p) } return out }
   const writers = [...walk(join(root, 'app')), ...walk(join(root, 'lib')), ...walk(join(root, 'components'))].filter(f => /bookingAdjustment\.(create|createMany|update|updateMany|delete|deleteMany|upsert)\b/.test(readFileSync(f, 'utf8')))

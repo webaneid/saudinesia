@@ -7,7 +7,7 @@ import { z } from 'zod'
 import { PaymentAmountError } from '@/lib/payments/confirmAmount'
 import { processPayment } from '@/lib/payments/process'
 
-// `amount` = jumlah yang benar-benar diterima (bawaan: total pesanan); kurang dari total ditolak, lebih dari total wajib bercatatan (lib/payments/confirmAmount.ts).
+// `amount` = jumlah yang benar-benar diterima (bawaan: nominal pelanggan, lalu sisa tagihan); kurang dari sisa = cicilan/DP, lebih dari sisa wajib bercatatan (lib/payments/confirmAmount.ts).
 // Pemrosesan (kunci booking, status dibaca ulang, kuota) ada di lib/payments/process.ts.
 const schema = z.object({ action: z.enum(['confirm', 'reject']), notes: z.string().max(500).optional(), amount: z.number().positive().optional() }).strict()
 
@@ -21,11 +21,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     const result = await processPayment(id, { action, amount: parsed.data.amount, notes: parsed.data.notes, byUserId: session.userId })
     if (result.kind === 'not_found') return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
-    if (result.kind === 'conflict') return NextResponse.json(err('Pembayaran ini sudah diproses atau pesanan tidak sedang menunggu verifikasi pembayaran'), { status: 409 })
+    if (result.kind === 'conflict') return NextResponse.json(err('Pembayaran ini sudah diproses atau pesanan tidak aktif'), { status: 409 })
     // Best-effort setelah transaksi commit, tidak memblokir respons; notify() tidak pernah melempar dan mencatat status jujur per kanal.
-    void notify({ userId: result.userId, bookingId: result.bookingId, event: { type: action === 'confirm' ? 'payment_confirmed' : 'payment_rejected', code: result.code } })
+    void notify({ userId: result.userId, bookingId: result.bookingId, event: action === 'confirm' ? { type: 'payment_confirmed', code: result.code, balance: result.balance } : { type: 'payment_rejected', code: result.code } })
 
-    return NextResponse.json(ok({ action }))
+    return NextResponse.json(ok({ action, seatConfirmed: result.seatConfirmed, balance: result.balance }))
   } catch (e) {
     if (e instanceof PaymentAmountError) return NextResponse.json(err(e.message), { status: 400 })
     return authFailureResponse(e, 'admin/payments/confirm')

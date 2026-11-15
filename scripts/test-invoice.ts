@@ -16,7 +16,6 @@ import { InvoiceError, issueInvoice } from '@/lib/invoice/issue'
 import { processPayment } from '@/lib/payments/process'
 import { setBookingTotal } from '@/lib/booking/adjustments'
 import { buildInvoiceData, invoiceBookingInclude } from '@/lib/pdf/invoiceData'
-import { PaymentAmountError } from '@/lib/payments/confirmAmount'
 import { addDays, calendarDateOf, dateInApp, todayInApp, endOfDayExclusiveInApp } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -152,14 +151,17 @@ await t('SATU INVOICE PER BOOKING: menerbitkan lagi untuk booking yang sudah pun
   await assert.rejects(() => prisma.$transaction(tx => issueInvoice(tx, did, { dueDays: 400, byUserId: null })), InvoiceError)
   assert.equal(await seqNow(), s0)
 })
-await t('KONFIRMASI PEMBAYARAN memakai TAGIHAN (termasuk pajak): bawaan = total tagihan; jumlah = subtotal tanpa pajak (kurang) DITOLAK', async () => {
+await t('KONFIRMASI PEMBAYARAN memakai TAGIHAN (termasuk pajak): jumlah = subtotal tanpa pajak = cicilan, sisa = pajak; bawaan pembayaran berikutnya = sisa tagihan', async () => {
   const did = await newDraft(DRAFT(1)) // 6.000.000 + PPN 11% = 6.660.000
   assert.ok((await publishDraft(did, { byUserId: staff.id })).ok)
   const p1 = await prisma.payment.create({ data: { bookingId: did, amount: 0, method: 'transfer', status: 'pending' } })
-  await assert.rejects(() => processPayment(p1.id, { action: 'confirm', amount: 6_000_000, byUserId: staff.id }), PaymentAmountError)
-  const done = await processPayment(p1.id, { action: 'confirm', byUserId: staff.id })
-  assert.equal(done.kind, 'done')
-  assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { id: p1.id } })).amount), 6_660_000)
+  const r1 = await processPayment(p1.id, { action: 'confirm', amount: 6_000_000, byUserId: staff.id })
+  assert.ok(r1.kind === 'done' && r1.balance === 660_000, JSON.stringify(r1))
+  assert.equal((await processPayment(p1.id, { action: 'confirm', byUserId: staff.id })).kind, 'conflict', 'pembayaran yang sama tak diproses dua kali')
+  const p2 = await prisma.payment.create({ data: { bookingId: did, amount: 0, method: 'transfer', status: 'pending' } })
+  const done = await processPayment(p2.id, { action: 'confirm', byUserId: staff.id })
+  assert.ok(done.kind === 'done' && done.balance === 0)
+  assert.equal(Number((await prisma.payment.findUniqueOrThrow({ where: { id: p2.id } })).amount), 660_000)
 })
 
 await t('PENYESUAIAN TOTAL sesudah terbit → pajak DIHITUNG ULANG dengan tarif BEKU (bukan tarif terkini): diskon menurunkan pajak, tagihan & PDF konsisten; pajak tersimpan yang tak cocok → PDF menolak terbit', async () => {
@@ -210,7 +212,7 @@ await t('PENJAGA: hanya lib/invoice/issue.ts yang menulis invoice; hanya lib/inv
 await t('PENJAGA: app/ dan components/ tak menampilkan `totalAmount` mentah sebagai tagihan (Number(x.totalAmount)) — tagihan lewat billOf', () => {
   const bad = [...files('app'), ...files('components')].filter(f => /Number\(\s*[\w.?]*totalAmount\s*\)/.test(read(f)))
   assert.deepEqual(bad, [])
-  assert.match(read('lib/payments/process.ts'), /resolveConfirmedAmount\(billOf\(booking\)\.grandTotal/)
+  assert.match(read('lib/payments/process.ts'), /const before = billOf\(booking\)[\s\S]*resolveVerifiedAmount\(before\.balance/)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────

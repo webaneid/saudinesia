@@ -73,6 +73,9 @@ export const bookingWhere = {
   expired: { status: 'expired' },
 } as const satisfies Record<string, Prisma.BookingWhereInput>
 
+/** Booking hidup yang punya bukti transfer menunggu verifikasi — termasuk booking yang SUDAH terkonfirmasi tapi mengirim cicilan/pelunasan (Fase 7a F3). Antrean halaman Pembayaran admin. */
+export const pendingPaymentWhere = { status: 'active', payments: { some: { status: 'pending' } } } as const satisfies Prisma.BookingWhereInput
+
 export type StatusFilter = keyof typeof bookingWhere | 'in_progress'
 export const STATUS_FILTERS: readonly StatusFilter[] = ['draft', 'awaiting_payment', 'payment_review', 'confirmed', 'in_progress', 'completed', 'cancelled', 'expired']
 export const isStatusFilter = (v: unknown): v is StatusFilter => typeof v === 'string' && (STATUS_FILTERS as readonly string[]).includes(v)

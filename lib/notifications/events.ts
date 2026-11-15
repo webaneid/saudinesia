@@ -10,7 +10,8 @@ export type NotificationEvent =
   | { type: 'invoice_issued'; code: string; number: string; total: string; dueDate: string | null; path: string | null }
   | { type: 'payment_reminder_d1'; code: string; deadline: string }
   | { type: 'payment_reminder_d0'; code: string; deadline: string }
-  | { type: 'payment_confirmed'; code: string }
+  /** `balance` > 0 = pembayaran sebagian (DP/cicilan, Fase 7a F3): pesan menyebut sisa tagihan. */
+  | { type: 'payment_confirmed'; code: string; balance?: number }
   | { type: 'payment_rejected'; code: string }
   | { type: 'booking_expired'; code: string }
   | { type: 'visa_status_change'; code: string; status: string }
@@ -37,7 +38,7 @@ export function waMessage(e: NotificationEvent): string | null {
     case 'payment_reminder_d0':
       return waTemplates.paymentReminder(e.code, e.deadline)
     case 'payment_confirmed':
-      return waTemplates.paymentConfirmed(e.code)
+      return waTemplates.paymentConfirmed(e.code, e.balance)
     case 'payment_rejected':
       return waTemplates.paymentRejected(e.code)
     case 'booking_expired':

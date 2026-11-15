@@ -1,4 +1,5 @@
 import type { NotificationEvent } from '@/lib/notifications/events'
+import { formatRupiah } from '@/lib/utils'
 
 // Template email: satu layout (tabel + CSS inline — kompatibel klien email) dan konten per kejadian.
 // SEMUA nilai dinamis (nama jamaah, kode booking, status) HARUS lewat `esc()`: nama yang diketik pengguna bisa berisi HTML.
@@ -82,6 +83,19 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         cta: bookingCta,
       }
     case 'payment_confirmed':
+      if (e.balance && e.balance > 0) {
+        return {
+          subject: `Pembayaran booking ${e.code} diterima`,
+          preheader: 'Terima kasih, pembayaran Anda sudah kami verifikasi.',
+          heading: 'Pembayaran diterima',
+          paragraphs: [
+            `Halo ${ctx.name}, pembayaran booking Anda sudah kami verifikasi. Terima kasih!`,
+            'Masih ada sisa tagihan. Bukti pelunasan dapat dikirim dari halaman booking.',
+          ],
+          facts: [['Kode booking', e.code], ['Sisa tagihan', formatRupiah(e.balance)]],
+          cta: bookingCta,
+        }
+      }
       return {
         subject: `Pembayaran booking ${e.code} dikonfirmasi`,
         preheader: 'Terima kasih, pembayaran Anda sudah kami verifikasi.',

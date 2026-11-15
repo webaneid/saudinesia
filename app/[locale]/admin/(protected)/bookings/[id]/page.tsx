@@ -1,7 +1,9 @@
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '@/lib/db'
-import { displayStatus } from '@/lib/booking/lifecycle'
+import { displayStatus, paymentState } from '@/lib/booking/lifecycle'
+import { getInvoiceSettings } from '@/lib/invoice/settings'
+import { paymentLimits } from '@/lib/payments/limits'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
 import { ArrowLeft, FileDown, Pencil, UserCog } from 'lucide-react'
 import { PaymentActions } from './PaymentActions'
@@ -22,7 +24,7 @@ import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canRecordCost } from '@/lib/pricing/policy'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
-import { DATE_LONG, DATE_NUMERIC, formatCalendarDate, formatInstant } from '@/lib/time'
+import { DATE_LONG, DATE_NUMERIC, DATETIME_FULL, formatCalendarDate, formatInstant } from '@/lib/time'
 import { itemSellTotals, visaTierTexts } from '@/lib/pricing/engine/snapshot'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
 import { formatRupiah } from '@/lib/utils'
@@ -77,9 +79,12 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
 
   const st      = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: booking.payments.some(p => p.status === 'pending'), departureDate: booking.departureDate, returnDate: booking.returnDate })
   const cfg     = BOOKING_STATUS[st]
-  const pendingPayment = st === 'payment_review' ? booking.payments.find(p => p.status === 'pending') : undefined
+  // Bukti menunggu verifikasi pada booking hidup — juga cicilan/pelunasan sesudah kursi terkonfirmasi (Fase 7a F3).
+  const pendingPayment = booking.status === 'active' ? booking.payments.find(p => p.status === 'pending') : undefined
   const bill    = billOf(booking)
-  const noBank  = booking.status === 'active' && !booking.confirmedAt && !!booking.invoice && (await payableBanks(booking.invoice.bankSnapshot as BankSnapshot[])).length === 0
+  const limits  = paymentLimits(bill, (await getInvoiceSettings()).minimumFirstPaymentPercent)
+  const payState = booking.status === 'active' || booking.status === 'completed' ? paymentState(bill.grandTotal, bill.paid) : null
+  const noBank  = booking.status === 'active' && bill.balance > 0 && !!booking.invoice && (await payableBanks(booking.invoice.bankSnapshot as BankSnapshot[])).length === 0
   const revRows = await prisma.bookingRevision.findMany({ where: { bookingId: id }, orderBy: [{ revision: 'desc' }, { id: 'desc' }], take: 100 }) // riwayat satu booking: 100 terbaru
   const revStaff = new Map((await prisma.user.findMany({ where: { id: { in: [...new Set(revRows.map(r => r.byUserId))] } }, select: { id: true, fullName: true }, take: 100 })).map(u => [u.id, u.fullName]))
   const revisions = revRows.map(r => ({ ...r, totalBefore: Number(r.totalBefore), totalAfter: Number(r.totalAfter), taxBefore: Number(r.taxBefore), taxAfter: Number(r.taxAfter), byName: revStaff.get(r.byUserId) ?? null }))
@@ -127,10 +132,23 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
         <span className={STATUS_BADGE[st] ?? 'admin-badge-gray'}>
           {cfg.label}
         </span>
+        {payState === 'partial' && <span className="admin-badge-amber">DP diterima · sisa {formatRupiah(bill.balance)}</span>}
+        {(payState === 'paid' || payState === 'overpaid') && <span className="admin-badge-green">Lunas</span>}
       </div>
 
       {/* Payment confirmation */}
-      <PaymentActions payment={pendingPayment ? { id: pendingPayment.id, hasProof: !!pendingPayment.buktiTransferPath } : null} billTotal={bill.grandTotal} />
+      <PaymentActions
+        payment={pendingPayment ? {
+          id: pendingPayment.id, hasProof: !!pendingPayment.buktiTransferPath,
+          claimed: pendingPayment.claimedAmountIdr === null ? null : Number(pendingPayment.claimedAmountIdr),
+          transferredAt: pendingPayment.transferredAt ? formatInstant(pendingPayment.transferredAt, DATETIME_FULL) : null,
+          senderBank: pendingPayment.senderBank, senderAccountName: pendingPayment.senderAccountName,
+          destination: pendingPayment.destinationLabel, payerNote: pendingPayment.payerNote,
+        } : null}
+        bill={{ grandTotal: bill.grandTotal, paid: bill.paid, balance: limits.balance }}
+        seatConfirmed={booking.confirmedAt !== null}
+        dpThreshold={limits.confirmThreshold}
+      />
 
       {/* Services summary */}
       <div className="grid md:grid-cols-2 gap-4">

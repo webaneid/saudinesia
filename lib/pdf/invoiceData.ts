@@ -179,8 +179,8 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
     dueDate:       inv ? formatCalendarDate(inv.dueDate, DATE_SHORT_MONTH_2D) : null,
     revision:      inv?.revision ?? 1,
     company:       inv ? (inv.companySnapshot as CompanySnapshot) : { name: fallback.businessName, taxId: null, address: fallback.businessAddress || null, phone: fallback.businessWa || null, email: null, website: null },
-    // Cadangan rekening aktif hanya selama tagihan masih bisa dibayar; dokumen booking lunas/batal/hangus tetap apa adanya.
-    banks:         inv ? (booking.status === 'active' && !booking.confirmedAt ? await payableBanks(inv.bankSnapshot as BankSnapshot[], db) : inv.bankSnapshot as BankSnapshot[]) : fallback.banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null })),
+    // Cadangan rekening aktif hanya selama tagihan masih bisa dibayar (termasuk sisa cicilan, Fase 7a F3); dokumen booking lunas/batal/hangus tetap apa adanya.
+    banks:         inv ? (booking.status === 'active' && bill.balance > 0 ? await payableBanks(inv.bankSnapshot as BankSnapshot[], db) : inv.bankSnapshot as BankSnapshot[]) : fallback.banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountName, branch: null })),
     taxLines:      inv ? (inv.taxLines as TaxLine[]) : [],
     taxAdded:      bill.taxAdded,
     paid:          bill.paid,
