@@ -254,7 +254,7 @@ await t('TERBIT ditolak untuk akun NONAKTIF atau TERHAPUS (UU PDP) sesudah draf 
 await t('pengeluaran vendor TIDAK bisa dicatat pada draf (draf dapat dihapus sungguhan → jejak uang keluar akan hilang) → 409', async () => {
   const did = await newDraft()
   await assert.rejects(
-    () => createCostActual({ bookingId: did, vendorId: vendor.id, component: 'tiket', currency: 'IDR', amount: 1000, paidAt: todayInApp(), byUserId: staff.id }),
+    () => createCostActual({ bookingId: did, vendorId: vendor.id, component: 'tiket', currency: 'IDR', amount: 1000, paidAt: todayInApp(), cashAccount: { kind: 'cash' }, byUserId: staff.id }),
     (e: unknown) => e instanceof CostActualError && e.status === 409,
   )
   assert.equal(await prisma.costActual.count({ where: { bookingId: did } }), 0)

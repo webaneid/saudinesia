@@ -4,6 +4,7 @@ import { costActualUpdateSchema, costActualVoidSchema } from '@/lib/validators/c
 import { requireCostRecord } from '@/lib/pricing/policy'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { CostActualError, updateCostActual, voidCostActual } from '@/lib/costs/actuals'
+import { parseCashTarget } from '@/lib/cash/accounts'
 
 type Ctx = { params: Promise<{ id: string; actualId: string }> }
 
@@ -14,7 +15,9 @@ export async function PUT(req: Request, { params }: Ctx) {
     const { id, actualId } = await params
     const parsed = costActualUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
-    await updateCostActual(id, actualId, { ...parsed.data, byUserId: session.userId })
+    const cashAccount = parsed.data.cashAccount === undefined ? undefined : parseCashTarget(parsed.data.cashAccount)
+    if (cashAccount === null) return NextResponse.json(err('Pilih akun kas pembayar'), { status: 400 })
+    await updateCostActual(id, actualId, { ...parsed.data, cashAccount, byUserId: session.userId })
     return NextResponse.json(ok({ id: actualId }))
   } catch (e) {
     if (e instanceof CostActualError) return NextResponse.json(err(e.message), { status: e.status })
