@@ -1504,18 +1504,18 @@ model Payment {
 
   // Data transfer dari pelanggan (Fase 7a, docs/arsitektur-booking-engine-v2.md §10.7 / D10). `amount` tetap = jumlah TERVERIFIKASI (0 selama menunggu);
   // `claimedAmountIdr` = nominal yang diisi pelanggan. Nama pemilik rekening + catatan = data pribadi → dibersihkan lib/account/deletion.ts.
-  claimedAmountIdr  Decimal?  @db.Decimal(14, 2)
-  transferredAt     DateTime? @db.Timestamptz(3)
-  senderBank        String?   @db.VarChar(100)
-  senderAccountName String?   @db.VarChar(100)
-  destinationLabel  String?   @db.VarChar(200)
-  payerNote         String?   @db.VarChar(500)
+  claimedAmountIdr         Decimal?  @db.Decimal(14, 2)
+  transferredAt            DateTime? @db.Timestamptz(3)
+  senderBank               String?   @db.VarChar(100)
+  senderAccountName        String?   @db.VarChar(100)
+  destinationLabel         String?   @db.VarChar(200)
+  payerNote                String?   @db.VarChar(500)
   /// Akun kas tujuan (Fase 7b-1): diisi route unggah dari rekening yang dipilih pelanggan (dicocokkan ke BankAccount), dapat diganti admin saat verifikasi. Ditulis HANYA lib/cash + process.ts.
   destinationCashAccountId String?
 
-  booking     Booking @relation(fields: [bookingId], references: [id])
+  booking                Booking      @relation(fields: [bookingId], references: [id])
   destinationCashAccount CashAccount? @relation(fields: [destinationCashAccountId], references: [id], onDelete: Restrict)
-  confirmedBy User?   @relation("ConfirmedBy", fields: [confirmedById], references: [id])
+  confirmedBy            User?        @relation("ConfirmedBy", fields: [confirmedById], references: [id])
 
   @@index([bookingId])
   @@index([destinationCashAccountId])
@@ -1544,12 +1544,12 @@ model Refund {
   createdAt      DateTime     @default(now())
   // Fase 7b-2a (docs/arsitektur-booking-engine-v2.md §10.10): siklus pending → approved → paid | rejected, ditulis HANYA lib/refunds/service.ts.
   // `reason`/`notes` = teks staf (bisa memuat nama) → dikosongkan lib/account/deletion.ts. Uang keluar = entri buku kas `refund` (refType 'refund').
-  source        RefundSource @default(cancellation)
-  createdById   String? // staf yang mengusulkan (null = baris lama)
-  rejectedAt    DateTime?    @db.Timestamptz(3)
-  rejectedById  String?
-  paidById      String?
-  cashAccountId String?
+  source         RefundSource @default(cancellation)
+  createdById    String? // staf yang mengusulkan (null = baris lama)
+  rejectedAt     DateTime?    @db.Timestamptz(3)
+  rejectedById   String?
+  paidById       String?
+  cashAccountId  String?
 
   booking     Booking      @relation(fields: [bookingId], references: [id])
   approvedBy  User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
@@ -1972,27 +1972,32 @@ model BookingAdjustment {
 /// Uang yang BENAR-BENAR keluar ke vendor (docs/arsitektur-harga-terpadu.md §20). Dibandingkan dengan modal rencana (price_snapshots.totalCostIdr) untuk melihat di mana HPP meleset.
 /// Ditulis HANYA oleh lib/costs/actuals.ts. Batal = voidedAt (bukan hapus keras).
 model CostActual {
-  id           String    @id @default(uuid())
-  bookingId    String
-  snapshotId   String? // baris rencana yang dibayar (null = tanpa rujukan baris → selisih tak dihitung)
-  vendorId     String
-  component    String
-  currency     String    @db.VarChar(3)
-  amount       Decimal   @db.Decimal(14, 2) // dalam mata uang asli
-  amountIdr    Decimal   @db.Decimal(14, 2) // rupiah yang benar-benar keluar (dibekukan saat dicatat)
-  paidAt       DateTime  @db.Date
-  isSettled    Boolean   @default(false) // pembayaran TERAKHIR untuk baris/komponen ini
-  varianceNote String?
-  recordedBy   String // staf
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  voidedAt     DateTime?
-  voidedBy     String?
-  voidReason   String?
+  id             String    @id @default(uuid())
+  bookingId      String
+  snapshotId     String? // baris rencana yang dibayar (null = tanpa rujukan baris → selisih tak dihitung)
+  vendorId       String
+  component      String
+  currency       String    @db.VarChar(3)
+  amount         Decimal   @db.Decimal(14, 2) // dalam mata uang asli
+  amountIdr      Decimal   @db.Decimal(14, 2) // rupiah yang benar-benar keluar (dibekukan saat dicatat)
+  paidAt         DateTime  @db.Date
+  isSettled      Boolean   @default(false) // pembayaran TERAKHIR untuk baris/komponen ini
+  varianceNote   String?
+  recordedBy     String // staf
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  voidedAt       DateTime?
+  voidedBy       String?
+  voidReason     String?
+  // Fase 7b-2b (docs/arsitektur-booking-engine-v2.md §10.10): uang keluar tercatat di buku kas (`out`/`biaya_vendor`, refId `<id>:<versi>`). Versi 0 = belum diposting
+  // (baris sebelum 7b-2b); ubah jumlah/tanggal/akun = entri pembalik + versi baru; batal = pembalik. Ditulis HANYA lib/costs/actuals.ts.
+  cashAccountId  String?
+  cashRefVersion Int       @default(0)
 
-  booking  Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  snapshot PriceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
-  vendor   Vendor         @relation(fields: [vendorId], references: [id])
+  booking     Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  snapshot    PriceSnapshot? @relation(fields: [snapshotId], references: [id], onDelete: SetNull)
+  vendor      Vendor         @relation(fields: [vendorId], references: [id])
+  cashAccount CashAccount?   @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
 
   @@index([bookingId])
   @@index([snapshotId])
@@ -2240,6 +2245,7 @@ model CashAccount {
   entries     CashEntry[]
   payments    Payment[]
   refunds     Refund[]
+  costActuals CostActual[]
 
   @@map("cash_accounts")
 }
@@ -2282,19 +2288,19 @@ enum CancelMoneyDecision {
 }
 
 model BookingCancellation {
-  id           String              @id @default(uuid())
-  bookingId    String              @unique
-  cancelledAt  DateTime            @db.Timestamptz(3)
+  id            String              @id @default(uuid())
+  bookingId     String              @unique
+  cancelledAt   DateTime            @db.Timestamptz(3)
   cancelledById String? // staf atau pemilik booking
-  byCustomer   Boolean             @default(false)
-  reason       String              @db.VarChar(500)
-  paidIdr      Decimal             @db.Decimal(14, 2)
-  decision     CancelMoneyDecision
-  decidedAt    DateTime?           @db.Timestamptz(3)
-  decidedById  String?
-  decisionNote String?             @db.VarChar(500)
-  createdAt    DateTime            @default(now()) @db.Timestamptz(3)
-  updatedAt    DateTime            @updatedAt @db.Timestamptz(3)
+  byCustomer    Boolean             @default(false)
+  reason        String              @db.VarChar(500)
+  paidIdr       Decimal             @db.Decimal(14, 2)
+  decision      CancelMoneyDecision
+  decidedAt     DateTime?           @db.Timestamptz(3)
+  decidedById   String?
+  decisionNote  String?             @db.VarChar(500)
+  createdAt     DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime            @updatedAt @db.Timestamptz(3)
 
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 

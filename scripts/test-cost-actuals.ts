@@ -10,6 +10,8 @@ import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { CostActualError, createCostActual, lineState, listCostActuals, updateCostActual, voidCostActual } from '@/lib/costs/actuals'
 import { getVendorUsage } from '@/lib/vendors/integrity'
+import { ensureMainCashAccount } from '@/lib/cash/accounts'
+import { startOfDayInApp } from '@/lib/time'
 import { assertThrowawayDb } from './lib/testDb'
 import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
@@ -37,8 +39,8 @@ async function mkBooking() {
   } })).id
   return { id: b.id, hotel: await mk('hotel', 8_000_000, 6_000_000), visa: await mk('visa', 2_000_000, 1_500_000), catering: await mk('catering', 1_000_000, null), adj: await mk('booking', -50_000, null, 'penyesuaian') }
 }
-const rec = (bookingId: string, snapshotId: string | null, extra: Partial<Parameters<typeof createCostActual>[0]> = {}) =>
-  createCostActual({ bookingId, snapshotId, vendorId: v1.id, component: 'kamar', currency: 'IDR', amount: 6_000_000, paidAt: '2026-03-10', byUserId: staff.id, ...extra })
+const rec = (bookingId: string, snapshotId: string | null, extra: Partial<Omit<Parameters<typeof createCostActual>[0], 'cashAccount'>> = {}) =>
+  createCostActual({ bookingId, snapshotId, vendorId: v1.id, component: 'kamar', currency: 'IDR', amount: 6_000_000, paidAt: '2026-03-10', cashAccount: { kind: 'cash' }, byUserId: staff.id, ...extra })
 const rejects = (fn: () => Promise<unknown>, status: number, re: RegExp) => assert.rejects(fn, (e: unknown) => e instanceof CostActualError && e.status === status && re.test((e as Error).message))
 const active = (snapshotId: string) => prisma.costActual.findMany({ where: { snapshotId, voidedAt: null } })
 
@@ -188,6 +190,48 @@ await t('PARALEL pada baris yang sama: 8 pengeluaran 400.000 serentak (rencana 1
   const res = await Promise.allSettled(Array.from({ length: 8 }, () => rec(b.id, b.visa, { amount: 400_000 })))
   assert.equal(res.filter(r => r.status === 'fulfilled').length, 3, res.map(r => r.status).join(','))
 })
+await t('BUKU KAS (7b-2b): catat → satu entri KELUAR biaya_vendor (akun pilihan, tanggal = awal hari bayar WIB); gagal aturan → tanpa entri; ubah jumlah/tanggal/akun → pembalik + versi baru; ubah catatan saja → tanpa entri; batal → pembalik; baris lama versi 0 diposting saat diberi akun', async () => {
+  const cash = await prisma.$transaction(tx => ensureMainCashAccount(tx))
+  const b = await mkBooking()
+  const entries = (id: string) => prisma.cashEntry.findMany({ where: { OR: [{ refType: 'cost_actual', refId: { startsWith: `${id}:` } }, { refType: 'reversal', reverses: { refId: { startsWith: `${id}:` } } }] }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })
+  const { id } = await rec(b.id, b.catering, { amount: 300_000, paidAt: '2026-03-10' })
+  let es = await entries(id)
+  assert.deepEqual(es.map(e => [e.refType, e.refId, e.direction, e.component, Number(e.amountIdr), e.cashAccountId, e.bookingId]), [['cost_actual', `${id}:1`, 'out', 'biaya_vendor', 300_000, cash, b.id]])
+  assert.equal(es[0]!.entryDate.toISOString(), startOfDayInApp('2026-03-10').toISOString())
+  const before = await prisma.cashEntry.count()
+  await rejects(() => rec(b.id, b.hotel, { amount: 7_000_000, isSettled: true }), 400, /catatan penyebab wajib/)
+  assert.equal(await prisma.cashEntry.count(), before, 'ditolak aturan selisih → tak ada entri (rollback)')
+  await updateCostActual(b.id, id, { varianceNote: 'catatan saja', byUserId: staff.id })
+  assert.equal((await entries(id)).length, 1, 'ubah catatan tak menyentuh buku kas')
+  await updateCostActual(b.id, id, { amount: 350_000, byUserId: staff.id })
+  es = await entries(id)
+  assert.deepEqual(es.map(e => [e.refType, e.direction, e.component, Number(e.amountIdr)]), [['cost_actual', 'out', 'biaya_vendor', 300_000], ['reversal', 'in', 'koreksi', 300_000], ['cost_actual', 'out', 'biaya_vendor', 350_000]])
+  assert.equal(es[2]!.refId, `${id}:2`)
+  assert.equal((await prisma.costActual.findUniqueOrThrow({ where: { id } })).cashRefVersion, 2)
+  await voidCostActual(b.id, id, { reason: 'salah vendor', byUserId: staff.id })
+  es = await entries(id)
+  const net = es.reduce((s, e) => s + (e.direction === 'out' ? -1 : 1) * Number(e.amountIdr), 0)
+  assert.equal(net, 0, 'batal → saldo kembali'); assert.equal(es.length, 4)
+  // baris lama (sebelum 7b-2b): versi 0 tanpa akun → tak ada entri; diberi akun saat diubah → diposting versi 1
+  const legacy = await prisma.costActual.create({ data: { bookingId: b.id, snapshotId: b.catering, vendorId: v1.id, component: 'lama', currency: 'IDR', amount: 100_000, amountIdr: 100_000, paidAt: new Date('2026-03-01'), recordedBy: staff.id } })
+  await updateCostActual(b.id, legacy.id, { varianceNote: 'x catatan', byUserId: staff.id })
+  assert.equal((await entries(legacy.id)).length, 0)
+  await updateCostActual(b.id, legacy.id, { cashAccount: { kind: 'cash' }, byUserId: staff.id })
+  assert.deepEqual((await entries(legacy.id)).map(e => [e.refId, Number(e.amountIdr)]), [[`${legacy.id}:1`, 100_000]])
+  await assert.rejects(prisma.costActual.update({ where: { id: legacy.id }, data: { cashAccountId: null } }), /cost_actuals_cash_check/)
+})
+await t('BUKU KAS SERENTAK: dua ubah jumlah bersamaan pada pengeluaran TANPA baris rencana → keduanya berurutan (kunci baris), versi 3, tepat satu posting aktif; batal serentak ×2 → satu pembalik', async () => {
+  const b = await mkBooking()
+  const { id } = await rec(b.id, null, { amount: 100_000 })
+  await Promise.all([updateCostActual(b.id, id, { amount: 110_000, byUserId: staff.id }), updateCostActual(b.id, id, { amount: 120_000, byUserId: staff.id })])
+  const row = await prisma.costActual.findUniqueOrThrow({ where: { id } })
+  assert.equal(row.cashRefVersion, 3)
+  const live = await prisma.cashEntry.findMany({ where: { refType: 'cost_actual', refId: { startsWith: `${id}:` }, reversedBy: null } })
+  assert.deepEqual(live.map(e => [e.refId, Number(e.amountIdr)]), [[`${id}:3`, Number(row.amountIdr)]])
+  const res = await Promise.allSettled([voidCostActual(b.id, id, { reason: 'dobel satu', byUserId: staff.id }), voidCostActual(b.id, id, { reason: 'dobel dua', byUserId: staff.id })])
+  assert.equal(res.filter(r => r.status === 'fulfilled').length, 1)
+  assert.equal(await prisma.cashEntry.count({ where: { refType: 'cost_actual', refId: { startsWith: `${id}:` }, reversedBy: null } }), 0)
+})
 await t('cascade: hapus pesanan menghapus pengeluarannya; hapus baris snapshot (cascade pesanan) tak meninggalkan yatim', async () => {
   const b = await mkBooking(); await rec(b.id, b.hotel, { amount: 1_000 })
   await prisma.booking.delete({ where: { id: b.id } }); bookings.splice(bookings.indexOf(b.id), 1)
@@ -208,6 +252,7 @@ await t('PENJAGA: hanya lib/costs/actuals.ts (+ pembersihan UU PDP) menulis cost
   }
   const lib = read('lib/costs/actuals.ts')
   assert.match(lib, /current\.bookingId !== bookingId/); assert.match(lib, /FOR UPDATE/)
+  assert.match(lib, /postEntries\(tx, \{ refType: 'cost_actual'/); assert.match(lib, /reverseEntries\(tx, \{ refType: 'cost_actual'/)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -13,10 +13,10 @@ import { todayInApp } from '@/lib/time'
 
 type Entry = {
   id: string; vendorId: string; vendorName: string; component: string; currency: string; amount: number; amountIdr: number; paidAt: string; isSettled: boolean
-  varianceNote: string | null; recordedByName: string | null; voided: boolean; voidReason: string | null
+  varianceNote: string | null; recordedByName: string | null; voided: boolean; voidReason: string | null; cashAccountName: string | null
 }
 type Line = { snapshotId: string; itemType: string; label: string; planIdr: number | null; plannedVendorIds: string[]; actualIdr: number; varianceIdr: number | null; settled: boolean; needsNote: boolean; entries: Entry[] }
-type Data = { lines: Line[]; loose: Entry[] }
+type Data = { lines: Line[]; loose: Entry[]; cashOptions: Array<{ value: string; label: string }> }
 
 const today = () => todayInApp()
 
@@ -33,6 +33,7 @@ export function CostActualsPanel({ bookingId }: { bookingId: string }) {
   const [paidAt, setPaidAt] = useState(today())
   const [settled, setSettled] = useState(false)
   const [note, setNote] = useState('')
+  const [account, setAccount] = useState('') // akun kas pembayar (Fase 7b-2b) — uang keluar tercatat di Buku Kas
 
   const load = useCallback(async () => {
     const res = await fetch(`/api/v1/admin/bookings/${bookingId}/cost-actuals`)
@@ -52,7 +53,7 @@ export function CostActualsPanel({ bookingId }: { bookingId: string }) {
     setBusy(true); setError('')
     const body = {
       ...(snapshotId ? { snapshotId } : {}), vendorId, component, currency: currency.toUpperCase(), amount: Number(amount),
-      ...(currency.toUpperCase() !== 'IDR' && amountIdr ? { amountIdr: Number(amountIdr) } : {}), paidAt, isSettled: settled, ...(note.trim() ? { varianceNote: note } : {}),
+      ...(currency.toUpperCase() !== 'IDR' && amountIdr ? { amountIdr: Number(amountIdr) } : {}), paidAt, isSettled: settled, cashAccount: account, ...(note.trim() ? { varianceNote: note } : {}),
     }
     const res = await fetch(`/api/v1/admin/bookings/${bookingId}/cost-actuals`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
     const j = await res.json().catch(() => null)
@@ -78,7 +79,7 @@ export function CostActualsPanel({ bookingId }: { bookingId: string }) {
     <li key={e.id} className={`flex flex-wrap items-start justify-between gap-2 py-1.5 text-[12px] ${e.voided ? 'opacity-50' : ''}`}>
       <div className="min-w-0">
         <p className="m-0 font-medium text-admin-ink">{e.vendorName} · {e.component}{e.isSettled && <span className="ml-1.5 rounded bg-admin-ok/10 px-1.5 py-0.5 text-[10px] font-bold text-admin-ok">lunas</span>}{e.voided && <span className="ml-1.5 text-admin-muted">(dibatalkan: {e.voidReason})</span>}</p>
-        <p className="m-0 text-admin-muted">{e.paidAt}{e.currency !== 'IDR' ? ` · ${e.amount.toLocaleString('id-ID')} ${e.currency}` : ''} · {e.recordedByName ?? 'staf'}{e.varianceNote ? ` · Catatan: ${e.varianceNote}` : ''}</p>
+        <p className="m-0 text-admin-muted">{e.paidAt}{e.currency !== 'IDR' ? ` · ${e.amount.toLocaleString('id-ID')} ${e.currency}` : ''} · {e.recordedByName ?? 'staf'} · {e.cashAccountName ? `dari ${e.cashAccountName}` : 'belum di buku kas'}{e.varianceNote ? ` · Catatan: ${e.varianceNote}` : ''}</p>
       </div>
       <div className="flex items-center gap-2">
         <span className="font-semibold tabular-nums">{formatRupiah(e.amountIdr)}</span>
@@ -131,9 +132,11 @@ export function CostActualsPanel({ bookingId }: { bookingId: string }) {
           {currency.toUpperCase() !== 'IDR' && <input aria-label="Rupiah yang keluar" type="number" min={0} className="admin-inp" placeholder="Rupiah yang keluar" value={amountIdr} onChange={e => setAmountIdr(e.target.value)} />}
           <input aria-label="Tanggal bayar" type="date" className="admin-inp" value={paidAt} onChange={e => setPaidAt(e.target.value)} />
         </div>
+        <ChoiceSelect ariaLabel="Dibayar dari akun kas" placeholder="Dibayar dari akun kas" value={account} onChange={setAccount} clearable={false}
+          options={(data?.cashOptions ?? []).map(o => ({ id: o.value, label: o.label }))} />
         <textarea aria-label="Catatan selisih" className="admin-inp w-full" rows={2} maxLength={500} placeholder="Catatan penyebab selisih (wajib bila lunas ≠ rencana atau melebihi rencana)" value={note} onChange={e => setNote(e.target.value)} />
         <label className="flex items-center gap-2 text-[12px] text-admin-muted"><input type="checkbox" checked={settled} onChange={e => setSettled(e.target.checked)} /> Ini pembayaran terakhir untuk baris ini (lunas)</label>
-        <button type="button" disabled={busy || !vendorId || !component.trim() || !Number(amount)} onClick={submit} className="admin-btn-sm">Simpan pengeluaran</button>
+        <button type="button" disabled={busy || !vendorId || !component.trim() || !Number(amount) || !account} onClick={submit} className="admin-btn-sm">Simpan pengeluaran</button>
       </div>
     </div>
   )

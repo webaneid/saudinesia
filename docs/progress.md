@@ -930,7 +930,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] SEC-221 — batas penahanan kuota tanpa bayar per akun — **SELESAI 2026-11-15**: maks. 5 pesanan belum dibayar per akun (dicek di dalam transaksi `placeCheckout`, ditolak 409 dengan arahan membatalkan pesanan lama); pesanan checkout tanpa pembayaran/bukti hangus sehari sesudah jatuh tempo (`expireOverdueBookings`); 100 orang per pesanan tetap. `docs/arsitektur-booking-engine-v2.md` §10.9
   - [x] Fase 7b-1 — Buku kas minimal (2026-11-16): `cash_accounts`/`cash_entries` append-only, posting saat verifikasi pembayaran, pemilih akun kas, halaman Keuangan → Buku Kas — `docs/arsitektur-booking-engine-v2.md` §10.10
   - [x] Fase 7b-2a — Refund & pembatalan oleh admin (2026-11-17): jamaah batal sendiri hanya tanpa uang (409 `cancelNeedsAdmin`), pembatalan admin dengan keputusan uang (refund/tahan/tunda), siklus refund → uang keluar buku kas, halaman Keuangan → Refund — §10.10
-  - [ ] Fase 7b-2b — Uang keluar vendor (`CostActual` → buku kas)
+  - [x] Fase 7b-2b — Uang keluar vendor (2026-11-17): pengeluaran vendor memilih akun kas → entri `out`/`biaya_vendor`, ubah = pembalik + versi baru, batal = pembalik — §10.10
   - [ ] Fase 7b-3 — Kode unik per invoice
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)

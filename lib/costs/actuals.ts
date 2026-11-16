@@ -2,15 +2,26 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
 import { VendorNotUsableError, assertVendorUsable } from '@/lib/vendors/integrity'
-import { addDays, calendarDateOf, dbDateOf, isCalendarDate, todayInApp } from '@/lib/time'
+import { addDays, calendarDateOf, dbDateOf, isCalendarDate, startOfDayInApp, todayInApp } from '@/lib/time'
+import { resolveCashTarget, type CashTarget } from '@/lib/cash/accounts'
+import { postEntries, reverseEntries } from '@/lib/cash/ledger'
 
 // PENGELUARAN AKTUAL ke vendor (docs/arsitektur-harga-terpadu.md §20, 7C). SATU-SATUNYA penulis `cost_actuals`. Modal di snapshot adalah RENCANA (HPP awal); di sini dicatat uang yang benar-benar
 // keluar supaya terlihat di mana HPP meleset. Aturan catatan dievaluasi per BARIS rencana (snapshot): selisih = Σ aktual aktif − modal rencana; catatan wajib bila baris dinyatakan lunas dan selisih
 // di luar toleransi, atau bila sudah melebihi rencana walau belum lunas. Dievaluasi ulang setelah SETIAP tambah/ubah/batal (membatalkan satu-satunya catatan penjelas ditolak).
 // Rencana tak diketahui (modal null) → tak ada selisih yang bisa dihitung, tak ada catatan wajib. Batal = voidedAt, bukan hapus keras.
+// Fase 7b-2b: setiap pengeluaran baru WAJIB memilih akun kas pembayar dan diposting `out`/`biaya_vendor` di transaksi yang sama (refId `<id>:<versi>`, tanggal entri = awal
+// hari bayar di zona aplikasi). Ubah jumlah rupiah/tanggal/akun = entri pembalik versi lama + posting versi baru; batal = pembalik. Baris lama (versi 0) tak diposting
+// sampai admin memilih akun saat mengubahnya.
 
 export class CostActualError extends Error {
   constructor(public readonly status: 400 | 404 | 409, message: string) { super(message); this.name = 'CostActualError' }
+}
+
+/** Benturan UNIQUE buku kas (posting/pembalik ganda yang lolos dari kunci) → 409, bukan 500. */
+function asConflict(e: unknown): never {
+  if (typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'P2002') throw new CostActualError(409, 'Pengeluaran sedang diubah — muat ulang lalu coba lagi')
+  throw e
 }
 
 /** Toleransi selisih (rupiah). 0 = setiap selisih wajib bercatatan; sistem merekomendasikan, admin memutuskan (satu tempat untuk diubah). */
@@ -30,8 +41,9 @@ export type ActualInput = {
   paidAt: string
   isSettled?: boolean
   varianceNote?: string | null
+  cashAccount: CashTarget
 }
-export type ActualPatch = Partial<Pick<ActualInput, 'vendorId' | 'component' | 'currency' | 'amount' | 'amountIdr' | 'paidAt' | 'isSettled' | 'varianceNote'>>
+export type ActualPatch = Partial<Pick<ActualInput, 'vendorId' | 'component' | 'currency' | 'amount' | 'amountIdr' | 'paidAt' | 'isSettled' | 'varianceNote' | 'cashAccount'>>
 
 /** Keadaan satu baris rencana. Murni — diuji tanpa DB. */
 export function lineState(planIdr: number | null, entries: ReadonlyArray<{ amountIdr: number; isSettled: boolean; varianceNote: string | null }>) {
@@ -72,6 +84,20 @@ async function usableVendor(vendorId: string, db?: Parameters<typeof assertVendo
   }
 }
 
+const cashRef = (id: string, version: number) => `${id}:${version}`
+
+async function cashAccountOf(tx: Prisma.TransactionClient, target: CashTarget): Promise<string> {
+  const id = await resolveCashTarget(tx, target)
+  if (!id) throw new CostActualError(400, 'Akun kas tidak aktif atau tidak ditemukan')
+  return id
+}
+
+/** Posting uang keluar satu versi (di dalam transaksi pemanggil). */
+async function postCost(tx: Prisma.TransactionClient, row: { id: string; bookingId: string; amountIdr: number; paidAt: string }, version: number, cashAccountId: string, byUserId: string): Promise<void> {
+  await postEntries(tx, { refType: 'cost_actual', refId: cashRef(row.id, version), direction: 'out', cashAccountId, entryDate: startOfDayInApp(row.paidAt), bookingId: row.bookingId, createdById: byUserId },
+    [{ component: 'biaya_vendor', amountIdr: row.amountIdr }])
+}
+
 /** Periksa baris rencana setelah mutasi (di dalam transaksi); melempar → rollback. */
 async function assertLineConsistent(tx: Prisma.TransactionClient, snapshotId: string | null): Promise<void> {
   if (!snapshotId) return
@@ -102,9 +128,11 @@ export async function createCostActual(input: ActualInput & { byUserId: string }
       if (snap.voidedAt) throw new CostActualError(409, 'Baris ini sudah dibatalkan oleh revisi pesanan — catat pada baris yang berlaku')
       if (snap.lineKey.startsWith('penyesuaian')) throw new CostActualError(400, 'Baris penyesuaian harga tidak memiliki modal — pilih baris komponen/produk')
     }
+    const cashAccountId = await cashAccountOf(tx, input.cashAccount)
     const row = await tx.costActual.create({
-      data: { bookingId: input.bookingId, snapshotId: input.snapshotId ?? null, vendorId: input.vendorId, ...n, isSettled: input.isSettled ?? false, recordedBy: input.byUserId },
+      data: { bookingId: input.bookingId, snapshotId: input.snapshotId ?? null, vendorId: input.vendorId, ...n, isSettled: input.isSettled ?? false, recordedBy: input.byUserId, cashAccountId, cashRefVersion: 1 },
     })
+    await postCost(tx, { id: row.id, bookingId: input.bookingId, amountIdr: n.amountIdr, paidAt: calendarDateOf(n.paidAt) }, 1, cashAccountId, input.byUserId)
     await assertLineConsistent(tx, input.snapshotId ?? null)
     return { id: row.id }
   })
@@ -115,6 +143,8 @@ export async function updateCostActual(bookingId: string, id: string, patch: Act
   if (!head || head.bookingId !== bookingId) throw new CostActualError(404, 'Pengeluaran tidak ditemukan')
   await prisma.$transaction(async tx => {
     if (head.snapshotId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${head.snapshotId} FOR UPDATE`) // void-ok: kunci;  lihat createCostActual
+    // Kunci baris pengeluaran itu sendiri (juga yang tanpa baris rencana): versi buku kas dibaca-lalu-dinaikkan — dua ubah serentak tak boleh sama-sama membalik/memposting.
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "cost_actuals" WHERE "id" = ${id} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     // Baca ULANG di dalam kunci: dua PUT paralel tak saling menimpa field yang tak mereka ubah; vendor diperiksa di transaksi yang sama.
     const current = await tx.costActual.findUnique({ where: { id } })
     if (!current || current.bookingId !== bookingId) throw new CostActualError(404, 'Pengeluaran tidak ditemukan')
@@ -126,9 +156,18 @@ export async function updateCostActual(bookingId: string, id: string, patch: Act
       amountIdr: patch.amountIdr ?? Number(current.amountIdr), paidAt: patch.paidAt ?? calendarDateOf(current.paidAt),
       varianceNote: patch.varianceNote !== undefined ? patch.varianceNote : current.varianceNote,
     })
-    await tx.costActual.update({ where: { id }, data: { vendorId, ...n, ...(patch.isSettled !== undefined ? { isSettled: patch.isSettled } : {}) } })
+    // Buku kas: posting ulang bila uang/tanggal/akun berubah (atau baris lama baru diberi akun). Pembalik bertanggal hari koreksi.
+    const cashAccountId = patch.cashAccount ? await cashAccountOf(tx, patch.cashAccount) : current.cashAccountId
+    const moneyChanged = round2(n.amountIdr) !== round2(Number(current.amountIdr)) || calendarDateOf(n.paidAt) !== calendarDateOf(current.paidAt) || cashAccountId !== current.cashAccountId
+    let cashRefVersion = current.cashRefVersion
+    if (cashAccountId && (moneyChanged || current.cashRefVersion === 0)) {
+      if (current.cashRefVersion > 0) await reverseEntries(tx, { refType: 'cost_actual', refId: cashRef(id, current.cashRefVersion) }, { createdById: patch.byUserId, entryDate: new Date() })
+      cashRefVersion = current.cashRefVersion + 1
+      await postCost(tx, { id, bookingId, amountIdr: n.amountIdr, paidAt: calendarDateOf(n.paidAt) }, cashRefVersion, cashAccountId, patch.byUserId)
+    }
+    await tx.costActual.update({ where: { id }, data: { vendorId, ...n, ...(patch.isSettled !== undefined ? { isSettled: patch.isSettled } : {}), cashAccountId, cashRefVersion } })
     await assertLineConsistent(tx, current.snapshotId)
-  })
+  }).catch(asConflict)
 }
 
 /** Batalkan (bukan hapus keras). Alasan wajib; membatalkan satu-satunya catatan penjelas selisih ditolak. */
@@ -139,15 +178,21 @@ export async function voidCostActual(bookingId: string, id: string, input: { rea
   if (!current || current.bookingId !== bookingId) throw new CostActualError(404, 'Pengeluaran tidak ditemukan')
   await prisma.$transaction(async tx => {
     if (current.snapshotId) await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "price_snapshots" WHERE "id" = ${current.snapshotId} FOR UPDATE`) /* void-ok: kunci */
+    await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "cost_actuals" WHERE "id" = ${id} FOR UPDATE`) // kunci baris (lihat updateCostActual); Prisma ORM tak punya SELECT … FOR UPDATE
     const res = await tx.costActual.updateMany({ where: { id, voidedAt: null }, data: { voidedAt: new Date(), voidedBy: input.byUserId, voidReason: reason } })
     if (res.count === 0) throw new CostActualError(409, 'Pengeluaran sudah dibatalkan')
+    // Uang keluar dibalik di buku kas (entri pembalik bertanggal hari batal); baris lama versi 0 tak punya entri.
+    const posted = await tx.costActual.findUniqueOrThrow({ where: { id }, select: { cashRefVersion: true } })
+    if (posted.cashRefVersion > 0) await reverseEntries(tx, { refType: 'cost_actual', refId: cashRef(id, posted.cashRefVersion) }, { createdById: input.byUserId, entryDate: new Date() })
     await assertLineConsistent(tx, current.snapshotId)
-  })
+  }).catch(asConflict)
 }
 
 export type ActualEntryView = {
   id: string; vendorId: string; vendorName: string; component: string; currency: string; amount: number; amountIdr: number; paidAt: string; isSettled: boolean
   varianceNote: string | null; recordedBy: string; recordedByName: string | null; createdAt: string; voided: boolean; voidReason: string | null
+  /** Akun kas pembayar (nama saat dibuat); null = baris sebelum 7b-2b, belum masuk buku kas. */
+  cashAccountName: string | null
 }
 export type PlanLineView = {
   snapshotId: string; itemType: string; label: string; planIdr: number | null; plannedVendorIds: string[]
@@ -158,7 +203,7 @@ export type PlanLineView = {
 export async function listCostActuals(bookingId: string): Promise<{ lines: PlanLineView[]; loose: ActualEntryView[] }> {
   const [snaps, actuals] = await Promise.all([
     prisma.priceSnapshot.findMany({ where: { bookingId }, orderBy: [{ itemType: 'asc' }, { lineKey: 'asc' }] }), // void-ok: disaring di bawah (void hanya bila berpengeluaran)
-    prisma.costActual.findMany({ where: { bookingId }, include: { vendor: { select: { name: true } } }, orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }] }),
+    prisma.costActual.findMany({ where: { bookingId }, include: { vendor: { select: { name: true } }, cashAccount: { select: { name: true } } }, orderBy: [{ paidAt: 'asc' }, { createdAt: 'asc' }] }),
   ])
   const users = await prisma.user.findMany({ where: { id: { in: [...new Set(actuals.map(a => a.recordedBy))] } }, select: { id: true, fullName: true } })
   const names = new Map(users.map(u => [u.id, u.fullName]))
@@ -166,6 +211,7 @@ export async function listCostActuals(bookingId: string): Promise<{ lines: PlanL
     id: a.id, vendorId: a.vendorId, vendorName: a.vendor.name, component: a.component, currency: a.currency, amount: Number(a.amount), amountIdr: Number(a.amountIdr),
     paidAt: calendarDateOf(a.paidAt), isSettled: a.isSettled, varianceNote: a.varianceNote, recordedBy: a.recordedBy, recordedByName: names.get(a.recordedBy) ?? null,
     createdAt: a.createdAt.toISOString(), voided: a.voidedAt !== null, voidReason: a.voidReason,
+    cashAccountName: a.cashRefVersion > 0 ? a.cashAccount?.name ?? null : null,
   })
   const bySnap = new Map<string, typeof actuals>()
   for (const a of actuals) if (a.snapshotId) bySnap.set(a.snapshotId, [...(bySnap.get(a.snapshotId) ?? []), a])

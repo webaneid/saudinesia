@@ -11,10 +11,12 @@ const base = {
   paidAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal harus berformat YYYY-MM-DD'),
   isSettled: z.boolean().optional(),
   varianceNote: z.string().max(500).nullish(),
+  /** Akun kas pembayar (Fase 7b-2b): `bank:<uuid>` | `cash` — diparse `parseCashTarget` di route. */
+  cashAccount: z.string().min(1, 'Pilih akun kas pembayar').max(60),
 }
 export const costActualCreateSchema = z.object(base).strict()
 export const costActualUpdateSchema = z.object({
   vendorId: base.vendorId.optional(), component: base.component.optional(), currency: base.currency.optional(), amount: base.amount.optional(),
-  amountIdr: base.amountIdr, paidAt: base.paidAt.optional(), isSettled: base.isSettled, varianceNote: base.varianceNote,
+  amountIdr: base.amountIdr, paidAt: base.paidAt.optional(), isSettled: base.isSettled, varianceNote: base.varianceNote, cashAccount: base.cashAccount.optional(),
 }).strict()
 export const costActualVoidSchema = z.object({ reason: z.string().min(3, 'Alasan wajib diisi').max(500) }).strict()
