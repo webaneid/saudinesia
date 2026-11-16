@@ -15,6 +15,8 @@ export type NotificationEvent =
   | { type: 'payment_confirmed'; code: string; balance?: number }
   | { type: 'payment_rejected'; code: string }
   | { type: 'booking_expired'; code: string }
+  /** Dibatalkan staf (Fase 7b-2a). `money` = sudah ada uang masuk: pesan hanya menyebut tim akan menghubungi soal dana — tanpa jumlah/keputusan internal. */
+  | { type: 'booking_cancelled'; code: string; money: boolean }
   | { type: 'visa_status_change'; code: string; status: string }
   /** Pemeriksaan data jamaah booking (Fase 6 modul jamaah): `status` = label tampil. Tanpa nama jamaah dan catatan petugas (dibaca di halaman booking). */
   | { type: 'pilgrim_review'; code: string; status: string }
@@ -43,6 +45,7 @@ export function waMessage(e: NotificationEvent): string | null {
     case 'payment_rejected':
       return waTemplates.paymentRejected(e.code)
     case 'booking_expired':
+    case 'booking_cancelled':
     case 'visa_status_change':
     case 'pilgrim_review':
     case 'contact_changed':

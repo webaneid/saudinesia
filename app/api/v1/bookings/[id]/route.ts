@@ -50,25 +50,24 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     const owned = await prisma.booking.findFirst({ where: { id, userId: session.userId, status: { not: 'draft' } }, select: { id: true } }) // draf = 404, sama seperti GET
     if (!owned) return apiErrorJson('bookingNotFound', 404)
 
-    // docs/arsitektur-booking.md §6 Step 3 — menutup Gap #2 (dulu tidak melepas kuota apa pun,
-    // tidak transaksional) dan Gap #3 (refund dihitung tapi tidak pernah dicatat sebagai row)
-    // sekaligus, lewat fungsi yang SAMA dipakai cron hangus (lib/booking/expire.ts).
-    // Status dibaca ULANG di dalam kunci baris: konfirmasi pembayaran yang berjalan serentak tak boleh dibatalkan setengah jalan.
-    const result = await prisma.$transaction(async (tx) => {
+    // Status dan uang dibaca ULANG di dalam kunci baris (konfirmasi pembayaran serentak tak boleh dibatalkan setengah jalan). Fase 7b-2a: pelanggan hanya
+    // membatalkan pesanan TANPA uang — bukti menunggu verifikasi (SEC-119) atau pembayaran terverifikasi → 409 `cancelNeedsAdmin` (staf memutuskan refund, lib/booking/adminCancel.ts).
+    const result = await prisma.$transaction(async (tx): Promise<'done' | 'closed' | 'money'> => {
       await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${id} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
       const booking = await tx.booking.findUniqueOrThrow({
         where: { id },
         include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true },
       })
-      if (!isPilgrimCancellable(booking)) return null
-      // Bukti transfer menunggu verifikasi = uang mungkin sudah dikirim: batal ditolak agar pembayaran itu tetap bisa diproses admin (SEC-119).
-      if (await tx.payment.count({ where: { bookingId: id, status: 'pending' } }) > 0) return null
-      return cancelBooking(tx, booking, 'Dibatalkan oleh pilgrim')
+      if (!isPilgrimCancellable(booking)) return 'closed'
+      if (await tx.payment.count({ where: { bookingId: id, status: { in: ['pending', 'confirmed'] } } }) > 0) return 'money'
+      await cancelBooking(tx, booking, 'cancelled')
+      await tx.bookingCancellation.create({ data: { bookingId: id, cancelledAt: new Date(), cancelledById: session.userId, byCustomer: true, reason: 'Dibatalkan oleh pemesan', paidIdr: 0, decision: 'none' } })
+      return 'done'
     })
-    if (!result) return apiErrorJson('bookingCannotCancel', 422)
-    const { refundAmount } = result
+    if (result === 'closed') return apiErrorJson('bookingCannotCancel', 422)
+    if (result === 'money') return apiErrorJson('cancelNeedsAdmin', 409)
 
-    return NextResponse.json(ok({ refundAmount }))
+    return NextResponse.json(ok({ cancelled: true }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)

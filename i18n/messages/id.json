@@ -1730,6 +1730,7 @@
     "paymentProofPending": "Bukti pembayaran sebelumnya masih menunggu verifikasi",
     "bookingCannotTakeProof": "Booking tidak dapat menerima bukti pembayaran saat ini",
     "bookingCannotCancel": "Booking ini tidak dapat dibatalkan.",
+    "cancelNeedsAdmin": "Pesanan yang sudah menerima pembayaran hanya dapat dibatalkan oleh tim Saudinesia. Silakan hubungi kami.",
     "fileEmpty": "Berkas kosong.",
     "fileTooLarge": "Ukuran berkas maksimal 5 MB.",
     "fileBadImage": "Berkas bukan gambar yang valid.",

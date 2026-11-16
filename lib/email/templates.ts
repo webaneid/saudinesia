@@ -132,13 +132,25 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         facts: [['Kode booking', e.code]],
         cta: { label: 'Unggah ulang bukti', path: bookingPath(ctx.bookingId) },
       }
+    case 'booking_cancelled':
+      return {
+        subject: `Booking ${e.code} dibatalkan`,
+        preheader: 'Booking Anda telah dibatalkan oleh tim Saudinesia.',
+        heading: 'Booking dibatalkan',
+        paragraphs: [
+          `Halo ${ctx.name}, booking Anda telah dibatalkan oleh tim Saudinesia.`,
+          e.money ? 'Tim kami akan menghubungi Anda mengenai dana yang sudah Anda bayarkan.' : 'Jika ada pertanyaan, silakan hubungi kami.',
+        ],
+        facts: [['Kode booking', e.code]],
+        cta: bookingCta,
+      }
     case 'booking_expired':
       return {
         subject: `Booking ${e.code} hangus`,
-        preheader: 'Pembayaran belum kami terima hingga mendekati tanggal keberangkatan.',
+        preheader: 'Pembayaran belum kami terima hingga batas waktunya.',
         heading: 'Booking hangus',
         paragraphs: [
-          `Halo ${ctx.name}, booking Anda kami hanguskan karena belum ada pembayaran yang kami terima hingga mendekati tanggal keberangkatan.`,
+          `Halo ${ctx.name}, booking Anda kami hanguskan karena belum ada pembayaran yang kami terima hingga lewat jatuh tempo atau mendekati tanggal keberangkatan.`,
           'Jika Anda masih ingin berangkat, silakan buat booking baru atau hubungi kami.',
         ],
         facts: [['Kode booking', e.code]],

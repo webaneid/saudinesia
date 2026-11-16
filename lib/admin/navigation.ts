@@ -1,7 +1,7 @@
 import { Fingerprint,
   Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck,
+  Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -22,6 +22,7 @@ const OPERASIONAL: NavItem[] = [
   { path: '/admin/reports',       icon: LineChart,       label: 'Laporan Untung' },
   { path: '/admin/reports/variance', icon: Scale,        label: 'Selisih HPP' },
   { path: '/admin/finance/cash-book', icon: BookOpenCheck, label: 'Buku Kas' },
+  { path: '/admin/finance/refunds', icon: Undo2,         label: 'Refund' },
   { path: '/admin/notifications', icon: Bell,            label: 'Notifikasi' },
 ]
 
@@ -72,6 +73,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   variance: 'Selisih HPP vs Aktual',
   finance: 'Keuangan',
   'cash-book': 'Buku Kas',
+  refunds: 'Refund',
   notifications: 'Notifikasi',
   products: 'Produk',
   packages: 'Paket',

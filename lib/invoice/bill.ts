@@ -8,6 +8,8 @@ export type BillSource = {
   totalAmount: Num
   invoice: { taxAddedIdr: Num; taxIncludedIdr: Num } | null
   payments?: ReadonlyArray<{ status: string; amount: Num }>
+  /** Refund (Fase 7b-2a): yang berstatus `paid` MENGURANGI terbayar (uang sudah dikembalikan). Muat dengan `billRefunds`. */
+  refunds?: ReadonlyArray<{ status: string; amount: Num }>
 }
 export type Bill = {
   /** Σ baris harga (sebelum pajak). */
@@ -18,7 +20,7 @@ export type Bill = {
   taxIncluded: number
   /** Yang ditagihkan = subtotal + pajak ditambahkan. */
   grandTotal: number
-  /** Σ pembayaran terkonfirmasi. */
+  /** Σ pembayaran terkonfirmasi − Σ refund yang sudah dibayar. */
   paid: number
   /** Sisa (negatif = kelebihan bayar). */
   balance: number
@@ -30,7 +32,8 @@ export function billOf(src: BillSource): Bill {
   const subtotal = cents(src.totalAmount)
   const taxAdded = cents(src.invoice?.taxAddedIdr)
   const taxIncluded = cents(src.invoice?.taxIncludedIdr)
-  const paid = (src.payments ?? []).filter(p => p.status === 'confirmed').reduce((s, p) => s + cents(p.amount), 0)
+  const refunded = (src.refunds ?? []).filter(r => r.status === 'paid').reduce((s, r) => s + cents(r.amount), 0)
+  const paid = (src.payments ?? []).filter(p => p.status === 'confirmed').reduce((s, p) => s + cents(p.amount), 0) - refunded
   const grand = subtotal + taxAdded
   return { subtotal: subtotal / 100, taxAdded: taxAdded / 100, taxIncluded: taxIncluded / 100, grandTotal: grand / 100, paid: paid / 100, balance: (grand - paid) / 100 }
 }
@@ -40,3 +43,6 @@ export const billSelect = {
   totalAmount: true,
   invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } },
 } satisfies Prisma.BookingSelect
+
+/** Refund yang memengaruhi terbayar — sertakan di `include`/`select` booking bersama pembayaran terkonfirmasi. */
+export const billRefunds = { where: { status: 'paid' }, select: { status: true, amount: true } } satisfies Prisma.Booking$refundsArgs

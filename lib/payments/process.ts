@@ -3,7 +3,7 @@ import { prisma } from '@/lib/db'
 import { quotaAdapters } from '@/lib/quota/adapters'
 import { resolveVerifiedAmount } from './confirmAmount'
 import { paymentLimits } from './limits'
-import { billOf } from '@/lib/invoice/bill'
+import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { resolveCashTarget, type CashTarget } from '@/lib/cash/accounts'
 import { postEntries, splitPaymentCredit } from '@/lib/cash/ledger'
@@ -30,7 +30,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
     if (!head) return { kind: 'not_found' }
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${head.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } })
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } } } })
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds } })
     if (payment.status !== 'pending' || booking.status !== 'active') return { kind: 'conflict' }
     let seatConfirmed = false
     let balance = 0

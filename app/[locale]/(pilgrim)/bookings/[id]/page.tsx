@@ -8,7 +8,7 @@ import Link from 'next/link'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { formatRupiah } from '@/lib/utils'
-import { billOf } from '@/lib/invoice/bill'
+import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { bookingPayTo } from '@/lib/invoice/banks'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { paymentLimits } from '@/lib/payments/limits'
@@ -64,7 +64,8 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   if (!booking) notFound()
   // Tagihan = subtotal + pajak yang ditambahkan (lib/invoice/bill.ts); terbayar = Σ pembayaran terverifikasi (cicilan, Fase 7a).
   const confirmedPayments = await prisma.payment.findMany({ where: { bookingId: booking.id, status: 'confirmed' }, select: { status: true, amount: true } })
-  const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice, payments: confirmedPayments })
+  const paidRefunds = await prisma.refund.findMany({ where: { bookingId: booking.id, ...billRefunds.where }, select: billRefunds.select })
+  const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice, payments: confirmedPayments, refunds: paidRefunds })
   // Batas nominal bukti transfer (Fase 7a F2): bawaan sisa, minimal DP / sisa menuju DP — sama dengan yang dinilai route unggah di dalam kunci.
   const limits = paymentLimits(bill, (await getInvoiceSettings()).minimumFirstPaymentPercent)
   // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.

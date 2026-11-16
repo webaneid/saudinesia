@@ -60,6 +60,8 @@ async function blockersFor(db: Db, userId: string, role: string, requestedAt: Da
   if (active > 0) blockers.push(`${active} booking masih berjalan (menunggu bayar / ditinjau / dikonfirmasi / aktif). Batalkan atau tunggu selesai.`)
   const refunds = await db.refund.count({ where: { booking: { userId }, status: { in: [...UNSETTLED_REFUND_STATUSES] } } })
   if (refunds > 0) blockers.push(`${refunds} refund belum tuntas (pending/disetujui).`)
+  const deferred = await db.bookingCancellation.count({ where: { booking: { userId }, decision: 'defer' } }) // Fase 7b-2a: nasib uang belum diputuskan
+  if (deferred > 0) blockers.push(`${deferred} pembatalan dengan dana belum diputuskan.`)
   return blockers
 }
 
@@ -189,7 +191,10 @@ export async function executeDeletion(
       await tx.bookingTransport.updateMany({ where: { booking: { userId } }, data: { pickupDetail: null, dropoffDetail: null } })
       // Data transfer (Fase 7a): nama pemilik rekening pengirim + catatan pelanggan = data pribadi; nominal/tanggal/bank/rekening tujuan dipertahankan (bukti uang masuk).
       await tx.payment.updateMany({ where: { booking: { userId } }, data: { notes: null, senderAccountName: null, payerNote: null } })
-      await tx.refund.updateMany({ where: { booking: { userId } }, data: { notes: null } })
+      await tx.refund.updateMany({ where: { booking: { userId } }, data: { notes: null, reason: '[dihapus]' } }) // alasan/catatan = teks staf (Fase 7b-2a), bisa memuat nama
+      // Pembatalan (Fase 7b-2a): alasan/catatan keputusan = teks staf; pembatalan oleh pemesan sendiri menyimpan id akun ini → dikosongkan.
+      await tx.bookingCancellation.updateMany({ where: { booking: { userId } }, data: { reason: '[dihapus]', decisionNote: null } })
+      await tx.bookingCancellation.updateMany({ where: { booking: { userId }, cancelledById: userId }, data: { cancelledById: null } })
       // Catatan staf pada penyesuaian total dan pengeluaran vendor (Fase 7) bisa menyebut nama pemesan → diganti penanda (≥ 3 karakter agar CHECK catatan-wajib tetap terpenuhi).
       // `label` penyesuaian tampil di invoice dan dibekukan di snapshot (trigger menolak UPDATE) — karena itu UI melarang data pribadi di label.
       await tx.bookingAdjustment.updateMany({ where: { booking: { userId }, reason: { not: null } }, data: { reason: '[dihapus]' } })

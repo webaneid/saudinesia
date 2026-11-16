@@ -12,7 +12,7 @@ import { docIpLimited, readFileWithFields } from '@/lib/documents/http'
 import { buildObjectKey, deleteObject, uploadBuffer } from '@/lib/storage/minio'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 import { bookingPayTo } from '@/lib/invoice/banks'
-import { billOf } from '@/lib/invoice/bill'
+import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { claimRefusal, paymentLimits, type ClaimRefusal } from '@/lib/payments/limits'
 import { paymentTransferSchema, TRANSFER_KEYS } from '@/lib/validators/paymentTransfer'
@@ -89,6 +89,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           status: true, totalAmount: true,
           invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } },
           payments: { where: { status: { in: ['pending', 'confirmed'] } }, select: { status: true, amount: true } },
+          refunds: billRefunds,
         },
       })
       if (fresh.status !== 'active') return 'closed'

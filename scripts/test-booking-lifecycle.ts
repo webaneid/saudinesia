@@ -219,7 +219,7 @@ await t('hangus = 0 hari → nonaktif sama sekali', async () => {
   assert.deepEqual(mine(await expireOverdueBookings(new Date('2026-10-30T17:30:00Z'))), [])
   assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id } })).status, 'active')
 })
-await t('HANGUS tanpa refund; pembatalan biasa: refund dihitung dari uang yang SUDAH MASUK (tanpa uang masuk → tanpa baris Refund, SEC-118); pesanan hangus tetap menyimpan datanya', async () => {
+await t('HANGUS tanpa refund; cancelBooking TIDAK PERNAH membuat baris Refund (Fase 7b-2a: keputusan uang oleh staf); pesanan hangus tetap menyimpan datanya', async () => {
   await setExpire(365)
   const far = '2091-01-01' // > 60 hari → kebijakan refund 100% bila lewat jalur batal
   const toExpire = await mk({ dep: far, total: 5_000_000 })
@@ -228,12 +228,10 @@ await t('HANGUS tanpa refund; pembatalan biasa: refund dihitung dari uang yang S
   const pendingOnly = await mk({ dep: far, total: 5_000_000, pays: ['pending', 'rejected'] })
   assert.deepEqual(mine(await expireOverdueBookings(new Date('2090-12-31T01:00:00Z'))).filter(i => i === toExpire), [toExpire])
   assert.equal(await prisma.refund.count({ where: { bookingId: toExpire } }), 0, 'hangus: tanpa refund')
-  const cancelled = await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id: toCancel }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } }), 'uji'))
-  assert.equal(cancelled.refundAmount, 5_000_000)
-  assert.equal(await prisma.refund.count({ where: { bookingId: toCancel } }), 1)
-  for (const id of [unpaid, pendingOnly]) {
-    const r = await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } }), 'uji'))
-    assert.equal(r.refundAmount, 0, 'belum ada uang masuk → refund 0')
+  // Fase 7b-2a (D11): cancelBooking hanya melepas kuota + status — keputusan uang ada di lib/booking/adminCancel.ts (scripts/test-refunds.ts).
+  for (const id of [toCancel, unpaid, pendingOnly]) {
+    await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })))
+    assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id } })).status, 'cancelled')
     assert.equal(await prisma.refund.count({ where: { bookingId: id } }), 0, 'tak ada baris Refund untuk uang yang tak pernah diterima')
   }
   assert.equal((await prisma.booking.findUniqueOrThrow({ where: { id: toExpire } })).totalAmount.toString(), '5000000', 'data tetap tersimpan')
@@ -288,7 +286,7 @@ await t('PENJAGA: draf tak pernah sampai ke jamaah (daftar, detail, API, invoice
   assert.match(cancel, /FOR UPDATE/); assert.match(cancel, /isPilgrimCancellable\(booking\)/)
   const del = cancel.slice(cancel.indexOf('export async function DELETE'))
   assert.match(del, /userId: session\.userId, status: \{ not: 'draft' \}/, 'DELETE: draf = 404 (SEC-120)')
-  assert.ok(del.indexOf("status: 'pending'") > del.indexOf('FOR UPDATE'), 'DELETE: bukti menunggu → tolak, diperiksa DI DALAM kunci (SEC-119)')
+  assert.ok(del.indexOf("status: { in: ['pending', 'confirmed'] }") > del.indexOf('FOR UPDATE'), 'DELETE: bukti menunggu / uang masuk → tolak, diperiksa DI DALAM kunci (SEC-119, 7b-2a)')
   assert.match(cancel, /const \{ confirmedById: _staff, \.\.\.visible \} = booking/, 'GET: id staf tak dikirim ke jamaah (SEC-120)')
   assert.ok(!/ok\(\{ \.\.\.booking,/.test(cancel), 'GET tak lagi menyebar baris booking mentah')
   const bukti = read('app/api/v1/bookings/[id]/payment/bukti/route.ts')
@@ -301,7 +299,7 @@ await t('PENJAGA: cron memakai zona aplikasi + dimuat SETELAH zona dimuat; tak a
   assert.match(job, /getAppTimezone\(\)/); assert.match(job, /\{ timezone \}/)
   assert.match(read('instrumentation-node.ts'), /await loadAppTimezone\(\)\s*\n\s*startBookingLifecycleJobs\(\)/)
   assert.ok(!/autocancelJob|startAutoCancelJob/.test(read('instrumentation-node.ts')))
-  assert.match(read('lib/booking/expire.ts'), /cancelBooking\(tx, booking, reason, 'expired'\)/)
+  assert.match(read('lib/booking/expire.ts'), /cancelBooking\(tx, booking, 'expired'\)/)
   assert.match(read('lib/booking/expire.ts'), /FOR UPDATE/)
   assert.match(read('lib/payments/process.ts'), /payment\.status !== 'pending' \|\| booking\.status !== 'active'\)/); assert.match(read('lib/payments/process.ts'), /booking\.confirmedAt === null && after\.dpMet/)
   assert.match(read('lib/payments/process.ts'), /confirmedAt: new Date\(\), confirmedById: input\.byUserId/)

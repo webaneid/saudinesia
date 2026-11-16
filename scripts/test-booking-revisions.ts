@@ -297,7 +297,7 @@ await t('TERKONFIRMASI (R2): tanpa alasan → 422; dengan alasan: hapus hotel me
   const s0 = await seats()
   await prisma.$transaction(async tx => {
     const b = await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })
-    await cancelBooking(tx, b, 'uji')
+    await cancelBooking(tx, b)
   })
   assert.deepEqual(await seats(), { pendingSeats: s0.pendingSeats, bookedSeats: s0.bookedSeats - 2 }, 'tiket (terkonfirmasi) melepas booked')
   assert.deepEqual(await vseats(), v0, 'transport tambahan (pending) melepas pending')
@@ -310,7 +310,7 @@ await t('BATAL booking TERKONFIRMASI melepas kursi BOOKED (bug lama: pending dik
   const s0 = await seats()
   await prisma.$transaction(async tx => {
     const b = await tx.booking.findUniqueOrThrow({ where: { id }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })
-    await cancelBooking(tx, b, 'uji')
+    await cancelBooking(tx, b)
   })
   assert.deepEqual(await seats(), { pendingSeats: s0.pendingSeats, bookedSeats: s0.bookedSeats - 2 })
 })
