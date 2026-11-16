@@ -84,6 +84,8 @@ export type InvoiceData = {
   /** TAGIHAN = subtotal + pajak ditambahkan (lib/invoice/bill.ts). */
   totalAmount: number
   balanceDue:  number
+  /** Kode unik transfer (Fase 7b-3) — hanya selama tagihan masih bisa dibayar; null = tak ditampilkan. */
+  uniqueCode:  number | null
 }
 
 const STATUS_LABEL: Record<DisplayStatus, string> = {
@@ -203,5 +205,6 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
     subtotal,
     totalAmount: bill.grandTotal,
     balanceDue:  Math.max(0, bill.balance),
+    uniqueCode:  inv?.uniqueCode && booking.status === 'active' && bill.balance > 0 ? inv.uniqueCode : null,
   }
 }

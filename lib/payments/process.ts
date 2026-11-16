@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { quotaAdapters } from '@/lib/quota/adapters'
-import { resolveVerifiedAmount } from './confirmAmount'
+import { PaymentAmountError, resolveVerifiedAmount } from './confirmAmount'
 import { paymentLimits } from './limits'
 import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
@@ -15,7 +15,9 @@ import { postEntries, splitPaymentCredit } from '@/lib/cash/ledger'
 // saat terbayar terverifikasi pertama kali mencapai ambang DP (`paymentLimits`, DP 0% = pembayaran pertama berapa pun). Pembayaran sesudahnya hanya menambah terbayar.
 
 // Fase 7b-1: konfirmasi MEMOSTING uang masuk ke buku kas (lib/cash/ledger.ts) di transaksi yang sama — akun kas = pilihan admin (`cashAccount`) atau rekening tujuan bukti.
-export type ProcessInput = { action: 'confirm' | 'reject'; amount?: number | null; notes?: string | null; cashAccount?: CashTarget | null; byUserId: string }
+// Fase 7b-3: `uniqueCode` = transfer ini MEMUAT kode unik invoice (admin menilai dari mutasi). Nilai kode dibaca dari invoice (beku), bukan dari klien;
+// `amount` tetap kredit tagihan (diterima − kode), kode diposting `in`/`kode_unik` (pemasukan lain, D9 — bukan kelebihan bayar).
+export type ProcessInput = { action: 'confirm' | 'reject'; amount?: number | null; notes?: string | null; cashAccount?: CashTarget | null; uniqueCode?: boolean; byUserId: string }
 export type ProcessResult =
   | { kind: 'not_found' }
   | { kind: 'conflict' }
@@ -30,7 +32,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
     if (!head) return { kind: 'not_found' }
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${head.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } })
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds } })
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true, uniqueCode: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds } })
     if (payment.status !== 'pending' || booking.status !== 'active') return { kind: 'conflict' }
     let seatConfirmed = false
     let balance = 0
@@ -45,9 +47,14 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       const cashAccountId = input.cashAccount ? await resolveCashTarget(tx, input.cashAccount) : payment.destinationCashAccountId
       if (!cashAccountId) return { kind: 'needs_account' }
       const now = new Date()
-      await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: verified, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: now, destinationCashAccountId: cashAccountId } })
+      const uniqueCodeIdr = input.uniqueCode ? (booking.invoice.uniqueCode ?? 0) : 0
+      // D11 (§2 baris aturan verifikasi): diterima < nominal pelanggan + kode → kode tak "sampai"; seluruh yang diterima mengkredit tagihan. Ditolak, bukan diubah diam-diam.
+      if (uniqueCodeIdr > 0 && payment.claimedAmountIdr !== null && Math.round(verified * 100) < Math.round(Number(payment.claimedAmountIdr) * 100)) {
+        throw new PaymentAmountError('Diterima kurang dari nominal + kode unik — kode tidak sampai; lepas centang kode unik')
+      }
+      await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: verified, uniqueCodeIdr, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: now, destinationCashAccountId: cashAccountId } })
       await postEntries(tx, { refType: 'payment', refId: payment.id, direction: 'in', cashAccountId, entryDate: payment.transferredAt ?? now, bookingId: booking.id, createdById: input.byUserId },
-        splitPaymentCredit({ amount: verified, balanceBefore: before.balance, grandTotal: before.grandTotal, taxAdded: before.taxAdded }))
+        [...splitPaymentCredit({ amount: verified, balanceBefore: before.balance, grandTotal: before.grandTotal, taxAdded: before.taxAdded }), { component: 'kode_unik', amountIdr: uniqueCodeIdr }])
       const after = paymentLimits({ grandTotal: before.grandTotal, paid: before.paid + verified }, minimumFirstPaymentPercent)
       balance = after.balance
       if (booking.confirmedAt === null && after.dpMet) {

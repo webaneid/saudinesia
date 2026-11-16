@@ -169,6 +169,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
         bill={{ grandTotal: bill.grandTotal, paid: bill.paid, balance: limits.balance }}
         seatConfirmed={booking.confirmedAt !== null}
         dpThreshold={limits.confirmThreshold}
+        uniqueCode={booking.invoice?.uniqueCode ?? null}
       />
 
       {/* Services summary */}

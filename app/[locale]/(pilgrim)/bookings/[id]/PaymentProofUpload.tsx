@@ -21,11 +21,13 @@ type Props = {
   /** Batas dari `paymentLimits` (server): bawaan nominal = sisa; minimal = DP / sisa menuju DP. Server menilai ulang di dalam kunci. */
   balance: number
   minClaim: number
+  /** Kode unik invoice (Fase 7b-3), 0 = tanpa kode. Nominal yang diisi tetap POKOK; kode hanya ditambahkan pada transfer. */
+  uniqueCode: number
 }
 
 // Bukti transfer + data transfer (Fase 7a F2). Nominal bisa diubah supaya pelanggan boleh membayar DP dulu; semua pemeriksaan sungguhan
 // (batas nominal, berkas dari isinya, rekening) di server, pesan penolakannya ditampilkan apa adanya.
-export function PaymentProofUpload({ bookingId, payTo, balance, minClaim }: Props) {
+export function PaymentProofUpload({ bookingId, payTo, balance, minClaim, uniqueCode }: Props) {
   const router = useRouter()
   const t = useTranslations('pilgrimArea.payment')
   const errorText = useApiError()
@@ -79,6 +81,7 @@ export function PaymentProofUpload({ bookingId, payTo, balance, minClaim }: Prop
         <p className="text-xs text-muted-foreground">
           {minClaim < balance ? t('amountRange', { min: formatRupiah(minClaim), max: formatRupiah(balance) }) : t('amountFull', { max: formatRupiah(balance) })}
         </p>
+        {uniqueCode > 0 && amountOk && <p className="text-xs font-medium text-amber-900">{t('amountNoCode', { total: formatRupiah(amountNum + uniqueCode), code: uniqueCode })}</p>}
         {partial && <p className="text-xs font-medium text-amber-800">{t('amountPartial', { rest: formatRupiah(balance - amountNum) })}</p>}
       </div>
       <DateTimeField label={t('transferredAt')} value={transferredAt} onChange={setTransferredAt} required />

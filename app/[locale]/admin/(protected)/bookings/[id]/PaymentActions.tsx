@@ -33,25 +33,33 @@ interface PaymentActionsProps {
   dpThreshold: number
   /** Pilihan akun kas penerima (rekening aktif + kas tunai), Fase 7b-1. */
   cashOptions: Array<{ value: string; label: string }>
+  /** Kode unik invoice (Fase 7b-3); null = invoice tanpa kode. */
+  uniqueCode: number | null
 }
 
 const cents = (n: number) => Math.round(n * 100)
 
 // Verifikasi pembayaran bertahap (Fase 7a F3): jumlah bawaan = nominal pelanggan (atau sisa); kurang dari sisa = cicilan (boleh), kurang dari DP hanya
 // diingatkan (P2 — kursi baru dikonfirmasi saat terbayar ≥ DP), lebih dari sisa wajib bercatatan. Aturan sungguhan di lib/payments (server).
-export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold, cashOptions }: PaymentActionsProps) {
+// Fase 7b-3: admin mengisi yang DITERIMA di rekening (bawaan nominal + kode unik); kredit tagihan = diterima − kode bila transfer memuat kode,
+// kode dicatat server sebagai pemasukan lain. Transfer tanpa kode → hilangkan centang.
+export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold, cashOptions, uniqueCode }: PaymentActionsProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [done,    setDone]    = useState<{ action: 'confirm' | 'reject'; seat?: boolean; balance?: number } | null>(null)
   const [error,   setError]   = useState('')
-  const [amount,  setAmount]  = useState(String(payment?.claimed ?? bill.balance))
+  const code = uniqueCode ?? 0
+  const [amount,  setAmount]  = useState(String((payment?.claimed ?? bill.balance) + code))
+  const [withCode, setWithCode] = useState(code > 0)
   const [notes,   setNotes]   = useState('')
   // Terisi dari rekening bukti bila masih aktif; rekening bukti yang kini nonaktif tetap sah (server memakainya bila admin tak memilih lain).
   const [account, setAccount] = useState(payment?.cashAccount && cashOptions.some(o => o.value === payment.cashAccount) ? payment.cashAccount : '')
   const hasDest = !!payment?.cashAccount
   const [viewing, setViewing] = useState(false) // bukti transfer dilihat di popup, bukan tab baru
-  const n = Number(amount)
-  const valid = Number.isFinite(n) && n > 0
+  const received = Number(amount)
+  const n = received - (withCode ? code : 0) // kredit tagihan
+  const valid = Number.isFinite(received) && n > 0
+  const codeShort = withCode && code > 0 && valid && payment?.claimed != null && cents(n) < cents(payment.claimed) // server menolak (D11)
   const over = valid && cents(n) > cents(bill.balance)
   const partial = valid && cents(n) < cents(bill.balance)
   const paidAfter = bill.paid + (valid ? n : 0)
@@ -63,7 +71,7 @@ export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold, cash
     const res  = await fetch(`/api/v1/admin/payments/${id}/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(action === 'confirm' ? { action, amount: n, ...(account ? { cashAccount: account } : {}), ...(notes.trim() ? { notes: notes.trim() } : {}) } : { action, ...(notes.trim() ? { notes: notes.trim() } : {}) }),
+      body: JSON.stringify(action === 'confirm' ? { action, amount: n, ...(code > 0 ? { uniqueCode: withCode } : {}), ...(account ? { cashAccount: account } : {}), ...(notes.trim() ? { notes: notes.trim() } : {}) } : { action, ...(notes.trim() ? { notes: notes.trim() } : {}) }),
     }).catch(() => null)
     const json = res ? await res.json().catch(() => null) as { success?: boolean; error?: string; data?: { seatConfirmed?: boolean; balance?: number } } | null : null
     setLoading(false)
@@ -112,8 +120,15 @@ export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold, cash
       )}
       {viewing && <FileViewerDialog title="Bukti transfer" endpoint={`/api/v1/admin/payments/${payment.id}/bukti`} onClose={() => setViewing(false)} />}
       <div className="space-y-1.5">
-        <label className="block text-[12px] font-medium text-admin-muted" htmlFor="pay-amount">Jumlah diterima (Rp)</label>
+        <label className="block text-[12px] font-medium text-admin-muted" htmlFor="pay-amount">Diterima di rekening (Rp)</label>
         <input id="pay-amount" type="number" min={1} className="admin-inp w-full" value={amount} onChange={e => setAmount(e.target.value)} />
+        {code > 0 && (
+          <label className="flex items-center gap-2 text-[12px] text-admin-ink">
+            <input type="checkbox" checked={withCode} onChange={e => setWithCode(e.target.checked)} />
+            Termasuk kode unik {code} — kredit tagihan {valid ? formatRupiah(n) : '-'}, kode dicatat sebagai pemasukan lain
+          </label>
+        )}
+        {codeShort && <p className="m-0 text-[11px] text-admin-warning">Diterima kurang dari nominal pelanggan + kode unik — kode tidak sampai; lepas centang supaya seluruhnya mengkredit tagihan.</p>}
         {differsFromClaim && <p className="m-0 text-[11px] text-admin-warning">Berbeda dari nominal yang dikirim pelanggan ({formatRupiah(payment.claimed!)}).</p>}
         {partial && !belowDp && <p className="m-0 text-[11px] text-admin-muted">Pembayaran sebagian — sisa {formatRupiah(bill.balance - n)} setelah dikonfirmasi.</p>}
         {belowDp && <p className="m-0 text-[11px] text-admin-warning">Terbayar akan {formatRupiah(paidAfter)}, di bawah DP {formatRupiah(dpThreshold)} — pembayaran tetap dicatat, tetapi kursi belum dikonfirmasi.</p>}
@@ -125,7 +140,7 @@ export function PaymentActions({ payment, bill, seatConfirmed, dpThreshold, cash
       </div>
       {error && <p className="text-[12px] text-admin-danger">{error}</p>}
       <div className="flex gap-2">
-        <button onClick={() => act(payment.id, 'confirm')} disabled={loading || !valid || (!account && !hasDest)}
+        <button onClick={() => act(payment.id, 'confirm')} disabled={loading || !valid || codeShort || (!account && !hasDest)}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-admin-ok hover:bg-admin-ok text-sm text-white font-medium disabled:opacity-50 transition-colors">
           <CheckCircle className="h-4 w-4" /> Konfirmasi
         </button>

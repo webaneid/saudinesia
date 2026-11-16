@@ -1512,6 +1512,8 @@ model Payment {
   payerNote                String?   @db.VarChar(500)
   /// Akun kas tujuan (Fase 7b-1): diisi route unggah dari rekening yang dipilih pelanggan (dicocokkan ke BankAccount), dapat diganti admin saat verifikasi. Ditulis HANYA lib/cash + process.ts.
   destinationCashAccountId String?
+  /// Kode unik yang ikut ditransfer (Fase 7b-3): diisi process.ts saat verifikasi (0 = transfer tanpa kode). Pemasukan lain, BUKAN kredit tagihan.
+  uniqueCodeIdr            Int       @default(0)
 
   booking                Booking      @relation(fields: [bookingId], references: [id])
   destinationCashAccount CashAccount? @relation(fields: [destinationCashAccountId], references: [id], onDelete: Restrict)
@@ -2168,6 +2170,8 @@ model Invoice {
   termsDoc        String?  @db.Text
   footerNoteDoc   String?  @db.Text
   issuedById      String? // staf yang menerbitkan (tanpa FK, pola byUserId); NULL = jalur jamaah / migrasi
+  /// Kode unik transfer (Fase 7b-3): dialokasikan sekali oleh lib/invoice/issue.ts bila setelan aktif, beku (revisi tak mengubah). NULL = tanpa kode.
+  uniqueCode      Int?
   createdAt       DateTime @default(now()) @db.Timestamptz(3)
   updatedAt       DateTime @updatedAt @db.Timestamptz(3)
 
