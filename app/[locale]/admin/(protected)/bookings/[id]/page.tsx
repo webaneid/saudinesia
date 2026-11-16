@@ -10,7 +10,7 @@ import { PaymentActions } from './PaymentActions'
 import { cashTargetOptions } from '@/lib/cash/accounts'
 import { InvoiceBox } from './InvoiceBox'
 import { RevisionHistory } from './RevisionHistory'
-import { billOf } from '@/lib/invoice/bill'
+import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { payableBanks } from '@/lib/invoice/banks'
 import type { BankSnapshot } from '@/lib/invoice/issue'
 import type { TaxLine } from '@/lib/invoice/tax'
@@ -22,7 +22,11 @@ import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
 import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
 import { PilgrimSlotsTable } from '@/components/shared/pilgrims/PilgrimSlotsTable'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
-import { canRecordCost } from '@/lib/pricing/policy'
+import { canCancelBooking, canManageRefund, canRecordCost } from '@/lib/pricing/policy'
+import { CancelBookingBox } from './CancelBookingBox'
+import { RefundsPanel, type RefundRow } from './RefundsPanel'
+import { refundableOf } from '@/lib/refunds/service'
+import { suggestedRefund } from '@/lib/booking/adminCancel'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
 import { DATE_LONG, DATE_NUMERIC, DATETIME_FULL, formatCalendarDate, formatInstant } from '@/lib/time'
@@ -53,6 +57,9 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
       pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
       payments:   { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], include: { destinationCashAccount: { select: { kind: true, bankAccountId: true } } } },
       invoice:    true,
+      // Fase 7b-2a: semua refund untuk panel; billOf hanya menghitung yang `paid`. Catatan/alasan = internal staf (halaman admin saja).
+      refunds:    { orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 50, include: { cashAccount: { select: { name: true } } } },
+      cancellation: true,
       groups:     { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true, plannedTravelDate: true } },
     },
   })
@@ -82,10 +89,21 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
   const cfg     = BOOKING_STATUS[st]
   // Bukti menunggu verifikasi pada booking hidup — juga cicilan/pelunasan sesudah kursi terkonfirmasi (Fase 7a F3).
   const pendingPayment = booking.status === 'active' ? booking.payments.find(p => p.status === 'pending') : undefined
-  const bill    = billOf(booking)
+  // Terbayar dihitung dari SEMUA refund dibayar (daftar panel dibatasi 50 baris).
+  const paidRefunds = await prisma.refund.findMany({ where: { bookingId: id, ...billRefunds.where }, select: billRefunds.select })
+  const bill    = billOf({ ...booking, refunds: paidRefunds })
   const limits  = paymentLimits(bill, (await getInvoiceSettings()).minimumFirstPaymentPercent)
   const payState = booking.status === 'active' || booking.status === 'completed' ? paymentState(bill.grandTotal, bill.paid) : null
   const noBank  = booking.status === 'active' && bill.balance > 0 && !!booking.invoice && (await payableBanks(booking.invoice.bankSnapshot as BankSnapshot[])).length === 0
+  const canMoney = canManageRefund(session.role)
+  const refundable = await refundableOf(prisma, id)
+  const refundRows: RefundRow[] = booking.refunds.map(r => ({
+    id: r.id, amount: Number(r.amount), reason: r.reason, status: r.status, source: r.source, createdAt: formatInstant(r.createdAt, DATETIME_FULL),
+    paidAt: r.paidAt ? formatInstant(r.paidAt, DATETIME_FULL) : null, notes: r.notes, account: r.cashAccount?.name ?? null,
+  }))
+  const c = booking.cancellation
+  const cancellationView = c ? { cancelledAt: formatInstant(c.cancelledAt, DATETIME_FULL), byCustomer: c.byCustomer, reason: c.reason, paid: Number(c.paidIdr), decision: c.decision, decisionNote: c.decisionNote, suggested: suggestedRefund(Number(c.paidIdr), booking.departureDate, c.cancelledAt) } : null
+  const needCash = canMoney && booking.refunds.some(r => r.status === 'approved')
   const revRows = await prisma.bookingRevision.findMany({ where: { bookingId: id }, orderBy: [{ revision: 'desc' }, { id: 'desc' }], take: 100 }) // riwayat satu booking: 100 terbaru
   const revStaff = new Map((await prisma.user.findMany({ where: { id: { in: [...new Set(revRows.map(r => r.byUserId))] } }, select: { id: true, fullName: true }, take: 100 })).map(u => [u.id, u.fullName]))
   const revisions = revRows.map(r => ({ ...r, totalBefore: Number(r.totalBefore), totalAfter: Number(r.totalAfter), taxBefore: Number(r.taxBefore), taxAfter: Number(r.taxAfter), byName: revStaff.get(r.byUserId) ?? null }))
@@ -336,6 +354,10 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
 
       {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
       <BookingPriceCard bookingId={id} status={st} />
+      <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} cashOptions={needCash ? await cashTargetOptions() : []} />
+      {booking.status === 'active' && canCancelBooking(session.role) && (
+        <CancelBookingBox bookingId={id} paid={refundable.paid} suggested={suggestedRefund(refundable.paid, booking.departureDate)} canMoney={canMoney} pendingProof={!!pendingPayment} />
+      )}
       {canRecordCost(session.role) && <CostActualsPanel bookingId={id} />}
       <RevisionHistory rows={revisions} />
 

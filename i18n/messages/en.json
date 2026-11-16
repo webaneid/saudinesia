@@ -1730,6 +1730,7 @@
     "paymentProofPending": "Your previous payment proof is still awaiting verification",
     "bookingCannotTakeProof": "This booking can’t accept payment proof right now",
     "bookingCannotCancel": "This booking can’t be cancelled.",
+    "cancelNeedsAdmin": "A booking that has received a payment can only be cancelled by the Saudinesia team. Please contact us.",
     "fileEmpty": "The file is empty.",
     "fileTooLarge": "The file can be at most 5 MB.",
     "fileBadImage": "The file isn’t a valid image.",

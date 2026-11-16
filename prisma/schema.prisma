@@ -855,6 +855,7 @@ model Booking {
   costActuals    CostActual[]
   payments       Payment[]
   refunds        Refund[]
+  cancellation   BookingCancellation?
   notifications  NotificationLog[]
   invoice        Invoice?
   revisions      BookingRevision[]
@@ -1541,11 +1542,29 @@ model Refund {
   paidAt         DateTime?
   notes          String?
   createdAt      DateTime     @default(now())
+  // Fase 7b-2a (docs/arsitektur-booking-engine-v2.md §10.10): siklus pending → approved → paid | rejected, ditulis HANYA lib/refunds/service.ts.
+  // `reason`/`notes` = teks staf (bisa memuat nama) → dikosongkan lib/account/deletion.ts. Uang keluar = entri buku kas `refund` (refType 'refund').
+  source        RefundSource @default(cancellation)
+  createdById   String? // staf yang mengusulkan (null = baris lama)
+  rejectedAt    DateTime?    @db.Timestamptz(3)
+  rejectedById  String?
+  paidById      String?
+  cashAccountId String?
 
-  booking    Booking @relation(fields: [bookingId], references: [id])
-  approvedBy User?   @relation("ApprovedBy", fields: [approvedById], references: [id])
+  booking     Booking      @relation(fields: [bookingId], references: [id])
+  approvedBy  User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
+  cashAccount CashAccount? @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
 
+  @@index([bookingId])
+  @@index([status, createdAt])
   @@map("refunds")
+}
+
+enum RefundSource {
+  cancellation
+  overpayment
+
+  @@map("refund_source")
 }
 
 enum RefundStatus {
@@ -2220,6 +2239,7 @@ model CashAccount {
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
   entries     CashEntry[]
   payments    Payment[]
+  refunds     Refund[]
 
   @@map("cash_accounts")
 }
@@ -2247,4 +2267,36 @@ model CashEntry {
   @@index([bookingId])
   @@index([entryDate, id])
   @@map("cash_entries")
+}
+
+// Pembatalan pesanan (Fase 7b-2a, §10.10): satu baris per booking yang dibatalkan oleh staf ATAU pelanggan, ditulis HANYA lib/booking/adminCancel.ts dan route batal pelanggan.
+// `paidIdr` = uang terverifikasi bersih saat dibatalkan; `decision` = nasib uang itu (D11): refund | retain (pemasukan lain) | defer (diputuskan nanti) | none (tak ada uang).
+// `reason`/`decisionNote` = teks staf (bisa memuat nama) → dikosongkan lib/account/deletion.ts.
+enum CancelMoneyDecision {
+  none
+  refund
+  retain
+  defer
+
+  @@map("cancel_money_decision")
+}
+
+model BookingCancellation {
+  id           String              @id @default(uuid())
+  bookingId    String              @unique
+  cancelledAt  DateTime            @db.Timestamptz(3)
+  cancelledById String? // staf atau pemilik booking
+  byCustomer   Boolean             @default(false)
+  reason       String              @db.VarChar(500)
+  paidIdr      Decimal             @db.Decimal(14, 2)
+  decision     CancelMoneyDecision
+  decidedAt    DateTime?           @db.Timestamptz(3)
+  decidedById  String?
+  decisionNote String?             @db.VarChar(500)
+  createdAt    DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime            @updatedAt @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@map("booking_cancellations")
 }

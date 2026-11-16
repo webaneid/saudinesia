@@ -15,6 +15,10 @@ export const canAdjustBooking = (role: UserRole): boolean => ADMIN_ROLES.include
 export const canRecordCost = (role: UserRole): boolean => MANAGER_ROLES.includes(role)
 /** Melihat buku kas (Fase 7b-1): semua peran admin, baca saja (docs/arsitektur-booking-engine-v2.md §10.10). */
 export const canViewCashBook = (role: UserRole): boolean => ADMIN_ROLES.includes(role)
+/** Refund (usul, setujui, tolak, bayar) dan keputusan uang saat batal: manager & superadmin (pemilik 2026-11-16). Admin hanya melihat. */
+export const canManageRefund = (role: UserRole): boolean => MANAGER_ROLES.includes(role)
+/** Membatalkan pesanan TANPA uang masuk: semua admin. Pesanan dengan uang masuk butuh `canManageRefund`. */
+export const canCancelBooking = (role: UserRole): boolean => ADMIN_ROLES.includes(role)
 export const canChangeMarginRule = (role: UserRole): boolean => SUPERADMIN_ROLES.includes(role)
 
 async function guard(allowed: (role: UserRole) => boolean): Promise<SessionPayload> {
@@ -35,3 +39,7 @@ export const requireBookingAdjust = () => guard(canAdjustBooking)
 export const requireCostRecord = () => guard(canRecordCost)
 /** Melihat buku kas. */
 export const requireCashView = () => guard(canViewCashBook)
+/** Refund dan keputusan uang pembatalan. */
+export const requireRefundManage = () => guard(canManageRefund)
+/** Membatalkan pesanan (uang masuk → `canManageRefund` diperiksa di layanan). */
+export const requireBookingCancel = () => guard(canCancelBooking)

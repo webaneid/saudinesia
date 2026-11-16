@@ -14,6 +14,7 @@ import { deleteObjectsByPrefix } from '@/lib/storage/minio'
 import { MIN_WAIT_HOURS, executeDeletion, previewDeletion, rejectDeletion, submitDeletionRequest, withdrawDeletionRequest, type DeletionDeps } from '@/lib/account/deletion'
 import { issueSessionToken, resolveSessionToken } from '@/lib/auth/session'
 import { assertThrowawayDb } from './lib/testDb'
+import { ensureMainCashAccount } from '@/lib/cash/accounts'
 import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
@@ -109,7 +110,7 @@ async function seed(opts: { bookingStatus?: LegacyBookingStatus; refundStatus?: 
   // Fase 6: catatan pemeriksaan data jamaah (teks bebas staf) — dikosongkan, baris riwayat tetap (append-only).
   await prisma.pilgrimReviewEvent.create({ data: { bookingPilgrimId: pilgrim.id, fromStatus: 'submitted', toStatus: 'needs_revision', note: 'foto paspor Budi buram, hubungi 0812-RAHASIA' } })
   const payment = await prisma.payment.create({ data: { bookingId: booking.id, amount: new Decimal(12_500_000), method: 'transfer', status: 'confirmed', buktiTransferPath: `payments/${uniq()}/bukti.jpg`, notes: 'nama pengirim beda: Ahmad 0812-RAHASIA', claimedAmountIdr: new Decimal(12_500_000), senderBank: 'BCA', senderAccountName: 'Siti Aminah', payerNote: 'transfer dari rekening istri 0812-RAHASIA' } })
-  const refund = await prisma.refund.create({ data: { bookingId: booking.id, amount: new Decimal(500_000), reason: 'selisih', notes: 'transfer ke rekening istri BCA 123456', status: opts.refundStatus ?? 'paid' } })
+  const refund = await prisma.refund.create({ data: { bookingId: booking.id, amount: new Decimal(500_000), reason: 'selisih', notes: 'transfer ke rekening istri BCA 123456', status: opts.refundStatus ?? 'paid', ...((opts.refundStatus ?? 'paid') === 'paid' ? { paidAt: new Date(), cashAccountId: await prisma.$transaction(tx => ensureMainCashAccount(tx)) } : {}) } })
   // Fase 7: catatan staf yang menyebut nama pemesan (penyesuaian total + pengeluaran vendor) harus dibersihkan saat akun dihapus
   const adjustment = await prisma.bookingAdjustment.create({ data: { bookingId: booking.id, amountIdr: new Decimal(-100_000), label: 'Diskon', reason: 'nego dengan Budi Santoso 0812-RAHASIA', totalBefore: new Decimal(12_600_000), totalAfter: new Decimal(12_500_000), costKnownIdr: new Decimal(0), belowCost: false, byUserId: 'staf-uji' } })
   const vendorForCost = await prisma.vendor.create({ data: { name: `Vendor Hapus ${uniq()}`, nameKey: `vendor hapus ${uniq()}`, countryCode: 'SA' } })
@@ -176,7 +177,7 @@ await t('blocker: refund pending menolak; kontrol positif refund paid lolos', as
   const s = await seed({ refundStatus: 'pending' })
   const r = await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, fakeDeps().deps)
   assert.equal(!r.ok && r.reason, 'blocked'); assert.match(!r.ok && r.reason === 'blocked' ? r.blockers.join() : '', /refund/)
-  await prisma.refund.update({ where: { id: s.refundId }, data: { status: 'paid' } })
+  await prisma.refund.update({ where: { id: s.refundId }, data: { status: 'paid', paidAt: new Date(), cashAccountId: await prisma.$transaction(tx => ensureMainCashAccount(tx)) } })
   assert.equal((await executeDeletion(s.requestId, admin.id, { confirmEmail: s.email }, fakeDeps().deps)).ok, true)
 })
 
@@ -643,6 +644,11 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'Payment.confirmedById': 'dipertahankan (staf yang memverifikasi pembayaran)',
     'CashEntry.createdById': 'dipertahankan (staf yang memosting entri buku kas; append-only, tanpa data pribadi)',
     'Refund.approvedById': 'dipertahankan (staf yang menyetujui refund)',
+    'Refund.createdById': 'dipertahankan (staf yang mengusulkan refund; alasan dibersihkan — refund.updateMany)',
+    'Refund.rejectedById': 'dipertahankan (staf yang menolak refund)',
+    'Refund.paidById': 'dipertahankan (staf yang membayar refund)',
+    'BookingCancellation.cancelledById': 'staf = dipertahankan; pembatalan oleh pemesan sendiri (id akun ini) dikosongkan — bookingCancellation.updateMany',
+    'BookingCancellation.decidedById': 'dipertahankan (staf yang memutuskan nasib uang; catatan dibersihkan — bookingCancellation.updateMany)',
     'InvoiceSettings.updatedById': 'dipertahankan (staf terakhir yang mengubah pengaturan)',
     'Invoice.issuedById': 'dipertahankan (staf yang menerbitkan invoice; NULL untuk jalur jamaah — tak pernah menunjuk akun jamaah)',
     'BookingRevision.byUserId': 'dipertahankan (staf yang merevisi booking; catatan `reason` dibersihkan — bookingRevision.updateMany)',
@@ -661,7 +667,7 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
   }
   assert.deepEqual([...found].sort(), Object.keys(HANDLED).sort(), 'kolom userId baru/hilang — tinjau penanganan penghapusan')
   const src = readFileSync('lib/account/deletion.ts', 'utf8')
-  for (const must of ['eraseSavedPilgrimsOf(tx, userId)', 'pilgrimDocument.findMany', 'bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'SEALED_PII_CLEARED', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany', 'pilgrimReviewEvent.updateMany']) assert.ok(src.includes(must), must)
+  for (const must of ['eraseSavedPilgrimsOf(tx, userId)', 'pilgrimDocument.findMany', 'bookingAdjustment.updateMany', 'costActual.updateMany', 'authToken.deleteMany', 'notificationLog.updateMany', 'SEALED_PII_CLEARED', 'bookingPilgrim.updateMany', 'address.delete', 'bookingTransport.updateMany', 'payment.updateMany', 'refund.updateMany', 'bookingCancellation.updateMany', 'pilgrimReviewEvent.updateMany']) assert.ok(src.includes(must), must)
   // Kolom teks bebas yang diketahui pada baris yang DIPERTAHANKAN harus dibersihkan (DEL-01).
   for (const col of ['pickupDetail', 'dropoffDetail']) assert.ok(src.includes(col), col)
   assert.ok(/notes: null/.test(src))

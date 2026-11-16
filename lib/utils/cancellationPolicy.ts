@@ -15,7 +15,7 @@ export function getCancellationPolicy(
   return { refundPercent: 0, label: '<30 hari: tidak ada refund' }
 }
 
-export function computeRefundAmount(totalAmount: number, departureDate: Date): number {
-  const { refundPercent } = getCancellationPolicy(departureDate)
+export function computeRefundAmount(totalAmount: number, departureDate: Date, cancelDate: Date = new Date()): number {
+  const { refundPercent } = getCancellationPolicy(departureDate, cancelDate)
   return Math.floor((totalAmount * refundPercent) / 100)
 }

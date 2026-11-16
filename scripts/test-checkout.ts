@@ -448,7 +448,7 @@ await t(`SEC-221 BATAS: maksimal ${MAX_UNPAID_CHECKOUTS} pesanan hidup belum dib
   made.push((await one()).id)
   await assert.rejects(one(), CheckoutUnpaidLimitError)
   // pelanggan membatalkan pesanan lama sendiri (jalur DELETE /bookings/[id]) → slot kembali
-  await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id: made[1]! }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } }), 'uji'))
+  await prisma.$transaction(async tx => cancelBooking(tx, await tx.booking.findUniqueOrThrow({ where: { id: made[1]! }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } })))
   made.push((await one()).id)
   await assert.rejects(one(), CheckoutUnpaidLimitError)
   // pesanan buatan admin untuk akun ini TETAP dihitung (yang diukur = tagihan terbuka akun), tetapi admin sendiri tak dibatasi (batas hanya di placeCheckout)

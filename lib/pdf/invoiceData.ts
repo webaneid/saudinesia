@@ -4,7 +4,7 @@ import { displayStatus, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 import { DATE_SHORT_MONTH_2D, calendarDateOf, dateInApp, formatCalendarDate, formatInstant, type CalendarDate } from '@/lib/time'
 import { formatAddressLine } from '@/lib/address/format'
-import { billOf } from '@/lib/invoice/bill'
+import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { frozenTaxRules, type BankSnapshot, type CompanySnapshot } from '@/lib/invoice/issue'
 import { computeTax } from '@/lib/invoice/tax'
 import { payableBanks } from '@/lib/invoice/banks'
@@ -22,6 +22,7 @@ export const invoiceBookingInclude = {
   priceSnapshots: { where: { voidedAt: null }, orderBy: [{ takenAt: 'asc' }, { itemType: 'asc' }, { itemId: 'asc' }, { lineKey: 'asc' }] }, // baris di-void revisi tak tampil (T1)
   pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { id: true, visaProductId: true } } } }, // tanpa kolom NIK/paspor tersegel
   payments: true,
+  refunds: billRefunds, // refund yang dibayar mengurangi terbayar (Fase 7b-2a)
   invoice: true,
   // Rombongan (§10.8, 11d-2b): nama bagian dirender dari label hidup, bukan snapshot; item hanya membawa rombongannya.
   groups:       { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true } },

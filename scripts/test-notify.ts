@@ -140,6 +140,7 @@ await t('WhatsApp HANYA untuk konfirmasi booking, pengingat pembayaran, pembayar
   ]
   const emailOnly: NotificationEvent[] = [
     { type: 'booking_expired', code: 'SND-1' },
+    { type: 'booking_cancelled', code: 'SND-1', money: true },
     { type: 'visa_status_change', code: 'SND-1', status: 'approved' },
     { type: 'pilgrim_review', code: 'SND-1', status: 'Terverifikasi' },
     { type: 'welcome', name: 'Budi' },
@@ -205,6 +206,7 @@ const ALL_EVENTS: NotificationEvent[] = [
   { type: 'payment_confirmed', code: 'SND-1' },
   { type: 'payment_rejected', code: 'SND-1' },
   { type: 'booking_expired', code: 'SND-1' },
+  { type: 'booking_cancelled', code: 'SND-1', money: false },
   { type: 'visa_status_change', code: 'SND-1', status: 'approved' },
   { type: 'pilgrim_review', code: 'SND-1', status: 'Perlu perbaikan' },
   { type: 'contact_changed' },

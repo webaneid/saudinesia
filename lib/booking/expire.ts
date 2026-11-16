@@ -1,4 +1,4 @@
-import { billOf, billSelect } from '@/lib/invoice/bill'
+import { billOf, billRefunds, billSelect } from '@/lib/invoice/bill'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
@@ -46,7 +46,7 @@ export async function expireOverdueBookings(now: Date = new Date()): Promise<Exp
         if ((await tx.booking.count({ where: { AND: [{ id }, where] } })) === 0) return null
         const booking = await loadForExpiry(tx, id)
         if (!booking) return null // berubah sejak daftar kandidat dibaca (dibayar / dikonfirmasi / dibatalkan)
-        await cancelBooking(tx, booking, reason, 'expired')
+        await cancelBooking(tx, booking, 'expired')
         return { id: booking.id, userId: booking.userId, code: booking.bookingCode }
       })
       if (done) result.expired.push(done)
@@ -87,6 +87,7 @@ export async function dueReminders(now: Date = new Date()): Promise<DueReminder[
     select: {
       id: true, userId: true, bookingCode: true, paymentDeadline: true, ...billSelect,
       payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } },
+      refunds: billRefunds,
     },
     orderBy: [{ paymentDeadline: 'asc' }, { id: 'asc' }],
   })

@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { getBookingProfitRows, getProfitReport, periodBounds, ReportInputError, type ReportParams } from '@/lib/reports/profit'
 import { assertThrowawayDb } from './lib/testDb'
+import { ensureMainCashAccount } from '@/lib/cash/accounts'
 import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
@@ -39,7 +40,7 @@ async function mk(code: string, at: string, status: LegacyBookingStatus, lines: 
     } })
   }
   for (const p of pays) await prisma.payment.create({ data: { bookingId: b.id, amount: p.amount, method: 'transfer', status: p.status, confirmedAt: p.status === 'confirmed' ? new Date(at) : null } })
-  for (const r of refs) await prisma.refund.create({ data: { bookingId: b.id, amount: r.amount, reason: 'uji', status: r.status } })
+  for (const r of refs) await prisma.refund.create({ data: { bookingId: b.id, amount: r.amount, reason: 'uji', status: r.status, ...(r.status === 'paid' ? { paidAt: new Date(at), cashAccountId: await prisma.$transaction(tx => ensureMainCashAccount(tx)) } : {}) } }) // refund dibayar wajib akun + tanggal (CHECK 7b-2a)
   return b.id
 }
 
