@@ -2,10 +2,9 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Banknote, Check, Pencil, Undo2, X } from 'lucide-react'
+import Link from 'next/link'
+import { ArrowRight, Undo2 } from 'lucide-react'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { DateTimeField } from '@/components/shared/DateTimeField'
-import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { formatRupiah } from '@/lib/utils'
 
 export type RefundRow = {
@@ -32,7 +31,8 @@ interface Props {
   refunds: RefundRow[]
   /** Batas usulan refund baru (dibaca server; booking hidup = kelebihan bayar). */
   refundableMax: number
-  cashOptions: Array<{ value: string; label: string }>
+  /** `/{locale}/admin/finance/refunds` — tindakan refund ada di halaman detail (SEC-244, §10.13). */
+  refundsHref: string
 }
 
 async function post(url: string, body: unknown): Promise<string | null> {
@@ -41,18 +41,16 @@ async function post(url: string, body: unknown): Promise<string | null> {
   return json?.success ? null : (json?.error ?? 'Gagal menyimpan')
 }
 
-// Pembatalan + refund satu booking (Fase 7b-2a §10.10): keputusan tertunda, usulan, setujui/tolak/ubah, bayar (uang keluar → buku kas). Aturan di lib/refunds/service.ts.
-export function RefundsPanel({ bookingId, canManage, cancellation, refunds, refundableMax, cashOptions }: Props) {
+// Pembatalan + refund satu booking (Fase 7b-2a §10.10): keputusan pembatalan tertunda di sini; refund = ringkasan + tautan — buat/setujui/ubah/tolak/bayar HANYA
+// di Keuangan → Refund (SEC-244, §10.13). Aturan di lib/refunds/service.ts.
+export function RefundsPanel({ bookingId, canManage, cancellation, refunds, refundableMax, refundsHref }: Props) {
   const router = useRouter()
-  const { ask, dialog } = useConfirm()
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState<null | { kind: 'propose' } | { kind: 'decide' } | { kind: 'edit'; id: string } | { kind: 'pay'; id: string }>(null)
+  const [form, setForm] = useState<null | { kind: 'decide' }>(null)
   const [amount, setAmount] = useState('')
   const [text, setText] = useState('')
   const [decision, setDecision] = useState<'refund' | 'retain'>('refund')
-  const [account, setAccount] = useState('')
-  const [paidAt, setPaidAt] = useState<string | null>(() => new Date().toISOString())
 
   if (!cancellation && refunds.length === 0 && (!canManage || refundableMax <= 0)) return null
 
@@ -67,7 +65,6 @@ export function RefundsPanel({ bookingId, canManage, cancellation, refunds, refu
 
   return (
     <div className="admin-card p-4 space-y-3">
-      {dialog}
       <p className="admin-section">Pembatalan &amp; Refund</p>
       {cancellation && (
         <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-[12px] sm:grid-cols-2">
@@ -95,68 +92,20 @@ export function RefundsPanel({ bookingId, canManage, cancellation, refunds, refu
       {refunds.length > 0 && (
         <ul className="divide-y divide-admin-line">
           {refunds.map(r => (
-            <li key={r.id} className="py-2 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2 text-[12px]">
+            <li key={r.id} className="py-2">
+              <Link href={`${refundsHref}/${r.id}`} className="flex flex-wrap items-center gap-2 text-[12px] hover:text-admin-accent">
                 <span className="font-semibold text-admin-ink tabular-nums">{formatRupiah(r.amount)}</span>
                 <span className={STATUS[r.status].cls}>{STATUS[r.status].label}</span>
                 <span className="text-admin-muted">{r.source === 'overpayment' ? 'Kelebihan bayar' : 'Pembatalan'} · {r.createdAt}</span>
-                {canManage && r.status === 'pending' && (
-                  <span className="ml-auto flex gap-1">
-                    <button type="button" className="admin-btn-sm" disabled={busy} aria-label="Setujui" onClick={() => run(`/api/v1/admin/refunds/${r.id}`, { action: 'approve' })}><Check className="h-3.5 w-3.5" /> Setujui</button>
-                    <button type="button" className="admin-btn-sm" disabled={busy} aria-label="Ubah" onClick={() => open({ kind: 'edit', id: r.id }, String(r.amount), r.reason)}><Pencil className="h-3.5 w-3.5" /></button>
-                  </span>
-                )}
-                {canManage && r.status === 'approved' && (
-                  <span className="ml-auto flex gap-1">
-                    <button type="button" className="admin-btn-sm" disabled={busy} onClick={() => { open({ kind: 'pay', id: r.id }); setAccount(''); setPaidAt(new Date().toISOString()) }}><Banknote className="h-3.5 w-3.5" /> Bayar</button>
-                  </span>
-                )}
-                {canManage && (r.status === 'pending' || r.status === 'approved') && (
-                  <button type="button" className="admin-btn-sm" disabled={busy} aria-label="Tolak" onClick={async () => { if (await ask({ title: 'Tolak refund ini?', confirmLabel: 'Ya, tolak' })) await run(`/api/v1/admin/refunds/${r.id}`, { action: 'reject' }) }}><X className="h-3.5 w-3.5" /></button>
-                )}
-              </div>
-              <p className="m-0 text-[12px] text-admin-muted break-words">{r.reason}{r.paidAt ? ` · dibayar ${r.paidAt}${r.account ? ` dari ${r.account}` : ''}` : ''}{r.notes ? ` · ${r.notes}` : ''}</p>
-              {form?.kind === 'edit' && form.id === r.id && (
-                <div className="admin-form-panel">
-                  <input type="number" min={1} className="admin-inp w-full" aria-label="Jumlah refund" value={amount} onChange={e => setAmount(e.target.value)} />
-                  <textarea className="admin-inp w-full" rows={2} maxLength={500} aria-label="Alasan" value={text} onChange={e => setText(e.target.value)} />
-                  <div className="flex gap-2">
-                    <button type="button" className="admin-btn-sm" disabled={busy} onClick={() => run(`/api/v1/admin/refunds/${r.id}`, { action: 'update', amount: Number(amount), reason: text.trim() })}>Simpan</button>
-                    <button type="button" className="admin-btn-sm" onClick={() => setForm(null)}>Tutup</button>
-                  </div>
-                </div>
-              )}
-              {form?.kind === 'pay' && form.id === r.id && (
-                <div className="admin-form-panel">
-                  <ChoiceSelect options={cashOptions.map(o => ({ id: o.value, label: o.label }))} value={account} onChange={setAccount} placeholder="Dibayar dari akun kas" ariaLabel="Akun kas pembayar" clearable={false} />
-                  <DateTimeField value={paidAt} onChange={setPaidAt} label="Waktu transfer refund" />
-                  <textarea className="admin-inp w-full" rows={2} maxLength={500} placeholder="Catatan (opsional)" value={text} onChange={e => setText(e.target.value)} />
-                  <div className="flex gap-2">
-                    <button type="button" className="admin-btn-sm" disabled={busy || !account || !paidAt}
-                      onClick={async () => { if (await ask({ title: `Catat refund ${formatRupiah(r.amount)} sudah dibayar?`, body: 'Uang keluar dicatat di buku kas dan tidak dapat diubah.', confirmLabel: 'Ya, catat', tone: 'primary' })) await run(`/api/v1/admin/refunds/${r.id}`, { action: 'pay', cashAccount: account, paidAt, ...(text.trim() ? { notes: text.trim() } : {}) }) }}>
-                      Catat dibayar
-                    </button>
-                    <button type="button" className="admin-btn-sm" onClick={() => setForm(null)}>Tutup</button>
-                  </div>
-                </div>
-              )}
+                <span className="ml-auto inline-flex items-center gap-1 font-semibold text-admin-accent">Buka <ArrowRight className="h-3.5 w-3.5" /></span>
+              </Link>
             </li>
           ))}
         </ul>
       )}
 
-      {canManage && refundableMax > 0 && form?.kind !== 'propose' && (
-        <button type="button" className="admin-btn-sm" onClick={() => open({ kind: 'propose' }, String(refundableMax))}><Undo2 className="h-3.5 w-3.5" /> Usulkan refund (maks. {formatRupiah(refundableMax)})</button>
-      )}
-      {form?.kind === 'propose' && (
-        <div className="admin-form-panel">
-          <input type="number" min={1} max={refundableMax} className="admin-inp w-full" aria-label="Jumlah refund" value={amount} onChange={e => setAmount(e.target.value)} />
-          <textarea className="admin-inp w-full" rows={2} maxLength={500} placeholder="Alasan (internal)" value={text} onChange={e => setText(e.target.value)} />
-          <div className="flex gap-2">
-            <button type="button" className="admin-btn-sm" disabled={busy} onClick={() => run(`/api/v1/admin/bookings/${bookingId}/refunds`, { amount: Number(amount), reason: text.trim() })}>Simpan usulan</button>
-            <button type="button" className="admin-btn-sm" onClick={() => setForm(null)}>Tutup</button>
-          </div>
-        </div>
+      {canManage && refundableMax > 0 && (
+        <Link href={`${refundsHref}/new?booking=${bookingId}`} className="admin-btn-sm"><Undo2 className="h-3.5 w-3.5" /> Buat refund (maks. {formatRupiah(refundableMax)})</Link>
       )}
       {error && <p className="text-[12px] text-admin-danger">{error}</p>}
     </div>

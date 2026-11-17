@@ -46,7 +46,7 @@ async function makeUser(role: 'pilgrim' | 'admin' = 'pilgrim'): Promise<Actor> {
 }
 // NIK uji: provinsi 32, lahir 15-07-1985 laki-laki (digit 7–12 = 150785), 4 digit urut berbeda per jalan.
 const base4 = Number(String(Date.now()).slice(-3)) * 10
-const nikOf = (i: number) => `320101150785${String((base4 + i) % 10000).padStart(4, '0')}`
+const nikOf = (i: number) => `320101150785${String(((base4 + i) % 9999) + 1).padStart(4, '0')}` // urut 0001–9999: '0000' ditolak validator (dulu flaky saat base4 + i = 10000)
 const card = async (actor: Actor, input: Record<string, unknown>) => {
   const r = await createSavedPilgrim(actor, actor.userId, savedPilgrimInputSchema.parse({ gender: 'male', birthPlace: 'Bandung', birthDate: '1985-07-15', nationality: 'ID', ...input }))
   if (!r.ok) throw new Error(`${r.status} ${r.error}`)

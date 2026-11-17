@@ -50,6 +50,7 @@ Dokumen lama (`decisions.md` 2026-09-15, komentar `schema.prisma`): "permintaan 
 | `Document` + objek MinIO (scan paspor/KTP) | baris dihapus + objek dihapus | PII inti |
 | `VisaApplication.notes`/`rejectionReason`, `Booking.notes`, `BookingTransport.pickupDetail`/`dropoffDetail`, `Payment.notes`, `Refund.notes` | → `null` | teks bebas bisa memuat nama/nomor/alamat (DEL-01). `Refund.reason` hanya string sistem → dibiarkan |
 | `GroupMember` milik pengguna | `userId`/`inviteToken` → `null` | |
+| `Refund.recipientBank`/`recipientAccountNumber`/`recipientAccountName` (SEC-244) | refund `paid` → **dipertahankan**; status lain → `null` | rekening tujuan refund yang dibayar = bukti ke mana uang keluar (putusan pemilik 2026-11-18, sejajar rekening tujuan pembayaran masuk); yang belum dibayar tak pernah jadi bukti |
 | `Booking`, `Payment` (+ bukti transfer), `Refund`, `ConsentLog`, `AccountDeletionRequest` | **dipertahankan** | kewajiban pembukuan/pajak, bukti persetujuan, akuntabilitas |
 
 Sisa risiko yang diketahui dan diterima: bukti transfer (`Payment.buktiTransferPath`) bisa memuat nama/rekening pengirim — dipertahankan bersama catatan pembayaran (kewajiban retensi); `Booking`/invoice historis tidak lagi menampilkan nama jamaah (manifest dikosongkan).

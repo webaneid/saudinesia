@@ -1576,6 +1576,11 @@ model Refund {
   rejectedById   String?
   paidById       String?
   cashAccountId  String?
+  // Rekening TUJUAN pelanggan (SEC-244, §10.13): semua-atau-tak-ada (CHECK); wajib saat bayar non-tunai (lib/refunds/service.ts). Data pribadi →
+  // dikosongkan lib/account/deletion.ts.
+  recipientBank          String? @db.VarChar(80)
+  recipientAccountNumber String? @db.VarChar(40)
+  recipientAccountName   String? @db.VarChar(120)
 
   booking     Booking      @relation(fields: [bookingId], references: [id])
   approvedBy  User?        @relation("ApprovedBy", fields: [approvedById], references: [id])

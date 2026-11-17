@@ -3601,3 +3601,14 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** Pemilik memilih bayar langsung + verifikasi otomatis (K9-1..K9-6). Callback tak bisa dipercaya isinya; menanyakan ulang ke iPaymu menutup pemalsuan nominal. Biaya per kelompok karena tarif iPaymu berbeda per kanal.
 **Alternatives considered:** redirect ke halaman iPaymu (ditolak pemilik); verifikasi admin manual (ditolak); satu setelan biaya untuk semua kanal (kolom lama, dihapus); memakai ulang `processPayment` utuh (mewajibkan staf + kode unik — tidak cocok, hanya bagian kursi yang dibagi).
 **Security check:** subagent `security-auditor` — 0 Critical, 0 High, 3 Medium (SEC-256 awaiting melewati SEC-221, SEC-257 sandbox di produksi, SEC-259 uang telat) semuanya diperbaiki + diuji; Low: SEC-260 diperbaiki, SEC-258 dan SEC-261 dicatat Terbuka. `bun audit` tanpa dependency baru.
+
+## 2026-11-17 — Halaman refund khusus (SEC-244)
+**Decision:** Refund dibuat dan ditindak HANYA di Keuangan → Refund: `finance/refunds/new` (pilih booking yang masih bersisa dana lewat `refundCandidates`, jumlah ≤ batas, alasan, rekening tujuan opsional) dan detail `finance/refunds/[id]` (ringkasan, arus uang booking dari buku kas, rekening tujuan, riwayat langkah dengan nama staf, tindakan Setujui/Ubah/Tolak/Bayar). Rekening tujuan pelanggan disimpan di `Refund.recipient*` (CHECK semua-atau-tak-ada) dan WAJIB saat bayar kecuali dari kas tunai. Panel refund di halaman booking menjadi ringkasan + tautan; keputusan pembatalan tertunda tetap di sana. Route usulan per booking dihapus, diganti `POST /api/v1/admin/refunds`. Pemisahan tugas TIDAK diterapkan (putusan pemilik).
+**Rationale:** Pemilik meminta formulir tersendiri supaya keluar-masuk uang jelas; satu tempat tindakan mencegah dua jalur yang menyimpang.
+**Alternatives considered:** tindakan tetap di kedua halaman (ditolak pemilik); tanpa rekening tujuan (ditolak pemilik); pemisahan tugas empat-mata (ditolak pemilik).
+**Security check:** subagent `security-auditor` — 0 Critical/High/Medium, 4 Low: SEC-264 diperbaiki, SEC-262 dicatat Terbuka, SEC-263/265 Diterima. `bun audit` tanpa dependency baru.
+
+## 2026-11-18 — Rekening tujuan refund yang dibayar dipertahankan saat hapus akun
+**Decision:** Penghapusan akun (`lib/account/deletion.ts`) mempertahankan `Refund.recipient*` untuk refund berstatus `paid` dan mengosongkannya untuk status lain. Diuji di `scripts/test-deletion.ts` (refund dibayar tetap, refund ditolak dikosongkan).
+**Rationale:** Pemilik: rekening tujuan refund yang dibayar "tidak sekadar data" — itu bukti ke mana uang perusahaan keluar, sejajar dengan rekening tujuan pembayaran masuk yang sudah dipertahankan sejak Fase 7a. Refund yang tak pernah dibayar tidak membuktikan apa pun, jadi datanya dihapus.
+**Alternatives considered:** Mengosongkan semua (versi SEC-244 awal) — menghilangkan bukti uang keluar; mempertahankan semua — menyimpan data pribadi tanpa kepentingan pembukuan.

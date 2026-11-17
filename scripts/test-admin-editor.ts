@@ -18,7 +18,7 @@ const fileOf = (e: string) => ADMIN + (e.endsWith('.tsx') ? e : e + '/page.tsx')
 // EditPage tanpa foto (entitas tak bergambar — dokumen jamaah menyusul Fase 4 jamaah sebagai kotak sendiri).
 const EDITPAGE_NO_MEDIA_PAGES = ['customers/[id]/pilgrims/[cardId]']
 // Halaman kelola server (EditorShell + MetaBox) yang setiap kotaknya komponen yang menyimpan sendiri — tanpa satu tombol Simpan (PublishBox).
-const PANEL_PAGES = ['bookings/[id]/pilgrims/[pilgrimId]']
+const PANEL_PAGES = ['bookings/[id]/pilgrims/[pilgrimId]', 'finance/refunds/[id]']
 
 await t('halaman kelola berkotak: EditorShell + MetaBox (lewat pembungkus klien ManageBox — ikon tak bisa dikirim server→klien), penjaga halaman admin', () => {
   for (const e of PANEL_PAGES) {

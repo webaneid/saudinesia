@@ -36,6 +36,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'app/[locale]/admin/(protected)/identitas-jamaah/[id]/page.tsx': { count: 2, reason: 'daftar bersarang milik SATU identitas: kartu yang menautnya (sedikit, satu orang) + 50 jamaah booking terbaru (jumlah total ditampilkan)' },
   'components/shared/pilgrims/PilgrimSlotsTable.tsx': { count: 1, reason: 'jamaah SATU booking (daftar bersarang milik satu induk; jumlah = slot yang ditagih), dipakai halaman booking jamaah dan admin' },
   'app/[locale]/admin/(protected)/finance/cash-book/page.tsx': { count: 1, reason: 'ringkasan per akun kas = agregat berukuran tetap (jumlah akun kas); daftar entri berpaginasi' },
+  'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': { count: 1, reason: 'arus uang buku kas SATU booking (daftar bersarang milik satu induk, dibatasi 200 entri dengan penanda); buku kas lengkap berpaginasi' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },
 }
 
@@ -44,6 +45,7 @@ const READ_ONLY_TABLES: Record<string, string> = {
   'app/[locale]/(public)/flight/page.tsx': 'katalog publik baca-saja (tak ada aksi per baris)',
   'app/[locale]/(public)/hotels/[id]/page.tsx': 'rate sheet publik baca-saja',
   'app/[locale]/admin/(protected)/notifications/page.tsx': 'log pengiriman baca-saja',
+  'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': 'arus uang buku kas baca-saja (entri append-only; tindakan refund di kotak Tindakan)',
   'components/admin/data-table/CatalogList.tsx': 'pembungkus generik: kolom & aksi ditentukan halaman pemakai (CatalogActions)',
 }
 
