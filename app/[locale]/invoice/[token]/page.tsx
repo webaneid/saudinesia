@@ -123,6 +123,7 @@ export default async function PublicInvoicePage({ params }: Props) {
               </li>
             ))}
           </ul>
+          {d.uniqueCode !== null && <p className="font-medium">{t('uniqueCode', { code: d.uniqueCode, total: formatRupiah(d.balanceDue + d.uniqueCode) })}</p>}
           <p className="text-xs italic text-muted-foreground">{t('validAfter', { company })}</p>
         </section>
       )}

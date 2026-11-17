@@ -57,7 +57,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
       packages:   { include: { package: { select: { name: true } } } },
       pilgrims:   { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { include: { visaProduct: true } } } }, // kolom tersegel tak pernah dimuat
       payments:   { orderBy: { createdAt: 'desc' }, take: 1 },
-      invoice:    { select: { number: true, taxAddedIdr: true, taxIncludedIdr: true, bankSnapshot: true } },
+      invoice:    { select: { number: true, taxAddedIdr: true, taxIncludedIdr: true, bankSnapshot: true, uniqueCode: true } },
       groups:     { orderBy: { position: 'asc' }, select: { id: true, label: true, position: true } },
     },
   })
@@ -68,11 +68,13 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   const bill = billOf({ totalAmount: booking.totalAmount, invoice: booking.invoice, payments: confirmedPayments, refunds: paidRefunds })
   // Batas nominal bukti transfer (Fase 7a F2): bawaan sisa, minimal DP / sisa menuju DP — sama dengan yang dinilai route unggah di dalam kunci.
   const limits = paymentLimits(bill, (await getInvoiceSettings()).minimumFirstPaymentPercent)
+  const due = bill.paid > 0 ? limits.balance : bill.grandTotal
   // Harga per item = harga jual beku yang BERLAKU (termasuk harga khusus/revisi), bukan kolom lama baris item.
   const [sells, tiers] = await Promise.all([itemSellTotals(prisma, booking.id), visaTierRanges(prisma, booking.id)])
   const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
   // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF dan route unggah bukti; lib/invoice/banks.ts `bookingPayTo`).
   const payTo = await bookingPayTo(booking.invoice)
+  const uniqueCode = booking.invoice?.uniqueCode ?? 0
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
@@ -180,8 +182,15 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
             </div>
           </div>
           <div className="text-center">
-            <p className="text-2xl font-bold text-amber-900">{formatRupiah(bill.paid > 0 ? limits.balance : bill.grandTotal)}</p>
+            <p className="text-2xl font-bold text-amber-900">{formatRupiah(due)}</p>
             {bill.paid > 0 && <p className="text-sm text-amber-800">{t('booking.paidSoFar', { paid: formatRupiah(bill.paid), total: formatRupiah(bill.grandTotal) })}</p>}
+            {/* Kode unik invoice (Fase 7b-3): identitas transfer, bukan bagian tagihan. */}
+            {uniqueCode > 0 && (
+              <>
+                <p className="mt-2 text-sm font-semibold text-amber-900">{t('booking.uniqueCodeLine', { amount: formatRupiah(due), code: uniqueCode, total: formatRupiah(due + uniqueCode) })}</p>
+                <p className="text-xs text-amber-800">{t('booking.uniqueCodeHint')}</p>
+              </>
+            )}
           </div>
           {!hasPendingPayment && proofRejected && (
             <p role="alert" className="flex items-center gap-2 text-sm font-medium text-destructive">
@@ -190,7 +199,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
           )}
           {/* Tanpa rekening tujuan tak ada unggah bukti — pesan "hubungi tim" di atas yang tampil (K3; route unggah juga menolak). */}
           {!hasPendingPayment && payTo.length > 0 && (
-            <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} balance={limits.balance} minClaim={limits.minClaim} />
+            <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} balance={limits.balance} minClaim={limits.minClaim} uniqueCode={uniqueCode} />
           )}
           {hasPendingPayment && (
             <div className="flex items-center gap-2 text-sm text-green-700">

@@ -4,6 +4,7 @@ import { addDays, calendarDateOf, dbDateOf, endOfDayExclusiveInApp, todayInApp }
 import { formatAddressLine } from '@/lib/address/format'
 import { paymentDeadlineFor } from '@/lib/booking/lifecycle'
 import { allocateInvoiceNumber } from './numbering'
+import { billOf, billRefunds } from './bill'
 import { computeTax, type TaxRuleInput, type TaxResult } from './tax'
 import { SETTINGS_ID } from './settings'
 
@@ -34,7 +35,7 @@ export async function taxFor(db: Pick<Tx, 'taxRule'>, subtotalIdr: number): Prom
  * Terbitkan invoice untuk booking yang baru terbit. `dueDays` = hari sejak tanggal invoice (saran, D4). Menulis juga `Booking.paymentDeadline` (akhir hari jatuh tempo, dipakai
  * pengingat sampai Fase 7) — kolom itu kini HANYA ditulis di sini. Booking yang sudah punya invoice → galat (satu booking = satu invoice, D18).
  */
-export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: number; byUserId: string | null; now?: Date }): Promise<{ id: string; number: string }> {
+export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: number; byUserId: string | null; now?: Date; random?: () => number }): Promise<{ id: string; number: string }> {
   const now = opts.now ?? new Date()
   if (!Number.isInteger(opts.dueDays) || opts.dueDays < 0 || opts.dueDays > 365) throw new InvoiceError('Jatuh tempo harus 0–365 hari')
   const booking = await tx.booking.findUniqueOrThrow({ where: { id: bookingId }, select: { status: true, totalAmount: true, invoice: { select: { id: true } } } })
@@ -53,6 +54,8 @@ export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: n
   const bankSnapshot: BankSnapshot[] = banks.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder, branch: b.branch }))
 
   const { number, seq, key } = await allocateInvoiceNumber(tx, now)
+  // Sesudah nomor: baris penghitung nomor sudah terkunci, jadi penerbit serentak menunggu/diulang (Serializable) — dua invoice baru tak memilih kode dari daftar terpakai yang sama.
+  const uniqueCode = s.uniqueCodeEnabled ? await allocateUniqueCode(tx, { min: s.uniqueCodeMin, max: s.uniqueCodeMax }, opts.random ?? Math.random) : null
   const invoiceDate = todayInApp(now)
   const inv = await tx.invoice.create({
     data: {
@@ -60,7 +63,7 @@ export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: n
       invoiceDate: dbDateOf(invoiceDate), dueDate: dbDateOf(addDays(invoiceDate, opts.dueDays)),
       taxLines: tax.lines as Prisma.InputJsonValue, taxAddedIdr: tax.addedIdr, taxIncludedIdr: tax.includedIdr,
       companySnapshot: company as Prisma.InputJsonValue, bankSnapshot: bankSnapshot as Prisma.InputJsonValue,
-      termsDoc: s.termsDoc, footerNoteDoc: s.footerNoteDoc, issuedById: opts.byUserId,
+      termsDoc: s.termsDoc, footerNoteDoc: s.footerNoteDoc, issuedById: opts.byUserId, uniqueCode,
     },
     select: { id: true, number: true },
   }).catch((e: unknown) => {
@@ -73,6 +76,30 @@ export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: n
   })
   await tx.booking.update({ where: { id: bookingId }, data: { paymentDeadline: paymentDeadlineFor(now, opts.dueDays) } })
   return inv
+}
+
+/**
+ * Kode unik (Fase 7b-3, §10.10): acak dalam [min, max], TIDAK sama dengan kode invoice lain yang bookingnya masih `active` dan bersisa tagihan (tagihan lewat `billOf`).
+ * Ruang habis → kode yang paling jarang dipakai (terkecil bila seri) + peringatan log; kode hanya alat bantu pencocokan, bukan kunci unik.
+ */
+export async function allocateUniqueCode(tx: Tx, range: { min: number; max: number }, random: () => number): Promise<number> {
+  const open = await tx.booking.findMany({
+    where: { status: 'active', invoice: { uniqueCode: { not: null } } },
+    select: { totalAmount: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true, uniqueCode: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds },
+  })
+  const used = new Map<number, number>()
+  for (const b of open) {
+    const code = b.invoice?.uniqueCode
+    if (code == null || billOf(b).balance <= 0) continue
+    used.set(code, (used.get(code) ?? 0) + 1)
+  }
+  const free: number[] = []
+  for (let c = range.min; c <= range.max; c++) if (!used.has(c)) free.push(c)
+  if (free.length > 0) return free[Math.min(free.length - 1, Math.floor(random() * free.length))]!
+  let best = range.min
+  for (let c = range.min; c <= range.max; c++) if ((used.get(c) ?? 0) < (used.get(best) ?? 0)) best = c
+  console.warn(`[invoice] ruang kode unik ${range.min}–${range.max} habis — memakai ulang kode ${best}`)
+  return best
 }
 
 /** Aturan pajak yang DIBEKUKAN di invoice (tarif, dasar, mode) — dipakai menghitung ulang jumlahnya bila subtotal berubah. */

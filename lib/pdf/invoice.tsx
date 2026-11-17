@@ -189,6 +189,11 @@ function InvoiceDocument({ data, logo }: { data: InvoiceData; logo: Buffer | nul
               Transfer via Bank {b.bankName} — {b.accountNumber} a.n. {b.accountHolder}{b.branch ? ` (${b.branch})` : ''}
             </Text>
           ))}
+          {data.uniqueCode !== null && (
+            <Text style={[styles.footerLine, { marginTop: 4, fontWeight: 700 }]}>
+              Tambahkan kode unik {data.uniqueCode} pada nominal transfer — mis. sisa tagihan menjadi {formatRupiahPdf(data.balanceDue + data.uniqueCode)}.
+            </Text>
+          )}
           <Text style={[styles.footerLine, { marginTop: 4, fontStyle: 'italic' }]}>
             Pembayaran dianggap sah setelah dikonfirmasi oleh tim {businessName}.
           </Text>
