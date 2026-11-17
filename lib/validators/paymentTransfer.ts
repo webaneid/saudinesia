@@ -14,8 +14,10 @@ export const paymentTransferSchema = z.object({
     .refine(n => n > 0 && n <= MAX_PRICE_IDR, { error: 'Nominal transfer tidak valid' }),
   /** Instan UTC ISO dari `DateTimeField` (formulir menafsirkan masukan di zona aplikasi). Rentang wajar (tak di masa depan) dinilai route. */
   transferredAt: z.iso.datetime({ error: 'Tanggal dan jam transfer tidak valid' }).transform(v => new Date(v)),
-  /** Urutan rekening tujuan dalam `bookingPayTo` (snapshot invoice tak punya id); route memetakannya ke label yang disimpan. */
-  destination: z.string({ error: 'Pilih rekening tujuan' }).trim().regex(/^\d{1,2}$/, { error: 'Pilih rekening tujuan' }).transform(Number),
+  /** Urutan rekening tujuan dalam `bookingPayTo` (snapshot invoice tak punya id), atau `qris:<id>` = QRIS aktif (Fase 8, `payableQris`); route memetakannya ke label yang disimpan. */
+  destination: z.string({ error: 'Pilih rekening tujuan' }).trim()
+    .regex(/^(\d{1,2}|qris:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/, { error: 'Pilih rekening tujuan' })
+    .transform((v): { kind: 'bank'; index: number } | { kind: 'qris'; id: string } => (v.startsWith('qris:') ? { kind: 'qris', id: v.slice(5) } : { kind: 'bank', index: Number(v) })),
   senderBank: text(100, 'Isi nama bank pengirim'),
   senderAccountName: text(100, 'Isi nama pemilik rekening pengirim'),
   note: z.string().trim().max(500, { error: 'Catatan terlalu panjang (maksimal 500 karakter)' }).optional(),

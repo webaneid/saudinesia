@@ -1488,7 +1488,8 @@
       "pilgrimsTitle": "Data & Dokumen Jamaah",
       "pilgrimsIntro": "Isi satu per satu: data diri dan dokumen tiap jamaah, lalu ajukan untuk diperiksa petugas.",
       "groupAll": "Semua jamaah",
-      "groupUnnamed": "Rombongan {mark}"
+      "groupUnnamed": "Rombongan {mark}",
+      "qrisAvailable": "Bisa juga bayar dengan QRIS — pilih QRIS sebagai tujuan di formulir di bawah."
     },
     "summary": {
       "title": "Rincian Pesanan",
@@ -1536,7 +1537,14 @@
       "failed": "Bukti transfer gagal diunggah.",
       "network": "Tidak dapat menghubungi server.",
       "uploading": "Mengunggah...",
-      "submit": "Kirim Bukti Transfer"
+      "submit": "Kirim Bukti Transfer",
+      "qrisOption": "QRIS {name}",
+      "qrisOptionHint": "Bayar dengan pindai QR",
+      "qrisAlt": "Kode QR QRIS untuk pembayaran",
+      "qrisTotal": "Nominal di QR: {total}",
+      "qrisNeedAmount": "Isi nominal pembayaran untuk menampilkan QR.",
+      "qrisHint": "Pindai dengan aplikasi bank atau dompet digital — nominal sudah terkunci (termasuk kode unik). Sesudah membayar, unggah tangkapan layar bukti bayar di bawah.",
+      "qrisFailed": "QR tidak bisa ditampilkan. Periksa nominal atau pilih tujuan lain."
     },
     "pilgrim": {
       "metaTitle": "Data Jamaah",
@@ -1663,7 +1671,11 @@
     "branch": " ({branch})",
     "validAfter": "Pembayaran dianggap sah setelah dikonfirmasi oleh tim {company}.",
     "terms": "Syarat & Ketentuan",
-    "downloadPdf": "Unduh PDF"
+    "downloadPdf": "Unduh PDF",
+    "qrisTitle": "Bayar dengan QRIS",
+    "qrisAlt": "Kode QR QRIS {name}",
+    "qrisTotal": "Nominal di QR (sisa tagihan + kode unik): {total}",
+    "qrisHint": "Pindai dengan aplikasi bank atau dompet digital. Mau membayar sebagian (DP/cicilan)? Masuk ke akun Anda dan buka halaman pesanan."
   },
   "privacy": {
     "metaTitle": "Kebijakan Privasi",
@@ -1903,6 +1915,8 @@
     "paymentAmountBelowMin": "Nominal transfer minimal {min}",
     "paymentAmountAboveBalance": "Nominal transfer melebihi sisa tagihan ({max})",
     "paymentTimeFuture": "Waktu transfer tidak boleh di masa depan",
-    "paymentNothingDue": "Tagihan pesanan ini sudah lunas"
+    "paymentNothingDue": "Tagihan pesanan ini sudah lunas",
+    "qrisUnavailable": "QRIS ini sedang tidak tersedia. Pilih tujuan pembayaran lain.",
+    "qrisInvalidRequest": "Permintaan QRIS tidak valid"
   }
 }

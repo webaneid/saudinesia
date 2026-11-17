@@ -64,8 +64,12 @@ t('validator F2: waktu = instan ISO (DateTimeField), rekening = urutan, daftar k
   const ok = { amount: '3000000', transferredAt: '2026-11-15T02:30:00.000Z', destination: '0', senderBank: 'BCA', senderAccountName: 'Siti Aminah' }
   const code = (v: Record<string, unknown>) => { const x = paymentTransferSchema.safeParse(v); assert.ok(!x.success); return matchText(x.error.issues[0]!.message)?.code }
   const r = paymentTransferSchema.safeParse(ok)
-  assert.ok(r.success && r.data.transferredAt instanceof Date && r.data.destination === 0 && r.data.amount === 3_000_000)
+  assert.ok(r.success && r.data.transferredAt instanceof Date && r.data.destination.kind === 'bank' && r.data.destination.index === 0 && r.data.amount === 3_000_000)
   assert.equal(code({ ...ok, destination: 'bank-1' }), 'paymentDestinationRequired')
+  // Fase 8: QRIS = `qris:<uuid>` persis; bentuk lain ditolak.
+  const q = paymentTransferSchema.safeParse({ ...ok, destination: 'qris:0f8fad5b-d9cb-469f-a165-70867728950e' })
+  assert.ok(q.success && q.data.destination.kind === 'qris' && q.data.destination.id === '0f8fad5b-d9cb-469f-a165-70867728950e')
+  for (const bad of ['qris:', 'qris:abc', 'qris:0F8FAD5B-D9CB-469F-A165-70867728950E', 'qris:0f8fad5b-d9cb-469f-a165-70867728950e;x']) assert.equal(code({ ...ok, destination: bad }), 'paymentDestinationRequired')
   // Kolom wajib yang TIDAK dikirim (isian kosong dibuang pembaca multipart) tetap berpesan katalog, bukan teks Zod generik.
   const without = (k: string) => Object.fromEntries(Object.entries(ok).filter(([x]) => x !== k))
   assert.deepEqual(['amount', 'transferredAt', 'destination', 'senderBank', 'senderAccountName'].map(k => code(without(k))),

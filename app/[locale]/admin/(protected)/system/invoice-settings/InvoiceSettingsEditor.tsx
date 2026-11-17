@@ -299,17 +299,43 @@ function QrisBox({ onChanged }: { onChanged: (rows: Qris[]) => void }) {
   return (
     <ListCrudBox<Qris, { name: string; emvPayload: string; isActive: boolean; sortOrder: number }>
       title="QRIS" icon={QrCode} noun="akun QRIS" apiBase="/api/v1/admin/system/qris-accounts" emptyText="Belum ada akun QRIS." onChanged={onChanged}
-      description="Akun QRIS statis. Unggah gambar + baca otomatis payload menyusul di fase QRIS dinamis; sementara payload dapat ditempel manual (diawali 000201)."
+      description="Akun QRIS statis. Unggah foto QRIS untuk membaca payload otomatis (gambar tidak disimpan); payload juga dapat ditempel manual (diawali 000201). Pelanggan memindai QR dinamis dengan nominal terkunci."
       summary={q => <><p className="m-0 font-semibold text-admin-ink">{q.name}</p><p className="m-0 text-[11px] text-admin-muted">{q.emvPayload ? `Payload tersimpan (${q.emvPayload.length} karakter)` : 'Belum ada payload'}</p></>}
       blank={{ name: '', emvPayload: '', isActive: true, sortOrder: 0 }}
       toForm={q => ({ name: q.name, emvPayload: q.emvPayload ?? '', isActive: q.isActive, sortOrder: q.sortOrder })}
       renderFields={(f, set) => (
         <>
           <FormField label="Nama akun" htmlFor="qr-name" required><input id="qr-name" className={inp} maxLength={80} value={f.name} onChange={e => set({ name: e.target.value })} /></FormField>
-          <FormField label="Payload QRIS statis" htmlFor="qr-emv" hint="Teks hasil scan QRIS statis; boleh kosong dulu"><textarea id="qr-emv" className={`${inp} min-h-24 font-mono text-xs`} maxLength={2000} value={f.emvPayload} onChange={e => set({ emvPayload: e.target.value })} /></FormField>
+          <QrisImageReader onRead={(emvPayload, merchant) => set({ emvPayload, ...(f.name.trim() === '' && merchant ? { name: merchant.slice(0, 80) } : {}) })} />
+          <FormField label="Payload QRIS statis" htmlFor="qr-emv" hint="Terisi otomatis dari gambar, atau tempel teks hasil scan; boleh kosong dulu"><textarea id="qr-emv" className={`${inp} min-h-24 font-mono text-xs`} maxLength={2000} value={f.emvPayload} onChange={e => set({ emvPayload: e.target.value })} /></FormField>
           <ToggleRow label="Aktif" checked={f.isActive} onChange={v => set({ isActive: v })} />
         </>
       )}
     />
+  )
+}
+
+/** Baca payload dari foto QRIS statis (Fase 8): gambar dikirim ke server untuk dibaca lalu dibuang — tidak disimpan (K8-3). */
+function QrisImageReader({ onRead }: { onRead: (payload: string, merchant: string | null) => void }) {
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null)
+  async function read(file: File | undefined) {
+    if (!file) return
+    setBusy(true); setMsg(null)
+    const body = new FormData()
+    body.append('file', file)
+    const res = await fetch('/api/v1/admin/system/qris-accounts/decode', { method: 'POST', body }).catch(() => null)
+    const json = res ? await res.json().catch(() => null) as { success?: boolean; error?: string; data?: { emvPayload: string; merchantName: string | null } } | null : null
+    setBusy(false)
+    if (!json?.success || !json.data) { setMsg({ ok: false, text: json?.error ?? 'Gagal membaca gambar' }); return }
+    onRead(json.data.emvPayload, json.data.merchantName)
+    setMsg({ ok: true, text: `Payload terbaca${json.data.merchantName ? ` — merchant ${json.data.merchantName}` : ''}` })
+  }
+  return (
+    <FormField label="Foto QRIS statis" htmlFor="qr-img" hint="JPG/PNG/WebP, maks. 5 MB — hanya dibaca, tidak disimpan">
+      <input id="qr-img" type="file" accept="image/jpeg,image/png,image/webp" className={inp} disabled={busy} onChange={e => void read(e.target.files?.[0])} />
+      {busy && <p className="m-0 text-[11px] text-admin-muted">Membaca QRIS…</p>}
+      {msg && <p className={`m-0 text-[11px] ${msg.ok ? 'text-admin-ok' : 'text-admin-danger'}`}>{msg.text}</p>}
+    </FormField>
   )
 }

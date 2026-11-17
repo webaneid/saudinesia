@@ -932,6 +932,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] Fase 7b-2a — Refund & pembatalan oleh admin (2026-11-17): jamaah batal sendiri hanya tanpa uang (409 `cancelNeedsAdmin`), pembatalan admin dengan keputusan uang (refund/tahan/tunda), siklus refund → uang keluar buku kas, halaman Keuangan → Refund — §10.10
   - [x] Fase 7b-2b — Uang keluar vendor (2026-11-17): pengeluaran vendor memilih akun kas → entri `out`/`biaya_vendor`, ubah = pembalik + versi baru, batal = pembalik — §10.10
   - [x] Fase 7b-3 — Kode unik per invoice (2026-11-17): kode dialokasikan & dibekukan saat terbit, pelanggan melihat "transfer + kode", verifikasi admin = diterima − kode → entri `in`/`kode_unik` — §10.10
+  - [x] Fase 8 — QRIS dinamis (2026-11-17): payload dibaca dari foto QRIS statis (tak disimpan), QR dinamis nominal + kode unik di halaman bayar jamaah dan invoice publik (QRIS aktif terkini), tujuan bukti QRIS → akun kas QRIS (hanya uang masuk) — §10.11
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
 

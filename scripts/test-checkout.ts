@@ -229,7 +229,8 @@ await t('K3: tanpa rekening aktif → CheckoutNoBankError, tak ada booking/kuota
   const route = read('app/api/v1/bookings/route.ts')
   assert.match(route, /CheckoutNoBankError\) return apiErrorJson\('checkoutNoBank', 409\)/)
   const bukti = read('app/api/v1/bookings/[id]/payment/bukti/route.ts')
-  assert.match(bukti, /const payTo = await bookingPayTo\(booking\.invoice\)\s+if \(payTo\.length === 0\) return apiErrorJson\('paymentNoDestination', 409\)/)
+  // Fase 8: QRIS aktif juga tujuan bayar — ditolak hanya bila rekening DAN QRIS kosong.
+  assert.match(bukti, /const payTo = await bookingPayTo\(booking\.invoice\)\s+const qrisList = await payableQris\(\)[^\n]*\n\s+if \(payTo\.length === 0 && qrisList\.length === 0\) return apiErrorJson\('paymentNoDestination', 409\)/)
 })
 await prisma.bankAccount.updateMany({ where: { id: { in: activeBanks.map(b => b.id) } }, data: { isActive: true } })
 const testBank = await prisma.bankAccount.create({ data: { bankName: `${tag} BSI`, accountNumber: '7101', accountHolder: 'PT Uji Checkout', isActive: true } })

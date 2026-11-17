@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { NextResponse } from 'next/server'
-import { cashAccountForSnapshot } from '@/lib/cash/accounts'
+import { cashAccountForSnapshot, ensureQrisCashAccount } from '@/lib/cash/accounts'
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
@@ -17,6 +17,7 @@ import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { claimRefusal, paymentLimits, type ClaimRefusal } from '@/lib/payments/limits'
 import { paymentTransferSchema, TRANSFER_KEYS } from '@/lib/validators/paymentTransfer'
 import { formatRupiah } from '@/lib/utils'
+import { payableQris } from '@/lib/qris/payable'
 
 const CLOCK_SKEW_MS = 5 * 60_000 // jam perangkat pelanggan boleh sedikit meleset dari server
 
@@ -41,7 +42,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (booking.status !== 'active') return apiErrorJson('bookingNotAwaitingPayment', 422)
     // Tanpa rekening tujuan, bukti transfer tak punya arti (pelanggan bisa saja mentransfer ke rekening yang salah) — K3, evaluasi 2026-11-14.
     const payTo = await bookingPayTo(booking.invoice)
-    if (payTo.length === 0) return apiErrorJson('paymentNoDestination', 409)
+    const qrisList = await payableQris() // Fase 8: QRIS aktif saat ini (K8-2) juga tujuan bayar
+    if (payTo.length === 0 && qrisList.length === 0) return apiErrorJson('paymentNoDestination', 409)
 
     // Satu bukti menunggu verifikasi pada satu waktu (perilaku v1: dulu dijaga status `payment_review`, kini diturunkan dari adanya payment `pending`).
     if (await prisma.payment.count({ where: { bookingId: id, status: 'pending' } }) > 0) {
@@ -63,9 +65,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const input = parsed.data
     if (input.transferredAt.getTime() > Date.now() + CLOCK_SKEW_MS) return apiErrorJson('paymentTimeFuture', 400, { field: 'transferredAt' })
     if (input.transferredAt.getTime() < booking.createdAt.getTime() - CLOCK_SKEW_MS) return apiErrorJson('paymentTimeInvalid', 400, { field: 'transferredAt' }) // tak ada tagihan sebelum booking dibuat
-    const dest = payTo[input.destination]
-    if (!dest) return apiErrorJson('paymentDestinationRequired', 400, { field: 'destination' })
-    const destinationLabel = `${dest.bankName} ${dest.accountNumber} a.n. ${dest.accountHolder}`.slice(0, 200)
+    const dest = input.destination.kind === 'bank' ? payTo[input.destination.index] : undefined
+    const destQris = input.destination.kind === 'qris' ? qrisList.find(q => q.id === (input.destination as { id: string }).id) : undefined
+    if (!dest && !destQris) return apiErrorJson('paymentDestinationRequired', 400, { field: 'destination' })
+    const destinationLabel = (dest ? `${dest.bankName} ${dest.accountNumber} a.n. ${dest.accountHolder}` : `QRIS ${destQris?.name ?? ''}`).slice(0, 200)
     const { minimumFirstPaymentPercent } = await getInvoiceSettings()
 
     // Jenis ditentukan dari ISI berkas, bukan MIME/nama dari klien; gambar dienkode ulang (EXIF/GPS dibuang). Nama asli tidak dipakai di kunci objek.
@@ -96,7 +99,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       if (fresh.payments.some(p => p.status === 'pending')) return 'closed'
       const refused = claimRefusal(paymentLimits(billOf(fresh), minimumFirstPaymentPercent), input.amount)
       if (refused) return refused
-      const destinationCashAccountId = await cashAccountForSnapshot(tx, dest) // Fase 7b-1: rekening tujuan → akun kas (null bila rekening sudah dihapus; admin memilih saat verifikasi)
+      // Fase 7b-1: rekening tujuan → akun kas (null bila rekening sudah dihapus; admin memilih saat verifikasi). Fase 8: QRIS → akun kas QRIS (null bila QRIS dinonaktifkan sementara itu).
+      const destinationCashAccountId = dest ? await cashAccountForSnapshot(tx, dest) : await ensureQrisCashAccount(tx, destQris!.id, { requireActive: true })
       await tx.payment.create({
         data: {
           bookingId:               id,
@@ -108,7 +112,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
           destinationLabel,
           destinationCashAccountId,
           payerNote:               input.note ?? null,
-          method:                  'bank_transfer',
+          method:                  destQris ? 'qris' : 'bank_transfer',
           status:                  'pending',
           buktiTransferPath:       filePath,
           buktiTransferUploadedAt: new Date(),
