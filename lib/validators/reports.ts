@@ -38,3 +38,11 @@ export const cashFlowQuerySchema = z.object({
   to: date.optional(),
   account: z.uuid().optional().catch(undefined),
 })
+
+// Laporan PPN (Fase 12c): periode + halaman tabel invoice; nilai asing diabaikan.
+export const taxReportQuerySchema = z.object({
+  from: date.optional(),
+  to: date.optional(),
+  page: z.coerce.number().int().min(1).max(100_000).catch(1),
+  limit: z.coerce.number().int().min(1).max(100).catch(25),
+})

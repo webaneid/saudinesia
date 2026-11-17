@@ -1,7 +1,7 @@
 import { Fingerprint,
   Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat,
+  Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -24,6 +24,7 @@ const OPERASIONAL: NavItem[] = [
   { path: '/admin/finance/cash-book', icon: BookOpenCheck, label: 'Buku Kas' },
   { path: '/admin/finance/cash-flow', icon: ArrowLeftRight, label: 'Arus Kas' },
   { path: '/admin/finance/transfers', icon: Repeat, label: 'Transfer Antar Akun' },
+  { path: '/admin/finance/tax', icon: BadgePercent, label: 'Laporan PPN' },
   { path: '/admin/finance/refunds', icon: Undo2,         label: 'Refund' },
   { path: '/admin/notifications', icon: Bell,            label: 'Notifikasi' },
 ]
@@ -77,6 +78,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   'cash-book': 'Buku Kas',
   'cash-flow': 'Arus Kas',
   transfers: 'Transfer Antar Akun',
+  tax: 'Laporan PPN',
   refunds: 'Refund',
   notifications: 'Notifikasi',
   products: 'Produk',
