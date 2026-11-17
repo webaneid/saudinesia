@@ -25,7 +25,7 @@ const read = (f: string) => readFileSync(join(root, f), 'utf8')
 const exec = (sql: string) => prisma.$executeRawUnsafe(sql)
 const rejects = async (sql: string, why: string) => { await assert.rejects(() => exec(sql), `${why} harus ditolak DB`) }
 
-const DEFAULTS = { numberPrefix: 'INV', numberPattern: '{PREFIX}-{YYYY}-{SEQ}', numberPadding: 4, numberResetYearly: true, appTimezone: 'Asia/Jakarta', defaultDueDays: 4, expireDaysBeforeReference: 7, minimumFirstPaymentPercent: 0, uniqueCodeEnabled: true, uniqueCodeMin: 100, uniqueCodeMax: 999, methodBankTransfer: true, methodQris: false, methodIpaymu: false, methodXendit: false, gatewaySandbox: true, ipaymuFeePercent: 0, ipaymuFeeFlatIdr: 0, xenditFeePercent: 0, xenditFeeFlatIdr: 0 }
+const DEFAULTS = { numberPrefix: 'INV', numberPattern: '{PREFIX}-{YYYY}-{SEQ}', numberPadding: 4, numberResetYearly: true, appTimezone: 'Asia/Jakarta', defaultDueDays: 4, expireDaysBeforeReference: 7, minimumFirstPaymentPercent: 0, uniqueCodeEnabled: true, uniqueCodeMin: 100, uniqueCodeMax: 999, methodBankTransfer: true, methodQris: false, methodIpaymu: false, methodXendit: false, gatewaySandbox: true }
 const valid = () => ({ ...DEFAULTS, companyName: 'PT Saudinesia', companyTaxId: '', companyPhone: '', companyEmail: '', companyWebsite: '', termsDoc: null, footerNoteDoc: null })
 async function resetDefaults() {
   await prisma.invoiceSettings.update({ where: { id: 'global' }, data: { ...DEFAULTS, companyName: null, companyTaxId: null, companyPhone: null, companyEmail: null, companyWebsite: null, termsDoc: null, footerNoteDoc: null, updatedById: null, companyAddressId: null } })
@@ -44,7 +44,7 @@ await t('migrasi menyemai SATU baris global dengan nilai bawaan dan satu aturan 
 })
 await t('CHECK di DB menolak nilai tak wajar walau ditulis lewat SQL mentah (baris kedua, padding, tenggat, persen, kode unik, biaya, awalan, pola tanpa {SEQ})', async () => {
   await rejects(`INSERT INTO invoice_settings (id, "updatedAt") VALUES ('lain', now())`, 'id selain global')
-  for (const [col, bad] of [['numberPadding', 0], ['numberPadding', 11], ['defaultDueDays', 400], ['defaultDueDays', -1], ['expireDaysBeforeReference', 366], ['minimumFirstPaymentPercent', 100.5], ['ipaymuFeePercent', 101], ['xenditFeeFlatIdr', 10_000_001]] as const)
+  for (const [col, bad] of [['numberPadding', 0], ['numberPadding', 11], ['defaultDueDays', 400], ['defaultDueDays', -1], ['expireDaysBeforeReference', 366], ['minimumFirstPaymentPercent', 100.5]] as const)
     await rejects(`UPDATE invoice_settings SET "${col}" = ${bad} WHERE id = 'global'`, `${col}=${bad}`)
   await rejects(`UPDATE invoice_settings SET "uniqueCodeMin" = 500, "uniqueCodeMax" = 500 WHERE id = 'global'`, 'kode unik min>=max')
   await rejects(`UPDATE invoice_settings SET "uniqueCodeMax" = 10000 WHERE id = 'global'`, 'kode unik > 9999')
@@ -87,7 +87,7 @@ await t('invoiceSettingsSchema: bawaan lolos; zona/email/situs/pola/kode unik/re
   assert.equal(bad({ companyWebsite: 'ftp://x.y' }), false); assert.equal(bad({ companyWebsite: 'https://saudinesia.com' }), true)
   assert.equal(bad({ numberPattern: '{PREFIX}-{YYYY}' }), false); assert.equal(bad({ numberResetYearly: true, numberPattern: '{SEQ}' }), false); assert.equal(bad({ numberResetYearly: false, numberPattern: '{SEQ}' }), true)
   assert.equal(bad({ uniqueCodeMin: 500, uniqueCodeMax: 500 }), false); assert.equal(bad({ uniqueCodeMax: 10000 }), false)
-  for (const [k, v] of [['numberPadding', 0], ['defaultDueDays', 366], ['expireDaysBeforeReference', -1], ['minimumFirstPaymentPercent', 101], ['ipaymuFeePercent', -1], ['xenditFeeFlatIdr', 10_000_001], ['defaultDueDays', 1.5]] as const) assert.equal(bad({ [k]: v }), false, `${k}=${v}`)
+  for (const [k, v] of [['numberPadding', 0], ['defaultDueDays', 366], ['expireDaysBeforeReference', -1], ['minimumFirstPaymentPercent', 101], ['defaultDueDays', 1.5]] as const) assert.equal(bad({ [k]: v }), false, `${k}=${v}`)
   for (const extra of [{ id: 'lain' }, { updatedById: 'x' }, { liar: 1 }, { companyAddressId: 'x' }]) assert.equal(bad(extra), false, JSON.stringify(extra))
   assert.equal(bad({ address: { type: 'international', fullAddress: '1 Orchard Rd', countryCode: 'SG' } }), true)
   assert.equal(bad({ address: { type: 'domestic', fullAddress: 'Jl. X' } }), false, 'alamat domestik tanpa provinsi')

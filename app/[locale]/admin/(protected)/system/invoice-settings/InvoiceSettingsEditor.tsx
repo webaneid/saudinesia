@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Banknote, Building2, Clock, FileText, Hash, Landmark, Percent, QrCode, ScrollText, Wallet } from 'lucide-react'
+import { AlertTriangle, Banknote, CreditCard, Building2, Clock, FileText, Hash, Landmark, Percent, QrCode, ScrollText, Wallet } from 'lucide-react'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
@@ -17,6 +17,7 @@ import { formatInvoiceNumber } from '@/lib/invoice/numberPattern'
 import { DATETIME_MEDIUM, DEFAULT_APP_TIMEZONE, dateInApp, formatInstant, zoneLabel } from '@/lib/time'
 import type { InvoiceSettingsDto } from '@/lib/invoice/settings'
 import { ListCrudBox } from '@/components/admin/editor/ListCrudBox'
+import { formatRupiah } from '@/lib/utils'
 
 // Bentuk formulir: angka disimpan sebagai TEKS supaya pengetikan "2." atau kolom kosong tak "dibetulkan" paksa; dikonversi saat simpan.
 type Form = {
@@ -24,7 +25,6 @@ type Form = {
   appTimezone: string; defaultDueDays: string; expireDaysBeforeReference: string; minimumFirstPaymentPercent: string
   uniqueCodeEnabled: boolean; uniqueCodeMin: string; uniqueCodeMax: string
   methodBankTransfer: boolean; methodQris: boolean; methodIpaymu: boolean; methodXendit: boolean; gatewaySandbox: boolean
-  ipaymuFeePercent: string; ipaymuFeeFlatIdr: string; xenditFeePercent: string; xenditFeeFlatIdr: string
   companyName: string; companyTaxId: string; companyPhone: string; companyEmail: string; companyWebsite: string
   termsDoc: string; footerNoteDoc: string
 }
@@ -39,7 +39,6 @@ function toState(d: InvoiceSettingsDto): State {
       appTimezone: d.appTimezone, defaultDueDays: str(d.defaultDueDays), expireDaysBeforeReference: str(d.expireDaysBeforeReference), minimumFirstPaymentPercent: str(d.minimumFirstPaymentPercent),
       uniqueCodeEnabled: d.uniqueCodeEnabled, uniqueCodeMin: str(d.uniqueCodeMin), uniqueCodeMax: str(d.uniqueCodeMax),
       methodBankTransfer: d.methodBankTransfer, methodQris: d.methodQris, methodIpaymu: d.methodIpaymu, methodXendit: d.methodXendit, gatewaySandbox: d.gatewaySandbox,
-      ipaymuFeePercent: str(d.ipaymuFeePercent), ipaymuFeeFlatIdr: str(d.ipaymuFeeFlatIdr), xenditFeePercent: str(d.xenditFeePercent), xenditFeeFlatIdr: str(d.xenditFeeFlatIdr),
       companyName: d.companyName ?? '', companyTaxId: d.companyTaxId ?? '', companyPhone: d.companyPhone ?? '', companyEmail: d.companyEmail ?? '', companyWebsite: d.companyWebsite ?? '',
       termsDoc: d.termsDoc ?? '', footerNoteDoc: d.footerNoteDoc ?? '',
     },
@@ -55,7 +54,6 @@ function toBody(f: Form, address: AddressValue, hadAddress: boolean, expectedUpd
     appTimezone: f.appTimezone, defaultDueDays: num(f.defaultDueDays), expireDaysBeforeReference: num(f.expireDaysBeforeReference), minimumFirstPaymentPercent: num(f.minimumFirstPaymentPercent),
     uniqueCodeEnabled: f.uniqueCodeEnabled, uniqueCodeMin: num(f.uniqueCodeMin), uniqueCodeMax: num(f.uniqueCodeMax),
     methodBankTransfer: f.methodBankTransfer, methodQris: f.methodQris, methodIpaymu: f.methodIpaymu, methodXendit: f.methodXendit, gatewaySandbox: f.gatewaySandbox,
-    ipaymuFeePercent: num(f.ipaymuFeePercent), ipaymuFeeFlatIdr: num(f.ipaymuFeeFlatIdr), xenditFeePercent: num(f.xenditFeePercent), xenditFeeFlatIdr: num(f.xenditFeeFlatIdr),
     companyName: f.companyName, companyTaxId: f.companyTaxId, companyPhone: f.companyPhone, companyEmail: f.companyEmail, companyWebsite: f.companyWebsite,
     termsDoc: f.termsDoc, footerNoteDoc: f.footerNoteDoc, expectedUpdatedAt,
     ...(hasAddress ? { address } : hadAddress ? { address: null } : {}),
@@ -70,6 +68,7 @@ function timezoneOptions(current: string) {
 
 type Bank = { id: string; bankName: string; accountNumber: string; accountHolder: string; branch: string | null; isActive: boolean; sortOrder: number }
 type Qris = { id: string; name: string; emvPayload: string | null; isActive: boolean; sortOrder: number }
+type GatewayFee = { id: string; gateway: 'ipaymu' | 'xendit'; channelGroup: string; percent: number; flatIdr: number; isActive: boolean; sortOrder: number }
 type Tax = { id: string; name: string; ratePercent: number; basisPercent: number; mode: 'added' | 'included'; isActive: boolean; sortOrder: number }
 
 const inp = 'admin-inp'
@@ -90,7 +89,7 @@ function ToggleRow({ label, hint, checked, onChange }: { label: string; hint?: s
   )
 }
 
-export function InvoiceSettingsEditor() {
+export function InvoiceSettingsEditor({ ipaymuKeys, sandboxAllowed }: { ipaymuKeys: boolean; sandboxAllowed: boolean }) {
   const [loaded, setLoaded] = useState<{ state: State; hadAddress: boolean; updatedAt: string } | null>(null)
   const [form, setForm] = useState<Form | null>(null)
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS)
@@ -140,7 +139,9 @@ export function InvoiceSettingsEditor() {
   const warnings: string[] = []
   if (form.methodBankTransfer && !banks.some(b => b.isActive)) warnings.push('Transfer bank aktif tetapi belum ada rekening aktif.')
   if (form.methodQris && !qris.some(q => q.isActive)) warnings.push('QRIS aktif tetapi belum ada akun QRIS aktif.')
-  if (form.methodIpaymu || form.methodXendit) warnings.push('Gateway disimpan sebagai setelan; pembayaran lewat iPaymu/Xendit baru tersedia pada fase berikutnya.')
+  if (form.methodIpaymu && form.gatewaySandbox && !sandboxAllowed) warnings.push('Mode sandbox menyala tetapi server ini tidak mengizinkan sandbox (IPAYMU_SANDBOX_ALLOWED) — pembayaran online tidak tampil sampai sandbox dimatikan.')
+  if (form.methodIpaymu && !ipaymuKeys) warnings.push('iPaymu aktif tetapi kunci IPAYMU_VA/IPAYMU_API_KEY belum terpasang di server — pembayaran online tidak tampil.')
+  if (form.methodXendit) warnings.push('Xendit disimpan sebagai setelan; pembayarannya tersedia pada fase berikutnya.')
 
   return (
     <EditorShell
@@ -197,13 +198,14 @@ export function InvoiceSettingsEditor() {
 
           <BankBox onChanged={setBanks} />
           <QrisBox onChanged={setQris} />
+          <GatewayFeeBox />
 
           <MetaBox title="Metode pembayaran" icon={Wallet} description="Yang aktif tampil di halaman bayar. Kunci API gateway disimpan di environment server, bukan di sini.">
             <ToggleRow label="Transfer bank" checked={form.methodBankTransfer} onChange={v => patch({ methodBankTransfer: v })} />
             <ToggleRow label="QRIS" checked={form.methodQris} onChange={v => patch({ methodQris: v })} />
-            {/* iPaymu/Xendit (toggle, sandbox, biaya) disembunyikan sampai fase gateway (Fase 9–10, §10.7 langkah 7): belum ada yang membacanya.
-                Nilai tersimpan tetap dikirim apa adanya saat menyimpan supaya tak hilang. */}
-            <p className="m-0 text-[12px] text-admin-muted">Payment gateway (iPaymu, Xendit) tersedia pada fase berikutnya.</p>
+            <ToggleRow label="iPaymu (bayar online)" hint={ipaymuKeys ? 'Kunci terpasang di server. Terverifikasi otomatis; biaya layanan per kelompok kanal diatur di bawah.' : 'Kunci IPAYMU_VA/IPAYMU_API_KEY belum terpasang di server.'} checked={form.methodIpaymu} onChange={v => patch({ methodIpaymu: v })} />
+            <ToggleRow label="Mode sandbox gateway" hint="Aktif = transaksi uji di sandbox iPaymu. Matikan hanya dengan kunci produksi." checked={form.gatewaySandbox} onChange={v => patch({ gatewaySandbox: v })} />
+            {/* Xendit = Fase 10: saklarnya disembunyikan sampai ada yang membacanya; nilai tersimpan tetap dikirim apa adanya. */}
             <div className="border-t border-admin-line pt-3">
               <ToggleRow label="Kode unik" hint="3 digit ditambahkan ke jumlah transfer/QRIS sebagai identitas transaksi (bukan kelebihan bayar)" checked={form.uniqueCodeEnabled} onChange={v => patch({ uniqueCodeEnabled: v })} />
               {form.uniqueCodeEnabled && (
@@ -265,6 +267,33 @@ function TaxBox() {
           <FormField label="Mode" htmlFor="tx-mode">
             <ChoiceSelect ariaLabel="Mode pajak" value={f.mode} onChange={v => set({ mode: v === 'included' ? 'included' : 'added' })} clearable={false} options={[{ id: 'added', label: 'Ditambahkan ke harga' }, { id: 'included', label: 'Sudah termasuk harga' }]} />
           </FormField>
+          <ToggleRow label="Aktif" checked={f.isActive} onChange={v => set({ isActive: v })} />
+        </>
+      )}
+    />
+  )
+}
+
+const GROUP_HINT = 'Kode kelompok kanal iPaymu: va (Virtual Account), qris, cstore (minimarket), ewallet'
+function GatewayFeeBox() {
+  return (
+    <ListCrudBox<GatewayFee, { gateway: 'ipaymu' | 'xendit'; channelGroup: string; percent: string; flatIdr: string; isActive: boolean; sortOrder: number }>
+      title="Biaya layanan gateway" icon={CreditCard} noun="aturan biaya" apiBase="/api/v1/admin/system/gateway-fees" emptyText="Belum ada aturan — pembayaran online tanpa biaya layanan."
+      description="Dibebankan ke pelanggan sebagai baris Biaya layanan (persen dibulatkan ke atas + rupiah tetap), per kelompok kanal. Kelompok tanpa aturan aktif = tanpa biaya."
+      summary={g => <><p className="m-0 font-semibold text-admin-ink">iPaymu · {g.channelGroup}</p><p className="m-0 text-[11px] text-admin-muted">{g.percent}% + {formatRupiah(g.flatIdr)}</p></>}
+      blank={{ gateway: 'ipaymu', channelGroup: '', percent: '0', flatIdr: '0', isActive: true, sortOrder: 0 }}
+      toForm={g => ({ gateway: g.gateway, channelGroup: g.channelGroup, percent: String(g.percent), flatIdr: String(g.flatIdr), isActive: g.isActive, sortOrder: g.sortOrder })}
+      toBody={f => ({ ...f, percent: f.percent.trim() === '' ? null : Number(f.percent), flatIdr: f.flatIdr.trim() === '' ? null : Number(f.flatIdr) })}
+      renderFields={(f, set) => (
+        <>
+          <FormField label="Kelompok kanal" htmlFor="gf-group" required hint={GROUP_HINT}>
+            <ChoiceSelect ariaLabel="Kelompok kanal" value={f.channelGroup} onChange={v => set({ channelGroup: v ?? '' })} clearable={false}
+              options={[{ id: 'va', label: 'Virtual Account (va)' }, { id: 'qris', label: 'QRIS (qris)' }, { id: 'cstore', label: 'Minimarket (cstore)' }, { id: 'ewallet', label: 'E-wallet (ewallet)' }]} />
+          </FormField>
+          <div className="grid grid-cols-2 gap-3">
+            <FormField label="Persen" htmlFor="gf-pct"><NumberInput id="gf-pct" value={f.percent} onChange={v => set({ percent: v })} suffix="%" step="0.01" /></FormField>
+            <FormField label="Tetap" htmlFor="gf-flat"><NumberInput id="gf-flat" value={f.flatIdr} onChange={v => set({ flatIdr: v })} suffix="Rp" /></FormField>
+          </div>
           <ToggleRow label="Aktif" checked={f.isActive} onChange={v => set({ isActive: v })} />
         </>
       )}

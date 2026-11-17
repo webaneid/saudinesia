@@ -127,11 +127,11 @@ await t('DB pra-migrasi berisi data → migrasi berhasil, data lama utuh, 5 tabe
   assert.deepEqual(tax, [{ name: 'PPN', rate: 0, mode: 'added', isActive: true }])
 })
 
-await t('CHECK terpasang di DB hasil migrasi (15 + 4 penguatan), jejak settings_audit append-only (trigger), dan kolom waktu baru bertipe timestamptz', async () => {
+await t('CHECK terpasang di DB hasil migrasi (15 + 4 penguatan; invoice_settings_fees dibuang Fase 9 — biaya pindah ke gateway_fee_rules), jejak settings_audit append-only (trigger), dan kolom waktu baru bertipe timestamptz', async () => {
   const r = await scenarioWith(async () => ({}))
   assert.equal(r.code, 0)
   const names = (await query(r.name, `select conname from pg_constraint where contype = 'c' and conrelid::regclass::text in ('invoice_settings','tax_rules','bank_accounts','qris_accounts','invoice_sequences') order by conname`)).map(x => x.conname)
-  assert.deepEqual(names, ['bank_accounts_fields', 'invoice_sequences_last', 'invoice_settings_due_days', 'invoice_settings_expire_days', 'invoice_settings_fees', 'invoice_settings_min_payment', 'invoice_settings_number_padding', 'invoice_settings_number_pattern', 'invoice_settings_number_pattern_charset', 'invoice_settings_number_prefix', 'invoice_settings_singleton', 'invoice_settings_timezone_shape', 'invoice_settings_unique_code', 'invoice_settings_website', 'qris_accounts_name', 'qris_accounts_payload', 'tax_rules_basis', 'tax_rules_name', 'tax_rules_rate'])
+  assert.deepEqual(names, ['bank_accounts_fields', 'invoice_sequences_last', 'invoice_settings_due_days', 'invoice_settings_expire_days', 'invoice_settings_min_payment', 'invoice_settings_number_padding', 'invoice_settings_number_pattern', 'invoice_settings_number_pattern_charset', 'invoice_settings_number_prefix', 'invoice_settings_singleton', 'invoice_settings_timezone_shape', 'invoice_settings_unique_code', 'invoice_settings_website', 'qris_accounts_name', 'qris_accounts_payload', 'tax_rules_basis', 'tax_rules_name', 'tax_rules_rate'])
   const trig = await query(r.name, `select tgname from pg_trigger where tgrelid = 'settings_audit'::regclass and not tgisinternal`)
   assert.deepEqual(trig, [{ tgname: 'settings_audit_no_change' }])
   const types = await query(r.name, `select table_name, column_name, data_type from information_schema.columns where table_name in ('bank_accounts','qris_accounts','tax_rules','invoice_sequences','invoice_settings') and column_name in ('createdAt','updatedAt') order by 1,2`)

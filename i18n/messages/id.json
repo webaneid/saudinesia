@@ -1544,7 +1544,37 @@
       "qrisTotal": "Nominal di QR: {total}",
       "qrisNeedAmount": "Isi nominal pembayaran untuk menampilkan QR.",
       "qrisHint": "Pindai dengan aplikasi bank atau dompet digital — nominal sudah terkunci (termasuk kode unik). Sesudah membayar, unggah tangkapan layar bukti bayar di bawah.",
-      "qrisFailed": "QR tidak bisa ditampilkan. Periksa nominal atau pilih tujuan lain."
+      "qrisFailed": "QR tidak bisa ditampilkan. Periksa nominal atau pilih tujuan lain.",
+      "online": {
+        "open": "Bayar online (VA, QRIS, minimarket, e-wallet)",
+        "formTitle": "Bayar online",
+        "channel": "Metode pembayaran",
+        "channelPlaceholder": "Pilih metode",
+        "amount": "Nominal pembayaran (Rp)",
+        "amountRange": "Minimal {min}, maksimal {max} (sisa tagihan).",
+        "amountLabel": "Nominal",
+        "feeLabel": "Biaya layanan",
+        "noFee": "Tanpa biaya",
+        "totalLabel": "Total dibayar",
+        "expiresLabel": "Bayar sebelum",
+        "submit": "Buat pembayaran",
+        "creating": "Membuat pembayaran...",
+        "failed": "Pembayaran online gagal dibuat.",
+        "network": "Tidak dapat menghubungi server.",
+        "activeTitle": "Menunggu pembayaran — {channel}",
+        "codeLabel": "Nomor pembayaran / Virtual Account",
+        "qrAlt": "Kode QR pembayaran",
+        "qrHint": "Pindai dengan aplikasi bank atau dompet digital — nominal sudah terkunci.",
+        "openApp": "Lanjutkan pembayaran di aplikasi",
+        "autoHint": "Pembayaran dikonfirmasi otomatis setelah lunas. Tidak perlu mengunggah bukti.",
+        "check": "Periksa status",
+        "cancel": "Batalkan",
+        "checkFailed": "Status gagal diperiksa.",
+        "cancelFailed": "Pembayaran gagal dibatalkan.",
+        "paid": "Pembayaran diterima. Terima kasih!",
+        "expired": "Pembayaran ini sudah kedaluwarsa. Silakan buat pembayaran baru.",
+        "stillWaiting": "Belum ada pembayaran masuk."
+      }
     },
     "pilgrim": {
       "metaTitle": "Data Jamaah",
@@ -1917,6 +1947,13 @@
     "paymentTimeFuture": "Waktu transfer tidak boleh di masa depan",
     "paymentNothingDue": "Tagihan pesanan ini sudah lunas",
     "qrisUnavailable": "QRIS ini sedang tidak tersedia. Pilih tujuan pembayaran lain.",
-    "qrisInvalidRequest": "Permintaan QRIS tidak valid"
+    "qrisInvalidRequest": "Permintaan QRIS tidak valid",
+    "onlinePaymentUnavailable": "Pembayaran online sedang tidak tersedia. Gunakan transfer bank atau QRIS.",
+    "onlinePaymentChannel": "Pilih metode pembayaran online yang tersedia",
+    "onlinePaymentBusy": "Masih ada pembayaran yang menunggu. Selesaikan atau batalkan dulu.",
+    "onlinePaymentFailed": "Gagal membuat pembayaran online. Coba lagi beberapa saat lagi.",
+    "onlinePaymentNotAwaiting": "Pembayaran ini sudah tidak menunggu pembayaran",
+    "onlinePaymentActive": "Masih ada pembayaran online yang menunggu. Batalkan dulu sebelum mengunggah bukti transfer.",
+    "tooManyPaymentRequests": "Terlalu banyak permintaan pembayaran online. Coba lagi nanti."
   }
 }

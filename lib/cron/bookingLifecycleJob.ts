@@ -32,5 +32,9 @@ export function startBookingLifecycleJobs(): void {
   const timezone = getAppTimezone()
   cron.schedule('20 0 * * *', () => { runExpireJob().catch(err => console.error('[cron] expire job:', err)) }, { timezone })
   cron.schedule('0 8 * * *', () => { runReminderJob().catch(err => console.error('[cron] reminder job:', err)) }, { timezone })
+  // Fase 9: pembayaran online yang menunggu dicocokkan ke iPaymu (cadangan bila callback tak sampai) — setiap 10 menit.
+  cron.schedule('*/10 * * * *', () => {
+    import('@/lib/payments/gateway').then(m => m.reconcileGatewayPayments()).catch(err => console.error('[cron] rekonsiliasi gateway:', err instanceof Error ? err.name : err))
+  }, { timezone })
   console.log(`[cron] Booking lifecycle jobs scheduled (hangus 00:20, pengingat 08:00 — ${timezone})`)
 }

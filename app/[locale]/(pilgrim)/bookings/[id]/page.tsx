@@ -2,6 +2,9 @@ import React from 'react'
 import { OrderSummaryCard, type SummarySection } from './OrderSummaryCard'
 import { collapseRows, type SummaryInput } from '@/lib/booking/orderSummary'
 import { PaymentProofUpload } from './PaymentProofUpload'
+import { OnlinePayment } from './OnlinePayment'
+import { gatewayOptions } from '@/lib/payments/gateway'
+import { gatewayView, gatewayViewSelect } from '@/lib/payments/gatewayView'
 import { payableQris } from '@/lib/qris/payable'
 import { safeLocale } from '@/lib/utils/locale'
 import { notFound, redirect } from 'next/navigation'
@@ -78,6 +81,12 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   const qris = (await payableQris()).map(q => ({ id: q.id, name: q.name })) // Fase 8: QRIS aktif saat ini (K8-2); payload tak dikirim ke klien
   const uniqueCode = booking.invoice?.uniqueCode ?? 0
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
+  // Fase 9 (iPaymu): kanal aktif + biaya dibaca server; pembayaran online yang menunggu (satu per booking) menggantikan formulir bukti transfer.
+  const payOpen = booking.status === 'active' && limits.balance > 0
+  const awaitingRow = payOpen ? await prisma.payment.findFirst({ where: { bookingId: booking.id, status: 'awaiting' }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], select: gatewayViewSelect }) : null
+  const awaiting = awaitingRow ? await gatewayView(awaitingRow) : null
+  const online = payOpen && !hasPendingPayment ? await gatewayOptions() : null
+  const onlineChannels = online ? online.groups.flatMap(g => g.channels.map(c => ({ id: c.id, group: c.group, name: c.name, groupName: g.name }))) : []
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
 
   // Tabel jamaah (pemilik 2026-11-10): kelengkapan per slot dihitung SATU pemuat yang sama dengan admin (lib/pilgrims/slots.ts); isi/edit per jamaah
@@ -201,7 +210,10 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
             </p>
           )}
           {/* Tanpa rekening tujuan tak ada unggah bukti — pesan "hubungi tim" di atas yang tampil (K3; route unggah juga menolak). */}
-          {!hasPendingPayment && (payTo.length > 0 || qris.length > 0) && (
+          {(awaiting || (online && onlineChannels.length > 0)) && (
+            <OnlinePayment bookingId={booking.id} locale={lang} channels={onlineChannels} fees={online?.fees ?? []} balance={limits.balance} minClaim={limits.minClaim} active={awaiting} />
+          )}
+          {!hasPendingPayment && !awaiting && (payTo.length > 0 || qris.length > 0) && (
             <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} qris={qris} balance={limits.balance} minClaim={limits.minClaim} uniqueCode={uniqueCode} />
           )}
           {hasPendingPayment && (

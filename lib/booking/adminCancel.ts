@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { cancelBooking } from '@/lib/booking/cancel'
+import { expireAwaitingPayments } from '@/lib/payments/awaiting'
 import { computeRefundAmount } from '@/lib/utils/cancellationPolicy'
 import { createRefundTx, lockBooking, refundableOf } from '@/lib/refunds/service'
 
@@ -48,6 +49,7 @@ export async function cancelByAdmin(bookingId: string, input: AdminCancelInput):
     if (decision === 'refund' && input.refundAmount == null && suggestedRefund(paid, booking.departureDate) <= 0) return { kind: 'amount_required' as const }
 
     await cancelBooking(tx, booking, 'cancelled')
+    await expireAwaitingPayments(tx, bookingId) // Fase 9: VA/QR yang masih hidup tak lagi dipakai (uang yang terlanjur masuk tetap dicatat, K9-4)
     let refundId: string | null = null
     if (decision === 'refund') {
       const amount = input.refundAmount ?? suggestedRefund(paid, booking.departureDate)

@@ -49,6 +49,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (await prisma.payment.count({ where: { bookingId: id, status: 'pending' } }) > 0) {
       return apiErrorJson('paymentProofPending', 422)
     }
+    // Fase 9 (K9-3): pembayaran online yang masih menunggu harus dibatalkan dulu — dua jalur bayar serentak = bayar ganda.
+    if (await prisma.payment.count({ where: { bookingId: id, status: 'awaiting' } }) > 0) return apiErrorJson('onlinePaymentActive', 409)
 
     // Per akun, di atas batas per IP: unggahan gambar memicu pemrosesan sharp dan penulisan ke MinIO.
     const perAccount = await consume(policy('pilgrimDocUser', session.userId))
@@ -91,12 +93,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         select: {
           status: true, totalAmount: true,
           invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } },
-          payments: { where: { status: { in: ['pending', 'confirmed'] } }, select: { status: true, amount: true } },
+          payments: { where: { status: { in: ['pending', 'confirmed', 'awaiting'] } }, select: { status: true, amount: true } },
           refunds: billRefunds,
         },
       })
       if (fresh.status !== 'active') return 'closed'
-      if (fresh.payments.some(p => p.status === 'pending')) return 'closed'
+      if (fresh.payments.some(p => p.status === 'pending' || p.status === 'awaiting')) return 'closed'
       const refused = claimRefusal(paymentLimits(billOf(fresh), minimumFirstPaymentPercent), input.amount)
       if (refused) return refused
       // Fase 7b-1: rekening tujuan → akun kas (null bila rekening sudah dihapus; admin memilih saat verifikasi). Fase 8: QRIS → akun kas QRIS (null bila QRIS dinonaktifkan sementara itu).

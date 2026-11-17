@@ -35,10 +35,6 @@ export const invoiceSettingsSchema = z.object({
   methodIpaymu: z.boolean(),
   methodXendit: z.boolean(),
   gatewaySandbox: z.boolean(),
-  ipaymuFeePercent: percent('Biaya iPaymu'),
-  ipaymuFeeFlatIdr: int('Biaya tetap iPaymu', 0, 10_000_000),
-  xenditFeePercent: percent('Biaya Xendit'),
-  xenditFeeFlatIdr: int('Biaya tetap Xendit', 0, 10_000_000),
 
   companyName: optionalText(160),
   companyTaxId: optionalText(40),
@@ -100,3 +96,14 @@ const taxFields = {
 export const taxRuleSchema = z.object({ ...taxFields, isActive: z.boolean().default(true), sortOrder: sortOrder.default(0) }).strict()
 export const taxRuleUpdateSchema = z.object({ ...taxFields, isActive: z.boolean(), sortOrder }).strict()
 export type TaxRuleInput = z.infer<typeof taxRuleSchema>
+
+// Biaya layanan gateway per kelompok kanal (Fase 9, K9-2). Batas sama dengan CHECK `gateway_fee_rules_bounds`.
+const gatewayFeeFields = {
+  gateway: z.enum(['ipaymu', 'xendit']),
+  channelGroup: z.string().trim().toLowerCase().regex(/^[a-z0-9_-]{1,40}$/, 'Kelompok kanal: huruf kecil, angka, - atau _ (mis. va, qris, cstore)'),
+  percent: percent('Biaya persen').refine(v => Math.round(v * 100) / 100 === v, 'Biaya persen maksimal 2 angka desimal'),
+  flatIdr: int('Biaya tetap', 0, 10_000_000),
+}
+export const gatewayFeeRuleSchema = z.object({ ...gatewayFeeFields, isActive: z.boolean().default(true), sortOrder: sortOrder.default(0) }).strict()
+export const gatewayFeeRuleUpdateSchema = z.object({ ...gatewayFeeFields, isActive: z.boolean(), sortOrder }).strict()
+export type GatewayFeeRuleInput = z.infer<typeof gatewayFeeRuleSchema>

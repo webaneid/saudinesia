@@ -6,6 +6,7 @@ import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { paymentLimits } from '@/lib/payments/limits'
 import { BOOKING_STATUS, VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
 import { ArrowLeft, FileDown, Pencil, UserCog } from 'lucide-react'
+import { GatewayPaymentsBox } from './GatewayPaymentsBox'
 import { PaymentActions } from './PaymentActions'
 import { cashTargetOptions, cashTargetValue } from '@/lib/cash/accounts'
 import { InvoiceBox } from './InvoiceBox'
@@ -171,6 +172,12 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
         dpThreshold={limits.confirmThreshold}
         uniqueCode={booking.invoice?.uniqueCode ?? null}
       />
+      <GatewayPaymentsBox rows={booking.payments.filter(p => p.gateway !== null).map(p => ({
+        id: p.id, status: p.status, channelName: p.channelName ?? p.channel ?? '', amount: Number(p.claimedAmountIdr ?? 0), fee: Number(p.serviceFeeIdr),
+        mdr: p.gatewayFeeIdr === null ? null : Number(p.gatewayFeeIdr), createdAt: formatInstant(p.createdAt, DATETIME_FULL),
+        paidAt: p.status === 'confirmed' && p.transferredAt ? formatInstant(p.transferredAt, DATETIME_FULL) : null,
+        expiresAt: p.payExpiresAt ? formatInstant(p.payExpiresAt, DATETIME_FULL) : null,
+      }))} />
 
       {/* Services summary */}
       <div className="grid md:grid-cols-2 gap-4">

@@ -57,6 +57,13 @@ export async function ensureMainCashAccount(tx: Tx): Promise<string> {
   return row.id
 }
 
+/** Akun kas sebuah gateway (Fase 9: saldo di iPaymu/Xendit; ditarik ke rekening = transfer antar akun, Fase 12). Hanya uang masuk pembayaran + MDR keluar. */
+export async function ensureGatewayCashAccount(tx: Tx, gateway: 'ipaymu' | 'xendit'): Promise<string> {
+  const key = `gateway:${gateway}`
+  const row = await tx.cashAccount.upsert({ where: { systemKey: key }, create: { kind: 'gateway', systemKey: key, name: gateway === 'ipaymu' ? 'iPaymu' : 'Xendit' }, update: {}, select: { id: true } })
+  return row.id
+}
+
 /** `incoming` = uang masuk (verifikasi pembayaran); target QRIS untuk uang keluar → null (ditolak sebagai akun tak sah). */
 export async function resolveCashTarget(tx: Tx, target: CashTarget, opts: { incoming?: boolean } = {}): Promise<string | null> {
   if (target.kind === 'cash') return ensureMainCashAccount(tx)

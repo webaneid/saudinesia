@@ -908,7 +908,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
     - [x] F3 verifikasi admin + aturan konfirmasi P1/P2 + label status (`resolveVerifiedAmount`, kursi dikonfirmasi sekali saat terbayar ≥ DP, unggah pelunasan sesudah terkonfirmasi, antrean `pendingPaymentWhere`, label "DP diterima · sisa"/"Lunas") — selesai 2026-11-15 (suite, build, browser alur DP → pelunasan)
     - [x] F4 pengingat selama ada sisa (menyebut sisa, termasuk booking terkonfirmasi lewat DP), setelan gateway iPaymu/Xendit disembunyikan, dokumentasi penutup — selesai 2026-11-15. **Fase 7a selesai.**
 - [ ] Fase 8 — QRIS dinamis (porting Facport)
-- [ ] Fase 9 — iPaymu · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
+- [x] Fase 9 — iPaymu (2026-11-17, §10.12) · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
 - [ ] Fase 11 — Front-end pelanggan memakai engine
   - [x] 11a — checkout pelanggan Paket Umroh, Visa, Transport, Haji (Haji tanpa visa umroh, H1 = b): satu halaman `/{locale}/checkout/[jenis]?id=`, pratinjau server (`lib/booking/simulate.ts`, dipakai bersama draf admin), pesan = `lib/checkout/place.ts` (invoice langsung terbit, data jamaah sesudahnya), alamat kembali aman sesudah login/daftar/Google/lengkapi-data (`lib/auth/nextPath.ts`), pita "Pesanan diterbitkan"; form lama Visa/Transport dihapus — selesai 2026-11-10 (§10.5)
   - [x] 11a+ — rincian pesanan ringkas "pakai rumus" (baris identik digabung: "Visa Umroh Longstay · 3 jamaah × Rp 6.250.000 = Rp 18.750.000", satu helper `lib/booking/orderSummary.ts` dipakai detail booking jamaah, detail admin, dan ringkasan checkout; satu kartu "Rincian Pesanan" + total menggantikan kartu per layanan), jamaah booking bernomor dan berurutan tetap (`orderBy id`), "Tambah jamaah baru" dan "Jadikan saya jamaah" sebaris di booking (kartu lewat API Jamaah Saya, lalu ditautkan), pita "Pesanan diterbitkan" hanya menampilkan langkah yang masih relevan — selesai 2026-11-10
@@ -933,6 +933,8 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] Fase 7b-2b — Uang keluar vendor (2026-11-17): pengeluaran vendor memilih akun kas → entri `out`/`biaya_vendor`, ubah = pembalik + versi baru, batal = pembalik — §10.10
   - [x] Fase 7b-3 — Kode unik per invoice (2026-11-17): kode dialokasikan & dibekukan saat terbit, pelanggan melihat "transfer + kode", verifikasi admin = diterima − kode → entri `in`/`kode_unik` — §10.10
   - [x] Fase 8 — QRIS dinamis (2026-11-17): payload dibaca dari foto QRIS statis (tak disimpan), QR dinamis nominal + kode unik di halaman bayar jamaah dan invoice publik (QRIS aktif terkini), tujuan bukti QRIS → akun kas QRIS (hanya uang masuk) — §10.11
+  - [x] Fase 9 — iPaymu (2026-11-17): bayar online langsung di halaman booking (semua kanal aktif, biaya layanan per kelompok kanal), konfirmasi OTOMATIS dari `/transaction` (callback hanya pemicu, cron rekonsiliasi), buku kas akun iPaymu (biaya layanan masuk, MDR keluar), uang telat = kelebihan → refund — §10.12. Uji tiruan lulus; **uji sandbox sungguhan menunggu kunci `IPAYMU_VA`/`IPAYMU_API_KEY`**
+  - [ ] SEC-244 — halaman refund khusus (Keuangan → Refund: buat + detail usul → setujui → bayar) — PR tersendiri
 - [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
 

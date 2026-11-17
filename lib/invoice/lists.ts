@@ -1,8 +1,8 @@
-import type { TaxRule } from '@prisma/client'
+import type { GatewayFeeRule, TaxRule } from '@prisma/client'
 import { createListHandlers, type ListAdapter } from '@/lib/invoice/listHandlers'
 import {
-  bankAccountSchema, bankAccountUpdateSchema, qrisAccountSchema, qrisAccountUpdateSchema, taxRuleSchema, taxRuleUpdateSchema,
-  type BankAccountInput, type QrisAccountInput, type TaxRuleInput,
+  bankAccountSchema, bankAccountUpdateSchema, gatewayFeeRuleSchema, gatewayFeeRuleUpdateSchema, qrisAccountSchema, qrisAccountUpdateSchema, taxRuleSchema, taxRuleUpdateSchema,
+  type BankAccountInput, type GatewayFeeRuleInput, type QrisAccountInput, type TaxRuleInput,
 } from '@/lib/validators/invoiceSettings'
 
 // Adapter model → handler (docs/arsitektur-booking-engine-v2.md §6). Hapus = hapus sungguhan SAAT INI (belum ada yang merujuk); Fase 7 menambah FK Restrict dari pembayaran
@@ -39,3 +39,15 @@ export const taxRuleAdapter: ListAdapter<TaxRuleInput> = {
   setActive: async (db, id, isActive) => taxDto(await db.taxRule.update({ where: { id }, data: { isActive } })),
 }
 export const taxRuleHandlers = createListHandlers({ tag: 'admin/system/tax-rules', label: 'Aturan pajak', entity: 'tax_rule', schema: taxRuleSchema, updateSchema: taxRuleUpdateSchema, adapter: taxRuleAdapter })
+
+// Biaya layanan gateway per kelompok kanal (Fase 9, K9-2) — dibaca lib/payments/fees.ts.
+const feeDto = (r: GatewayFeeRule) => ({ ...r, percent: Number(r.percent) })
+export const gatewayFeeRuleAdapter: ListAdapter<GatewayFeeRuleInput> = {
+  list: async db => (await db.gatewayFeeRule.findMany({ orderBy: [{ gateway: 'asc' }, ...order] })).map(feeDto),
+  get: async (db, id) => { const r = await db.gatewayFeeRule.findUnique({ where: { id } }); return r ? feeDto(r) : null },
+  create: async (db, d) => feeDto(await db.gatewayFeeRule.create({ data: d })),
+  update: async (db, id, d) => feeDto(await db.gatewayFeeRule.update({ where: { id }, data: d })),
+  remove: async (db, id) => { await db.gatewayFeeRule.delete({ where: { id } }) },
+  setActive: async (db, id, isActive) => feeDto(await db.gatewayFeeRule.update({ where: { id }, data: { isActive } })),
+}
+export const gatewayFeeRuleHandlers = createListHandlers({ tag: 'admin/system/gateway-fees', label: 'Biaya gateway', entity: 'gateway_fee_rule', schema: gatewayFeeRuleSchema, updateSchema: gatewayFeeRuleUpdateSchema, adapter: gatewayFeeRuleAdapter })

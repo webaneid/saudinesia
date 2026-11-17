@@ -1515,19 +1515,43 @@ model Payment {
   /// Kode unik yang ikut ditransfer (Fase 7b-3): diisi process.ts saat verifikasi (0 = transfer tanpa kode). Pemasukan lain, BUKAN kredit tagihan.
   uniqueCodeIdr            Int       @default(0)
 
+  // Pembayaran online lewat gateway (Fase 9, docs/arsitektur-booking-engine-v2.md §10.12). null = manual (transfer/QRIS statis, diverifikasi admin).
+  // Gateway: `awaiting` (menunggu pelanggan membayar) → `confirmed` (otomatis, sesudah iPaymu memastikan lewat /transaction) atau `expired`. Referensi ke gateway = `id` ini.
+  // `claimedAmountIdr` = nominal tagihan yang dibayar (pokok), `serviceFeeIdr` = biaya layanan yang ditagih ke pelanggan (D15), `gatewayFeeIdr` = MDR yang dipotong gateway.
+  // Ditulis HANYA lib/payments/gateway.ts (+ process.ts saat konfirmasi).
+  gateway          PaymentGateway?
+  gatewayTrxId     String?         @unique @db.VarChar(80)
+  channel          String?         @db.VarChar(80) // "<kelompok>:<kode>" mis. va:bca, qris:qris
+  channelName      String?         @db.VarChar(120)
+  payCode          String?         @db.Text // nomor VA / kode bayar / isi QR
+  payExpiresAt     DateTime?       @db.Timestamptz(3)
+  serviceFeeIdr    Decimal         @default(0) @db.Decimal(14, 2)
+  gatewayFeeIdr    Decimal?        @db.Decimal(14, 2)
+  gatewayCheckedAt DateTime?       @db.Timestamptz(3)
+
   booking                Booking      @relation(fields: [bookingId], references: [id])
   destinationCashAccount CashAccount? @relation(fields: [destinationCashAccountId], references: [id], onDelete: Restrict)
   confirmedBy            User?        @relation("ConfirmedBy", fields: [confirmedById], references: [id])
 
   @@index([bookingId])
   @@index([destinationCashAccountId])
+  @@index([status, gateway])
   @@map("payments")
+}
+
+enum PaymentGateway {
+  ipaymu
+  xendit
+
+  @@map("payment_gateway")
 }
 
 enum PaymentStatus {
   pending
   confirmed
   rejected
+  awaiting
+  expired
 
   @@map("payment_status")
 }
@@ -2055,10 +2079,7 @@ model InvoiceSettings {
   methodIpaymu       Boolean @default(false)
   methodXendit       Boolean @default(false)
   gatewaySandbox     Boolean @default(true)
-  ipaymuFeePercent   Decimal @default(0) @db.Decimal(5, 2)
-  ipaymuFeeFlatIdr   Int     @default(0)
-  xenditFeePercent   Decimal @default(0) @db.Decimal(5, 2)
-  xenditFeeFlatIdr   Int     @default(0)
+  // Biaya layanan gateway per kelompok kanal = tabel GatewayFeeRule (Fase 9, K9-2).
 
   // Profil perusahaan (kop invoice)
   companyName      String?  @db.VarChar(160)
@@ -2108,6 +2129,22 @@ model QrisAccount {
   cashAccount CashAccount?
 
   @@map("qris_accounts")
+}
+
+/// Biaya layanan (MDR dibebankan ke pelanggan, D15) per gateway × kelompok kanal (Fase 9, K9-2). Kelompok tanpa aturan aktif = tanpa biaya. Ditulis lewat lib/invoice/lists.ts.
+model GatewayFeeRule {
+  id           String         @id @default(uuid())
+  gateway      PaymentGateway
+  channelGroup String         @db.VarChar(40) // kode kelompok iPaymu: va, qris, cstore, …
+  percent      Decimal        @default(0) @db.Decimal(5, 2)
+  flatIdr      Int            @default(0)
+  isActive     Boolean        @default(true)
+  sortOrder    Int            @default(0)
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime       @updatedAt @db.Timestamptz(3)
+
+  @@unique([gateway, channelGroup])
+  @@map("gateway_fee_rules")
 }
 
 model TaxRule {
@@ -2217,6 +2254,7 @@ enum CashAccountKind {
   bank
   cash
   qris
+  gateway
 
   @@map("cash_account_kind")
 }
@@ -2236,6 +2274,8 @@ enum CashComponent {
   refund
   biaya_vendor
   koreksi
+  biaya_layanan
+  mdr
 
   @@map("cash_component")
 }
@@ -2245,7 +2285,7 @@ model CashAccount {
   kind          CashAccountKind
   name          String          @db.VarChar(200) // nama saat dibuat (rekening: bank + nomor); tampilan rekening memakai BankAccount terkini
   bankAccountId String?         @unique // kind = bank
-  systemKey     String?         @unique @db.VarChar(40) // kind = cash: 'cash:main'
+  systemKey     String?         @unique @db.VarChar(40) // kind = cash: 'cash:main'; kind = gateway: 'gateway:ipaymu'
   qrisAccountId String?         @unique // kind = qris (Fase 8)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
 
