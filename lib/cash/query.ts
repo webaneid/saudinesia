@@ -1,13 +1,14 @@
 import type { CashComponent, CashDirection, Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { periodBounds } from '@/lib/reports/profit'
+import { balancesAround } from '@/lib/cash/flow'
 
 // Pembaca buku kas untuk staf (docs/arsitektur-booking-engine-v2.md §10.10 Fase 7b-1). Baca saja — penulis hanya lib/cash/ledger.ts. Periode = hari kalender zona aplikasi
 // (`periodBounds`: awal hari WIB s.d. awal hari sesudah `to`); kolom `entryDate` bertipe timestamptz, jadi batas boleh diikat sebagai `Date`.
 
 export type CashBookFilter = { from: string; to: string; account?: string; direction?: CashDirection; component?: CashComponent }
 export type CashBookRow = { id: string; entryDate: string; direction: CashDirection; component: CashComponent; amountIdr: number; account: string; bookingId: string | null; bookingCode: string | null; refType: string }
-export type CashAccountSummary = { id: string; name: string; inIdr: number; outIdr: number; balanceIdr: number }
+export type CashAccountSummary = { id: string; name: string; inIdr: number; outIdr: number; openingIdr: number; closingIdr: number }
 
 function where(f: CashBookFilter): Prisma.CashEntryWhereInput {
   const { fromTs, toTs } = periodBounds(f.from, f.to)
@@ -35,14 +36,14 @@ export async function cashBookEntries(f: CashBookFilter, page: number, limit: nu
   }
 }
 
-/** Ringkasan per akun: masuk/keluar DALAM periode (mengikuti filter arah/komponen) dan saldo SEPANJANG WAKTU (semua entri). */
+/** Ringkasan per akun: masuk/keluar DALAM periode (mengikuti filter arah/komponen) dan saldo awal/akhir periode (semua entri akun itu, tanpa filter arah/komponen). */
 export async function cashBookSummary(f: CashBookFilter): Promise<{ accounts: CashAccountSummary[]; inIdr: number; outIdr: number }> {
-  const [period, all, accounts] = await Promise.all([
+  const [period, balances, accounts] = await Promise.all([
     prisma.cashEntry.groupBy({ by: ['cashAccountId', 'direction'], where: where(f), _sum: { amountIdr: true } }),
-    prisma.cashEntry.groupBy({ by: ['cashAccountId', 'direction'], ...(f.account ? { where: { cashAccountId: f.account } } : {}), _sum: { amountIdr: true } }),
+    balancesAround({ from: f.from, to: f.to, account: f.account }),
     cashAccountsList(),
   ])
-  const sum = (rows: typeof period, id: string, d: CashDirection) => Number(rows.find(r => r.cashAccountId === id && r.direction === d)?._sum.amountIdr ?? 0)
-  const list = accounts.filter(a => !f.account || a.id === f.account).map(a => ({ id: a.id, name: a.name, inIdr: sum(period, a.id, 'in'), outIdr: sum(period, a.id, 'out'), balanceIdr: Math.round((sum(all, a.id, 'in') - sum(all, a.id, 'out')) * 100) / 100 }))
+  const sum = (id: string, d: CashDirection) => Number(period.find(r => r.cashAccountId === id && r.direction === d)?._sum.amountIdr ?? 0)
+  const list = accounts.filter(a => !f.account || a.id === f.account).map(a => ({ id: a.id, name: a.name, inIdr: sum(a.id, 'in'), outIdr: sum(a.id, 'out'), openingIdr: (balances.opening.get(a.id) ?? 0) / 100, closingIdr: (balances.closing.get(a.id) ?? 0) / 100 }))
   return { accounts: list, inIdr: list.reduce((s, a) => s + a.inIdr, 0), outIdr: list.reduce((s, a) => s + a.outIdr, 0) }
 }
