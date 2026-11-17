@@ -104,7 +104,6 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
   }))
   const c = booking.cancellation
   const cancellationView = c ? { cancelledAt: formatInstant(c.cancelledAt, DATETIME_FULL), byCustomer: c.byCustomer, reason: c.reason, paid: Number(c.paidIdr), decision: c.decision, decisionNote: c.decisionNote, suggested: suggestedRefund(Number(c.paidIdr), booking.departureDate, c.cancelledAt) } : null
-  const needCash = canMoney && booking.refunds.some(r => r.status === 'approved')
   const revRows = await prisma.bookingRevision.findMany({ where: { bookingId: id }, orderBy: [{ revision: 'desc' }, { id: 'desc' }], take: 100 }) // riwayat satu booking: 100 terbaru
   const revStaff = new Map((await prisma.user.findMany({ where: { id: { in: [...new Set(revRows.map(r => r.byUserId))] } }, select: { id: true, fullName: true }, take: 100 })).map(u => [u.id, u.fullName]))
   const revisions = revRows.map(r => ({ ...r, totalBefore: Number(r.totalBefore), totalAfter: Number(r.totalAfter), taxBefore: Number(r.taxBefore), taxAfter: Number(r.taxAfter), byName: revStaff.get(r.byUserId) ?? null }))
@@ -362,7 +361,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
 
       {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
       <BookingPriceCard bookingId={id} status={st} />
-      <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} cashOptions={needCash ? await cashTargetOptions() : []} />
+      <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} refundsHref={`/${locale}/admin/finance/refunds`} />
       {booking.status === 'active' && canCancelBooking(session.role) && (
         <CancelBookingBox bookingId={id} paid={refundable.paid} suggested={suggestedRefund(refundable.paid, booking.departureDate)} canMoney={canMoney} pendingProof={!!pendingPayment} />
       )}

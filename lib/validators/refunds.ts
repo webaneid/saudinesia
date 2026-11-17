@@ -16,12 +16,19 @@ export const adminCancelSchema = z.object({
 
 export const cancelDecisionSchema = z.object({ decision: z.enum(['refund', 'retain']), refundAmount: amount.nullish(), note }).strict()
 
-export const refundProposeSchema = z.object({ amount, reason }).strict()
+/** Rekening tujuan pelanggan (SEC-244, §10.13): ketiganya wajib bila dikirim; nomor = angka (spasi/strip diizinkan) — bentuk sama dengan CHECK DB. */
+export const refundRecipientSchema = z.object({
+  bank: z.string().trim().min(2, 'Nama bank wajib diisi').max(80),
+  accountNumber: z.string().trim().regex(/^[0-9][0-9 -]{3,38}[0-9]$/, 'Nomor rekening hanya angka (5–40 karakter)'),
+  accountName: z.string().trim().min(2, 'Nama pemilik rekening wajib diisi').max(120),
+}).strict()
+
+export const refundCreateSchema = z.object({ bookingId: z.uuid('Pilih booking'), amount, reason, recipient: refundRecipientSchema.nullish() }).strict()
 
 export const refundActionSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('approve') }).strict(),
   z.object({ action: z.literal('reject'), notes: note }).strict(),
-  z.object({ action: z.literal('update'), amount, reason }).strict(),
+  z.object({ action: z.literal('update'), amount, reason, recipient: refundRecipientSchema.nullish() }).strict(),
   /** `paidAt` = instan UTC ISO dari `DateTimeField`; `cashAccount` = `bank:<uuid>` | `cash`. */
-  z.object({ action: z.literal('pay'), cashAccount: z.string().max(60), paidAt: z.iso.datetime({ error: 'Tanggal bayar tidak valid' }).transform(v => new Date(v)), notes: note }).strict(),
+  z.object({ action: z.literal('pay'), cashAccount: z.string().max(60), paidAt: z.iso.datetime({ error: 'Tanggal bayar tidak valid' }).transform(v => new Date(v)), notes: note, recipient: refundRecipientSchema.nullish() }).strict(),
 ])

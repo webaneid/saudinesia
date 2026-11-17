@@ -192,6 +192,9 @@ export async function executeDeletion(
       // Data transfer (Fase 7a): nama pemilik rekening pengirim + catatan pelanggan = data pribadi; nominal/tanggal/bank/rekening tujuan dipertahankan (bukti uang masuk).
       await tx.payment.updateMany({ where: { booking: { userId } }, data: { notes: null, senderAccountName: null, payerNote: null } })
       await tx.refund.updateMany({ where: { booking: { userId } }, data: { notes: null, reason: '[dihapus]' } }) // alasan/catatan = teks staf (Fase 7b-2a), bisa memuat nama
+      // Rekening tujuan refund (SEC-244): yang SUDAH DIBAYAR = bukti ke mana uang keluar (bukan sekadar data pribadi, keputusan pemilik 2026-11-18) → dipertahankan,
+      // sejajar rekening tujuan pembayaran masuk di atas; yang belum dibayar tak pernah menjadi bukti → dikosongkan.
+      await tx.refund.updateMany({ where: { booking: { userId }, status: { not: 'paid' } }, data: { recipientBank: null, recipientAccountNumber: null, recipientAccountName: null } })
       // Pembatalan (Fase 7b-2a): alasan/catatan keputusan = teks staf; pembatalan oleh pemesan sendiri menyimpan id akun ini → dikosongkan.
       await tx.bookingCancellation.updateMany({ where: { booking: { userId } }, data: { reason: '[dihapus]', decisionNote: null } })
       await tx.bookingCancellation.updateMany({ where: { booking: { userId }, cancelledById: userId }, data: { cancelledById: null } })

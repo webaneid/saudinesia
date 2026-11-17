@@ -802,6 +802,21 @@ Sisa Fase 7 sesudah 7a (D9, D11, §3.5). QRIS dinamis = Fase 8, gateway = Fase 9
 - **K9-5 Invoice publik (tanpa login)** juga bisa bayar online? Usulan: belum di fase ini (halaman booking berlogin dulu).
 - **K9-6 Masa berlaku VA/QR:** 24 jam (dipotong ke jatuh tempo bila lebih dekat) — usulan.
 
+### 10.13 Halaman refund khusus (SEC-244; DISETUJUI pemilik 2026-11-17)
+
+**Recheck (2026-11-17):** refund ditulis HANYA `lib/refunds/service.ts` (`proposeRefund`/`updateRefundAmount`/`approveRefund`/`rejectRefund`/`payRefund`, batas `refundableOf` dinilai ulang di dalam kunci; bayar → entri `out`/`refund`). UI: daftar baca-saja `finance/refunds` + SEMUA tindakan di `RefundsPanel` halaman booking (usul lewat `POST admin/bookings/[id]/refunds`, aksi lewat `POST admin/refunds/[id]`). Model `Refund` tak menyimpan ke mana uang dikirim (hanya akun kas pembayar).
+
+**Putusan pemilik:** orang yang sama boleh mengusulkan, menyetujui, dan membayar (tanpa pemisahan tugas); yang diminta = formulir sendiri supaya keluar-masuk uang jelas. (1) **Rekening tujuan pelanggan dicatat** (bank, nomor, nama pemilik); (2) **tindakan refund pindah sepenuhnya ke halaman detail refund** — panel di booking hanya ringkasan + tautan + "Buat refund"; keputusan pembatalan (tunda → putuskan) tetap di booking.
+
+**Rancangan:**
+1. **Skema** — `Refund.recipientBank` (≤ 80), `recipientAccountNumber` (≤ 40, angka/strip/spasi), `recipientAccountName` (≤ 120); CHECK semua-atau-tak-ada. Hapus akun (`lib/account/deletion.ts`): refund DIBAYAR mempertahankan rekening tujuan sebagai bukti uang keluar (sejajar rekening tujuan pembayaran masuk; putusan pemilik 2026-11-18), refund lain dikosongkan.
+2. **Layanan** — `proposeRefund`/`updateRefund` menerima `recipient` (opsional); `payRefund` WAJIB rekening tujuan lengkap kecuali dibayar dari akun kas `cash` (tunai) — boleh diisi saat bayar. Satu-satunya penulis tetap `lib/refunds/service.ts`.
+3. **Route** — `POST /api/v1/admin/refunds` (buat: `bookingId`, `amount`, `reason`, `recipient?` → `{ id }`; menggantikan `POST admin/bookings/[id]/refunds`, yang dihapus), `GET /api/v1/admin/refunds/candidates?q=` (booking yang masih punya dana dapat dikembalikan, maks. 10, dengan batasnya), `POST admin/refunds/[id]` (aksi, `update`/`pay` membawa `recipient`). Semua `requireRefundManage`.
+4. **Halaman** — `finance/refunds` (+ tombol "Buat Refund", baris → detail); `finance/refunds/new` (`CreatePage`: pilih booking dengan pencarian, tampil terbayar/tagihan/batas, jumlah, alasan, rekening tujuan; `?booking=` dari halaman booking); `finance/refunds/[id]` (`EditorShell`: kiri = ringkasan, arus uang booking (masuk/keluar/terbayar bersih/batas), rekening tujuan, riwayat langkah dengan nama staf + entri buku kas; kanan = status + tindakan Setujui / Ubah / Tolak / Bayar dengan konfirmasi).
+5. **Uji** — `scripts/test-refunds.ts` diperluas (rekening wajib saat bayar non-tunai, CHECK, buat lewat route baru), penjaga: tindakan refund tak ada lagi di `RefundsPanel`.
+
+**Hasil eksekusi (as-built 2026-11-17):** sesuai rancangan. Migrasi `20261201090000_refund_recipient` (CHECK `refunds_recipient_shape`: semua-atau-tak-ada, nomor `^[0-9][0-9 -]{3,38}[0-9]$` = `refundRecipientSchema`). Galat layanan → HTTP lewat SATU `refundFailureResponse` (`lib/refunds/http.ts`); pemilih booking = `refundCandidates` (`lib/refunds/candidates.ts`, ≤ 10, `escapeLike`, batas = `refundableOf`, hanya pratinjau). Label status/sumber satu tempat `lib/refunds/labels.ts`. Detail refund = `EditorShell` + `ManageBox` (terdaftar `PANEL_PAGES` di `scripts/test-admin-editor.ts`); arus uang = entri buku kas booking (≤ 200, terdaftar di `scripts/test-table-consistency.ts`). Diverifikasi di browser server audit: buat → setujui → bayar dari akun bank (rekening wajib), entri `refund` tampil di arus uang, panel booking jadi ringkasan + tautan.
+
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
 

@@ -2,7 +2,7 @@
 // keputusan uang saat batal (none/refund/retain/defer), peran uang, bukti menunggu menolak, batas refund dinilai di dalam kunci (batal = terbayar bersih,
 // hidup = kelebihan bayar), siklus pending → approved → paid | rejected, uang keluar ke buku kas, billOf mengurangi refund dibayar, CHECK DB, dan penjaga penulis tunggal.
 import assert from 'node:assert/strict'
-import { readFileSync, readdirSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { cancelByAdmin, decideDeferred, suggestedRefund } from '@/lib/booking/adminCancel'
@@ -140,6 +140,41 @@ await t('AUDIT 7b-2a: tagihan naik sesudah usulan (revisi) → setujui/bayar dit
   assert.equal((await cancelByAdmin(z, { reason: 'mepet', decision: 'refund', ...by, canMoney: true })).kind, 'amount_required')
   assert.equal(await status(z), 'active')
 })
+await t('REKENING TUJUAN (SEC-244): bayar dari bank tanpa rekening → needs_recipient; rekening saat bayar disimpan; tunai boleh tanpa; usulan menyimpan & ubah mengosongkan', async () => {
+  const bank = await prisma.bankAccount.create({ data: { bankName: 'BSI', accountNumber: `9${Date.now()}`.slice(0, 13), accountHolder: 'PT Uji' } })
+  const target = { kind: 'bank' as const, bankAccountId: bank.id }
+  const rec = { bank: 'BCA', accountNumber: '1234567890', accountName: 'Uji Refund' }
+  const id = await mk({ paid: 1_510_000 }) // kelebihan 400.000
+  const a = await proposeRefund(id, { amount: 100_000, reason: 'lebih', ...by })
+  const rid = a.kind === 'done' ? a.refundId : ''
+  assert.equal((await approveRefund(rid, staff.id)).kind, 'done')
+  assert.equal((await payRefund(rid, { ...by, cashAccount: target, paidAt: new Date(), notes: null })).kind, 'needs_recipient')
+  assert.equal((await payRefund(rid, { ...by, cashAccount: { kind: 'qris', qrisAccountId: bank.id }, paidAt: new Date(), notes: null, recipient: rec })).kind, 'needs_account', 'QRIS tak boleh untuk uang keluar')
+  assert.equal(await prisma.cashEntry.count({ where: { refType: 'refund', refId: rid } }), 0)
+  assert.equal((await payRefund(rid, { ...by, cashAccount: target, paidAt: new Date(), notes: null, recipient: rec })).kind, 'done')
+  const paid = await prisma.refund.findUniqueOrThrow({ where: { id: rid } })
+  assert.deepEqual([paid.recipientBank, paid.recipientAccountNumber, paid.recipientAccountName], ['BCA', '1234567890', 'Uji Refund'])
+  const b = await proposeRefund(id, { amount: 100_000, reason: 'lebih 2', ...by, recipient: rec })
+  const rid2 = b.kind === 'done' ? b.refundId : ''
+  assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: rid2 } })).recipientBank, 'BCA')
+  assert.equal((await updateRefundAmount(rid2, { amount: 90_000, reason: 'kurangi', recipient: null })).kind, 'done')
+  assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: rid2 } })).recipientBank, null)
+  assert.equal((await approveRefund(rid2, staff.id)).kind, 'done')
+  assert.equal((await payRefund(rid2, { ...by, cashAccount: { kind: 'cash' }, paidAt: new Date(), notes: null })).kind, 'done', 'tunai tanpa rekening')
+  await assert.rejects(prisma.refund.update({ where: { id: rid2 }, data: { recipientBank: 'BCA' } }), /refunds_recipient_shape/, 'sebagian terisi')
+  await assert.rejects(prisma.refund.update({ where: { id: rid2 }, data: { recipientBank: 'BCA', recipientAccountNumber: '12ab', recipientAccountName: 'X' } }), /refunds_recipient_shape/, 'nomor bukan angka')
+})
+await t('PENJAGA §10.13: tindakan refund hanya di halaman detail — panel booking tanpa aksi/akun kas; route lama per booking dihapus; daftar menaut ke detail + Buat Refund', () => {
+  const panel = read('app/[locale]/admin/(protected)/bookings/[id]/RefundsPanel.tsx')
+  assert.doesNotMatch(panel, /api\/v1\/admin\/refunds|action: 'pay'|action: 'approve'|cashOptions/)
+  assert.match(panel, /finance\/refunds|refundsHref/)
+  assert.ok(!existsSync(join(root, 'app/api/v1/admin/bookings/[id]/refunds')), 'route usulan lama per booking harus dihapus')
+  const acts = read('app/[locale]/admin/(protected)/finance/refunds/[id]/RefundActions.tsx')
+  for (const a of ['approve', 'update', 'reject', 'pay']) assert.match(acts, new RegExp(`action: '${a}'`), a)
+  const list = read('app/[locale]/admin/(protected)/finance/refunds/page.tsx')
+  assert.match(list, /\$\{base\}\/new/); assert.match(list, /\$\{base\}\/\$\{r\.id\}/)
+  assert.match(read('lib/account/deletion.ts'), /recipientBank: null, recipientAccountNumber: null, recipientAccountName: null/)
+})
 await t('CHECK DB: refund paid tanpa akun/tanggal, jumlah ≤ 0, keputusan tak sesuai uang ditolak', async () => {
   const id = await mk()
   await assert.rejects(prisma.refund.create({ data: { bookingId: id, amount: 1, reason: 'x', status: 'paid' } }), /refunds_paid_check/)
@@ -165,7 +200,7 @@ await t('PENJAGA: hanya lib/refunds/service.ts membuat/mengubah refund (selain p
   assert.match(del, /FOR UPDATE[\s\S]*status: \{ in: \['pending', 'confirmed'\] \}[\s\S]*'money'[\s\S]*cancelNeedsAdmin', 409/)
   assert.doesNotMatch(del, /refundAmount/)
   assert.match(read('app/api/v1/admin/bookings/[id]/cancel/route.ts'), /requireBookingCancel\(\)[\s\S]*canMoney: canManageRefund\(session\.role\)/)
-  for (const f of ['app/api/v1/admin/bookings/[id]/cancel/decision/route.ts', 'app/api/v1/admin/bookings/[id]/refunds/route.ts', 'app/api/v1/admin/refunds/[id]/route.ts']) assert.match(read(f), /await requireRefundManage\(\)/, f)
+  for (const f of ['app/api/v1/admin/bookings/[id]/cancel/decision/route.ts', 'app/api/v1/admin/refunds/route.ts', 'app/api/v1/admin/refunds/candidates/route.ts', 'app/api/v1/admin/refunds/[id]/route.ts']) assert.match(read(f), /await requireRefundManage\(\)/, f)
   const svc = read('lib/refunds/service.ts')
   assert.match(svc, /FOR UPDATE[\s\S]*postEntries\(tx, \{ refType: 'refund'/)
 })

@@ -19,7 +19,12 @@ export type RefundFailure =
   | { kind: 'needs_account' }
   | { kind: 'invalid_date' }
   | { kind: 'decision_pending' } // pembatalan ditahan/ditunda: putuskan lewat decideDeferred, bukan usulan biasa
+  | { kind: 'needs_recipient' } // bayar non-tunai tanpa rekening tujuan pelanggan (SEC-244)
 export type RefundOk<T = unknown> = { kind: 'done' } & T
+
+/** Rekening TUJUAN pelanggan (§10.13). Data pribadi: dikosongkan lib/account/deletion.ts. */
+export type RefundRecipient = { bank: string; accountNumber: string; accountName: string }
+const recipientData = (r: RefundRecipient | null) => ({ recipientBank: r?.bank ?? null, recipientAccountNumber: r?.accountNumber ?? null, recipientAccountName: r?.accountName ?? null })
 
 export async function lockBooking(tx: Tx, bookingId: string): Promise<void> {
   await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
@@ -45,11 +50,11 @@ export async function refundableOf(tx: Tx, bookingId: string, excludeRefundId?: 
 }
 
 /** Dipanggil DI DALAM transaksi yang sudah mengunci booking (pembatalan admin / keputusan tunda / usulan kelebihan bayar). */
-export async function createRefundTx(tx: Tx, input: { bookingId: string; amount: number; reason: string; byUserId: string }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
+export async function createRefundTx(tx: Tx, input: { bookingId: string; amount: number; reason: string; byUserId: string; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
   const { max, cancelled } = await refundableOf(tx, input.bookingId)
   if (cents(input.amount) <= 0 || cents(input.amount) > cents(max)) return { kind: 'over_limit', max }
   const row = await tx.refund.create({
-    data: { bookingId: input.bookingId, amount: input.amount, reason: input.reason, source: cancelled ? 'cancellation' : 'overpayment', status: 'pending', createdById: input.byUserId },
+    data: { bookingId: input.bookingId, amount: input.amount, reason: input.reason, source: cancelled ? 'cancellation' : 'overpayment', status: 'pending', createdById: input.byUserId, ...recipientData(input.recipient ?? null) },
     select: { id: true },
   })
   return { kind: 'done', refundId: row.id }
@@ -66,7 +71,7 @@ async function lateMoneyOf(tx: Tx, bookingId: string, since: Date): Promise<numb
 }
 
 /** Usulan refund atas booking (kelebihan bayar pada booking hidup, atau sisa uang pada booking batal). */
-export async function proposeRefund(bookingId: string, input: { amount: number; reason: string; byUserId: string }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
+export async function proposeRefund(bookingId: string, input: { amount: number; reason: string; byUserId: string; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
   return prisma.$transaction(async (tx) => {
     const exists = await tx.booking.findUnique({ where: { id: bookingId }, select: { status: true } })
     if (!exists || exists.status === 'draft') return { kind: 'not_found' }
@@ -88,12 +93,13 @@ async function withRefund<T>(refundId: string, fn: (tx: Tx, r: { id: string; boo
   })
 }
 
-export async function updateRefundAmount(refundId: string, input: { amount: number; reason: string }): Promise<RefundFailure | RefundOk> {
+/** Ubah usulan (hanya `pending`): jumlah, alasan, dan — bila dikirim — rekening tujuan (`null` = dikosongkan). */
+export async function updateRefundAmount(refundId: string, input: { amount: number; reason: string; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk> {
   return withRefund(refundId, async (tx, r) => {
     if (r.status !== 'pending') return { kind: 'conflict' as const }
     const { max } = await refundableOf(tx, r.bookingId, r.id)
     if (cents(input.amount) <= 0 || cents(input.amount) > cents(max)) return { kind: 'over_limit' as const, max }
-    await tx.refund.update({ where: { id: r.id }, data: { amount: input.amount, reason: input.reason } })
+    await tx.refund.update({ where: { id: r.id }, data: { amount: input.amount, reason: input.reason, ...(input.recipient !== undefined ? recipientData(input.recipient) : {}) } })
     return { kind: 'done' as const }
   })
 }
@@ -119,19 +125,25 @@ export async function rejectRefund(refundId: string, input: { byUserId: string; 
 
 const CLOCK_SKEW_MS = 5 * 60_000
 
-/** Uang benar-benar dikembalikan: hanya refund `approved`; akun kas wajib; entri buku kas `out`/`refund` di transaksi yang sama. */
-export async function payRefund(refundId: string, input: { byUserId: string; cashAccount: CashTarget; paidAt: Date; notes: string | null }): Promise<RefundFailure | RefundOk> {
+/**
+ * Uang benar-benar dikembalikan: hanya refund `approved`; akun kas wajib; entri buku kas `out`/`refund` di transaksi yang sama. Rekening tujuan pelanggan
+ * WAJIB kecuali dibayar tunai (boleh diisi di sini, menimpa yang tersimpan — SEC-244).
+ */
+export async function payRefund(refundId: string, input: { byUserId: string; cashAccount: CashTarget; paidAt: Date; notes: string | null; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk> {
   if (input.paidAt.getTime() > Date.now() + CLOCK_SKEW_MS) return { kind: 'invalid_date' }
+  if (input.cashAccount.kind === 'qris') return { kind: 'needs_account' } // QRIS hanya uang masuk (Fase 8) — ditolak sebelum memeriksa rekening tujuan
   return withRefund(refundId, async (tx, r) => {
     if (r.status !== 'approved') return { kind: 'conflict' as const }
     // Batas dinilai ULANG di dalam kunci (booking hidup = kelebihan bayar saat ini; batal = terbayar bersih) — juga menjamin uang keluar ≤ uang masuk.
     const { max } = await refundableOf(tx, r.bookingId, r.id)
     if (cents(r.amount) > cents(max)) return { kind: 'over_limit' as const, max }
-    const approved = await tx.refund.findUniqueOrThrow({ where: { id: r.id }, select: { approvedAt: true } })
+    const approved = await tx.refund.findUniqueOrThrow({ where: { id: r.id }, select: { approvedAt: true, recipientAccountNumber: true } })
+    const hasRecipient = input.recipient ? true : approved.recipientAccountNumber !== null
+    if (input.cashAccount.kind !== 'cash' && !hasRecipient) return { kind: 'needs_recipient' as const }
     if (approved.approvedAt && input.paidAt.getTime() < approved.approvedAt.getTime() - CLOCK_SKEW_MS) return { kind: 'invalid_date' as const } // tak sebelum disetujui (periode kas)
     const cashAccountId = await resolveCashTarget(tx, input.cashAccount)
     if (!cashAccountId) return { kind: 'needs_account' as const }
-    await tx.refund.update({ where: { id: r.id }, data: { status: 'paid', paidAt: input.paidAt, paidById: input.byUserId, cashAccountId, ...(input.notes ? { notes: input.notes } : {}) } })
+    await tx.refund.update({ where: { id: r.id }, data: { status: 'paid', paidAt: input.paidAt, paidById: input.byUserId, cashAccountId, ...(input.notes ? { notes: input.notes } : {}), ...(input.recipient ? recipientData(input.recipient) : {}) } })
     await postEntries(tx, { refType: 'refund', refId: r.id, direction: 'out', cashAccountId, entryDate: input.paidAt, bookingId: r.bookingId, createdById: input.byUserId }, [{ component: 'refund', amountIdr: r.amount }])
     return { kind: 'done' as const }
   })

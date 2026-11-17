@@ -1,5 +1,6 @@
 import Link from 'next/link'
 import type { Prisma, RefundStatus } from '@prisma/client'
+import { Plus } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { formatRupiah } from '@/lib/utils'
 import { escapeLike } from '@/lib/utils/search'
@@ -14,19 +15,18 @@ import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { canManageRefund } from '@/lib/pricing/policy'
+import { REFUND_SOURCE_LABEL, REFUND_STATUS as STATUS } from '@/lib/refunds/labels'
 
-// Daftar refund (Fase 7b-2a, docs/arsitektur-booking-engine-v2.md §10.10): baca saja untuk semua admin; tindakan (setujui/bayar) di halaman booking, peran refund.
+// Daftar refund (Fase 7b-2a §10.10; halaman khusus §10.13): baca untuk semua admin; Buat Refund + tindakan (setujui/bayar) di halaman detail, peran refund.
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
 type Row = Prisma.RefundGetPayload<{ include: { booking: { select: { id: true; bookingCode: true; user: { select: { fullName: true } } } } } }>
 
 const STATUSES = ['pending', 'approved', 'paid', 'rejected'] as const satisfies readonly RefundStatus[]
-const STATUS: Record<RefundStatus, { label: string; tone: 'warning' | 'accent' | 'ok' | 'danger' }> = {
-  pending: { label: 'Diusulkan', tone: 'warning' }, approved: { label: 'Disetujui', tone: 'accent' }, paid: { label: 'Dibayar', tone: 'ok' }, rejected: { label: 'Ditolak', tone: 'danger' },
-}
 
 export default async function AdminRefunds({ params, searchParams }: Props) {
   const { locale } = await params
-  await requireAdminPage(locale)
+  const session = await requireAdminPage(locale)
   const sp = await searchParams
   const list = parseListParams(sp)
   const q = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 100)
@@ -57,16 +57,17 @@ export default async function AdminRefunds({ params, searchParams }: Props) {
         </>
       ),
     },
-    { key: 'src', header: 'Sumber', hideBelowLg: true, cell: r => <span className="text-[12px] text-admin-muted">{r.source === 'overpayment' ? 'Kelebihan bayar' : 'Pembatalan'}</span> },
+    { key: 'src', header: 'Sumber', hideBelowLg: true, cell: r => <span className="text-[12px] text-admin-muted">{REFUND_SOURCE_LABEL[r.source]}</span> },
     { key: 'at', header: 'Diusulkan', hideBelowLg: true, cell: r => <span className="text-[12px] tabular-nums text-admin-muted">{formatInstant(r.createdAt, DATETIME_MEDIUM)}</span> },
     { key: 'st', header: 'Status', cell: r => <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge> },
     { key: 'amt', header: 'Jumlah', align: 'right', cell: r => <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(Number(r.amount))}</span> },
-    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.booking.id}`} label={`Buka booking ${r.booking.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`${base}/${r.id}`} label={`Buka refund ${r.booking.bookingCode}`} /></RowActions> },
   ]
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Refund" description={`${open._count} refund belum tuntas · ${formatRupiah(Number(open._sum.amount ?? 0))}`} />
+      <PageHeader title="Refund" description={`${open._count} refund belum tuntas · ${formatRupiah(Number(open._sum.amount ?? 0))}`}
+        actions={canManageRefund(session.role) ? <Link href={`${base}/new`} className="admin-btn"><Plus className="size-4" /> Buat Refund</Link> : undefined} />
       <FilterBar active={Boolean(q || status)} resetHref={buildListHref(base, { limit: limitParam })}>
         <SearchForm action={base} q={q} placeholder="Cari kode booking / nama…" preserve={{ status, limit: limitParam === undefined ? undefined : String(limitParam) }} clearHref={hrefFor({ q: undefined, page: 1 })} />
         <FilterSelect label="Status" value={status ?? ''} options={STATUSES.map(s => ({ value: s, label: STATUS[s].label }))} nav={{ base, param: 'status', query: { q: q || undefined, limit: limitParam === undefined ? undefined : String(limitParam) } }} />
