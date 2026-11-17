@@ -938,7 +938,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 12 — Menu Keuangan (rancangan DISETUJUI 2026-11-18, `docs/arsitektur-booking-engine-v2.md` §10.14)
   - [x] 12a — saldo awal/akhir per akun di Buku Kas, halaman Arus Kas (per akun + per komponen), CSV Buku Kas & Arus Kas (2026-11-18)
   - [x] 12b — transfer antar akun (`cash_transfers`, `pindah_akun`, biaya transfer; batal = pembalik) (2026-11-18)
-  - [ ] 12c — laporan PPN (ditagihkan vs diterima, proporsional) + CSV
+  - [x] 12c — laporan PPN (ditagihkan vs diterima, proporsional) + CSV (2026-11-18)
   - [ ] 12d — kas per booking di Laporan Untung + menu Keuangan dirapikan
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
 

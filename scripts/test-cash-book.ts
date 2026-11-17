@@ -14,6 +14,7 @@ import { cashFlow } from '@/lib/cash/flow'
 import { csvCell } from '@/lib/reports/csv'
 import { createTransfer, transferAccountOptions, voidTransfer } from '@/lib/cash/transfers'
 import { cashTransferCreateSchema } from '@/lib/validators/cashTransfers'
+import { taxInvoices, taxSummary } from '@/lib/reports/tax'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -260,6 +261,34 @@ await t('TRANSFER ditolak: akun sama, akun QRIS (asal/tujuan), akun tak ada, wak
   assert.ok(opts.some(o => o.value === `account:${bankAcct}` && typeof o.balanceIdr === 'number' && o.canReceive))
 })
 
+await t('LAPORAN PPN (Fase 12c): ditagihkan = invoice terbit dalam periode (batas hari WIB; batal/hangus dipisah), diterima = entri ppn + PPN termasuk proporsional − bagian PPN refund; per invoice s.d. akhir periode', async () => {
+  const acct = await prisma.$transaction(tx => ensureMainCashAccount(tx))
+  const inv = async (o: { issuedAt: string; added?: number; included?: number; status?: 'active' | 'cancelled' }) => {
+    const b = await prisma.booking.create({ data: { bookingCode: `${tag}-${++n}`, userId: user.id, status: o.status ?? 'active', departureDate: new Date('2094-01-01'), season: 'regular', totalAmount: 1_000_000 } })
+    await prisma.invoice.create({ data: { bookingId: b.id, number: `${tag}-PPN-${n}`, sequenceKey: `p${n}`.slice(0, 8), sequence: n, issuedAt: new Date(o.issuedAt), invoiceDate: new Date('2093-05-01'), dueDate: new Date('2093-05-05'), companySnapshot: {}, taxAddedIdr: o.added ?? 0, taxIncludedIdr: o.included ?? 0 } })
+    return b.id
+  }
+  const post = (bookingId: string, refType: 'payment' | 'refund', direction: 'in' | 'out', at: string, lines: Array<{ component: 'pokok' | 'ppn' | 'refund'; amountIdr: number }>) =>
+    prisma.$transaction(tx => postEntries(tx, { refType, refId: `${tag}-${++n}`, direction, cashAccountId: acct, entryDate: new Date(at), bookingId, createdById: staff.id }, lines))
+  const A = await inv({ issuedAt: '2093-04-30T17:30:00Z', added: 110_000 })             // 1 Mei 00.30 WIB → masuk periode
+  const B = await inv({ issuedAt: '2093-05-20T03:00:00Z', included: 100_000 })            // PPN di dalam harga
+  const C = await inv({ issuedAt: '2093-05-21T03:00:00Z', added: 22_000, status: 'cancelled' })
+  await inv({ issuedAt: '2093-04-30T16:30:00Z', added: 999_000 })                          // 30 Apr 23.30 WIB → di luar periode
+  await post(A, 'payment', 'in', '2093-05-02T03:00:00Z', [{ component: 'pokok', amountIdr: 500_000 }, { component: 'ppn', amountIdr: 55_000 }])
+  await post(A, 'refund', 'out', '2093-05-25T03:00:00Z', [{ component: 'refund', amountIdr: 111_000 }]) // bagian PPN = 111.000 × 110.000 ÷ 1.110.000 = 11.000
+  await post(A, 'payment', 'in', '2093-06-02T03:00:00Z', [{ component: 'pokok', amountIdr: 500_000 }, { component: 'ppn', amountIdr: 55_000 }]) // sesudah periode
+  await post(B, 'payment', 'in', '2093-05-22T03:00:00Z', [{ component: 'pokok', amountIdr: 1_000_000 }]) // PPN termasuk = 1.000.000 × 100.000 ÷ 1.000.000
+  const s = await taxSummary('2093-05-01', '2093-05-31')
+  assert.deepEqual(s.billed, { count: 2, addedIdr: 110_000, includedIdr: 100_000, totalIdr: 210_000 })
+  assert.deepEqual(s.billedVoid, { count: 1, addedIdr: 22_000, includedIdr: 0, totalIdr: 22_000 })
+  assert.deepEqual(s.received, { addedIdr: 55_000, includedIdr: 100_000, grossIdr: 155_000, refundIdr: 11_000, netIdr: 144_000 })
+  const list = await taxInvoices('2093-05-01', '2093-05-31', { page: 1, limit: 10, skip: 0 })
+  assert.equal(list.meta.total, 3)
+  assert.deepEqual(list.items.map(r => [r.bookingId, r.status, r.receivedIdr]), [[C, 'cancelled', 0], [B, 'active', 100_000], [A, 'active', 44_000]], 'terbaru dulu; diterima s.d. 31 Mei (pembayaran Juni tak dihitung)')
+  const june = await taxSummary('2093-06-01', '2093-06-30')
+  assert.deepEqual([june.billed.count, june.received.addedIdr, june.received.netIdr], [0, 55_000, 55_000], 'uang masuk Juni dihitung di Juni walau invoice terbit Mei')
+})
+
 await t('REKENING yang sudah menerima uang tak bisa dihapus (FK Restrict → P2003, jalur "nonaktifkan saja"); rekening tanpa akun kas tetap bisa dihapus', async () => {
   await assert.rejects(prisma.bankAccount.delete({ where: { id: bank.id } }), (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003')
   const fresh = await prisma.bankAccount.create({ data: { bankName: `${tag} Mandiri`, accountNumber: '7003', accountHolder: 'PT Uji' } })
@@ -291,6 +320,8 @@ await t('PENJAGA: hanya lib/cash/ledger.ts menulis cash_entries dan hanya lib/ca
   const page = read('app/[locale]/admin/(protected)/finance/cash-book/page.tsx')
   assert.doesNotMatch(page, /@\/lib\/cash\/(query|ledger|accounts)'/)
   assert.match(read('app/api/v1/admin/finance/cash-book/route.ts'), /await requireCashView\(\)/)
+  for (const r of ['app/api/v1/admin/finance/tax/route.ts', 'app/api/v1/admin/finance/tax/export/route.ts']) assert.match(read(r), /await requireCashView\(\)/, `${r}: peran laporan PPN`)
+  assert.doesNotMatch(read('app/[locale]/admin/(protected)/finance/tax/page.tsx'), /@\/lib\/(reports\/tax|db)'/, 'halaman PPN (klien) hanya membaca API')
   assert.match(read('app/api/v1/bookings/[id]/payment/bukti/route.ts'), /FOR UPDATE[\s\S]*cashAccountForSnapshot\(tx, dest\)[\s\S]*destinationCashAccountId,/)
 })
 

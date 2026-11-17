@@ -3624,3 +3624,10 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** Buku kas belum memuat saldo sebelum sistem dipakai, jadi menolak transfer melebihi saldo tercatat akan memblokir pencatatan yang sah. Gateway dan rekening nonaktif perlu dikosongkan, bukan diisi. Ubah = batal + catat baru menjaga buku kas append-only.
 **Alternatives considered:** Menolak transfer melebihi saldo (ditolak, alasan di atas); mengizinkan ubah langsung (ditolak — buku kas append-only); fitur saldo awal per akun (di luar scope, dicatat untuk nanti).
 **Security check:** subagent `security-auditor` — 0 Critical/High/Medium, 4 Low: SEC-268 (penolakan meninggalkan akun kas), SEC-269 (tabel tak beku), SEC-271 (tujuan nonaktif/gateway, tanpa batas bawah waktu) diperbaiki; SEC-270 diterima. `bun audit` tak berubah (SEC-266).
+
+## 2026-11-18 — Fase 12c: laporan PPN (ditagihkan vs diterima)
+**Decision:** Laporan PPN dari satu modul `lib/reports/tax.ts`: ditagihkan = invoice terbit dalam periode (nilai terkini; batal/hangus dipisah), diterima = buku kas dalam periode (entri `ppn` + PPN di dalam harga proporsional dari `pokok` − bagian PPN refund proporsional). Ledger tidak diubah; tanpa skema baru. CSV lewat `csvResponse`; peran `requireCashView`.
+**Rationale:** K12-3 (pemilik): PPN harga-termasuk dihitung proporsional di laporan, bukan dengan memecah ulang entri lama. Dua dasar waktu (terbit vs uang masuk) sengaja dipisah karena itulah pertanyaan pemilik: berapa yang ditagih dan berapa yang benar-benar diterima; tabel per invoice menjembatani keduanya (diterima s.d. akhir periode).
+**Alternatives considered:** Memecah PPN termasuk di buku kas saat posting (mengubah perilaku ledger + data lama tetap tak terpecah — ditolak); bagian PPN refund dari kelebihan bayar dikecualikan (butuh atribusi refund ke kelebihan yang tak tercatat — ditunda, angka diberi label perkiraan).
+**Security check:** inline (fase baca saja, 2 route + 1 modul + 1 halaman): 0 Critical/High/Medium, 1 Low efisiensi diperbaiki (SEC-272). `bun audit` tak berubah (2 high pre-existing, SEC-266).
+
