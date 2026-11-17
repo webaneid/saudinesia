@@ -12,7 +12,10 @@ import { addDays, dbDateOf, endOfDayExclusiveInApp, startOfDayInApp, todayInApp 
 
 export type ExpireResult = { expired: Array<{ id: string; userId: string; code: string }>; skipped: number }
 
+// `awaiting` (Fase 9) BUKAN uang: tak dihitung di sini (batas pesanan checkout SEC-221 tetap berlaku). Hangus hanya menunggu VA/QR yang MASIH HIDUP
+// (`liveAwaiting`, batas waktunya dipotong ke saat hangus — lib/payments/gateway.ts `expiryHours`; SEC-256).
 const PAYMENT_ACTIVITY = ['pending', 'confirmed'] as const
+const liveAwaiting = (now: Date) => ({ status: 'awaiting' as const, payExpiresAt: { gt: now } })
 
 /** Booking hidup yang belum menerima uang sama sekali (tanpa pembayaran `pending`/`confirmed`) — dipakai hangus dan batas pesanan checkout (SEC-221). */
 export const UNPAID_ACTIVE = { status: 'active', confirmedAt: null, payments: { none: { status: { in: [...PAYMENT_ACTIVITY] } } } } as const satisfies Prisma.BookingWhereInput
@@ -26,14 +29,14 @@ export async function expireOverdueBookings(now: Date = new Date()): Promise<Exp
 
   // (1) Menjelang berangkat tanpa uang masuk (setelan `expireDaysBeforeReference`, 0 = mati).
   if (days > 0) {
-    const where: Prisma.BookingWhereInput = { ...UNPAID_ACTIVE, departureDate: { not: null, lte: dbDateOf(addDays(today, days)) } } // berangkat ≤ hari ini + N hari
+    const where: Prisma.BookingWhereInput = { ...UNPAID_ACTIVE, AND: [{ payments: { none: liveAwaiting(now) } }], departureDate: { not: null, lte: dbDateOf(addDays(today, days)) } } // berangkat ≤ hari ini + N hari
     for (const { id } of await prisma.booking.findMany({ where, select: { id: true }, orderBy: [{ departureDate: 'asc' }, { id: 'asc' }] })) {
       reasons.set(id, { reason: 'Hangus: belum ada pembayaran menjelang tanggal keberangkatan', where })
     }
   }
   // (2) SEC-221 (pemilik 2026-11-15): pesanan CHECKOUT PELANGGAN (invoice diterbitkan sistem, `issuedById` NULL) yang lewat jatuh tempo tanpa pembayaran/bukti
   // sama sekali — hangus sehari sesudah jatuh tempo supaya kuota tak tertahan. Pesanan buatan admin tak terkena (jatuh tempo tetap label, D4).
-  const overdue: Prisma.BookingWhereInput = { ...UNPAID_ACTIVE, invoice: { is: { issuedById: null, dueDate: { lt: dbDateOf(today) } } } }
+  const overdue: Prisma.BookingWhereInput = { ...UNPAID_ACTIVE, AND: [{ payments: { none: liveAwaiting(now) } }], invoice: { is: { issuedById: null, dueDate: { lt: dbDateOf(today) } } } }
   for (const { id } of await prisma.booking.findMany({ where: overdue, select: { id: true }, orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] })) {
     if (!reasons.has(id)) reasons.set(id, { reason: 'Hangus: belum ada pembayaran sampai lewat jatuh tempo', where: overdue })
   }
@@ -44,7 +47,7 @@ export async function expireOverdueBookings(now: Date = new Date()): Promise<Exp
         await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${id} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
         // Syarat kandidat dinilai ULANG di dalam kunci (jatuh tempo/tanggal bisa berubah lewat revisi admin), lalu status pembayaran.
         if ((await tx.booking.count({ where: { AND: [{ id }, where] } })) === 0) return null
-        const booking = await loadForExpiry(tx, id)
+        const booking = await loadForExpiry(tx, id, now)
         if (!booking) return null // berubah sejak daftar kandidat dibaca (dibayar / dikonfirmasi / dibatalkan)
         await cancelBooking(tx, booking, 'expired')
         return { id: booking.id, userId: booking.userId, code: booking.bookingCode }
@@ -59,7 +62,7 @@ export async function expireOverdueBookings(now: Date = new Date()): Promise<Exp
   return result
 }
 
-async function loadForExpiry(tx: Prisma.TransactionClient, id: string): Promise<CancellableBooking | null> {
+async function loadForExpiry(tx: Prisma.TransactionClient, id: string, now: Date): Promise<CancellableBooking | null> {
   const booking = await tx.booking.findUnique({
     where: { id },
     include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true },
@@ -67,6 +70,8 @@ async function loadForExpiry(tx: Prisma.TransactionClient, id: string): Promise<
   if (!booking || booking.status !== 'active' || booking.confirmedAt !== null) return null
   const activity = await tx.payment.count({ where: { bookingId: id, status: { in: [...PAYMENT_ACTIVITY] } } })
   if (activity > 0) return null
+  if (await tx.payment.count({ where: { bookingId: id, ...liveAwaiting(now) } }) > 0) return null
+  await tx.payment.updateMany({ where: { bookingId: id, status: 'awaiting' }, data: { status: 'expired' } }) // VA/QR yang sudah lewat batas waktu ikut ditutup
   return booking
 }
 

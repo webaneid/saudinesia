@@ -5,6 +5,7 @@ import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
 import { requireSession } from '@/lib/auth/session'
 import { ok } from '@/lib/validators'
 import { cancelBooking } from '@/lib/booking/cancel'
+import { expireAwaitingPayments } from '@/lib/payments/awaiting'
 import { displayStatus, isPilgrimCancellable } from '@/lib/booking/lifecycle'
 import { apiErrorJson } from '@/lib/errors/api'
 
@@ -61,6 +62,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
       if (!isPilgrimCancellable(booking)) return 'closed'
       if (await tx.payment.count({ where: { bookingId: id, status: { in: ['pending', 'confirmed'] } } }) > 0) return 'money'
       await cancelBooking(tx, booking, 'cancelled')
+      await expireAwaitingPayments(tx, id) // Fase 9: VA/QR yang masih hidup tak lagi dipakai (uang yang terlanjur masuk tetap dicatat, K9-4)
       await tx.bookingCancellation.create({ data: { bookingId: id, cancelledAt: new Date(), cancelledById: session.userId, byCustomer: true, reason: 'Dibatalkan oleh pemesan', paidIdr: 0, decision: 'none' } })
       return 'done'
     })

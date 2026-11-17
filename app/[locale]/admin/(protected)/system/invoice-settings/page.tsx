@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { safeLocale } from '@/lib/utils/locale'
+import { sandboxAllowed } from '@/lib/payments/ipaymu'
 import { InvoiceSettingsEditor } from './InvoiceSettingsEditor'
 
 // Sistem → Pengaturan Invoice (docs/arsitektur-booking-engine-v2.md §6) — hanya superadmin.
@@ -9,5 +10,7 @@ export default async function InvoiceSettingsPage({ params }: { params: Promise<
   const { locale } = await params
   const session = await requireAdminPage(locale)
   if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
-  return <InvoiceSettingsEditor />
+  // Hanya ADA/TIDAK kunci iPaymu yang dikirim ke klien (nilainya tak pernah).
+  const ipaymuKeys = Boolean(process.env.IPAYMU_VA?.trim() && process.env.IPAYMU_API_KEY?.trim())
+  return <InvoiceSettingsEditor ipaymuKeys={ipaymuKeys} sandboxAllowed={sandboxAllowed()} />
 }

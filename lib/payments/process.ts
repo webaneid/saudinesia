@@ -24,6 +24,28 @@ export type ProcessResult =
   | { kind: 'needs_account' }
   | { kind: 'done'; userId: string; bookingId: string; code: string; seatConfirmed: boolean; balance: number }
 
+/** Booking beserta item yang menahan kuota — bentuk yang dibutuhkan `confirmSeats`. */
+export const seatInclude = { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true } as const satisfies Prisma.BookingInclude
+type SeatBooking = Prisma.BookingGetPayload<{ include: typeof seatInclude }>
+
+/**
+ * Kursi dikonfirmasi SEKALI (pemanggil memastikan `confirmedAt` masih null di dalam kunci booking): `confirmedAt`/`confirmedById` (null = sistem/gateway) + kuota
+ * per baris yang BELUM dikonfirmasi, lalu ditandai. Dipakai verifikasi admin dan konfirmasi gateway otomatis (lib/payments/gateway.ts).
+ */
+export async function confirmSeats(tx: Prisma.TransactionClient, booking: SeatBooking, byUserId: string | null): Promise<void> {
+  await tx.booking.update({ where: { id: booking.id }, data: { confirmedAt: new Date(), confirmedById: byUserId } })
+  // Loop generik via adapter registry (docs/arsitektur-booking.md §6 Step 1) — tidak mungkin lagi ada tipe yang "terlupa" seperti insiden Muthowif kemarin.
+  // Hanya baris yang kuotanya BELUM dikonfirmasi (status per baris), lalu ditandai — konfirmasi ganda tak pernah memindahkan kuota dua kali.
+  const pending = <T extends { quotaConfirmed: boolean }>(rows: T[]) => rows.filter(r => !r.quotaConfirmed)
+  for (const h of pending(booking.hotels)) { await quotaAdapters.hotel.confirm(tx, h); await tx.bookingHotel.update({ where: { id: h.id }, data: { quotaConfirmed: true } }) }
+  for (const t of pending(booking.transports)) { await quotaAdapters.transport.confirm(tx, t); await tx.bookingTransport.update({ where: { id: t.id }, data: { quotaConfirmed: true } }) }
+  for (const tp of pending(booking.tourPackages)) { await quotaAdapters.tourPackage.confirm(tx, tp); await tx.bookingTourPackage.update({ where: { id: tp.id }, data: { quotaConfirmed: true } }) }
+  for (const bm of pending(booking.muthowif)) { await quotaAdapters.muthowif.confirm(tx, bm); await tx.bookingMuthowif.update({ where: { id: bm.id }, data: { quotaConfirmed: true } }) }
+  for (const bh of pending(booking.haji)) { await quotaAdapters.haji.confirm(tx, bh); await tx.bookingHaji.update({ where: { id: bh.id }, data: { quotaConfirmed: true } }) }
+  for (const bf of pending(booking.flights)) { await quotaAdapters.flight.confirm(tx, bf); await tx.bookingFlight.update({ where: { id: bf.id }, data: { quotaConfirmed: true } }) }
+  for (const bp of pending(booking.packages)) { await quotaAdapters.package.confirm(tx, bp); await tx.bookingPackage.update({ where: { id: bp.id }, data: { quotaConfirmed: true } }) }
+}
+
 export async function processPayment(paymentId: string, input: ProcessInput): Promise<ProcessResult> {
   // Setelan dibaca SEBELUM transaksi (SEC-212: tak boleh menyentuh klien global di dalam callback transaksi).
   const { minimumFirstPaymentPercent } = await getInvoiceSettings()
@@ -32,7 +54,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
     if (!head) return { kind: 'not_found' }
     await tx.$queryRaw(Prisma.sql`SELECT "id" FROM "bookings" WHERE "id" = ${head.bookingId} FOR UPDATE`) // Prisma ORM tak punya SELECT … FOR UPDATE
     const payment = await tx.payment.findUniqueOrThrow({ where: { id: paymentId } })
-    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { hotels: true, transports: true, muthowif: true, tourPackages: true, haji: true, flights: true, packages: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true, uniqueCode: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds } })
+    const booking = await tx.booking.findUniqueOrThrow({ where: { id: head.bookingId }, include: { ...seatInclude, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true, uniqueCode: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds } })
     if (payment.status !== 'pending' || booking.status !== 'active') return { kind: 'conflict' }
     let seatConfirmed = false
     let balance = 0
@@ -59,17 +81,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       balance = after.balance
       if (booking.confirmedAt === null && after.dpMet) {
         seatConfirmed = true
-        await tx.booking.update({ where: { id: booking.id }, data: { confirmedAt: new Date(), confirmedById: input.byUserId } })
-        // Loop generik via adapter registry (docs/arsitektur-booking.md §6 Step 1) — tidak mungkin lagi ada tipe yang "terlupa" seperti insiden Muthowif kemarin.
-        // Hanya baris yang kuotanya BELUM dikonfirmasi (status per baris), lalu ditandai — konfirmasi ganda tak pernah memindahkan kuota dua kali.
-        const pending = <T extends { quotaConfirmed: boolean }>(rows: T[]) => rows.filter(r => !r.quotaConfirmed)
-        for (const h of pending(booking.hotels)) { await quotaAdapters.hotel.confirm(tx, h); await tx.bookingHotel.update({ where: { id: h.id }, data: { quotaConfirmed: true } }) }
-        for (const t of pending(booking.transports)) { await quotaAdapters.transport.confirm(tx, t); await tx.bookingTransport.update({ where: { id: t.id }, data: { quotaConfirmed: true } }) }
-        for (const tp of pending(booking.tourPackages)) { await quotaAdapters.tourPackage.confirm(tx, tp); await tx.bookingTourPackage.update({ where: { id: tp.id }, data: { quotaConfirmed: true } }) }
-        for (const bm of pending(booking.muthowif)) { await quotaAdapters.muthowif.confirm(tx, bm); await tx.bookingMuthowif.update({ where: { id: bm.id }, data: { quotaConfirmed: true } }) }
-        for (const bh of pending(booking.haji)) { await quotaAdapters.haji.confirm(tx, bh); await tx.bookingHaji.update({ where: { id: bh.id }, data: { quotaConfirmed: true } }) }
-        for (const bf of pending(booking.flights)) { await quotaAdapters.flight.confirm(tx, bf); await tx.bookingFlight.update({ where: { id: bf.id }, data: { quotaConfirmed: true } }) }
-        for (const bp of pending(booking.packages)) { await quotaAdapters.package.confirm(tx, bp); await tx.bookingPackage.update({ where: { id: bp.id }, data: { quotaConfirmed: true } }) }
+        await confirmSeats(tx, booking, input.byUserId)
       }
     } else {
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'rejected', notes: input.notes ?? null } })

@@ -1544,7 +1544,37 @@
       "qrisTotal": "Amount in QR: {total}",
       "qrisNeedAmount": "Enter the payment amount to show the QR code.",
       "qrisHint": "Scan it with a banking or e-wallet app — the amount is locked (including the unique code). After paying, upload a screenshot of the receipt below.",
-      "qrisFailed": "The QR code can’t be shown. Check the amount or choose another destination."
+      "qrisFailed": "The QR code can’t be shown. Check the amount or choose another destination.",
+      "online": {
+        "open": "Pay online (VA, QRIS, convenience store, e-wallet)",
+        "formTitle": "Pay online",
+        "channel": "Payment method",
+        "channelPlaceholder": "Choose a method",
+        "amount": "Payment amount (IDR)",
+        "amountRange": "Minimum {min}, maximum {max} (remaining balance).",
+        "amountLabel": "Amount",
+        "feeLabel": "Service fee",
+        "noFee": "No fee",
+        "totalLabel": "Total to pay",
+        "expiresLabel": "Pay before",
+        "submit": "Create payment",
+        "creating": "Creating payment...",
+        "failed": "Could not create the online payment.",
+        "network": "Could not reach the server.",
+        "activeTitle": "Awaiting payment — {channel}",
+        "codeLabel": "Payment number / Virtual Account",
+        "qrAlt": "Payment QR code",
+        "qrHint": "Scan with your banking or e-wallet app — the amount is already locked.",
+        "openApp": "Continue payment in the app",
+        "autoHint": "Payment is confirmed automatically once paid. No proof upload needed.",
+        "check": "Check status",
+        "cancel": "Cancel",
+        "checkFailed": "Could not check the status.",
+        "cancelFailed": "Could not cancel the payment.",
+        "paid": "Payment received. Thank you!",
+        "expired": "This payment has expired. Please create a new one.",
+        "stillWaiting": "No payment received yet."
+      }
     },
     "pilgrim": {
       "metaTitle": "Pilgrim Data",
@@ -1917,6 +1947,13 @@
     "paymentTimeFuture": "The transfer time cannot be in the future",
     "paymentNothingDue": "This order is already paid in full",
     "qrisUnavailable": "This QRIS is currently unavailable. Choose another payment destination.",
-    "qrisInvalidRequest": "Invalid QRIS request"
+    "qrisInvalidRequest": "Invalid QRIS request",
+    "onlinePaymentUnavailable": "Online payment is currently unavailable. Use bank transfer or QRIS.",
+    "onlinePaymentChannel": "Choose an available online payment method",
+    "onlinePaymentBusy": "A payment is still pending. Complete or cancel it first.",
+    "onlinePaymentFailed": "Could not create the online payment. Please try again shortly.",
+    "onlinePaymentNotAwaiting": "This payment is no longer awaiting payment",
+    "onlinePaymentActive": "An online payment is still pending. Cancel it before uploading a transfer proof.",
+    "tooManyPaymentRequests": "Too many online payment requests. Please try again later."
   }
 }

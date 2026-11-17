@@ -55,6 +55,16 @@ export async function createRefundTx(tx: Tx, input: { bookingId: string; amount:
   return { kind: 'done', refundId: row.id }
 }
 
+/**
+ * Uang yang masuk SESUDAH pembatalan (bayar online yang lunas belakangan, Fase 9 K9-4) dikurangi refund yang diusulkan sejak itu: tak termasuk keputusan
+ * `retain`/`defer` (yang hanya menyangkut uang yang ada saat batal), jadi boleh diusulkan dikembalikan biasa (SEC-259).
+ */
+async function lateMoneyOf(tx: Tx, bookingId: string, since: Date): Promise<number> {
+  const paid = await tx.payment.aggregate({ where: { bookingId, status: 'confirmed', confirmedAt: { gt: since } }, _sum: { amount: true } })
+  const refunded = await tx.refund.aggregate({ where: { bookingId, status: { not: 'rejected' }, createdAt: { gt: since } }, _sum: { amount: true } })
+  return Math.max(0, Number(paid._sum.amount ?? 0) - Number(refunded._sum.amount ?? 0))
+}
+
 /** Usulan refund atas booking (kelebihan bayar pada booking hidup, atau sisa uang pada booking batal). */
 export async function proposeRefund(bookingId: string, input: { amount: number; reason: string; byUserId: string }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
   return prisma.$transaction(async (tx) => {
@@ -62,8 +72,8 @@ export async function proposeRefund(bookingId: string, input: { amount: number; 
     if (!exists || exists.status === 'draft') return { kind: 'not_found' }
     await lockBooking(tx, bookingId)
     // Keputusan pembatalan `retain`/`defer` tak boleh dilangkahi usulan biasa (jejak keputusan harus sama dengan uang yang keluar).
-    const c = await tx.bookingCancellation.findUnique({ where: { bookingId }, select: { decision: true } })
-    if (c && (c.decision === 'retain' || c.decision === 'defer')) return { kind: 'decision_pending' }
+    const c = await tx.bookingCancellation.findUnique({ where: { bookingId }, select: { decision: true, cancelledAt: true } })
+    if (c && (c.decision === 'retain' || c.decision === 'defer') && cents(input.amount) > cents(await lateMoneyOf(tx, bookingId, c.cancelledAt))) return { kind: 'decision_pending' }
     return createRefundTx(tx, { bookingId, ...input })
   })
 }

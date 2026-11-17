@@ -9,13 +9,13 @@ import type { InvoiceSettingsInput } from '@/lib/validators/invoiceSettings'
 export const SETTINGS_ID = 'global'
 
 type Row = InvoiceSettings & { companyAddress: Address | null }
-export type InvoiceSettingsDto = Omit<Row, 'minimumFirstPaymentPercent' | 'ipaymuFeePercent' | 'xenditFeePercent' | 'updatedAt'> & {
-  minimumFirstPaymentPercent: number; ipaymuFeePercent: number; xenditFeePercent: number; updatedAt: string
+export type InvoiceSettingsDto = Omit<Row, 'minimumFirstPaymentPercent' | 'updatedAt'> & {
+  minimumFirstPaymentPercent: number; updatedAt: string
 }
 
 const toDto = (r: Row): InvoiceSettingsDto => ({
   ...r,
-  minimumFirstPaymentPercent: Number(r.minimumFirstPaymentPercent), ipaymuFeePercent: Number(r.ipaymuFeePercent), xenditFeePercent: Number(r.xenditFeePercent),
+  minimumFirstPaymentPercent: Number(r.minimumFirstPaymentPercent),
   updatedAt: r.updatedAt.toISOString(),
 })
 
@@ -95,7 +95,7 @@ export async function updateInvoiceSettings(input: InvoiceSettingsInput, staffId
     })
     if (address === null && cur.companyAddressId) await tx.address.delete({ where: { id: cur.companyAddressId } }) // alamat yang dilepas tak dibiarkan yatim
 
-    const before: Record<string, unknown> = { ...cur, minimumFirstPaymentPercent: Number(cur.minimumFirstPaymentPercent), ipaymuFeePercent: Number(cur.ipaymuFeePercent), xenditFeePercent: Number(cur.xenditFeePercent) }
+    const before: Record<string, unknown> = { ...cur, minimumFirstPaymentPercent: Number(cur.minimumFirstPaymentPercent) }
     const diff = changedFields(before, fields as Record<string, unknown>, LONG_TEXT)
     if (address !== undefined) diff.address = address === null ? 'dihapus' : cur.companyAddressId ? 'diubah' : 'dibuat'
     if (Object.keys(diff).length > 0) await writeAudit(tx, staffId, 'invoice_settings', SETTINGS_ID, 'update', diff)

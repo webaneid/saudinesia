@@ -302,7 +302,8 @@ await t('PENJAGA: cron memakai zona aplikasi + dimuat SETELAH zona dimuat; tak a
   assert.match(read('lib/booking/expire.ts'), /cancelBooking\(tx, booking, 'expired'\)/)
   assert.match(read('lib/booking/expire.ts'), /FOR UPDATE/)
   assert.match(read('lib/payments/process.ts'), /payment\.status !== 'pending' \|\| booking\.status !== 'active'\)/); assert.match(read('lib/payments/process.ts'), /booking\.confirmedAt === null && after\.dpMet/)
-  assert.match(read('lib/payments/process.ts'), /confirmedAt: new Date\(\), confirmedById: input\.byUserId/)
+  assert.match(read('lib/payments/process.ts'), /confirmedAt: new Date\(\), confirmedById: byUserId/) // confirmSeats (dibagi dengan iPaymu, Fase 9)
+  assert.match(read('lib/payments/process.ts'), /confirmSeats\(tx, booking, input\.byUserId\)/)
 })
 
 // ── pembersihan ──────────────────────────────────────────────────────────────────────────────────

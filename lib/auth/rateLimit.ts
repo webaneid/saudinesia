@@ -43,7 +43,10 @@ export const LIMITS = {
   identityRevealStaff: { limit: 60,  windowSec: 3600 }, // buka NIK/paspor utuh per staf — setiap pembukaan juga berjejak (K4)
   pilgrimDocUser:     { limit: 60,  windowSec: 3600 }, // unggah/hapus dokumen jamaah per akun jamaah (tiap unggahan = pemrosesan gambar + objek MinIO)
   pilgrimDocStaff:    { limit: 600, windowSec: 3600 }, // sama, per staf yang mengunggah atas nama pelanggan
-  pilgrimDocIp:       { limit: 120, windowSec: 3600 }, // unggah/hapus dokumen lewat route jamaah per IP
+  pilgrimDocIp:       { limit: 120, windowSec: 3600 },
+  gatewayPayUser:     { limit: 20,  windowSec: 3600 }, // buat/batal pembayaran online per akun (tiap pembuatan = panggilan ke iPaymu + nomor VA baru)
+  gatewayCheckUser:   { limit: 60,  windowSec: 600 },  // "Periksa status" pembayaran online per akun (panggilan /transaction ke iPaymu)
+  gatewayWebhookIp:   { limit: 600, windowSec: 600 },  // callback iPaymu per IP — isi callback hanya pemicu; tiap callback sah = satu panggilan /transaction // unggah/hapus dokumen lewat route jamaah per IP
 } as const satisfies Record<string, { limit: number; windowSec: number }>
 
 const MAX_ID_LENGTH = 128
