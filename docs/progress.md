@@ -935,7 +935,11 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] Fase 8 — QRIS dinamis (2026-11-17): payload dibaca dari foto QRIS statis (tak disimpan), QR dinamis nominal + kode unik di halaman bayar jamaah dan invoice publik (QRIS aktif terkini), tujuan bukti QRIS → akun kas QRIS (hanya uang masuk) — §10.11
   - [x] Fase 9 — iPaymu (2026-11-17): bayar online langsung di halaman booking (semua kanal aktif, biaya layanan per kelompok kanal), konfirmasi OTOMATIS dari `/transaction` (callback hanya pemicu, cron rekonsiliasi), buku kas akun iPaymu (biaya layanan masuk, MDR keluar), uang telat = kelebihan → refund — §10.12. Uji tiruan lulus; **uji sandbox sungguhan menunggu kunci `IPAYMU_VA`/`IPAYMU_API_KEY`**
   - [x] SEC-244 — halaman refund khusus (2026-11-17): Keuangan → Refund → Buat Refund (pilih booking bersisa dana, jumlah ≤ batas, rekening tujuan) dan detail per refund (ringkasan, arus uang booking dari buku kas, rekening tujuan, riwayat, tindakan Setujui/Ubah/Tolak/Bayar); tindakan refund dipindah dari halaman booking — §10.13
-- [ ] Fase 12 — Menu Keuangan (Buku Kas, Saldo, Arus Kas, PPN, Laba per Booking, Transfer Antar Akun)
+- [ ] Fase 12 — Menu Keuangan (rancangan DISETUJUI 2026-11-18, `docs/arsitektur-booking-engine-v2.md` §10.14)
+  - [x] 12a — saldo awal/akhir per akun di Buku Kas, halaman Arus Kas (per akun + per komponen), CSV Buku Kas & Arus Kas (2026-11-18)
+  - [ ] 12b — transfer antar akun (`cash_transfers`, `pindah_akun`, biaya transfer)
+  - [ ] 12c — laporan PPN (ditagihkan vs diterima, proporsional) + CSV
+  - [ ] 12d — kas per booking di Laporan Untung + menu Keuangan dirapikan
 - [ ] Fase 13 — Bagi Hasil (halaman setelan sendiri; bawaan developer 5%; dasar omzet→harga atau keuntungan→saat selesai; per transaksi)
 
 ## Kuota tanggal Transport lewat admin (`docs/arsitektur-transportasi.md` §10, 2026-11-06)

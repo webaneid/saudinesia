@@ -10,6 +10,8 @@ import { processPayment } from '@/lib/payments/process'
 import { postEntries, reverseEntries, splitPaymentCredit } from '@/lib/cash/ledger'
 import { cashAccountForSnapshot, ensureBankCashAccount, ensureMainCashAccount, parseCashTarget } from '@/lib/cash/accounts'
 import { cashBookEntries, cashBookSummary } from '@/lib/cash/query'
+import { cashFlow } from '@/lib/cash/flow'
+import { csvCell } from '@/lib/reports/csv'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -146,12 +148,43 @@ await t('RINGKASAN: masuk/keluar per akun dalam periode (batas hari WIB), saldo 
   assert.deepEqual([oct31.inIdr, oct31.outIdr], [111_000, 0])
   const all = await prisma.cashEntry.groupBy({ by: ['direction'], where: { cashAccountId: acct }, _sum: { amountIdr: true } })
   const bal = all.reduce((s, r) => s + (r.direction === 'in' ? 1 : -1) * Number(r._sum.amountIdr), 0)
-  assert.equal(oct31.accounts[0]!.balanceIdr, bal, 'saldo = Σ semua waktu, bukan periode')
+  assert.equal(oct31.accounts[0]!.closingIdr, bal, 'saldo akhir 31 Okt = Σ semua entri sampai akhir hari itu')
+  assert.equal(Math.round((oct31.accounts[0]!.closingIdr - oct31.accounts[0]!.openingIdr) * 100), Math.round((oct31.inIdr - oct31.outIdr) * 100), 'saldo akhir − saldo awal = masuk − keluar 31 Okt WIB')
+  assert.equal((await cashBookSummary({ from: '2090-10-30', to: '2090-10-30', account: acct })).accounts[0]!.closingIdr, oct31.accounts[0]!.openingIdr, 'saldo per 30 Okt WIB = saldo awal 31 Okt (transfer 00.30 WIB belum masuk)')
   const page = await cashBookEntries({ from: '2090-10-31', to: '2090-10-31', account: acct }, 1, 1)
   assert.deepEqual([page.total, page.rows.length, page.rows[0]!.bookingId, page.rows[0]!.bookingCode?.startsWith(tag)], [2, 1, booking, true])
   const ppnOnly = await cashBookEntries({ from: '2090-10-31', to: '2090-10-31', account: acct, component: 'ppn' }, 1, 10)
   assert.deepEqual(ppnOnly.rows.map(r => r.amountIdr), [11_000])
 })
+await t('ARUS KAS (Fase 12a): saldo awal + masuk − keluar = saldo akhir per akun dan total; komponen per arah = total periode; batas hari WIB; filter akun', async () => {
+  const acct = (await prisma.$transaction(tx => ensureBankCashAccount(tx, bank.id)))!
+  const other = await prisma.$transaction(tx => ensureMainCashAccount(tx))
+  const at = (iso: string) => new Date(iso)
+  const ref = `flow-${tag}`
+  await prisma.$transaction(async tx => {
+    await postEntries(tx, { refType: 'payment', refId: `${ref}-a`, direction: 'in', cashAccountId: acct, entryDate: at('2091-03-31T16:59:00Z'), bookingId: null, createdById: null }, [{ component: 'pokok', amountIdr: 1_000 }]) // 31 Mar 23.59 WIB
+    await postEntries(tx, { refType: 'payment', refId: `${ref}-b`, direction: 'in', cashAccountId: acct, entryDate: at('2091-03-31T17:00:00Z'), bookingId: null, createdById: null }, [{ component: 'pokok', amountIdr: 2_000.5 }, { component: 'ppn', amountIdr: 220 }]) // 1 Apr 00.00 WIB
+    await postEntries(tx, { refType: 'refund', refId: `${ref}-c`, direction: 'out', cashAccountId: acct, entryDate: at('2091-04-15T03:00:00Z'), bookingId: null, createdById: null }, [{ component: 'refund', amountIdr: 500.25 }])
+    await postEntries(tx, { refType: 'cost_actual', refId: `${ref}-d`, direction: 'out', cashAccountId: other, entryDate: at('2091-04-20T03:00:00Z'), bookingId: null, createdById: null }, [{ component: 'biaya_vendor', amountIdr: 300 }])
+    await postEntries(tx, { refType: 'payment', refId: `${ref}-e`, direction: 'in', cashAccountId: acct, entryDate: at('2091-04-30T17:00:00Z'), bookingId: null, createdById: null }, [{ component: 'pokok', amountIdr: 9_999 }]) // 1 Mei 00.00 WIB — di luar April
+  })
+  const f = await cashFlow({ from: '2091-04-01', to: '2091-04-30' })
+  const c = (n: number) => Math.round(n * 100)
+  for (const a of [...f.accounts, f]) assert.equal(c(a.openingIdr) + c(a.inIdr) - c(a.outIdr), c(a.closingIdr), `invarian saldo (${'name' in a ? a.name : 'total'})`)
+  const mine = f.accounts.find(a => a.id === acct)!
+  const before = await prisma.cashEntry.groupBy({ by: ['direction'], where: { cashAccountId: acct, entryDate: { lt: at('2091-03-31T17:00:00Z') } }, _sum: { amountIdr: true } })
+  assert.equal(c(mine.openingIdr), before.reduce((s, r) => s + (r.direction === 'in' ? 1 : -1) * c(Number(r._sum.amountIdr)), 0), 'saldo awal = semua entri sebelum 1 Apr 00.00 WIB (memuat 31 Mar 23.59)')
+  assert.deepEqual([mine.inIdr, mine.outIdr], [2_220.5, 500.25], 'periode April WIB: 1 Apr 00.00 masuk, 1 Mei 00.00 tidak')
+  const sumDir = (d: 'in' | 'out') => f.components.filter(x => x.direction === d).reduce((s, x) => s + c(x.amountIdr), 0)
+  assert.deepEqual([sumDir('in'), sumDir('out')], [c(f.inIdr), c(f.outIdr)], 'rincian komponen = total periode')
+  const only = await cashFlow({ from: '2091-04-01', to: '2091-04-30', account: other })
+  assert.deepEqual([only.accounts.length, only.accounts[0]!.id, only.components.map(x => x.component)], [1, other, ['biaya_vendor']])
+})
+
+await t('CSV: sel diawali = + - @ diberi awalan (CSV injection), koma/kutip di-escape, angka negatif tak diubah', () => {
+  assert.deepEqual([csvCell('=SUM(A1)'), csvCell('-x'), csvCell('a,b'), csvCell('a"b'), csvCell(-500), csvCell(null)], ["'=SUM(A1)", "'-x", '"a,b"', '"a""b"', '-500', ''])
+})
+
 await t('REKENING yang sudah menerima uang tak bisa dihapus (FK Restrict → P2003, jalur "nonaktifkan saja"); rekening tanpa akun kas tetap bisa dihapus', async () => {
   await assert.rejects(prisma.bankAccount.delete({ where: { id: bank.id } }), (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003')
   const fresh = await prisma.bankAccount.create({ data: { bankName: `${tag} Mandiri`, accountNumber: '7003', accountHolder: 'PT Uji' } })

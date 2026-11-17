@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CashComponent } from '@prisma/client'
 
 // Query laporan untung (docs/arsitektur-harga-terpadu.md §19). Tanggal divalidasi lebih lanjut oleh `periodBounds` (format, urutan, rentang); di sini hanya bentuk.
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Tanggal harus berformat YYYY-MM-DD')
@@ -26,7 +27,14 @@ export const cashBookQuerySchema = z.object({
   to: date.optional(),
   account: z.uuid().optional().catch(undefined),
   direction: z.enum(['in', 'out']).optional().catch(undefined),
-  component: z.enum(['pokok', 'ppn', 'kode_unik', 'kelebihan', 'refund', 'biaya_vendor', 'koreksi']).optional().catch(undefined),
+  component: z.enum(CashComponent).optional().catch(undefined), // semua komponen skema (dulu daftar tulis tangan melewatkan biaya_layanan/mdr)
   page: z.coerce.number().int().min(1).max(100_000).catch(1),
   limit: z.coerce.number().int().min(1).max(100).catch(25),
+})
+
+// Arus kas (Fase 12a): periode + akun; nilai asing diabaikan.
+export const cashFlowQuerySchema = z.object({
+  from: date.optional(),
+  to: date.optional(),
+  account: z.uuid().optional().catch(undefined),
 })

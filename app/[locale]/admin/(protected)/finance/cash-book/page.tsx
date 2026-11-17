@@ -3,11 +3,11 @@
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation'
-import { BookOpenCheck } from 'lucide-react'
+import { BookOpenCheck, Download } from 'lucide-react'
 import type { CashComponent, CashDirection } from '@prisma/client'
 import type { PageMeta } from '@/lib/admin/pagination'
 import { cn, formatRupiah } from '@/lib/utils'
-import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
+import { DATE_SHORT_MONTH, DATETIME_MEDIUM, formatCalendarDate, formatInstant } from '@/lib/time'
 import { CASH_COMPONENT_LABEL, CASH_DIRECTION_LABEL } from '@/lib/cash/labels'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { FilterBar } from '@/components/admin/data-table/FilterBar'
@@ -24,7 +24,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 // Buku kas (docs/arsitektur-booking-engine-v2.md §10.10 Fase 7b-1): baca saja. Data dari GET /api/v1/admin/finance/cash-book; filter di URL (daftar putih di server).
 
 type Row = { id: string; entryDate: string; direction: CashDirection; component: CashComponent; amountIdr: number; account: string; bookingId: string | null; bookingCode: string | null; refType: string }
-type AccountSummary = { id: string; name: string; inIdr: number; outIdr: number; balanceIdr: number }
+type AccountSummary = { id: string; name: string; inIdr: number; outIdr: number; openingIdr: number; closingIdr: number }
 type Data = { params: { from: string; to: string }; summary: { accounts: AccountSummary[]; inIdr: number; outIdr: number }; accounts: Array<{ id: string; name: string }>; rows: Row[] }
 
 const FILTERS = ['account', 'direction', 'component'] as const
@@ -86,7 +86,8 @@ export default function CashBookPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader icon={BookOpenCheck} title="Buku Kas" description="Uang masuk dan keluar per akun kas. Dicatat otomatis saat pembayaran diverifikasi; tidak dapat diubah — koreksi tercatat sebagai entri pembalik." />
+      <PageHeader icon={BookOpenCheck} title="Buku Kas" description="Uang masuk dan keluar per akun kas. Dicatat otomatis saat pembayaran diverifikasi; tidak dapat diubah — koreksi tercatat sebagai entri pembalik."
+        actions={<><Link href={`/${locale}/admin/finance/cash-flow?${new URLSearchParams({ from, to, ...(picked.account ? { account: picked.account } : {}) })}`} className="admin-btn-sm">Arus Kas</Link><a href={`/api/v1/admin/finance/cash-book/export?${query({})}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>} />
       <FilterBar active={from !== def.from || to !== def.to || FILTERS.some(k => picked[k])} resetHref={pathname}>
         <PeriodFilter from={from} to={to} onChange={r => go({ from: r.from, to: r.to })} />
         <FilterSelect label="Akun" allLabel="Semua akun" value={picked.account} options={(data?.accounts ?? []).map(a => ({ value: a.id, label: a.name }))} onChange={v => go({ account: v })} />
@@ -106,13 +107,15 @@ export default function CashBookPage() {
 
       {s && (
         <Card className="space-y-2 p-4">
-          <h2 className="m-0 text-sm font-bold">Per akun kas</h2>
+          <h2 className="m-0 text-sm font-bold">Saldo per akun kas</h2>
+          <p className="m-0 text-[11px] text-admin-muted">Saldo awal dan akhir periode memuat semua entri akun (filter arah/komponen hanya memengaruhi kolom masuk/keluar).</p>
           <DataTable
             columns={[
               { key: 'n', header: 'Akun', mobile: 'title', cell: (r: AccountSummary) => <span className="font-semibold text-admin-ink">{r.name}</span> },
+              { key: 's', header: `Saldo awal ${formatCalendarDate(from, DATE_SHORT_MONTH)}`, align: 'right', hideBelowLg: true, cell: r => <span className="tabular-nums text-admin-muted">{formatRupiah(r.openingIdr)}</span> },
               { key: 'i', header: 'Masuk', align: 'right', cell: r => <span className="tabular-nums">{formatRupiah(r.inIdr)}</span> },
               { key: 'o', header: 'Keluar', align: 'right', cell: r => <span className="tabular-nums">{formatRupiah(r.outIdr)}</span> },
-              { key: 'b', header: 'Saldo (semua waktu)', align: 'right', cell: r => <span className="font-semibold tabular-nums">{formatRupiah(r.balanceIdr)}</span> },
+              { key: 'b', header: `Saldo per ${formatCalendarDate(to, DATE_SHORT_MONTH)}`, align: 'right', cell: r => <span className="font-semibold tabular-nums">{formatRupiah(r.closingIdr)}</span> },
             ]}
             rows={s.accounts} getRowId={r => r.id} loading={loading} empty="Belum ada akun kas — akun dibuat saat pembayaran pertama masuk ke rekening."
           />

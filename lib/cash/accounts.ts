@@ -33,8 +33,8 @@ export async function ensureQrisCashAccount(tx: Tx, qrisAccountId: string, opts:
   const q = await tx.qrisAccount.findUnique({ where: { id: qrisAccountId }, select: { id: true, name: true, isActive: true, cashAccount: { select: { id: true } } } })
   if (!q || (opts.requireActive && !q.isActive)) return null
   if (q.cashAccount) return q.cashAccount.id
-  const row = await tx.cashAccount.upsert({ where: { qrisAccountId: q.id }, create: { kind: 'qris', qrisAccountId: q.id, name: `QRIS ${q.name}`.slice(0, 200) }, update: {}, select: { id: true } })
-  return row.id
+  await tx.cashAccount.createMany({ data: [{ kind: 'qris', qrisAccountId: q.id, name: `QRIS ${q.name}`.slice(0, 200) }], skipDuplicates: true }) // aman serentak (lihat ensureBankCashAccount)
+  return (await tx.cashAccount.findUniqueOrThrow({ where: { qrisAccountId: q.id }, select: { id: true } })).id
 }
 
 /** Akun kas untuk sebuah rekening (dibuat bila belum ada). Rekening harus ada; `requireActive` untuk pilihan baru dari admin. null = rekening tak ada / nonaktif. */
@@ -42,26 +42,27 @@ export async function ensureBankCashAccount(tx: Tx, bankAccountId: string, opts:
   const bank = await tx.bankAccount.findUnique({ where: { id: bankAccountId }, select: { id: true, bankName: true, accountNumber: true, isActive: true, cashAccount: { select: { id: true } } } })
   if (!bank || (opts.requireActive && !bank.isActive)) return null
   if (bank.cashAccount) return bank.cashAccount.id
-  const row = await tx.cashAccount.upsert({ // upsert: dua transaksi serentak untuk rekening yang sama tak membuat dua akun
-    where: { bankAccountId: bank.id },
-    create: { kind: 'bank', bankAccountId: bank.id, name: `${bank.bankName} ${bank.accountNumber}`.slice(0, 200) },
-    update: {},
-    select: { id: true },
-  })
-  return row.id
+  // INSERT … ON CONFLICT DO NOTHING lalu baca: dua transaksi serentak untuk rekening yang sama tak membuat dua akun. Bukan `upsert` — Prisma dapat melempar
+  // P2002 pada upsert serentak, dan galat di dalam transaksi interaktif membatalkan seluruh transaksi (dulu sesekali gagal di uji serentak).
+  await tx.cashAccount.createMany({ data: [{ kind: 'bank', bankAccountId: bank.id, name: `${bank.bankName} ${bank.accountNumber}`.slice(0, 200) }], skipDuplicates: true })
+  return (await tx.cashAccount.findUniqueOrThrow({ where: { bankAccountId: bank.id }, select: { id: true } })).id
+}
+
+/** Akun sistem (kas tunai, gateway) berkunci `systemKey` — dibuat sekali, aman serentak (lihat ensureBankCashAccount). */
+async function ensureSystemAccount(tx: Tx, systemKey: string, kind: 'cash' | 'gateway', name: string): Promise<string> {
+  await tx.cashAccount.createMany({ data: [{ kind, systemKey, name }], skipDuplicates: true })
+  return (await tx.cashAccount.findUniqueOrThrow({ where: { systemKey }, select: { id: true } })).id
 }
 
 /** Akun Kas tunai (satu). */
 export async function ensureMainCashAccount(tx: Tx): Promise<string> {
-  const row = await tx.cashAccount.upsert({ where: { systemKey: CASH_MAIN }, create: { kind: 'cash', systemKey: CASH_MAIN, name: 'Kas tunai' }, update: {}, select: { id: true } })
-  return row.id
+  return ensureSystemAccount(tx, CASH_MAIN, 'cash', 'Kas tunai')
 }
 
 /** Akun kas sebuah gateway (Fase 9: saldo di iPaymu/Xendit; ditarik ke rekening = transfer antar akun, Fase 12). Hanya uang masuk pembayaran + MDR keluar. */
 export async function ensureGatewayCashAccount(tx: Tx, gateway: 'ipaymu' | 'xendit'): Promise<string> {
   const key = `gateway:${gateway}`
-  const row = await tx.cashAccount.upsert({ where: { systemKey: key }, create: { kind: 'gateway', systemKey: key, name: gateway === 'ipaymu' ? 'iPaymu' : 'Xendit' }, update: {}, select: { id: true } })
-  return row.id
+  return ensureSystemAccount(tx, key, 'gateway', gateway === 'ipaymu' ? 'iPaymu' : 'Xendit')
 }
 
 /** `incoming` = uang masuk (verifikasi pembayaran); target QRIS untuk uang keluar → null (ditolak sebagai akun tak sah). */
