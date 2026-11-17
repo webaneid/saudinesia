@@ -59,7 +59,7 @@
     # supaya `..` tak bisa meminjam batas unggah. Route unggah baru WAJIB ditambahkan — dijaga scripts/test-body-limit.ts.
     @unggah {
         method POST
-        path_regexp ^/api/v1/((admin/)?bookings/[A-Za-z0-9_-]+/pilgrims/[A-Za-z0-9_-]+/documents|bookings/[A-Za-z0-9_-]+/payment/bukti|admin/customers/[A-Za-z0-9_-]+/pilgrims/[A-Za-z0-9_-]+/documents|account/pilgrims/[A-Za-z0-9_-]+/documents|admin/media/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+)/?$
+        path_regexp ^/api/v1/((admin/)?bookings/[A-Za-z0-9_-]+/pilgrims/[A-Za-z0-9_-]+/documents|bookings/[A-Za-z0-9_-]+/payment/bukti|admin/customers/[A-Za-z0-9_-]+/pilgrims/[A-Za-z0-9_-]+/documents|account/pilgrims/[A-Za-z0-9_-]+/documents|admin/media/[A-Za-z0-9_-]+/[A-Za-z0-9_-]+|admin/system/qris-accounts/decode)/?$
     }
     handle @unggah {
         request_body {

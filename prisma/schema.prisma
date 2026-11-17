@@ -2105,6 +2105,8 @@ model QrisAccount {
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime @updatedAt @db.Timestamptz(3)
 
+  cashAccount CashAccount?
+
   @@map("qris_accounts")
 }
 
@@ -2214,6 +2216,7 @@ model SettingsAudit {
 enum CashAccountKind {
   bank
   cash
+  qris
 
   @@map("cash_account_kind")
 }
@@ -2243,9 +2246,11 @@ model CashAccount {
   name          String          @db.VarChar(200) // nama saat dibuat (rekening: bank + nomor); tampilan rekening memakai BankAccount terkini
   bankAccountId String?         @unique // kind = bank
   systemKey     String?         @unique @db.VarChar(40) // kind = cash: 'cash:main'
+  qrisAccountId String?         @unique // kind = qris (Fase 8)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
 
   bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  qrisAccount QrisAccount? @relation(fields: [qrisAccountId], references: [id], onDelete: Restrict)
   entries     CashEntry[]
   payments    Payment[]
   refunds     Refund[]

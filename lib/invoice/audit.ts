@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto'
 import type { Prisma } from '@prisma/client'
+import { qrisMerchantName } from '@/lib/qris/emv'
 
 type Tx = Prisma.TransactionClient
 export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'public_page'
@@ -18,10 +20,15 @@ export function auditView(entity: AuditEntity, row: Record<string, unknown>): Re
   for (const [k, v] of Object.entries(row)) {
     if (k === 'id' || k === 'createdAt' || k === 'updatedAt') continue
     if (entity === 'bank_account' && k === 'accountNumber') out[k] = maskAccountNumber(String(v))
-    else if (entity === 'qris_account' && k === 'emvPayload') out[k] = v == null ? null : `(${String(v).length} karakter)`
+    else if (entity === 'qris_account' && k === 'emvPayload') out[k] = v == null ? null : qrisAuditView(String(v))
     else out[k] = v === undefined ? null : (v as Prisma.InputJsonValue | null)
   }
   return out
+}
+
+/** Payload QRIS di jejak (Fase 8, K8-2: payload langsung mengarahkan pembayaran): nama merchant + sidik SHA-256 — cukup untuk membuktikan merchant mana yang aktif, tanpa menyalin payload. */
+function qrisAuditView(payload: string): string {
+  return `${qrisMerchantName(payload) ?? '(tanpa nama)'} · sha256:${createHash('sha256').update(payload).digest('hex').slice(0, 16)}`
 }
 
 /** Hanya kolom yang BERUBAH: `{ kolom: [lama, baru] }`; teks kaya cukup "berubah" (isinya panjang). */

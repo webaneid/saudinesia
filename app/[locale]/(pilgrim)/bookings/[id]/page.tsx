@@ -2,6 +2,7 @@ import React from 'react'
 import { OrderSummaryCard, type SummarySection } from './OrderSummaryCard'
 import { collapseRows, type SummaryInput } from '@/lib/booking/orderSummary'
 import { PaymentProofUpload } from './PaymentProofUpload'
+import { payableQris } from '@/lib/qris/payable'
 import { safeLocale } from '@/lib/utils/locale'
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
@@ -14,7 +15,7 @@ import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { paymentLimits } from '@/lib/payments/limits'
 import { itemSellTotals, visaTierRanges } from '@/lib/pricing/engine/snapshot'
 import { getTranslations } from 'next-intl/server'
-import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, Landmark, Package, Plane, Stamp, UserRound, UtensilsCrossed } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Building2, Bus, CheckCircle, Clock, FileDown, Landmark, Package, Plane, QrCode, Stamp, UserRound, UtensilsCrossed } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { displayStatus } from '@/lib/booking/lifecycle'
@@ -74,6 +75,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   const sellOf = (type: string, itemId: string) => sells.get(`${type}:${itemId}`) ?? 0
   // Rekening tujuan = yang DIBEKUKAN di invoice (sama dengan PDF dan route unggah bukti; lib/invoice/banks.ts `bookingPayTo`).
   const payTo = await bookingPayTo(booking.invoice)
+  const qris = (await payableQris()).map(q => ({ id: q.id, name: q.name })) // Fase 8: QRIS aktif saat ini (K8-2); payload tak dikirim ke klien
   const uniqueCode = booking.invoice?.uniqueCode ?? 0
   const hasPendingPayment = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
   const st = displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment, departureDate: booking.departureDate, returnDate: booking.returnDate })
@@ -171,7 +173,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
           )}
           <div className="rounded-lg bg-white/70 p-4 space-y-2 text-sm">
             <p className="font-semibold">{t('booking.transferTo')}</p>
-            {payTo.length === 0 && <p className="text-amber-800">{t('booking.noBank')}</p>}
+            {payTo.length === 0 && qris.length === 0 && <p className="text-amber-800">{t('booking.noBank')}</p>}
             <div className="grid grid-cols-2 gap-1">
               {payTo.map((b) => (
                 <React.Fragment key={`${b.bankName}-${b.accountNumber}`}>
@@ -180,6 +182,7 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
                 </React.Fragment>
               ))}
             </div>
+            {qris.length > 0 && <p className="flex items-center gap-1.5 text-muted-foreground"><QrCode className="h-4 w-4" aria-hidden /> {t('booking.qrisAvailable')}</p>}
           </div>
           <div className="text-center">
             <p className="text-2xl font-bold text-amber-900">{formatRupiah(due)}</p>
@@ -198,8 +201,8 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
             </p>
           )}
           {/* Tanpa rekening tujuan tak ada unggah bukti — pesan "hubungi tim" di atas yang tampil (K3; route unggah juga menolak). */}
-          {!hasPendingPayment && payTo.length > 0 && (
-            <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} balance={limits.balance} minClaim={limits.minClaim} uniqueCode={uniqueCode} />
+          {!hasPendingPayment && (payTo.length > 0 || qris.length > 0) && (
+            <PaymentProofUpload bookingId={booking.id} payTo={payTo.map(b => ({ bankName: b.bankName, accountNumber: b.accountNumber, accountHolder: b.accountHolder }))} qris={qris} balance={limits.balance} minClaim={limits.minClaim} uniqueCode={uniqueCode} />
           )}
           {hasPendingPayment && (
             <div className="flex items-center gap-2 text-sm text-green-700">

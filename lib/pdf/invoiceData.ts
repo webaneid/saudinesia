@@ -86,6 +86,8 @@ export type InvoiceData = {
   balanceDue:  number
   /** Kode unik transfer (Fase 7b-3) — hanya selama tagihan masih bisa dibayar; null = tak ditampilkan. */
   uniqueCode:  number | null
+  /** Invoice terbit, booking hidup, masih bersisa — QR QRIS sisa tagihan boleh tampil di invoice publik (Fase 8 K8-1). */
+  payable:     boolean
 }
 
 const STATUS_LABEL: Record<DisplayStatus, string> = {
@@ -206,5 +208,6 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
     totalAmount: bill.grandTotal,
     balanceDue:  Math.max(0, bill.balance),
     uniqueCode:  inv?.uniqueCode && booking.status === 'active' && bill.balance > 0 ? inv.uniqueCode : null,
+    payable:     !!inv && booking.status === 'active' && bill.balance > 0,
   }
 }

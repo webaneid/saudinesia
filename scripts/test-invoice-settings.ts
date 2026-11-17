@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { prisma } from '@/lib/db'
 import { assertThrowawayDb } from './lib/testDb'
+import { sampleStaticQris } from './lib/qrisSample'
 import { formatInvoiceNumber, numberPatternError } from '@/lib/invoice/numberPattern'
 import { allocateInvoiceNumber } from '@/lib/invoice/numbering'
 import { getInvoiceSettings, loadAppTimezone, SettingsError, updateInvoiceSettings } from '@/lib/invoice/settings'
@@ -97,7 +98,9 @@ await t('invoiceSettingsSchema: bawaan lolos; zona/email/situs/pola/kode unik/re
 await t('skema bank/QRIS/pajak: batas dan bentuk (tarif 3 desimal, dasar 0 ditolak, payload QRIS harus 000201…, nomor rekening karakter liar ditolak, .strict)', () => {
   assert.ok(bankAccountSchema.safeParse({ bankName: 'BSI', accountNumber: '7000 123 456', accountHolder: 'PT S' }).success)
   for (const b of [{ bankName: '', accountNumber: '1', accountHolder: 'A' }, { bankName: 'B', accountNumber: '12;DROP', accountHolder: 'A' }, { bankName: 'B', accountNumber: '1', accountHolder: 'A', extra: 1 }]) assert.equal(bankAccountSchema.safeParse(b).success, false, JSON.stringify(b))
-  assert.ok(qrisAccountSchema.safeParse({ name: 'QRIS', emvPayload: '00020101021226' }).success)
+  assert.ok(qrisAccountSchema.safeParse({ name: 'QRIS', emvPayload: sampleStaticQris() }).success)
+  assert.equal(qrisAccountSchema.safeParse({ name: 'QRIS', emvPayload: '00020101021226' }).success, false, 'tanpa CRC (Fase 8)')
+  assert.equal(qrisAccountSchema.safeParse({ name: 'QRIS', emvPayload: sampleStaticQris().slice(0, -1) + (sampleStaticQris().endsWith('0') ? '1' : '0') }).success, false, 'CRC salah')
   assert.equal(qrisAccountSchema.safeParse({ name: 'QRIS', emvPayload: 'http://evil' }).success, false)
   assert.ok(taxRuleSchema.safeParse({ name: 'PPN', ratePercent: 11, basisPercent: 100, mode: 'added' }).success)
   assert.ok(taxRuleSchema.safeParse({ name: 'PPN', ratePercent: 12, basisPercent: 91.667, mode: 'included' }).success)
@@ -240,12 +243,12 @@ await t('SEC-112: PUT penuh MEWAJIBKAN isActive dan sortOrder (menghilangkannya 
 })
 await t('QRIS dan pajak lewat handler: buat/ubah/aktif/hapus + jejak (payload QRIS hanya panjangnya); tarif desimal utuh; tarif 101 ditolak', async () => {
   const { qris, tax } = mkHandlers()
-  const q = await json(await qris.POST(req({ name: 'QRIS Uji', emvPayload: '00020101021226ABCDEF' }))); const qid = q.data!.id!
+  const q = await json(await qris.POST(req({ name: 'QRIS Uji', emvPayload: sampleStaticQris() }))); const qid = q.data!.id!
   assert.equal((await qris.PUT(req({ name: 'QRIS Uji', emvPayload: null, isActive: false, sortOrder: 0 }), ctx(qid))).status, 200)
   assert.equal((await qris.POST(req({ name: 'Salah', emvPayload: 'http://evil' }))).status, 400)
   await qris.DELETE(req(null), ctx(qid))
   const qlog = JSON.stringify((await audits(qid)).map(l => l.summary))
-  assert.ok(!qlog.includes('ABCDEF') && qlog.includes('(20 karakter)'), 'payload QRIS tak tersimpan di jejak')
+  assert.ok(!qlog.includes(sampleStaticQris()) && !qlog.includes('ID.CO.QRIS') && /TOKO UJI · sha256:[0-9a-f]{16}/.test(qlog), 'jejak QRIS = merchant + sidik, bukan payload (Fase 8)')
   const t1 = await json(await tax.POST(req({ name: 'PPN Uji', ratePercent: 11, basisPercent: 91.667, mode: 'included' })))
   assert.deepEqual([t1.data!.ratePercent, t1.data!.basisPercent], [11, 91.667]); assert.equal((await tax.POST(req({ name: 'X', ratePercent: 101, basisPercent: 100, mode: 'added' }))).status, 400)
   await tax.DELETE(req(null), ctx(t1.data!.id!))

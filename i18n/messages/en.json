@@ -1488,7 +1488,8 @@
       "pilgrimsTitle": "Pilgrim Data & Documents",
       "pilgrimsIntro": "Fill them in one at a time: each pilgrim's personal data and documents, then submit them for staff review.",
       "groupAll": "All pilgrims",
-      "groupUnnamed": "Group {mark}"
+      "groupUnnamed": "Group {mark}",
+      "qrisAvailable": "You can also pay with QRIS — choose QRIS as the destination in the form below."
     },
     "summary": {
       "title": "Order Details",
@@ -1536,7 +1537,14 @@
       "failed": "The transfer receipt could not be uploaded.",
       "network": "Could not reach the server.",
       "uploading": "Uploading...",
-      "submit": "Send Transfer Receipt"
+      "submit": "Send Transfer Receipt",
+      "qrisOption": "QRIS {name}",
+      "qrisOptionHint": "Pay by scanning a QR code",
+      "qrisAlt": "QRIS QR code for payment",
+      "qrisTotal": "Amount in QR: {total}",
+      "qrisNeedAmount": "Enter the payment amount to show the QR code.",
+      "qrisHint": "Scan it with a banking or e-wallet app — the amount is locked (including the unique code). After paying, upload a screenshot of the receipt below.",
+      "qrisFailed": "The QR code can’t be shown. Check the amount or choose another destination."
     },
     "pilgrim": {
       "metaTitle": "Pilgrim Data",
@@ -1663,7 +1671,11 @@
     "branch": " ({branch})",
     "validAfter": "Payment is valid once confirmed by the {company} team.",
     "terms": "Terms & Conditions",
-    "downloadPdf": "Download PDF"
+    "downloadPdf": "Download PDF",
+    "qrisTitle": "Pay with QRIS",
+    "qrisAlt": "QRIS QR code {name}",
+    "qrisTotal": "Amount in QR (balance due + unique code): {total}",
+    "qrisHint": "Scan it with a banking or e-wallet app. Want to pay part of it (deposit/installment)? Sign in and open the booking page."
   },
   "privacy": {
     "metaTitle": "Privacy Policy",
@@ -1903,6 +1915,8 @@
     "paymentAmountBelowMin": "The transfer amount must be at least {min}",
     "paymentAmountAboveBalance": "The transfer amount exceeds the remaining balance ({max})",
     "paymentTimeFuture": "The transfer time cannot be in the future",
-    "paymentNothingDue": "This order is already paid in full"
+    "paymentNothingDue": "This order is already paid in full",
+    "qrisUnavailable": "This QRIS is currently unavailable. Choose another payment destination.",
+    "qrisInvalidRequest": "Invalid QRIS request"
   }
 }

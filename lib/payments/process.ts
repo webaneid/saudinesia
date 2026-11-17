@@ -44,7 +44,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       const before = billOf(booking)
       const verified = resolveVerifiedAmount(before.balance, payment.claimedAmountIdr === null ? null : Number(payment.claimedAmountIdr), { amount: input.amount, notes: input.notes })
       // Akun kas penerima: pilihan admin menang; selain itu rekening yang dipilih pelanggan. Tanpa keduanya (bukti lama / rekening sudah dihapus) admin wajib memilih.
-      const cashAccountId = input.cashAccount ? await resolveCashTarget(tx, input.cashAccount) : payment.destinationCashAccountId
+      const cashAccountId = input.cashAccount ? await resolveCashTarget(tx, input.cashAccount, { incoming: true }) : payment.destinationCashAccountId
       if (!cashAccountId) return { kind: 'needs_account' }
       const now = new Date()
       const uniqueCodeIdr = input.uniqueCode ? (booking.invoice.uniqueCode ?? 0) : 0

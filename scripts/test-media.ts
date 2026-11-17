@@ -235,7 +235,9 @@ await t('F2: SETIAP tipe di registry punya <MediaField productType="…"> di hal
   assert.deepEqual(Object.keys(pages).sort(), Object.keys(MEDIA_OWNERS).sort(), 'tipe baru di registry wajib dipetakan ke halaman edit')
   for (const [type, file] of Object.entries(pages)) assert.match(readFileSync(dir + file, 'utf8'), new RegExp(`<MediaField\\s[^>]*productType="${type}"`), `${type}: MediaField tidak terpasang di ${file}`)
   const walk = (d: string): string[] => (require('node:fs').readdirSync(d, { withFileTypes: true }) as Array<{ name: string; isDirectory: () => boolean }>).flatMap(e => e.isDirectory() ? walk(`${d}/${e.name}`) : e.name.endsWith('.tsx') ? [`${d}/${e.name}`] : [])
-  const adhoc = walk('app/[locale]/admin').filter(f => /type="file"|\/photo`|\/images`/.test(readFileSync(f, 'utf8')))
+  // Pengecualian beralasan: pembaca gambar QRIS (Fase 8 K8-3) hanya MEMBACA payload dari foto lalu membuangnya — bukan foto produk, tak ada yang disimpan.
+  const NOT_PRODUCT_PHOTO = new Set(['app/[locale]/admin/(protected)/system/invoice-settings/InvoiceSettingsEditor.tsx'])
+  const adhoc = walk('app/[locale]/admin').filter(f => !NOT_PRODUCT_PHOTO.has(f) && /type="file"|\/photo`|\/images`/.test(readFileSync(f, 'utf8')))
   assert.deepEqual(adhoc, [], 'unggah foto ad-hoc di halaman admin (pakai MediaField)')
   const field = readFileSync('components/admin/media/MediaField.tsx', 'utf8')
   assert.equal((field.match(/<button\b(?![^>]*type=)/g) ?? []).length, 0, 'semua <button> di MediaField harus bertipe (aman di dalam form)')

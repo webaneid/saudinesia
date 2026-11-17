@@ -32,10 +32,11 @@ await t('splitPaymentCredit: pokok + PPN proporsional tagihan, kelebihan di atas
     assert.equal(sum, Math.round(amount * 100), `Σ komponen = ${amount}`)
   }
 })
-await t('parseCashTarget: hanya bank:<uuid> atau cash', () => {
+await t('parseCashTarget: hanya bank:<uuid>, qris:<uuid> (Fase 8) atau cash', () => {
+  assert.deepEqual(parseCashTarget('qris:3f1e2d4c-1111-4222-8333-944455556666'), { kind: 'qris', qrisAccountId: '3f1e2d4c-1111-4222-8333-944455556666' })
   assert.deepEqual(parseCashTarget('cash'), { kind: 'cash' })
   assert.deepEqual(parseCashTarget('bank:3f1e2d4c-1111-4222-8333-944455556666'), { kind: 'bank', bankAccountId: '3f1e2d4c-1111-4222-8333-944455556666' })
-  for (const bad of ['', 'bank:', 'bank:x', 'qris:3f1e2d4c-1111-4222-8333-944455556666', "bank:3f1e2d4c-1111-4222-8333-944455556666' OR 1=1"]) assert.equal(parseCashTarget(bad), null, bad)
+  for (const bad of ['', 'bank:', 'bank:x', 'qris:', 'qris:x', "bank:3f1e2d4c-1111-4222-8333-944455556666' OR 1=1"]) assert.equal(parseCashTarget(bad), null, bad)
 })
 
 // ── basis data ───────────────────────────────────────────────────────────────────────────────────

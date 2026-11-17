@@ -1,3 +1,4 @@
+import { isUsableQrisPayload } from '@/lib/qris/emv'
 import { z } from 'zod'
 import { addressSchema } from '@/lib/validators/address'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
@@ -83,7 +84,8 @@ export type BankAccountInput = z.infer<typeof bankAccountSchema>
 const qrisFields = {
   name: req(80, 'Nama QRIS wajib diisi'),
   // Payload QRIS statis (diawali "000201"); dibaca otomatis dari gambar di Fase 8. Opsional di sini.
-  emvPayload: z.string().trim().max(2000).nullish().transform(v => (v ? v : null)).refine(v => v === null || /^000201[\x20-\x7E]+$/.test(v), 'Payload QRIS harus diawali 000201 dan berupa teks ASCII'),
+  // Fase 8: bentuk + CRC diperiksa (`isUsableQrisPayload`, juga harus bisa dijadikan dinamis) — payload salah salin akan menghasilkan QR yang ditolak aplikasi bank.
+  emvPayload: z.string().trim().max(1000).nullish().transform(v => (v ? v : null)).refine(v => v === null || isUsableQrisPayload(v), 'Payload QRIS tidak sah (harus diawali 000201, CRC di akhir cocok, dan berisi Tag 53 mata uang)'),
 }
 export const qrisAccountSchema = z.object({ ...qrisFields, isActive: z.boolean().default(true), sortOrder: sortOrder.default(0) }).strict()
 export const qrisAccountUpdateSchema = z.object({ ...qrisFields, isActive: z.boolean(), sortOrder }).strict()

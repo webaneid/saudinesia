@@ -9,13 +9,32 @@ type Tx = Prisma.TransactionClient
 
 export const CASH_MAIN = 'cash:main'
 
-/** Pilihan akun kas di formulir admin: `bank:<BankAccount.id>` atau `cash`. */
-export type CashTarget = { kind: 'bank'; bankAccountId: string } | { kind: 'cash' }
+/** Pilihan akun kas di formulir admin: `bank:<BankAccount.id>`, `qris:<QrisAccount.id>` (Fase 8), atau `cash`. */
+export type CashTarget = { kind: 'bank'; bankAccountId: string } | { kind: 'qris'; qrisAccountId: string } | { kind: 'cash' }
 
 export function parseCashTarget(v: string): CashTarget | null {
   if (v === 'cash') return { kind: 'cash' }
-  const m = /^bank:([0-9a-f-]{36})$/.exec(v)
-  return m ? { kind: 'bank', bankAccountId: m[1]! } : null
+  const m = /^(bank|qris):([0-9a-f-]{36})$/.exec(v)
+  if (!m) return null
+  return m[1] === 'bank' ? { kind: 'bank', bankAccountId: m[2]! } : { kind: 'qris', qrisAccountId: m[2]! }
+}
+
+/** Nilai pilihan formulir untuk akun kas tersimpan (kebalikan `parseCashTarget`); '' bila tak dikenali. */
+export function cashTargetValue(a: { kind: string; bankAccountId: string | null; qrisAccountId: string | null } | null): string {
+  if (!a) return ''
+  if (a.kind === 'cash') return 'cash'
+  if (a.kind === 'bank' && a.bankAccountId) return `bank:${a.bankAccountId}`
+  if (a.kind === 'qris' && a.qrisAccountId) return `qris:${a.qrisAccountId}`
+  return ''
+}
+
+/** Akun kas untuk sebuah akun QRIS (dibuat bila belum ada; pola `ensureBankCashAccount`). null = QRIS tak ada / nonaktif (bila `requireActive`). */
+export async function ensureQrisCashAccount(tx: Tx, qrisAccountId: string, opts: { requireActive?: boolean } = {}): Promise<string | null> {
+  const q = await tx.qrisAccount.findUnique({ where: { id: qrisAccountId }, select: { id: true, name: true, isActive: true, cashAccount: { select: { id: true } } } })
+  if (!q || (opts.requireActive && !q.isActive)) return null
+  if (q.cashAccount) return q.cashAccount.id
+  const row = await tx.cashAccount.upsert({ where: { qrisAccountId: q.id }, create: { kind: 'qris', qrisAccountId: q.id, name: `QRIS ${q.name}`.slice(0, 200) }, update: {}, select: { id: true } })
+  return row.id
 }
 
 /** Akun kas untuk sebuah rekening (dibuat bila belum ada). Rekening harus ada; `requireActive` untuk pilihan baru dari admin. null = rekening tak ada / nonaktif. */
@@ -38,8 +57,11 @@ export async function ensureMainCashAccount(tx: Tx): Promise<string> {
   return row.id
 }
 
-export async function resolveCashTarget(tx: Tx, target: CashTarget): Promise<string | null> {
-  return target.kind === 'cash' ? ensureMainCashAccount(tx) : ensureBankCashAccount(tx, target.bankAccountId, { requireActive: true })
+/** `incoming` = uang masuk (verifikasi pembayaran); target QRIS untuk uang keluar → null (ditolak sebagai akun tak sah). */
+export async function resolveCashTarget(tx: Tx, target: CashTarget, opts: { incoming?: boolean } = {}): Promise<string | null> {
+  if (target.kind === 'cash') return ensureMainCashAccount(tx)
+  if (target.kind === 'qris') return opts.incoming ? ensureQrisCashAccount(tx, target.qrisAccountId, { requireActive: true }) : null
+  return ensureBankCashAccount(tx, target.bankAccountId, { requireActive: true })
 }
 
 /** Rekening yang dipilih pelanggan (baris snapshot invoice) → akun kas; null bila rekening sudah tak ada (admin memilih saat verifikasi). */
@@ -48,8 +70,19 @@ export async function cashAccountForSnapshot(tx: Tx, dest: { bankName: string; a
   return bank ? ensureBankCashAccount(tx, bank.id) : null
 }
 
-/** Pilihan akun untuk formulir verifikasi admin (rekening aktif + kas tunai). Hanya nama dan nomor rekening — bukan data pribadi. */
-export async function cashTargetOptions(db: Pick<Tx, 'bankAccount'> = prisma): Promise<Array<{ value: string; label: string }>> {
-  const banks = await db.bankAccount.findMany({ where: { isActive: true }, orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }], take: 50, select: { id: true, bankName: true, accountNumber: true, accountHolder: true } })
-  return [...banks.map(b => ({ value: `bank:${b.id}`, label: `${b.bankName} ${b.accountNumber} a.n. ${b.accountHolder}` })), { value: 'cash', label: 'Kas tunai' }]
+/**
+ * Pilihan akun untuk formulir admin (rekening aktif + kas tunai; QRIS aktif hanya bila `incoming` — uang MASUK lewat QRIS. Uang keluar (refund, vendor) tak dibayar
+ * dari QRIS: saldo merchant mengendap ke rekening). Hanya nama dan nomor rekening — bukan data pribadi.
+ */
+export async function cashTargetOptions(opts: { incoming?: boolean } = {}, db: Pick<Tx, 'bankAccount' | 'qrisAccount'> = prisma): Promise<Array<{ value: string; label: string }>> {
+  const order = [{ sortOrder: 'asc' as const }, { id: 'asc' as const }]
+  const [banks, qris] = await Promise.all([
+    db.bankAccount.findMany({ where: { isActive: true }, orderBy: order, take: 50, select: { id: true, bankName: true, accountNumber: true, accountHolder: true } }),
+    opts.incoming ? db.qrisAccount.findMany({ where: { isActive: true }, orderBy: order, take: 50, select: { id: true, name: true } }) : Promise.resolve([]),
+  ])
+  return [
+    ...banks.map(b => ({ value: `bank:${b.id}`, label: `${b.bankName} ${b.accountNumber} a.n. ${b.accountHolder}` })),
+    ...qris.map(q => ({ value: `qris:${q.id}`, label: `QRIS ${q.name}` })),
+    { value: 'cash', label: 'Kas tunai' },
+  ]
 }

@@ -2,9 +2,12 @@ import type { Metadata } from 'next'
 import { headers } from 'next/headers'
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { FileDown, Landmark } from 'lucide-react'
+import { FileDown, Landmark, QrCode } from 'lucide-react'
 import { clientIp } from '@/lib/auth/rateLimit'
 import { loadPublicInvoice } from '@/lib/invoice/publicView'
+import { buildDynamicQris } from '@/lib/qris/emv'
+import { payableQris } from '@/lib/qris/payable'
+import { qrisSvg } from '@/lib/qris/render'
 import { formatRupiah } from '@/lib/utils'
 import { safeLocale } from '@/lib/utils/locale'
 import { DATE_SHORT_MONTH_2D, formatCalendarDate } from '@/lib/time'
@@ -45,6 +48,20 @@ export default async function PublicInvoicePage({ params }: Props) {
   const company = c.name ?? 'Saudinesia'
   const paid = d.balanceDue <= 0 && d.totalAmount > 0
   const day = (v: string) => formatCalendarDate(v, DATE_SHORT_MONTH_2D, locale)
+  // QR QRIS sisa tagihan + kode unik (Fase 8 K8-1): QRIS aktif SAAT INI (K8-2), nominal terkunci, referensi = nomor invoice. Gambar dibuat di server
+  // sebagai data URI — payload statis tak pernah dikirim terpisah.
+  // Sisa bersen (konfirmasi/penyesuaian 2 desimal) dibulatkan KE ATAS — QRIS hanya rupiah bulat. QR yang gagal dibuat dilewati, halaman tetap tampil.
+  const qrisTotal = Math.ceil(d.balanceDue) + (d.uniqueCode ?? 0)
+  const qris = d.payable && qrisTotal > 0
+    ? (await Promise.all((await payableQris()).map(async q => {
+        try {
+          return [{ id: q.id, name: q.name, src: `data:image/svg+xml;base64,${Buffer.from(await qrisSvg(buildDynamicQris(q.payload, qrisTotal, d.invoiceNumber))).toString('base64')}` }]
+        } catch (e) {
+          console.error('[invoice publik] QR QRIS gagal dibuat', e instanceof Error ? e.message : String(e))
+          return []
+        }
+      }))).flat()
+    : []
 
   return (
     <main className="mx-auto max-w-3xl space-y-6 px-4 py-8">
@@ -125,6 +142,23 @@ export default async function PublicInvoicePage({ params }: Props) {
           </ul>
           {d.uniqueCode !== null && <p className="font-medium">{t('uniqueCode', { code: d.uniqueCode, total: formatRupiah(d.balanceDue + d.uniqueCode) })}</p>}
           <p className="text-xs italic text-muted-foreground">{t('validAfter', { company })}</p>
+        </section>
+      )}
+
+      {qris.length > 0 && (
+        <section className="space-y-3 rounded-xl border p-4 text-sm">
+          <p className="flex items-center gap-1.5 font-semibold"><QrCode className="size-4" aria-hidden /> {t('qrisTitle')}</p>
+          <div className="flex flex-wrap justify-center gap-6">
+            {qris.map(q => (
+              <figure key={q.id} className="flex flex-col items-center gap-1 text-center">
+                {/* eslint-disable-next-line @next/next/no-img-element -- data URI SVG buatan server; loader MinIO next/image tidak berlaku */}
+                <img src={q.src} alt={t('qrisAlt', { name: q.name })} width={240} height={240} className="h-60 w-60" />
+                <figcaption className="font-medium">{q.name}</figcaption>
+              </figure>
+            ))}
+          </div>
+          <p className="text-center font-semibold">{t('qrisTotal', { total: formatRupiah(qrisTotal) })}</p>
+          <p className="text-center text-xs text-muted-foreground">{t('qrisHint')}</p>
         </section>
       )}
 

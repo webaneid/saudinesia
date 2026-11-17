@@ -189,7 +189,7 @@ Sumber: `/Users/webane/sites/facport/apps/api/src/lib/qris-emv.ts` (parser TLV, 
 | **5** | **Form booking admin**: draf, popup modul→produk, pratinjau, terbitkan, form jamaah + indikator kelengkapan | e2e browser |
 | **6** | **Invoice terbit**: penomoran, pajak, revisi + log, T1 (void snapshot, trigger), edit setelah terbit, `setBookingTotal` dilonggarkan, invoice publik + PDF baru | invoice konsisten Σ; tes beku |
 | **7** | **Pembayaran manual**: ledger, alur bayar publik, kode unik, verifikasi, bertahap, refund saran, pembatalan dengan uang, `CashAccount`/`CashEntry` minimal | uang masuk konsisten satu sumber |
-| **8** | **QRIS dinamis** (porting Facport) | scan menghasilkan nominal terkunci |
+| **8** | **QRIS dinamis** (porting Facport) — rancangan rinci §10.11 | scan menghasilkan nominal terkunci |
 | **9** | **iPaymu** (webhook, MDR) | sandbox lulus |
 | **10** | **Xendit** | sandbox lulus |
 | **11** | **Front-end pelanggan** memakai engine — dikerjakan sebelum 7–10; **11a (Paket, Visa, Transport, Haji) SELESAI 2026-11-10 (§10.5)**; 11b produk lain, 11c keranjang | e2e pelanggan |
@@ -733,6 +733,37 @@ Sisa Fase 7 sesudah 7a (D9, D11, §3.5). QRIS dinamis = Fase 8, gateway = Fase 9
 **As-built 7b-3 (2026-11-17):** migrasi `20261128090000_invoice_unique_code` (`invoices.uniqueCode` CHECK 1–9999 atau NULL; `payments.uniqueCodeIdr` default 0, CHECK ≠ 0 hanya `confirmed`). Kode dialokasikan `allocateUniqueCode` (`lib/invoice/issue.ts`) — acak di antara kode yang tak dipakai invoice booking `active` bersisa (`billOf`); invoice lama tanpa kode tetap NULL. Verifikasi: panel admin "Diterima di rekening" (bawaan nominal pelanggan + kode) + centang "Termasuk kode unik"; klien mengirim `amount` = kredit (diterima − kode) dan `uniqueCode` boolean; `processPayment` membaca kode dari invoice, menyimpan `uniqueCodeIdr`, dan memosting `kode_unik` bersama pokok/PPN/kelebihan; kredit < nominal pelanggan saat kode dicentang → 400 (D11). Setiap cicilan membawa kode yang sama (masing-masing pemasukan lain; tidak ikut refund) — perlu dijelaskan di S&K. Tampilan: halaman booking jamaah ("Transfer X + kode unik K = X+K", petunjuk nominal tanpa kode di formulir bukti), invoice publik, PDF — hanya selama booking hidup bersisa. Uji: `scripts/test-unique-code.ts`. Security check (subagent `security-auditor`): 0 Critical/High/Medium; SEC-250 & SEC-251 diperbaiki, SEC-249 (pindaian alokasi) terbuka Low.
 
 **Peringatan uji:** setiap bagian dijaga skrip DB sekali pakai (penulis tunggal, trigger append-only, posting idempoten, pecahan pokok/ppn tepat sen, kunci baris) + browser di server audit.
+
+### 10.11 Fase 8 — QRIS dinamis (SELESAI 2026-11-17; disetujui pemilik 2026-11-17 — K8-1 ya, K8-2 SELALU TERKINI, K8-3 tidak disimpan, K8-4 tanpa MDR)
+
+**Recheck (2026-11-17):** `QrisAccount` (`name`, `emvPayload` teks manual, `isActive`, `sortOrder`) + CRUD di Pengaturan Invoice dan saklar `InvoiceSettings.methodQris` sudah ada sejak Fase 2, tetapi **tak dibaca kode mana pun**: belum ada pembacaan gambar, pembuatan QR dinamis, akun kas QRIS (`CashAccountKind` hanya `bank|cash`), maupun tampilan QRIS ke pelanggan. Sumber porting ada di Facport (`apps/api/src/lib/qris-emv.ts` 118 baris, `qris-decode.ts` 32 baris + tes). Kode unik (7b-3) sudah ada → QRIS memakainya.
+
+**Tujuan:** pelanggan memindai QR yang nominalnya SUDAH terkunci (pokok + kode unik), tanpa mengetik nominal; uang masuk tercatat ke akun kas QRIS.
+
+1. **Pustaka murni `lib/qris/emv.ts`** (porting Facport, TypeScript strict): parser TLV, CRC16-CCITT, `isValidQrisPayload` (diperketat: CRC payload statis diperiksa), `buildDynamicQris(payload, amount, reference)` (Tag 01 → 12, Tag 54 = nominal, Tag 62/05 = nomor invoice ≤ 25 karakter, CRC baru; tanpa Tag 53/54 → galat), `qrisMerchantName` (Tag 59, untuk tampilan admin). Tes vektor + uji pulang-balik.
+2. **Baca gambar `lib/qris/decode.ts`** (`sharp` sudah ada + **`jsqr` baru**): admin mengunggah foto QRIS statis di Pengaturan Invoice → payload terisi otomatis (isian manual tetap ada). Unggahan divalidasi dari ISI berkas, ≤ 5 MB, route multipart ditambahkan ke `@unggah` Caddyfile.
+3. **Gambar QR untuk pelanggan** (**`qrcode` baru**, SVG di server): route `GET /api/v1/bookings/[id]/payment/qris?amount=` (pemilik booking; nominal dinilai `paymentLimits` di server) dan QR sisa tagihan di invoice publik (lihat K8-1). Nominal QR = nominal + kode unik invoice.
+4. **Akun kas QRIS:** `CashAccountKind` + `qris`, `CashAccount.qrisAccountId` (FK Restrict, dibuat saat pertama dipakai — pola `ensureBankCashAccount`); pilihan akun kas admin menyertakan QRIS aktif.
+5. **Pembayaran:** formulir bukti mendapat tujuan "QRIS · {nama}" (`Payment.method = 'qris'`, `destinationCashAccountId` = akun QRIS); verifikasi tetap manual oleh admin (kode unik sudah ikut dalam nominal QR) — tak ada konfirmasi otomatis (tanpa API acquirer).
+6. **Invoice:** QRIS TIDAK dibekukan (K8-2 = selalu terkini): yang tampil = QRIS aktif saat ini, hanya bila `methodQris` aktif dan ada QRIS berpayload sah.
+7. **Uji:** `scripts/test-qris.ts` (vektor EMV, CRC, galat payload rusak, decode pulang-balik dengan `qrcode`, route nominal di luar batas → 400, bukan pemilik → 404, akun kas QRIS, penjaga penulis).
+
+**Keputusan pemilik:**
+- **K8-1** QR di invoice publik (tanpa login) untuk SISA tagihan + kode? Usulan: **ya** (tautan publik memang untuk membayar; konfirmasi tetap manual).
+- **K8-2** QRIS dibekukan di invoice saat terbit (seperti rekening)? Usulan: ya. **Putusan pemilik: TIDAK — selalu QRIS aktif terkini.**
+- **K8-3** Simpan gambar QRIS yang diunggah? Usulan: **tidak** — hanya dibaca payload-nya (QR pelanggan dibuat ulang dari payload).
+- **K8-4** Biaya layanan/MDR QRIS dibebankan ke pelanggan? Usulan: **tidak** di fase ini (QRIS statis: MDR ditanggung merchant).
+
+**As-built (2026-11-17):**
+- `lib/qris/emv.ts` (murni): `crc16`, `isValidQrisPayload` (≤ 1000, `000201…6304`+CRC cocok, ASCII cetak, TLV tanpa sisa), `isUsableQrisPayload` (= sah + Tag 53/54 — syarat payload yang boleh DISIMPAN dan DIPAKAI), `buildDynamicQris` (Tag 01 → 12; Tag 54 diganti di tempat atau disisipkan tepat sesudah 53, tak pernah ganda; Tag 55/56/57 tip/biaya DIBUANG — yang dibayar persis Tag 54, K8-4; Tag 62/05 = nomor invoice ASCII ≤ 25; nominal rupiah bulat 1..`MAX_QRIS_AMOUNT`, selain itu `QrisError`).
+- `lib/qris/decode.ts`: `sharp` (jenis dari ISI: jpeg/png/webp, `limitInputPixels` 16 MP, diperkecil ≤ 2000 px) → `jsqr` → `isUsableQrisPayload`; null bila tak terbaca. Route `POST /api/v1/admin/system/qris-accounts/decode` (superadmin, `Content-Length` sebelum `formData`, satu berkas ≤ 5 MB, terdaftar di `@unggah`); gambar TIDAK disimpan (K8-3). Editor Pengaturan Invoice: tombol "Baca dari gambar" mengisi payload (+ nama bila kosong).
+- `lib/qris/payable.ts` `payableQris()` = SATU-SATUNYA pembaca QRIS untuk pelanggan: `methodQris` aktif + QRIS aktif + payload `isUsableQrisPayload` (K8-2 selalu terkini — tak ada kolom beku di invoice). Payload statis tak pernah dikirim ke klien (halaman jamaah hanya `{id, name}`).
+- `lib/qris/render.ts` `qrisSvg` (`qrcode`, SVG). Route `GET /api/v1/bookings/[id]/payment/qris?qris=&amount=` (pemilik, draf 404, booking `active` berinvoice, nominal dinilai `claimRefusal(paymentLimits(billOf))`, total = nominal + `Invoice.uniqueCode`, referensi = nomor invoice; `no-store`, `nosniff`, CSP `default-src 'none'`; galat berkode `qrisInvalidRequest`/`qrisUnavailable`).
+- Formulir bukti jamaah: tujuan `qris:<uuid>` (skema `paymentTransferSchema`) di samping rekening; QR tampil untuk nominal yang sudah berhenti diketik. Route bukti mencocokkan id ke `payableQris()`, menyimpan `method = 'qris'`, label `QRIS {nama}`, dan `destinationCashAccountId` = `ensureQrisCashAccount(tx, id, { requireActive: true })` di dalam kunci booking. Verifikasi tetap manual (`processPayment`, kode unik seperti 7b-3).
+- Invoice publik (K8-1): bila `InvoiceData.payable` (invoice terbit, booking `active`, bersisa) → QR per QRIS untuk `ceil(sisa) + kode unik` sebagai data URI SVG; QR yang gagal dibuat dilewati (halaman tak pernah 500).
+- Akun kas: `CashAccountKind.qris` + `CashAccount.qrisAccountId` (UNIQUE, FK Restrict; CHECK bentuk tiga jenis). `CashTarget` `qris:<uuid>`; `resolveCashTarget` mengembalikan akun QRIS HANYA dengan `{ incoming: true }` (satu pemanggil: `processPayment`) — refund dan biaya vendor menolak QRIS; `cashTargetOptions({ incoming })` idem.
+- Jejak `settings_audit` untuk payload QRIS = nama merchant (Tag 59) + sidik SHA-256 (16 hex), bukan panjang saja — K8-2 membuat payload langsung mengarahkan pembayaran.
+- Uji: `scripts/test-qris.ts` (vektor CRC, payload rusak, dinamis ganda/tip, bolak-balik PNG/JPEG/WebP dan SVG, `payableQris`, akun kas serentak/nonaktif/keluar, CHECK & FK, penjaga sumber route/halaman).
 
 ## 11. Yang sengaja di luar scope v2 awal
 PPh 23 (potongan pelanggan badan), PPN masukan, laporan PPN bulanan/ekspor CSV (Fase 12+), peran admin terperinci, saldo kredit pelanggan, aturan DP per produk, notifikasi perubahan invoice ke pelanggan, mata uang akun kas selain rupiah, kolom lama `TIMESTAMP(3)` → `timestamptz`.
