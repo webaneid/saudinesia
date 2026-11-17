@@ -2281,6 +2281,8 @@ enum CashComponent {
   koreksi
   biaya_layanan
   mdr
+  pindah_akun // Fase 12b: transfer antar akun (keluar di akun asal, masuk di akun tujuan)
+  biaya_transfer // Fase 12b: biaya bank/gateway saat memindahkan saldo (keluar di akun asal)
 
   @@map("cash_component")
 }
@@ -2300,6 +2302,8 @@ model CashAccount {
   payments    Payment[]
   refunds     Refund[]
   costActuals CostActual[]
+  transfersOut CashTransfer[] @relation("CashTransferFrom")
+  transfersIn  CashTransfer[] @relation("CashTransferTo")
 
   @@map("cash_accounts")
 }
@@ -2327,6 +2331,32 @@ model CashEntry {
   @@index([bookingId])
   @@index([entryDate, id])
   @@map("cash_entries")
+}
+
+// Transfer antar akun kas (Fase 12b, docs/arsitektur-booking-engine-v2.md §10.14): memindahkan saldo milik perusahaan (mis. iPaymu → rekening, rekening → kas tunai).
+// Ditulis HANYA lib/cash/transfers.ts; entri kas `out`/`pindah_akun` (+ `biaya_transfer`) di akun asal dan `in`/`pindah_akun` di akun tujuan, di transaksi yang sama.
+// Tak pernah dihapus: batal = `voidedAt` + entri pembalik. `note` = catatan staf internal (bukan data pelanggan). createdById/voidedById = staf (tanpa FK, pola refunds).
+model CashTransfer {
+  id            String    @id @default(uuid())
+  fromAccountId String
+  toAccountId   String
+  amountIdr     Decimal   @db.Decimal(14, 2) // > 0 (CHECK)
+  feeIdr        Decimal   @default(0) @db.Decimal(14, 2) // ≥ 0 (CHECK); keluar dari akun asal
+  transferredAt DateTime  @db.Timestamptz(3)
+  note          String?   @db.VarChar(200)
+  createdById   String?
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  voidedAt      DateTime? @db.Timestamptz(3)
+  voidedById    String?
+  voidReason    String?   @db.VarChar(200)
+
+  fromAccount CashAccount @relation("CashTransferFrom", fields: [fromAccountId], references: [id], onDelete: Restrict)
+  toAccount   CashAccount @relation("CashTransferTo", fields: [toAccountId], references: [id], onDelete: Restrict)
+
+  @@index([transferredAt, id])
+  @@index([fromAccountId])
+  @@index([toAccountId])
+  @@map("cash_transfers")
 }
 
 // Pembatalan pesanan (Fase 7b-2a, §10.10): satu baris per booking yang dibatalkan oleh staf ATAU pelanggan, ditulis HANYA lib/booking/adminCancel.ts dan route batal pelanggan.

@@ -653,6 +653,8 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'Refund.createdById': 'dipertahankan (staf yang mengusulkan refund; alasan dibersihkan — refund.updateMany)',
     'Refund.rejectedById': 'dipertahankan (staf yang menolak refund)',
     'Refund.paidById': 'dipertahankan (staf yang membayar refund)',
+    'CashTransfer.createdById': 'dipertahankan (staf yang mencatat transfer antar akun kas perusahaan; tak menyangkut pelanggan)',
+    'CashTransfer.voidedById': 'dipertahankan (staf yang membatalkan transfer antar akun kas)',
     'BookingCancellation.cancelledById': 'staf = dipertahankan; pembatalan oleh pemesan sendiri (id akun ini) dikosongkan — bookingCancellation.updateMany',
     'BookingCancellation.decidedById': 'dipertahankan (staf yang memutuskan nasib uang; catatan dibersihkan — bookingCancellation.updateMany)',
     'InvoiceSettings.updatedById': 'dipertahankan (staf terakhir yang mengubah pengaturan)',

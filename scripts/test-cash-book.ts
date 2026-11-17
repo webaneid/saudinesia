@@ -8,10 +8,12 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { processPayment } from '@/lib/payments/process'
 import { postEntries, reverseEntries, splitPaymentCredit } from '@/lib/cash/ledger'
-import { cashAccountForSnapshot, ensureBankCashAccount, ensureMainCashAccount, parseCashTarget } from '@/lib/cash/accounts'
+import { cashAccountForSnapshot, ensureBankCashAccount, ensureGatewayCashAccount, ensureMainCashAccount, ensureQrisCashAccount, parseCashTarget } from '@/lib/cash/accounts'
 import { cashBookEntries, cashBookSummary } from '@/lib/cash/query'
 import { cashFlow } from '@/lib/cash/flow'
 import { csvCell } from '@/lib/reports/csv'
+import { createTransfer, transferAccountOptions, voidTransfer } from '@/lib/cash/transfers'
+import { cashTransferCreateSchema } from '@/lib/validators/cashTransfers'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -185,6 +187,79 @@ await t('CSV: sel diawali = + - @ diberi awalan (CSV injection), koma/kutip di-e
   assert.deepEqual([csvCell('=SUM(A1)'), csvCell('-x'), csvCell('a,b'), csvCell('a"b'), csvCell(-500), csvCell(null)], ["'=SUM(A1)", "'-x", '"a,b"', '"a""b"', '-500', ''])
 })
 
+await t('TRANSFER ANTAR AKUN (Fase 12b): keluar pindah_akun + biaya di asal, masuk di tujuan; Σ semua akun berubah hanya sebesar biaya; batal = pembalik (saldo kembali), batal kedua → already_void, serentak satu yang menang', async () => {
+  const bankAcct = (await prisma.$transaction(tx => ensureBankCashAccount(tx, bank.id)))!
+  const cash = await prisma.$transaction(tx => ensureMainCashAccount(tx))
+  const balances = async () => Object.fromEntries((await prisma.cashEntry.groupBy({ by: ['cashAccountId', 'direction'], _sum: { amountIdr: true } }))
+    .reduce((m, r) => m.set(r.cashAccountId, (m.get(r.cashAccountId) ?? 0) + (r.direction === 'in' ? 1 : -1) * Math.round(Number(r._sum.amountIdr) * 100)), new Map<string, number>()))
+  const total = (b: Record<string, number>) => Object.values(b).reduce((x, y) => x + y, 0)
+  const b0 = await balances()
+  const when = new Date(Date.now() - 60_000)
+  const r = await createTransfer({ from: `account:${bankAcct}`, to: 'cash', amount: 250_000, fee: 6_500, transferredAt: when, note: 'ref 123' }, staff.id)
+  assert.ok(r.ok)
+  const b1 = await balances()
+  assert.deepEqual([(b1[bankAcct] ?? 0) - (b0[bankAcct] ?? 0), (b1[cash] ?? 0) - (b0[cash] ?? 0), total(b1) - total(b0)], [-25_650_000, 25_000_000, -650_000], 'asal −(jumlah+biaya), tujuan +jumlah, Σ hanya −biaya (sen)')
+  const ents = await prisma.cashEntry.findMany({ where: { refId: r.value.id }, orderBy: [{ refType: 'asc' }, { component: 'asc' }], select: { refType: true, direction: true, component: true, amountIdr: true, entryDate: true } })
+  assert.deepEqual(ents.map(e => [e.refType, e.direction, e.component, Number(e.amountIdr)]), [['transfer_in', 'in', 'pindah_akun', 250_000], ['transfer_out', 'out', 'pindah_akun', 250_000], ['transfer_out', 'out', 'biaya_transfer', 6_500]])
+  assert.ok(ents.every(e => e.entryDate.getTime() === when.getTime()), 'tanggal entri = waktu transfer')
+  const [v1, v2] = await Promise.all([voidTransfer(r.value.id, 'salah akun', staff.id), voidTransfer(r.value.id, 'salah akun', staff.id)])
+  assert.deepEqual([v1.ok, v2.ok].sort(), [false, true], 'pembatalan serentak: satu menang')
+  assert.equal([v1, v2].find(v => !v.ok && v.kind === 'already_void') !== undefined, true)
+  assert.deepEqual(await balances(), b0, 'sesudah batal saldo semua akun kembali seperti semula')
+  assert.equal(await prisma.cashEntry.count({ where: { refType: 'reversal', reverses: { refId: r.value.id } } }), 3, 'tepat satu pembalik per entri')
+  const v3 = await voidTransfer(r.value.id, 'lagi', staff.id)
+  assert.deepEqual(!v3.ok && v3.kind, 'already_void')
+})
+
+await t('TRANSFER ditolak: akun sama, akun QRIS (asal/tujuan), akun tak ada, waktu masa depan; validator menolak kunci asing/desimal/akun sama; CHECK DB menolak bentuk salah; pilihan akun tanpa QRIS', async () => {
+  const bankAcct = (await prisma.$transaction(tx => ensureBankCashAccount(tx, bank.id)))!
+  const q = await prisma.qrisAccount.create({ data: { name: `${tag} QRIS`.slice(0, 80), isActive: true } })
+  const qAcct = await prisma.$transaction(tx => ensureQrisCashAccount(tx, q.id))
+  const now = new Date()
+  const base = { amount: 1_000, fee: 0, transferredAt: now, note: null }
+  const kinds = [
+    await createTransfer({ ...base, from: `account:${bankAcct}`, to: `account:${bankAcct}` }, staff.id),
+    ...(qAcct ? [await createTransfer({ ...base, from: `account:${qAcct}`, to: 'cash' }, staff.id), await createTransfer({ ...base, from: 'cash', to: `account:${qAcct}` }, staff.id)] : []),
+    await createTransfer({ ...base, from: `account:${'0'.repeat(8)}-0000-0000-0000-${'0'.repeat(12)}`, to: 'cash' }, staff.id),
+    await createTransfer({ ...base, from: `account:${bankAcct}`, to: 'cash', transferredAt: new Date(now.getTime() + 3_600_000) }, staff.id),
+  ].map(r => !r.ok && r.kind)
+  assert.deepEqual(kinds, ['same_account', ...(qAcct ? ['qris_account', 'qris_account'] : []), 'account_missing', 'future_date'])
+  // SEC-268: penolakan tak meninggalkan akun kas baru (rekening yang belum pernah dipakai tetap bisa dihapus)
+  const fresh = await prisma.bankAccount.create({ data: { bankName: `${tag} BRI`, accountNumber: '7009', accountHolder: 'PT Uji', isActive: true } })
+  const before = await prisma.cashAccount.count()
+  const rej = await createTransfer({ ...base, from: `bank:${fresh.id}`, to: qAcct ? `account:${qAcct}` : `bank:${fresh.id}` }, staff.id)
+  assert.equal(rej.ok, false)
+  assert.equal(await prisma.cashAccount.count(), before, 'transfer ditolak tak membuat akun kas')
+  await prisma.bankAccount.delete({ where: { id: fresh.id } })
+  // SEC-271: tujuan rekening nonaktif / gateway ditolak (asal boleh); waktu > 1 tahun lalu ditolak
+  const gw = await prisma.$transaction(tx => ensureGatewayCashAccount(tx, 'ipaymu'))
+  assert.deepEqual([await createTransfer({ ...base, from: 'cash', to: `account:${gw}` }, staff.id)].map(r => !r.ok && r.kind), ['bad_destination'])
+  await prisma.bankAccount.update({ where: { id: bank.id }, data: { isActive: false } })
+  const toInactive = await createTransfer({ ...base, from: 'cash', to: `account:${bankAcct}` }, staff.id)
+  const fromInactive = await createTransfer({ ...base, from: `account:${bankAcct}`, to: 'cash' }, staff.id)
+  await prisma.bankAccount.update({ where: { id: bank.id }, data: { isActive: true } })
+  assert.deepEqual([!toInactive.ok && toInactive.kind, fromInactive.ok], ['bad_destination', true], 'rekening nonaktif hanya boleh jadi asal')
+  const old = await createTransfer({ ...base, from: `account:${bankAcct}`, to: 'cash', transferredAt: new Date(now.getTime() - 400 * 24 * 3_600_000) }, staff.id)
+  assert.deepEqual(!old.ok && old.kind, 'too_old')
+  // SEC-269: baris transfer beku di DB — DELETE/ubah ditolak; pembatalan sekali diizinkan, membatalkan ulang/menghidupkan lagi ditolak
+  const tr = fromInactive.ok ? fromInactive.value.id : ''
+  await assert.rejects(prisma.$executeRaw`DELETE FROM cash_transfers WHERE id = ${tr}`, /frozen/)
+  await assert.rejects(prisma.$executeRaw`UPDATE cash_transfers SET "amountIdr" = 2 WHERE id = ${tr}`, /frozen/)
+  assert.ok((await voidTransfer(tr, 'uji beku', staff.id)).ok)
+  await assert.rejects(prisma.$executeRaw`UPDATE cash_transfers SET "voidedAt" = NULL, "voidedById" = NULL, "voidReason" = NULL WHERE id = ${tr}`, /frozen/)
+  await assert.rejects(prisma.$executeRaw`TRUNCATE cash_transfers`, /frozen/)
+  const ok = { from: 'cash', to: `account:${bankAcct}`, amount: 1, fee: 0, transferredAt: now.toISOString() }
+  assert.equal(cashTransferCreateSchema.safeParse(ok).success, true)
+  for (const bad of [{ ...ok, extra: 1 }, { ...ok, amount: 1.5 }, { ...ok, amount: 0 }, { ...ok, fee: -1 }, { ...ok, to: 'cash' }, { ...ok, from: 'qris:x' }, { ...ok, transferredAt: 'kemarin' }]) assert.equal(cashTransferCreateSchema.safeParse(bad).success, false, JSON.stringify(bad))
+  const cash = await prisma.$transaction(tx => ensureMainCashAccount(tx))
+  await assert.rejects(prisma.$executeRaw`INSERT INTO cash_transfers (id, "fromAccountId", "toAccountId", "amountIdr", "transferredAt") VALUES (gen_random_uuid()::text, ${cash}, ${cash}, 1, timezone('UTC', now()))`, /cash_transfers_shape/)
+  await assert.rejects(prisma.$executeRaw`INSERT INTO cash_transfers (id, "fromAccountId", "toAccountId", "amountIdr", "feeIdr", "transferredAt") VALUES (gen_random_uuid()::text, ${cash}, ${bankAcct}, 1, -1, timezone('UTC', now()))`, /cash_transfers_shape/)
+  await assert.rejects(prisma.$executeRaw`INSERT INTO cash_transfers (id, "fromAccountId", "toAccountId", "amountIdr", "transferredAt", "voidedAt") VALUES (gen_random_uuid()::text, ${cash}, ${bankAcct}, 1, timezone('UTC', now()), timezone('UTC', now()))`, /cash_transfers_shape/)
+  const opts = await transferAccountOptions()
+  assert.ok(!opts.some(o => qAcct && o.value === `account:${qAcct}`), 'akun QRIS tak ditawarkan')
+  assert.ok(opts.some(o => o.value === `account:${bankAcct}` && typeof o.balanceIdr === 'number' && o.canReceive))
+})
+
 await t('REKENING yang sudah menerima uang tak bisa dihapus (FK Restrict → P2003, jalur "nonaktifkan saja"); rekening tanpa akun kas tetap bisa dihapus', async () => {
   await assert.rejects(prisma.bankAccount.delete({ where: { id: bank.id } }), (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2003')
   const fresh = await prisma.bankAccount.create({ data: { bankName: `${tag} Mandiri`, accountNumber: '7003', accountHolder: 'PT Uji' } })
@@ -205,6 +280,12 @@ await t('PENJAGA: hanya lib/cash/ledger.ts menulis cash_entries dan hanya lib/ca
   assert.deepEqual(entryWriters, ['lib/cash/ledger.ts'])
   const accountWriters = files.filter(f => /cashAccount\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(/.test(read(f)))
   assert.deepEqual(accountWriters, ['lib/cash/accounts.ts'])
+  const transferWriters = files.filter(f => /cashTransfer\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|(INSERT INTO|UPDATE|DELETE FROM)\s+"?cash_transfers/.test(read(f)))
+  assert.deepEqual(transferWriters, ['lib/cash/transfers.ts'], 'hanya lib/cash/transfers.ts menulis cash_transfers (Fase 12b)')
+  const transferPosters = files.filter(f => /'pindah_akun'|'biaya_transfer'|refType: 'transfer_(in|out)'/.test(read(f)) && !f.startsWith('lib/cash/labels'))
+  assert.deepEqual(transferPosters, ['lib/cash/transfers.ts'], 'entri pindah_akun/biaya_transfer hanya diposting lib/cash/transfers.ts')
+  for (const r of ['app/api/v1/admin/finance/transfers/route.ts', 'app/api/v1/admin/finance/transfers/[id]/route.ts', 'app/api/v1/admin/finance/transfers/options/route.ts']) assert.match(read(r), /await requireCashTransfer\(\)/)
+  assert.doesNotMatch(read('app/[locale]/admin/(protected)/finance/transfers/new/page.tsx'), /^import (?!type)[^\n]*@\/lib\/cash\/transfers'/m, 'formulir klien hanya mengimpor TIPE dari modul berprisma')
   const proc = read('lib/payments/process.ts')
   assert.match(proc, /FOR UPDATE[\s\S]*resolveVerifiedAmount[\s\S]*needs_account[\s\S]*tx\.payment\.update[\s\S]*postEntries\(tx, \{ refType: 'payment'/)
   const page = read('app/[locale]/admin/(protected)/finance/cash-book/page.tsx')

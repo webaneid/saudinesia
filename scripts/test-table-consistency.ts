@@ -37,6 +37,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'components/shared/pilgrims/PilgrimSlotsTable.tsx': { count: 1, reason: 'jamaah SATU booking (daftar bersarang milik satu induk; jumlah = slot yang ditagih), dipakai halaman booking jamaah dan admin' },
   'app/[locale]/admin/(protected)/finance/cash-book/page.tsx': { count: 1, reason: 'ringkasan per akun kas = agregat berukuran tetap (jumlah akun kas); daftar entri berpaginasi' },
   'app/[locale]/admin/(protected)/finance/cash-flow/page.tsx': { count: 2, reason: 'arus kas = agregat berukuran tetap: rincian per komponen (≤ jumlah komponen kas, masuk & keluar) dan per akun kas (jumlah akun); entri rinci di Buku Kas yang berpaginasi' },
+  'app/[locale]/admin/(protected)/finance/transfers/[id]/page.tsx': { count: 1, reason: 'entri buku kas SATU transfer (≤ 3 entri + ≤ 3 pembalik; daftar bersarang milik satu induk)' },
   'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': { count: 1, reason: 'arus uang buku kas SATU booking (daftar bersarang milik satu induk, dibatasi 200 entri dengan penanda); buku kas lengkap berpaginasi' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },
 }
@@ -47,6 +48,7 @@ const READ_ONLY_TABLES: Record<string, string> = {
   'app/[locale]/(public)/hotels/[id]/page.tsx': 'rate sheet publik baca-saja',
   'app/[locale]/admin/(protected)/notifications/page.tsx': 'log pengiriman baca-saja',
   'app/[locale]/admin/(protected)/finance/cash-flow/page.tsx': 'laporan arus kas baca-saja (agregat dari buku kas append-only; tak ada baris yang bisa ditindak)',
+  'app/[locale]/admin/(protected)/finance/transfers/[id]/page.tsx': 'entri buku kas baca-saja (append-only; pembatalan di kotak Tindakan)',
   'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': 'arus uang buku kas baca-saja (entri append-only; tindakan refund di kotak Tindakan)',
   'components/admin/data-table/CatalogList.tsx': 'pembungkus generik: kolom & aksi ditentukan halaman pemakai (CatalogActions)',
 }

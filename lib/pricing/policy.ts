@@ -17,6 +17,8 @@ export const canRecordCost = (role: UserRole): boolean => MANAGER_ROLES.includes
 export const canViewCashBook = (role: UserRole): boolean => ADMIN_ROLES.includes(role)
 /** Refund (usul, setujui, tolak, bayar) dan keputusan uang saat batal: manager & superadmin (pemilik 2026-11-16). Admin hanya melihat. */
 export const canManageRefund = (role: UserRole): boolean => MANAGER_ROLES.includes(role)
+/** Transfer antar akun kas (Fase 12b, K12-1): manager + superadmin; admin lain hanya melihat. */
+export const canTransferCash = (role: UserRole): boolean => MANAGER_ROLES.includes(role)
 /** Membatalkan pesanan TANPA uang masuk: semua admin. Pesanan dengan uang masuk butuh `canManageRefund`. */
 export const canCancelBooking = (role: UserRole): boolean => ADMIN_ROLES.includes(role)
 export const canChangeMarginRule = (role: UserRole): boolean => SUPERADMIN_ROLES.includes(role)
@@ -39,6 +41,8 @@ export const requireBookingAdjust = () => guard(canAdjustBooking)
 export const requireCostRecord = () => guard(canRecordCost)
 /** Melihat buku kas. */
 export const requireCashView = () => guard(canViewCashBook)
+/** Mencatat/membatalkan transfer antar akun kas. */
+export const requireCashTransfer = () => guard(canTransferCash)
 /** Refund dan keputusan uang pembatalan. */
 export const requireRefundManage = () => guard(canManageRefund)
 /** Membatalkan pesanan (uang masuk → `canManageRefund` diperiksa di layanan). */
