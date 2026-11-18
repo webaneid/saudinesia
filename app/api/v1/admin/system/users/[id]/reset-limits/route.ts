@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { resetAccountLimits } from '@/lib/auth/rateLimit'
+import { visibleStaffWhere } from '@/lib/auth/adminUsers'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { ok, err } from '@/lib/validators'
 
@@ -11,7 +12,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   try {
     const session = await requireSuperAdmin()
     const { id } = await params
-    const user = await prisma.user.findUnique({ where: { id }, select: { email: true } })
+    const user = await prisma.user.findFirst({ where: { id, ...visibleStaffWhere(session) }, select: { email: true } })
     if (!user) return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
 
     const cleared = await resetAccountLimits(user.email)

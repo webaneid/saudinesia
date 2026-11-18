@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { updateUserByAdmin } from '@/lib/auth/adminUsers'
+import { updateUserByAdmin, visibleStaffWhere } from '@/lib/auth/adminUsers'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { userAdminUpdateSchema } from '@/lib/validators/adminUpdates'
@@ -7,9 +7,9 @@ import { prisma } from '@/lib/db'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await requireSuperAdmin()
+    const session = await requireSuperAdmin()
     const { id } = await params
-    const user = await prisma.user.findUnique({ where: { id }, select: { id: true, fullName: true, email: true, role: true, isActive: true, createdAt: true } })
+    const user = await prisma.user.findFirst({ where: { id, ...visibleStaffWhere(session) }, select: { id: true, fullName: true, email: true, role: true, isActive: true, createdAt: true } })
     if (!user) return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
     return NextResponse.json(ok(user))
   } catch (e) {
@@ -28,7 +28,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const parsed = userAdminUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const result = await updateUserByAdmin(id, parsed.data, session.userId)
+    const result = await updateUserByAdmin(id, parsed.data, session)
     if (!result.ok) {
       if (result.reason === 'not_found') return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
       const message = result.reason === 'self'

@@ -113,6 +113,10 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    email yang sudah terdaftar dan tidak pernah mengubah akun yang ada; password harus lolos aturan aplikasi dan
    **≤ 72 byte** (lebih panjang → `Bun.password` mem-pre-hash sehingga `bcryptjs.compare` di login tidak cocok dan admin
    terkunci). Email dinormalisasi huruf kecil di semua jalur auth.
+1b. **Akun Platform Provider** (`docs/arsitektur-bagi-hasil.md` §3) — hanya lewat `scripts/set-platform-provider.ts` (ikut ke image web; tak ada route/UI):
+   `docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy exec web bun scripts/set-platform-provider.ts <email>` (`--off` mencabut).
+   Akun harus superadmin aktif; sesi akun itu dicabut (login ulang). **Jangan** menulis `isPlatformProvider` lewat psql — tak menaikkan `sessionVersion`.
+
 2. GitHub **Variables** (bukan Secrets) untuk build-arg `NEXT_PUBLIC_*` (nama bisnis, WA, alamat, rekening, URL aplikasi,
    `NEXT_PUBLIC_MINIO_PUBLIC_URL` = `https://<FILES_DOMAIN>/saudinesia-docs`). Image bersifat spesifik-environment.
 3. Jalankan workflow **MinIO Image** (Actions → Run workflow) sekali.

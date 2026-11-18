@@ -33,6 +33,8 @@ model User {
   // Pencabutan sesi (SEC-18, docs/arsitektur-auth.md §11): JWT membawa `ver`; getSession() menolak token yang `ver`-nya ≠ kolom ini.
   // Dinaikkan saat password diganti/direset, akun dinonaktifkan, peran diubah, atau akun Google disambung ke akun lama.
   sessionVersion     Int       @default(0)
+  /// Penanda akun Platform Provider (docs/arsitektur-bagi-hasil.md §3). Hanya lewat scripts/set-platform-provider.ts — tak ada route/UI yang menulisnya.
+  isPlatformProvider Boolean   @default(false)
   addressId          String?   @unique // docs/arsitektur-alamat.md §9 — 1:1, alamat rumah jamaah
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
@@ -59,6 +61,7 @@ model User {
   createdIdentityAliases    PilgrimIdentityAlias[]
   identityErasures          PilgrimIdentityErasure[]
   bookingPilgrims           BookingPilgrim[]         @relation("BookingPilgrimUser")
+  revenueShareSettings      RevenueShareSetting[]    @relation("RevenueShareSettingAuthor")
 
   @@map("users")
 }
@@ -1557,30 +1560,30 @@ enum PaymentStatus {
 }
 
 model Refund {
-  id             String       @id @default(uuid())
-  bookingId      String
-  amount         Decimal      @db.Decimal(14, 2)
-  reason         String
-  isForceMajeure Boolean      @default(false)
-  status         RefundStatus @default(pending)
-  approvedById   String?
-  approvedAt     DateTime?
-  paidAt         DateTime?
-  notes          String?
-  createdAt      DateTime     @default(now())
+  id                     String       @id @default(uuid())
+  bookingId              String
+  amount                 Decimal      @db.Decimal(14, 2)
+  reason                 String
+  isForceMajeure         Boolean      @default(false)
+  status                 RefundStatus @default(pending)
+  approvedById           String?
+  approvedAt             DateTime?
+  paidAt                 DateTime?
+  notes                  String?
+  createdAt              DateTime     @default(now())
   // Fase 7b-2a (docs/arsitektur-booking-engine-v2.md §10.10): siklus pending → approved → paid | rejected, ditulis HANYA lib/refunds/service.ts.
   // `reason`/`notes` = teks staf (bisa memuat nama) → dikosongkan lib/account/deletion.ts. Uang keluar = entri buku kas `refund` (refType 'refund').
-  source         RefundSource @default(cancellation)
-  createdById    String? // staf yang mengusulkan (null = baris lama)
-  rejectedAt     DateTime?    @db.Timestamptz(3)
-  rejectedById   String?
-  paidById       String?
-  cashAccountId  String?
+  source                 RefundSource @default(cancellation)
+  createdById            String? // staf yang mengusulkan (null = baris lama)
+  rejectedAt             DateTime?    @db.Timestamptz(3)
+  rejectedById           String?
+  paidById               String?
+  cashAccountId          String?
   // Rekening TUJUAN pelanggan (SEC-244, §10.13): semua-atau-tak-ada (CHECK); wajib saat bayar non-tunai (lib/refunds/service.ts). Data pribadi →
   // dikosongkan lib/account/deletion.ts.
-  recipientBank          String? @db.VarChar(80)
-  recipientAccountNumber String? @db.VarChar(40)
-  recipientAccountName   String? @db.VarChar(120)
+  recipientBank          String?      @db.VarChar(80)
+  recipientAccountNumber String?      @db.VarChar(40)
+  recipientAccountName   String?      @db.VarChar(120)
 
   booking     Booking      @relation(fields: [bookingId], references: [id])
   approvedBy  User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
@@ -2296,12 +2299,12 @@ model CashAccount {
   qrisAccountId String?         @unique // kind = qris (Fase 8)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
 
-  bankAccount BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  qrisAccount QrisAccount? @relation(fields: [qrisAccountId], references: [id], onDelete: Restrict)
-  entries     CashEntry[]
-  payments    Payment[]
-  refunds     Refund[]
-  costActuals CostActual[]
+  bankAccount  BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  qrisAccount  QrisAccount?   @relation(fields: [qrisAccountId], references: [id], onDelete: Restrict)
+  entries      CashEntry[]
+  payments     Payment[]
+  refunds      Refund[]
+  costActuals  CostActual[]
   transfersOut CashTransfer[] @relation("CashTransferFrom")
   transfersIn  CashTransfer[] @relation("CashTransferTo")
 
@@ -2389,4 +2392,27 @@ model BookingCancellation {
   booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 
   @@map("booking_cancellations")
+}
+
+// Bagi hasil Platform Provider (docs/arsitektur-bagi-hasil.md, Fase 13a): versi setelan APPEND-ONLY (trigger DB); versi terbaru = berlaku.
+// Ditulis HANYA lib/revenue-share/settings.ts, oleh akun `isPlatformProvider`. Tanpa baris = bawaan (5%, markup).
+enum RevenueShareBasis {
+  margin // opsi 1: persen × (jual − modal); harga jual tidak berubah
+  markup // opsi 2: persen ditambahkan ke poin marjin; bagian = persen × modal
+
+  @@map("revenue_share_basis")
+}
+
+model RevenueShareSetting {
+  id          String            @id @default(uuid())
+  percent     Decimal           @db.Decimal(5, 2) // 0..50 (CHECK)
+  basis       RevenueShareBasis
+  note        String?           @db.VarChar(200)
+  createdById String
+  createdAt   DateTime          @default(now()) @db.Timestamptz(3)
+
+  createdBy User @relation("RevenueShareSettingAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([createdAt, id])
+  @@map("revenue_share_settings")
 }

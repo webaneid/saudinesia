@@ -1,7 +1,7 @@
 import { Fingerprint,
   Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
-  Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent,
+  Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent, BadgeCheck,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -54,6 +54,7 @@ const SISTEM: NavItem[] = [
   { path: '/admin/system/deletion-requests', icon: ShieldAlert, label: 'Hapus Akun' },
   { path: '/admin/system/invoice-settings',  icon: Receipt,     label: 'Pengaturan Invoice' },
   { path: '/admin/system/site-content',      icon: PanelsTopLeft, label: 'Konten Situs' },
+  { path: '/admin/system/platform-provider', icon: BadgeCheck,  label: 'Platform Provider' },
   { path: '/admin/system/settings',          icon: Settings,    label: 'Pengaturan' },
 ]
 
@@ -80,6 +81,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   reports: 'Laporan Untung',
   variance: 'Selisih HPP vs Aktual',
   finance: 'Keuangan',
+  'platform-provider': 'Platform Provider',
   'cash-book': 'Buku Kas',
   'cash-flow': 'Arus Kas',
   transfers: 'Transfer Antar Akun',

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { releaseWhatsappVerification } from '@/lib/auth/whatsappVerify'
+import { visibleStaffWhere } from '@/lib/auth/adminUsers'
 import { prisma } from '@/lib/db'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { ok, err } from '@/lib/validators'
@@ -11,7 +12,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
   try {
     const session = await requireSuperAdmin()
     const { id } = await params
-    const exists = await prisma.user.findUnique({ where: { id }, select: { id: true } })
+    const exists = await prisma.user.findFirst({ where: { id, ...visibleStaffWhere(session) }, select: { id: true } })
     if (!exists) return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
 
     const result = await releaseWhatsappVerification({ userId: id })

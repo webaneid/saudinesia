@@ -74,6 +74,8 @@ COPY --from=builder --chown=bun:bun /app/.next/static ./.next/static
 # Dijalankan di server: docker compose exec web bun scripts/create-superadmin.ts (lihat docs/deployment.md §6).
 # Hanya bergantung pada @prisma/client + Bun — bcryptjs/zod di-bundle Next.js dan TIDAK ada di node_modules image ini.
 COPY --from=builder --chown=bun:bun /app/scripts/create-superadmin.ts ./scripts/create-superadmin.ts
+# Penanda akun Platform Provider (docs/arsitektur-bagi-hasil.md §3) — satu-satunya jalan menulisnya; pola dependensi sama (@prisma/client saja).
+COPY --from=builder --chown=bun:bun /app/scripts/set-platform-provider.ts ./scripts/set-platform-provider.ts
 
 # Non-root (user `bun` sudah ada di image resmi).
 USER bun
