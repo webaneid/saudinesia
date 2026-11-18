@@ -6,15 +6,18 @@ import { hash } from 'bcryptjs'
 import { Prisma } from '@prisma/client'
 import { staffCreateSchema } from '@/lib/validators/adminUpdates'
 import { paginate, parseListParams } from '@/lib/admin/pagination'
+import { visibleStaffWhere } from '@/lib/auth/adminUsers'
 
 export async function GET(req: Request) {
   try {
-    await requireSuperAdmin()
+    const session = await requireSuperAdmin()
+    const where = visibleStaffWhere(session) // akun bayangan Platform Provider tak terlihat oleh superadmin klien
     const list = parseListParams(new URL(req.url).searchParams)
     const { items, meta } = await paginate(
       list,
-      () => prisma.user.count(),
+      () => prisma.user.count({ where }),
       range => prisma.user.findMany({
+        where,
         // id sebagai tie-breaker: createdAt bisa kembar, dan halaman harus stabil antar request
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         ...range,

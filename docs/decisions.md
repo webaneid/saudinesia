@@ -3636,3 +3636,25 @@ Mengingat besarnya scope 8 Step total (Manifest+Dokumen+redesain `items[]` adala
 **Rationale:** K12-2 (pemilik): satu tempat untuk melihat untung dan uang yang benar-benar bergerak tanpa laporan laba kedua. Kelebihan bayar ikut "masuk" karena refund atas kelebihan keluar sebagai `refund`; tanpa itu kas bersih booking yang mengembalikan kelebihan tampak negatif. Kas tidak dibatasi periode karena periode laporan memilih booking menurut tanggal pesan, dan uangnya bisa bergerak sesudahnya.
 **Alternatives considered:** Kas dibatasi periode entri (membingungkan per booking: pesanan Maret yang dibayar April tampak tanpa uang); kolom kas hanya di CSV (pemilik meminta di laporan); grup menu terpisah Kas vs Laporan (terlalu banyak grup untuk 7 menu).
 **Security check:** inline (baca saja, tanpa route baru; SQL tanpa masukan di CTE ber-parameter): 0 Critical/High/Medium; 1 Low pre-existing diperbaiki (SEC-273, tanggal pesan UTC). `bun audit` tak berubah (2 high, 4 moderate, 1 low).
+
+## 2026-11-18 — Fase 13 rencana + 13a: Platform Provider dan setelan bagi hasil
+**Decision:** Rencana `docs/arsitektur-bagi-hasil.md` (disetujui pemilik) menggantikan §6b/K1 engine v2. Pokok keputusannya:
+- "Developer" diganti sebutannya menjadi **Platform Provider**.
+- Ada dua opsi dasar: **tambah poin marjin** (bawaan 5%) atau **bagi dari margin**.
+- Aturan dibekukan saat invoice terbit.
+- Hak hanya dihitung dari pembayaran yang berhasil.
+- Admin menandai booking selesai secara manual.
+- Pencairan dicatat superadmin klien.
+- Persen dan dasar hanya bisa diubah akun Platform Provider.
+
+Akun Platform Provider adalah **akun bayangan**: penandanya `users.isPlatformProvider` hanya bisa ditulis lewat skrip server. Akun ini tidak terlihat dan tidak bisa dikelola superadmin klien, serta tidak dihitung sebagai cadangan superadmin. 13a mengirim penanda, versi setelan append-only, dan halaman Sistem → Platform Provider. Dampak ke harga dan booking dikerjakan di 13b.
+
+**Rationale:** Pemilik menegaskan provider adalah "shadow akun" yang hanya terlihat oleh dirinya. Persen adalah kesepakatan klien dan provider, jadi klien tidak boleh mengubahnya atau mengunci provider. Riwayat versi dibuat append-only supaya kesepakatan lama tidak bisa ditimpa. Contoh angka memakai satu fungsi murni sehingga pratinjau UI dan rencana tidak menyimpang.
+
+**Alternatives considered:**
+- Gross-up (K1 B): diganti dua opsi pemilik.
+- Peran baru `platform` di enum `UserRole`: menyentuh semua penjaga peran; penanda boolean + superadmin lebih sempit.
+- Mengizinkan klien mengunci provider: ditolak pemilik.
+- Menyimpan nama penyimpan di riwayat: tidak dipakai karena akun bayangan.
+
+**Security check:** subagen `security-auditor` menemukan 0 Critical/High, 1 Medium (SEC-274: skrip penanda tak ada di image produksi), dan 4 Low (SEC-275..278). Semuanya diperbaiki di fase ini dan dibuktikan lewat uji atau browser. `bun audit` tidak berubah (2 high, 4 moderate, 1 low).

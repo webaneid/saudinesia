@@ -14,9 +14,10 @@ docs/
 docker-compose*.yml
 Caddyfile*
 infra/
-# scripts/ dikecualikan, KECUALI skrip pembuat superadmin yang memang dijalankan di dalam container web
+# scripts/ dikecualikan, KECUALI skrip yang memang dijalankan di dalam container web (pembuat superadmin, penanda Platform Provider)
 scripts/*
 !scripts/create-superadmin.ts
+!scripts/set-platform-provider.ts
 
 # Seed pengembangan: menghapus data katalog & membuat akun demo ber-password default (SEC-27). Tidak ada gunanya di image mana pun —
 # image `migrate` membawa DATABASE_URL produksi, jadi `prisma db seed` dari sana akan mengenai DB produksi. Penjaga di dalam seed

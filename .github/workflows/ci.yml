@@ -206,6 +206,13 @@ jobs:
             echo "skrip seharusnya menolak superadmin kedua"; exit 1
           fi
           $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
+          # Penanda Platform Provider (docs/arsitektur-bagi-hasil.md §3) juga hanya lewat skrip DI DALAM image: tetapkan, ulang = tak berubah,
+          # akun bukan superadmin ditolak.
+          $C exec -T web bun scripts/set-platform-provider.ts ci-admin@example.test
+          $C exec -T web bun scripts/set-platform-provider.ts ci-admin@example.test | grep -q 'Tidak berubah'
+          if $C exec -T web bun scripts/set-platform-provider.ts tak-ada@example.test; then
+            echo "skrip seharusnya menolak akun yang tak ada"; exit 1
+          fi
 
       # Invoice PDF di image produksi (`bun server.js`): upgrade dependency pernah lulus `next build` dan dev tetapi invoice gagal 500 di
       # produksi (modul pembuat PDF tak termuat oleh Bun). Hanya uji pada artefak produksi yang menangkap kelas regresi ini (SEC-05).

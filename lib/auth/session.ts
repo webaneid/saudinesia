@@ -17,6 +17,8 @@ function getSecret(): Uint8Array {
 export type SessionPayload = {
   userId: string
   role: UserRole  // sourced from Prisma — auto-updates when enum changes
+  /** Akun Platform Provider (docs/arsitektur-bagi-hasil.md) — dari DB, bukan token. Hanya berarti bersama peran superadmin (`requirePlatformProvider`). */
+  isPlatformProvider: boolean
 }
 
 // Role hierarchy helpers — didefinisikan di ./roles (client-safe), di-re-export agar import lama tetap jalan
@@ -64,7 +66,7 @@ export async function createSession(userId: string, expectedVersion?: number): P
 const loadSessionUser = cache((userId: string) =>
   prisma.user.findUnique({
     where: { id: userId },
-    select: { role: true, isActive: true, emailVerifiedAt: true, sessionVersion: true },
+    select: { role: true, isActive: true, emailVerifiedAt: true, sessionVersion: true, isPlatformProvider: true },
   }),
 )
 
@@ -85,7 +87,7 @@ export async function resolveSessionToken(token: string | undefined): Promise<Se
 
   const user = await loadSessionUser(claims.userId)
   if (!user || !user.isActive || !user.emailVerifiedAt || user.sessionVersion !== claims.ver) return null
-  return { userId: claims.userId, role: user.role }
+  return { userId: claims.userId, role: user.role, isPlatformProvider: user.isPlatformProvider }
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -122,5 +124,12 @@ export async function requireManager(): Promise<SessionPayload> {
 export async function requireSuperAdmin(): Promise<SessionPayload> {
   const session = await requireSession()
   if (!SUPERADMIN_ROLES.includes(session.role)) throw new Error('Forbidden')
+  return session
+}
+
+/** Akun Platform Provider: superadmin DAN `isPlatformProvider` (penanda hanya lewat scripts/set-platform-provider.ts). Mengubah setelan bagi hasil. */
+export async function requirePlatformProvider(): Promise<SessionPayload> {
+  const session = await requireSuperAdmin()
+  if (!session.isPlatformProvider) throw new Error('Forbidden')
   return session
 }

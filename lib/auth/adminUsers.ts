@@ -2,6 +2,17 @@ import type { Prisma, UserRole } from '@prisma/client'
 import { prisma } from '@/lib/db'
 
 export type AdminUserChange = { role?: UserRole; isActive?: boolean; fullName?: string }
+/** Pelaku pengelolaan pengguna (sesi superadmin). null = skrip/uji (melihat semua). */
+export type AdminActor = { userId: string; isPlatformProvider: boolean } | null
+
+/**
+ * Akun Platform Provider adalah AKUN BAYANGAN (keputusan pemilik 2026-11-18, docs/arsitektur-bagi-hasil.md §5): tak terlihat dan tak dapat dikelola
+ * superadmin klien di Sistem → Pengguna — klien tak bisa menurunkan, menonaktifkan, mengganti nama, membuka kunci, atau melihatnya. Pemulihan hanya lewat
+ * scripts/set-platform-provider.ts. SATU tempat aturan ini: setiap kueri pengguna di area pengelolaan staf memakai `visibleStaffWhere`.
+ */
+export function visibleStaffWhere(actor: AdminActor): Prisma.UserWhereInput {
+  return actor === null || actor.isPlatformProvider ? {} : { isPlatformProvider: false }
+}
 
 export type AdminUserUpdate =
   | { ok: true; user: { id: string; role: UserRole; isActive: boolean; fullName: string } }
@@ -18,18 +29,21 @@ export type AdminUserUpdate =
  * SEC-13: superadmin tidak boleh menurunkan/menonaktifkan DIRINYA SENDIRI, dan perubahan tidak boleh meninggalkan sistem tanpa
  * superadmin aktif sama sekali (tak ada jalur pemulihan lewat UI). Kedua aturan ditolak, bukan di-no-op-kan.
  */
-export async function updateUserByAdmin(id: string, change: AdminUserChange, actorId: string | null): Promise<AdminUserUpdate> {
+export async function updateUserByAdmin(id: string, change: AdminUserChange, actor: AdminActor): Promise<AdminUserUpdate> {
+  const actorId = actor?.userId ?? null
   return prisma.$transaction(async (tx) => {
     // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE. Kunci baris menserialkan dua superadmin yang mengubah akun yang sama —
     // tanpa ini permintaan yang menganggap dirinya "tanpa perubahan" (membaca keadaan basi) bisa menimpa hasil permintaan lain tanpa mencabut sesi (S18-C).
     // Yang dikunci: akun target + SEMUA superadmin aktif, dalam urutan id yang sama di setiap transaksi (tanpa deadlock) — dua superadmin yang
     // saling menurunkan secara bersamaan berserial, jadi hitungan "superadmin tersisa" tidak pernah dibaca basi.
-    const locked = await tx.$queryRaw<{ id: string; role: UserRole; isActive: boolean }[]>`
-      SELECT "id", "role", "isActive" FROM "users"
+    const locked = await tx.$queryRaw<{ id: string; role: UserRole; isActive: boolean; isPlatformProvider: boolean }[]>`
+      SELECT "id", "role", "isActive", "isPlatformProvider" FROM "users"
       WHERE "id" = ${id} OR ("role" = 'superadmin' AND "isActive" = true)
       ORDER BY "id" FOR UPDATE`
     const current = locked.find(r => r.id === id)
     if (!current) return { ok: false, reason: 'not_found' } as const
+    // Akun bayangan Platform Provider: bagi superadmin klien seolah tak ada (sama dengan visibleStaffWhere).
+    if (current.isPlatformProvider && actor !== null && !actor.isPlatformProvider) return { ok: false, reason: 'not_found' } as const
 
     const roleChanges = change.role !== undefined && change.role !== current.role
     const statusChanges = change.isActive !== undefined && change.isActive !== current.isActive
@@ -39,7 +53,8 @@ export async function updateUserByAdmin(id: string, change: AdminUserChange, act
 
     const losesSuperadmin = current.role === 'superadmin' && current.isActive &&
       ((roleChanges && change.role !== 'superadmin') || (statusChanges && change.isActive === false))
-    if (losesSuperadmin && !locked.some(r => r.id !== id && r.role === 'superadmin' && r.isActive)) {
+    // Akun bayangan Platform Provider TIDAK dihitung: klien harus selalu menyisakan superadmin miliknya sendiri yang aktif.
+    if (losesSuperadmin && !locked.some(r => r.id !== id && r.role === 'superadmin' && r.isActive && !r.isPlatformProvider)) {
       return { ok: false, reason: 'last_superadmin' } as const
     }
 

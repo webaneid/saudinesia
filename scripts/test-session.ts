@@ -42,7 +42,12 @@ console.log('== validasi token ke DB ==')
 
 await t('kontrol positif: token baru untuk akun sah → sesi; peran dari DB', async () => {
   const u = await mk({ role: 'admin' })
-  assert.deepEqual(await resolveSessionToken(await issueSessionToken(u.id)), { userId: u.id, role: 'admin' })
+  assert.deepEqual(await resolveSessionToken(await issueSessionToken(u.id)), { userId: u.id, role: 'admin', isPlatformProvider: false })
+  // Penanda Platform Provider dibaca dari DB (bukan token): diubah lewat skrip + sessionVersion naik → token lama mati, token baru membawa penanda.
+  const tok = await issueSessionToken(u.id)
+  await prisma.user.update({ where: { id: u.id }, data: { role: 'superadmin', isPlatformProvider: true, sessionVersion: { increment: 1 } } })
+  assert.equal(await resolveSessionToken(tok), null)
+  assert.deepEqual(await resolveSessionToken(await issueSessionToken(u.id)), { userId: u.id, role: 'superadmin', isPlatformProvider: true })
 })
 
 await t('tanpa token / sampah / ditandatangani rahasia lain → null', async () => {
