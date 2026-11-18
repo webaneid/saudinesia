@@ -140,7 +140,7 @@ await t('mengubah margin global + refreshAllPricingCaches() → harga Hotel (non
   }
 })
 await t('penjaga sumber: semua cache dalam SATU daftar (urutan: dasar dulu, komposit terakhir); cron dan perubahan margin memakainya', () => {
-  assert.deepEqual(PRICE_CACHE_STEP_NAMES, ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'tour_package', 'package', 'haji', 'catering', 'hotel_service'])
+  assert.deepEqual(PRICE_CACHE_STEP_NAMES, ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'cost_component', 'tour_package', 'package', 'haji', 'catering', 'hotel_service'])
   const cron = readFileSync('lib/cron/exchangeRateJob.ts', 'utf8')
   assert.match(cron, /refreshAllPricingCaches\(updatedCurrencies\)/); assert.doesNotMatch(cron, /refreshAll(Visa|Flight|Hotel|Transport|Muthowif|TourPackage|Package|Haji)/, 'cron tak boleh punya daftar refresh sendiri')
   const route = readFileSync('app/api/v1/admin/system/settings/pricing-rule/route.ts', 'utf8')

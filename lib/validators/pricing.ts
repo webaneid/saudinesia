@@ -1,7 +1,7 @@
 import { z } from 'zod'
 
 // Masukan API harga (docs/arsitektur-harga-terpadu.md §16). `.strict()`: kolom tak dikenal (mass assignment) ditolak.
-const OWNER_TYPES = ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'package', 'tour_package', 'haji', 'catering', 'hotel_service'] as const
+const OWNER_TYPES = ['visa', 'flight', 'hotel', 'transport', 'muthowif', 'package', 'tour_package', 'haji', 'catering', 'hotel_service', 'cost_component'] as const
 export const priceOwnerTypeSchema = z.enum(OWNER_TYPES)
 
 const pointKey = {

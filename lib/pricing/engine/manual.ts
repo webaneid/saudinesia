@@ -4,6 +4,7 @@ import { priceOwner } from './owners'
 import { lockOwnerPoints } from './lock'
 import { toView } from './view'
 import { departureVariantKey } from './variantKeys'
+import { repriceOwner } from './service'
 import type { PriceOwnerType, PriceUnit, PriceView } from './types'
 
 // HARGA MANUAL (docs/arsitektur-harga-terpadu.md §2 I2/I6, §16): admin menetapkan harga jual sendiri; margin default hanyalah saran. Hidup di `price_points`
@@ -29,6 +30,15 @@ function validAmount(value: number, what: string): number {
   if (!Number.isFinite(value) || value <= 0) throw new PriceInputError(`${what} harus lebih dari 0`)
   if (value > MAX_PRICE_IDR) throw new PriceInputError(`${what} melebihi batas wajar (${MAX_PRICE_IDR.toLocaleString('id-ID')})`)
   return Math.round(value * 100) / 100
+}
+
+/** Sesudah commit: pemilik yang harganya dibentuk dari titik ini (komponen biaya → produk komposit) dihitung ulang — totalnya mengikuti harga komponen (§22). */
+async function repriceParent(ownerType: PriceOwnerType, ownerId: string): Promise<void> {
+  const parent = await priceOwner(ownerType).parent?.(ownerId)
+  if (!parent) return
+  // Harga titik ini SUDAH tersimpan; gagal menghitung ulang induk tak boleh menjadi 500 — induk tertinggal sampai hitung ulang berikutnya (cron/ubah biaya),
+  // dan booking tetap konsisten karena baris selisih snapshot selalu menutup ke harga induk yang tersimpan.
+  try { await repriceOwner(parent.ownerType, parent.ownerId) } catch (e) { console.error(`[pricing] hitung ulang ${parent.ownerType} ${parent.ownerId} sesudah harga komponen berubah gagal:`, e) }
 }
 
 async function ensureOwner(ownerType: PriceOwnerType, ownerId: string): Promise<void> {
@@ -68,6 +78,7 @@ export async function setManualSell(input: PointKey & Actor & { sellIdr: number;
     })
     return toView(row)
   })
+  await repriceParent(ownerType, ownerId)
   return view
 }
 
@@ -80,7 +91,7 @@ export async function clearManualSell(input: PointKey & Actor & { note?: string 
   const owner = priceOwner(ownerType)
   const inheritsBase = !!variantKey && !!(await owner.variants?.(ownerId))?.some(v => v.key === variantKey && v.inheritsBase) // sebelum transaksi (SEC-212)
 
-  return prisma.$transaction(async tx => {
+  const view = await prisma.$transaction(async tx => {
     await lockOwnerPoints(tx, ownerType, ownerId)
     const existing = await tx.pricePoint.findUnique({ where: { ownerType_ownerId_variantKey: { ownerType, ownerId, variantKey } } })
     if (!existing || existing.manualSellIdr == null) throw new PriceInputError('Harga ini tidak sedang diatur manual')
@@ -102,6 +113,8 @@ export async function clearManualSell(input: PointKey & Actor & { note?: string 
     })
     return toView(row)
   })
+  await repriceParent(ownerType, ownerId)
+  return view
 }
 
 /**

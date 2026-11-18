@@ -3,6 +3,7 @@ import { flightOwner, hotelOwner, muthowifOwner, transportOwner } from './base'
 import { hajiOwner, packageOwner, tourPackageOwner } from './composite'
 import { cateringOwner, hotelServiceOwner } from './manualOnly'
 import { visaOwner } from './visa'
+import { costComponentOwner } from './costComponent'
 
 // REGISTRY pemilik harga (pola costComponentOwners / registry media). Menambah produk yang dijual = satu entri di sini.
 // URUTAN penting: modul dasar dulu, komposit terakhir — komposit membaca titik harga (modal) modul dasar.
@@ -12,6 +13,7 @@ export const PRICE_OWNERS = {
   hotel: hotelOwner,
   transport: transportOwner,
   muthowif: muthowifOwner,
+  cost_component: costComponentOwner, // sebelum komposit: produk komposit = Σ harga berlaku komponennya (§22)
   tour_package: tourPackageOwner,
   package: packageOwner,
   haji: hajiOwner,

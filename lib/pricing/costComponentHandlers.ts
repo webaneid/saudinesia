@@ -8,9 +8,11 @@ import { simulateSellPrice } from './simulateSellPrice'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
 import { COST_OWNERS, type CostOwnerKey } from './costComponentOwners'
+import { repriceOwner } from './engine'
 
 // Handler CRUD Komponen Biaya yang dipakai semua pemilik (docs/arsitektur-komponen-biaya.md §3.1). Berkas route per modul hanya mengekspor
-// ulang hasil `createCostComponentHandlers(...)`. Semua endpoint superadmin-only (HPP rahasia — sama seperti seluruh endpoint biaya lain).
+// ulang hasil `createCostComponentHandlers(...)`. Semua endpoint superadmin-only (menyusun biaya = superadmin). Membaca modal/harga per komponen untuk semua peran
+// admin lewat titik harga `cost_component` (`admin/pricing/points`, lib/pricing/policy.ts) — keputusan pemilik 2026-11-19 (SEC-299).
 
 const FLAT_TIER = { minDays: 0, maxDays: 9999 }
 type CostTier = { minDays: number; maxDays: number; cost: number }
@@ -67,6 +69,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
       const created = await prisma.productCost.create({
         data: { productType: owner.productType, productId: id, costComponent, vendorId, currency, costTiers },
       })
+      await repriceOwner('cost_component', created.id) // titik harga komponen (rekomendasi) dulu, lalu induk (§22)
       await owner.refresh(id)
       return NextResponse.json(ok(created), { status: 201 })
     } catch (e) {
@@ -89,6 +92,7 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
         data: { ...rest, ...(cost !== undefined ? { costTiers: [{ ...FLAT_TIER, cost }] as CostTier[] } : {}) },
       })
       if (updated.count !== 1) return notFound('Komponen biaya tidak ditemukan')
+      await repriceOwner('cost_component', costId) // modal/rekomendasi komponen berubah; harga manualnya (bila ada) tetap
       await owner.refresh(id)
       return NextResponse.json(ok(null))
     } catch (e) {
@@ -101,7 +105,13 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
     try {
       await authorize()
       const { id, costId } = await params
-      const deleted = await prisma.productCost.deleteMany({ where: { id: costId, productType: owner.productType, productId: id } })
+      // Titik harga komponen (§22) dihapus di transaksi yang sama — tanpa FK, jadi tak boleh tertinggal yatim.
+      // Hanya bila komponennya memang milik produk ini (dicakup, G1) — titik komponen produk lain tak boleh terhapus lewat URL ini.
+      const deleted = await prisma.$transaction(async tx => {
+        const d = await tx.productCost.deleteMany({ where: { id: costId, productType: owner.productType, productId: id } })
+        if (d.count === 1) await tx.pricePoint.deleteMany({ where: { ownerType: 'cost_component', ownerId: costId } })
+        return d
+      })
       if (deleted.count !== 1) return notFound('Komponen biaya tidak ditemukan')
       await owner.refresh(id)
       return NextResponse.json(ok(null))

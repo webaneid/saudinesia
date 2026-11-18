@@ -33,6 +33,9 @@ async function lockRow(tx: Tx, table: LockTable, id: string): Promise<void> {
 export async function dropPolymorphic(tx: Tx, productType: string, ids: string[]): Promise<void> {
   if (ids.length === 0) return
   const scope = { productType, productId: { in: ids } }
+  // Titik harga per Komponen Biaya (§22 docs/arsitektur-harga-terpadu.md, tanpa FK) ikut dihapus bersama komponennya.
+  const costIds = (await tx.productCost.findMany({ where: scope, select: { id: true } })).map(c => c.id)
+  if (costIds.length > 0) await tx.pricePoint.deleteMany({ where: { ownerType: 'cost_component', ownerId: { in: costIds } } })
   await tx.productCost.deleteMany({ where: scope })
   await tx.preferredVendor.deleteMany({ where: scope })
   await deleteRequirementsOf(tx, productType, ids)

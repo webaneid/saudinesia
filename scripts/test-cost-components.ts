@@ -88,7 +88,7 @@ await t('komponen tanpa kurs dilewati (bukan error total), nonaktif dikecualikan
   const r = await computeCostComponents('package', pkg.id)
   assert.deepEqual(r.components.map((c) => c.costComponent).sort(), ['Admin Fee', 'Dokumen', 'Handling'])
   assert.equal(r.totalSellPrice, 1200000)
-  assert.deepEqual((await computeCostComponents('package', randomUUID())), { components: [], totalSellPrice: 0 })
+  assert.deepEqual((await computeCostComponents('package', randomUUID())), { components: [], totalSellPrice: 0, totalAutoSellPrice: 0 })
 })
 
 await t('breakdown paket memakai komponen bersama: componentsTotalSellPrice dan components identik dengan computeCostComponents', async () => {

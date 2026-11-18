@@ -31,6 +31,8 @@ export async function deleteOrDeactivateHaji(id: string): Promise<HajiDeleteResu
         return { found: true, deleted: false, bookingCount }
       }
       const scope = { productType: 'haji', productId: id }
+      const costIds = (await tx.productCost.findMany({ where: scope, select: { id: true } })).map(c => c.id)
+      if (costIds.length > 0) await tx.pricePoint.deleteMany({ where: { ownerType: 'cost_component', ownerId: { in: costIds } } }) // titik harga per komponen (§22)
       await tx.productCost.deleteMany({ where: scope })
       await tx.preferredVendor.deleteMany({ where: scope })
       await deleteRequirementsOf(tx, 'haji', [id])

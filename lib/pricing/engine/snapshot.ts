@@ -121,8 +121,9 @@ export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 
 
   const lines: SnapshotLine[] = components.map(c => ({
     lineKey: `komponen:${c.costId}`, description: c.costComponent, qty: o.multiplier, unit: 'package',
-    unitCostIdr: c.hppRupiah, unitSellIdr: c.sellPrice, mode: 'auto' as const,
-    ref: null, fxRateIds: c.rateId ? [c.rateId] : [], vendorIds: [c.vendorId],
+    // jual = harga BERLAKU komponen (manual komponen menang, §22); rekomendasi = HPP × margin — harga manual komponen tak pernah menjadi rekomendasi
+    unitCostIdr: c.hppRupiah, unitSellIdr: c.sellPrice, recommendedUnitSellIdr: c.autoSellPrice ?? c.sellPrice, mode: c.mode,
+    ref: { ownerType: 'cost_component' as const, ownerId: c.costId, variantKey: '' }, fxRateIds: c.rateId ? [c.rateId] : [], vendorIds: [c.vendorId],
   }))
   for (const part of o.parts ?? []) {
     lines.push({
@@ -136,10 +137,10 @@ export async function compositeLines(db: Db & CostComponentsDb, o: { ownerType: 
   const gapCents = targetCents - Math.round(sumSell(lines) * 100)
   if (gapCents !== 0) {
     const only = lines.length === 0
-    // Rekomendasi total paket = harga OTOMATIS titik × pengali; baris selisih membawa sisanya (nol bila otomatis, selisih manual bila ditimpa) sehingga Σ rekomendasi baris = rekomendasi paket.
-    // Harga khusus keberangkatan: rekomendasi tetap harga otomatis PAKET (varian tak punya rumus sendiri).
-    const recTargetCents = cents(base.autoSellIdr != null && base.autoSellIdr > 0 ? base.autoSellIdr : base.sellIdr) * o.multiplier
-    const recGapCents = recTargetCents - lines.reduce((s, l) => s + Math.round(lineTotalRecommended(l) * 100), 0)
+    // Rekomendasi total = Σ rekomendasi baris komponen (HPP × margin) + bagian included — dihitung dari baris, bukan dari otomatis titik produk: sejak §22 otomatis produk
+    // memuat harga manual komponen. Baris selisih (harga manual total / harga khusus keberangkatan / titik basi) tidak menambah rekomendasi, kecuali seluruh harga
+    // berupa satu baris (tanpa komponen maupun bagian) — rekomendasinya otomatis titik dasar.
+    const recGapCents = only ? cents(base.autoSellIdr != null && base.autoSellIdr > 0 ? base.autoSellIdr : base.sellIdr) * o.multiplier : 0
     lines.push({
       lineKey: only ? 'main' : 'penyesuaian', description: only ? o.label : special ? 'Harga khusus keberangkatan' : 'Penyesuaian harga paket', qty: o.multiplier, unit: 'package',
       unitCostIdr: null, unitSellIdr: gapCents / 100 / o.multiplier, recommendedUnitSellIdr: recGapCents / 100 / o.multiplier, mode: point.mode,
