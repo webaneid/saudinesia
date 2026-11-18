@@ -19,14 +19,18 @@ const OPERASIONAL: NavItem[] = [
   { path: '/admin/visa',          icon: FileText,        label: 'Visa Status' },
   { path: '/admin/quotas',        icon: BarChart3,       label: 'Quota' },
   { path: '/admin/margin',        icon: HeartPulse,      label: 'Kesehatan Margin' },
-  { path: '/admin/reports',       icon: LineChart,       label: 'Laporan Untung' },
-  { path: '/admin/reports/variance', icon: Scale,        label: 'Selisih HPP' },
-  { path: '/admin/finance/cash-book', icon: BookOpenCheck, label: 'Buku Kas' },
-  { path: '/admin/finance/cash-flow', icon: ArrowLeftRight, label: 'Arus Kas' },
-  { path: '/admin/finance/transfers', icon: Repeat, label: 'Transfer Antar Akun' },
-  { path: '/admin/finance/tax', icon: BadgePercent, label: 'Laporan PPN' },
-  { path: '/admin/finance/refunds', icon: Undo2,         label: 'Refund' },
   { path: '/admin/notifications', icon: Bell,            label: 'Notifikasi' },
+]
+
+/** Fase 12d (docs/arsitektur-booking-engine-v2.md §10.14): uang dan laporan dalam satu grup — kas lebih dulu, lalu laporan. Semua admin (peran di route/halaman masing-masing). */
+const KEUANGAN: NavItem[] = [
+  { path: '/admin/finance/cash-book', icon: BookOpenCheck,  label: 'Buku Kas' },
+  { path: '/admin/finance/cash-flow', icon: ArrowLeftRight, label: 'Arus Kas' },
+  { path: '/admin/finance/transfers', icon: Repeat,         label: 'Transfer' },
+  { path: '/admin/finance/refunds',   icon: Undo2,          label: 'Refund' },
+  { path: '/admin/finance/tax',       icon: BadgePercent,   label: 'Laporan PPN' },
+  { path: '/admin/reports',           icon: LineChart,      label: 'Laporan Untung' },
+  { path: '/admin/reports/variance',  icon: Scale,          label: 'Selisih HPP' },
 ]
 
 const PRODUK: NavItem[] = [
@@ -53,10 +57,11 @@ const SISTEM: NavItem[] = [
   { path: '/admin/system/settings',          icon: Settings,    label: 'Pengaturan' },
 ]
 
-/** Grup menu sesuai role: OPERASIONAL semua admin, PRODUK manager+, SISTEM superadmin saja. */
+/** Grup menu sesuai role: OPERASIONAL dan KEUANGAN semua admin, PRODUK manager+, SISTEM superadmin saja. */
 export function getAdminNavigation({ isManager, isSuperAdmin }: { isManager: boolean; isSuperAdmin: boolean }): NavGroup[] {
   return [
     { label: 'Operasional', items: OPERASIONAL },
+    { label: 'Keuangan', items: KEUANGAN },
     ...(isManager ? [{ label: 'Produk', items: PRODUK }] : []),
     ...(isSuperAdmin ? [{ label: 'Sistem', items: SISTEM }] : []),
   ]

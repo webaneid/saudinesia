@@ -24,7 +24,9 @@ import { Badge } from '@/components/admin/ui/Badge'
 type Figures = {
   sellIdr: number; costKnownIdr: number; sellUnknownCostIdr: number; profitIdr: number; marginPct: number | null; costCoveragePct: number | null; realizedSellIdr: number; realizedProfitIdr: number
 }
+type Cash = { inIdr: number; refundIdr: number; vendorIdr: number; otherIdr: number; netIdr: number }
 type Report = {
+  cash: Cash
   params: { from: string; to: string; scope: 'recognized' | 'with_pending' }
   summary: Figures & { bookings: number; paidIdr: number; refundedIdr: number; lossBookings: number }
   cancelledRetained: { bookings: number; retainedIdr: number }
@@ -33,7 +35,7 @@ type Report = {
   byMonth: Array<Figures & { month: string }>
   bookings: BookingRow[]
 }
-type BookingRow = Figures & { id: string; bookingCode: string; createdAt: string; status: string; totalIdr: number; paidIdr: number; refundedIdr: number; realizedRatio: number }
+type BookingRow = Figures & { id: string; bookingCode: string; createdAt: string; status: string; totalIdr: number; paidIdr: number; refundedIdr: number; realizedRatio: number; createdDate: string; cash: Cash }
 
 const ITEM_LABEL: Record<string, string> = {
   hotel: 'Hotel', transport: 'Transport', muthowif: 'Muthowif', catering: 'Katering', tourPackage: 'Paket Ziarah', haji: 'Haji', visa: 'Visa', booking: 'Penyesuaian tingkat-booking',
@@ -52,6 +54,15 @@ function Stat({ label, value, hint, tone }: { label: string; value: string; hint
       <p className="m-0 text-[11px] font-semibold uppercase tracking-wide text-admin-muted">{label}</p>
       <p className={cn('m-0 mt-1 text-lg font-extrabold tabular-nums', tone === 'ok' && 'text-admin-ok', tone === 'danger' && 'text-admin-danger')}>{value}</p>
       {hint && <p className="m-0 mt-0.5 text-[11px] text-admin-muted">{hint}</p>}
+    </div>
+  )
+}
+
+function CashLine({ label, value, strong, minus }: { label: string; value: number; strong?: boolean; minus?: boolean }) {
+  return (
+    <div className={cn('flex items-baseline justify-between gap-3 py-1 text-[13px]', strong && 'border-t border-admin-line pt-2 font-semibold')}>
+      <span className={strong ? 'text-admin-ink' : 'text-admin-muted'}>{label}</span>
+      <span className={cn('tabular-nums', value < 0 && strong ? 'text-admin-danger' : 'text-admin-ink')}>{minus && value > 0 ? '−' : ''}{formatRupiah(value)}</span>
     </div>
   )
 }
@@ -105,12 +116,14 @@ export default function ProfitReportPage() {
     { key: 'code', header: 'Booking', mobile: 'title', cell: r => (
       <div className="min-w-0">
         <Link href={`/${locale}/admin/bookings/${r.id}`} className="font-semibold text-admin-ink hover:underline">{r.bookingCode}</Link>
-        <p className="m-0 text-[11px] text-admin-muted">{r.createdAt.slice(0, 10)}</p>
+        <p className="m-0 text-[11px] text-admin-muted">{r.createdDate}</p>
       </div>
     ) },
     { key: 'status', header: 'Status', hideBelowLg: true, cell: r => <Badge tone={r.status === 'cancelled' ? 'danger' : r.status === 'awaiting_payment' || r.status === 'payment_review' ? 'warning' : 'accent'}>{STATUS_LABEL[r.status] ?? r.status}</Badge> },
     ...figureColumns<BookingRow>(),
     { key: 'real', header: 'Terealisasi', align: 'right', hideBelowLg: true, cell: r => <span className="tabular-nums text-admin-ink/80">{Math.round(r.realizedRatio * 100)}%</span> },
+    { key: 'cashIn', header: 'Kas masuk', align: 'right', hideBelowLg: true, cell: r => <Rp v={r.cash.inIdr} /> },
+    { key: 'cashNet', header: 'Kas bersih', align: 'right', hideBelowLg: true, cell: r => <span className={cn('font-semibold tabular-nums', r.cash.netIdr < 0 && 'text-admin-danger')}>{formatRupiah(r.cash.netIdr)}</span> },
     { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.id}`} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
   ]
 
@@ -138,6 +151,15 @@ export default function ProfitReportPage() {
             <Stat label="Untung" value={formatRupiah(s.profitIdr)} tone={s.profitIdr < 0 ? 'danger' : 'ok'} hint={s.marginPct != null ? `${s.marginPct.toFixed(1)}% dari penjualan bermodal` : 'belum ada baris bermodal'} />
             <Stat label="Terealisasi" value={formatRupiah(s.realizedSellIdr)} hint={`untung ${formatRupiah(s.realizedProfitIdr)} · dibayar ${formatRupiah(s.paidIdr)}`} />
           </div>
+          <Card className="space-y-1 p-4">
+            <h2 className="m-0 text-sm font-bold">Kas booking ini (buku kas)</h2>
+            <p className="m-0 text-[12px] text-admin-muted">Uang yang benar-benar bergerak untuk booking di atas sampai hari ini, menurut buku kas — basis kas di samping untung (akrual) di atas, bukan laporan laba kedua.</p>
+            <CashLine label="Masuk (pokok + PPN + kelebihan bayar)" value={data.cash.inIdr} />
+            <CashLine label="Refund dibayar" value={data.cash.refundIdr} minus />
+            <CashLine label="Biaya vendor dibayar" value={data.cash.vendorIdr} minus />
+            <CashLine label="Lainnya (kode unik, biaya layanan − MDR)" value={data.cash.otherIdr} />
+            <CashLine label="Kas bersih" value={data.cash.netIdr} strong />
+          </Card>
           {s.sellUnknownCostIdr > 0 && (
             <p className="m-0 rounded-xl border border-admin-gold/40 bg-admin-gold/10 px-3 py-2 text-xs text-admin-ink">
               {formatRupiah(s.sellUnknownCostIdr)} penjualan belum diketahui modalnya, sehingga untungnya tidak termasuk di atas (modal kosong di editor produk, atau data pesanan lama).

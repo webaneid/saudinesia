@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { getAppTimezone, daysBetween, endOfDayExclusiveInApp, isCalendarDate, startOfDayInApp, todayInApp } from '@/lib/time'
+import { getAppTimezone, dateInApp, daysBetween, endOfDayExclusiveInApp, isCalendarDate, startOfDayInApp, todayInApp } from '@/lib/time'
 
 // LAPORAN UNTUNG dari snapshot harga (docs/arsitektur-harga-terpadu.md §19, Fase 6). Semua angka berasal dari `price_snapshots` (beku saat dipesan — tak bergeser oleh kurs/harga
 // sesudahnya) + `payments`/`refunds`. SQL mentah ber-parameter ($queryRaw): Prisma ORM tidak mengekspresikan agregat per irisan + rasio dibayar per booking dalam satu kueri;
@@ -13,6 +13,9 @@ import { getAppTimezone, daysBetween, endOfDayExclusiveInApp, isCalendarDate, st
 //    Baris `penyesuaian*` (selisih harga manual/diskon) bermodal 0 — modalnya ada di baris komponen. Pengecualian: sisa data lama (migrasi Fase 4: itemType booking yang itemId-nya BUKAN baris `booking_adjustments`) = modal tak diketahui —
 //    dibedakan dari struktur, bukan dari label teks bebas yang bisa diketik staf.
 //  - Terealisasi per booking = jual × rasio, rasio = clamp((Σ payment confirmed − Σ refund approved|paid) ÷ total, 0..1).
+//  - KAS per booking (Fase 12d, K12-2 — basis kas di samping akrual, bukan laporan laba kedua): dari `cash_entries` booking itu S.D. SEKARANG (bukan dibatasi periode —
+//    periode memilih booking menurut tanggal pesan). Pembalik (`koreksi`) dihitung pada komponen entri ASALNYA (bertanda berlawanan). Masuk = pokok + PPN + kelebihan;
+//    refund dibayar; biaya vendor dibayar; lainnya = kode unik + biaya layanan − MDR gateway (dll.); kas bersih = masuk − refund − vendor + lainnya = Σ bertanda semua entri.
 
 export class ReportInputError extends Error {
   constructor(message: string) { super(message); this.name = 'ReportInputError' }
@@ -64,6 +67,22 @@ function base(p: ReportParams) {
     )`
 }
 
+/** CTE kas `k` per booking (disambung SESUDAH `base`): Σ bertanda per kelompok komponen, pembalik ikut komponen entri asal. */
+const CASH = Prisma.sql`, k AS (
+    SELECT x.booking_id,
+      COALESCE(SUM(x.signed) FILTER (WHERE x.comp IN ('pokok', 'ppn', 'kelebihan')), 0)::float8 AS cash_in,
+      COALESCE(-SUM(x.signed) FILTER (WHERE x.comp = 'refund'), 0)::float8 AS cash_refund,
+      COALESCE(-SUM(x.signed) FILTER (WHERE x.comp = 'biaya_vendor'), 0)::float8 AS cash_vendor,
+      COALESCE(SUM(x.signed) FILTER (WHERE x.comp NOT IN ('pokok', 'ppn', 'kelebihan', 'refund', 'biaya_vendor')), 0)::float8 AS cash_other,
+      COALESCE(SUM(x.signed), 0)::float8 AS cash_net
+    FROM (
+      SELECT e."bookingId" AS booking_id, COALESCE(o."component", e."component")::text AS comp,
+        CASE WHEN e."direction" = 'in' THEN e."amountIdr" ELSE -e."amountIdr" END AS signed
+      FROM "cash_entries" e LEFT JOIN "cash_entries" o ON o."id" = e."reversesEntryId"
+      WHERE e."bookingId" IN (SELECT "id" FROM b)
+    ) x GROUP BY x.booking_id
+  )`
+
 /** Agregat standar satu irisan (kolom `l`). */
 const AGG = Prisma.sql`
   COALESCE(SUM(sell), 0)::float8 AS sell,
@@ -104,8 +123,15 @@ const figures = (a: Agg): Figures => {
   }
 }
 
+/** Kas sebuah booking (atau jumlahnya) menurut buku kas, s.d. sekarang. Invarian: inIdr − refundIdr − vendorIdr + otherIdr = netIdr. */
+export type CashFigures = { inIdr: number; refundIdr: number; vendorIdr: number; otherIdr: number; netIdr: number }
+type CashAgg = { cash_in: number | null; cash_refund: number | null; cash_vendor: number | null; cash_other: number | null; cash_net: number | null }
+const cashOf = (a: CashAgg): CashFigures => ({ inIdr: money(a.cash_in), refundIdr: money(a.cash_refund), vendorIdr: money(a.cash_vendor), otherIdr: money(a.cash_other), netIdr: money(a.cash_net) })
+
 export type ProfitReport = {
   params: ReportParams
+  /** Kas booking dalam cakupan (Fase 12d). */
+  cash: CashFigures
   summary: Figures & { bookings: number; paidIdr: number; refundedIdr: number; /** Pesanan yang untung teridentifikasinya negatif (di bawah HPP — mis. diskon melampaui margin). */ lossBookings: number }
   /** Uang ditahan dari booking yang dibatalkan pada periode yang sama (bayar terkonfirmasi − refund disetujui/dibayar, tak negatif). */
   cancelledRetained: { bookings: number; retainedIdr: number }
@@ -113,14 +139,14 @@ export type ProfitReport = {
   byVendor: Array<Figures & { vendorId: string | null; label: string; kind: 'vendor' | 'multi' | 'none' }>
   byMonth: Array<Figures & { month: string }>
 }
-export type BookingProfitRow = Figures & { id: string; bookingCode: string; createdAt: string; status: string; totalIdr: number; paidIdr: number; refundedIdr: number; realizedRatio: number }
+export type BookingProfitRow = Figures & { id: string; bookingCode: string; createdAt: string; /** Tanggal pesan di zona aplikasi (YYYY-MM-DD). */ createdDate: string; status: string; totalIdr: number; paidIdr: number; refundedIdr: number; realizedRatio: number; cash: CashFigures }
 
 /** Ringkasan + irisan (produk, vendor, bulan). */
 export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
   const b = base(p)
   const run = <T,>(tail: Prisma.Sql) => prisma.$queryRaw<T[]>(Prisma.sql`${b} ${tail}`)
   const bounds = periodBounds(p.from, p.to)
-  const [sum, cash, byProduct, byVendor, byMonth, cancelled, loss] = await Promise.all([
+  const [sum, cash, byProduct, byVendor, byMonth, cancelled, loss, kas] = await Promise.all([
     run<Agg>(Prisma.sql`SELECT ${AGG} FROM l`),
     run<{ bookings: number; paid: number; refunded: number }>(Prisma.sql`SELECT COUNT(*)::int AS bookings, COALESCE(SUM(paid), 0)::float8 AS paid, COALESCE(SUM(refunded), 0)::float8 AS refunded FROM b`),
     run<Agg & { item_type: string }>(Prisma.sql`SELECT item_type, ${AGG} FROM l GROUP BY item_type ORDER BY SUM(sell) DESC, item_type`),
@@ -135,6 +161,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
         FROM "bookings" bk WHERE bk."createdAt" >= ${utcText(bounds.fromTs)}::timestamp AND bk."createdAt" < ${utcText(bounds.toTs)}::timestamp AND bk."status"::text = 'cancelled') x
       WHERE x.paid > 0`),
     run<{ n: number }>(Prisma.sql`SELECT COUNT(*)::int AS n FROM (SELECT booking_id FROM l GROUP BY booking_id HAVING ${LOSS}) x`),
+    run<CashAgg>(Prisma.sql`${CASH} SELECT SUM(cash_in)::float8 AS cash_in, SUM(cash_refund)::float8 AS cash_refund, SUM(cash_vendor)::float8 AS cash_vendor, SUM(cash_other)::float8 AS cash_other, SUM(cash_net)::float8 AS cash_net FROM k`),
   ])
 
   const vendorIds = byVendor.map(r => r.bucket).filter(k => !k.startsWith('__'))
@@ -143,6 +170,7 @@ export async function getProfitReport(p: ReportParams): Promise<ProfitReport> {
 
   return {
     params: p,
+    cash: cashOf(kas[0]!),
     summary: { ...figures(sum[0]!), bookings: cash[0]!.bookings, paidIdr: money(cash[0]!.paid), refundedIdr: money(cash[0]!.refunded), lossBookings: loss[0]!.n },
     cancelledRetained: { bookings: cancelled[0]!.bookings, retainedIdr: money(cancelled[0]!.retained) },
     byProduct: byProduct.map(r => ({ itemType: r.item_type, ...figures(r) })),
@@ -161,14 +189,15 @@ export async function getBookingProfitRows(p: ReportParams, page: number, limit:
   const b = base(p)
   const having = onlyLoss ? Prisma.sql`HAVING ${LOSS_L}` : Prisma.empty
   const [rows, count] = await Promise.all([
-    prisma.$queryRaw<Array<Agg & { id: string; booking_code: string; created_at: Date; status: string; total: number; paid: number; refunded: number; ratio: number }>>(Prisma.sql`
-      ${b}
+    prisma.$queryRaw<Array<Agg & CashAgg & { id: string; booking_code: string; created_at: Date; status: string; total: number; paid: number; refunded: number; ratio: number }>>(Prisma.sql`
+      ${b} ${CASH}
       SELECT b."id", b."bookingCode" AS booking_code, b."createdAt" AS created_at, b.status, b.total, b.paid, b.refunded,
+        MAX(k.cash_in) AS cash_in, MAX(k.cash_refund) AS cash_refund, MAX(k.cash_vendor) AS cash_vendor, MAX(k.cash_other) AS cash_other, MAX(k.cash_net) AS cash_net,
         CASE WHEN b.total > 0 THEN LEAST(1, GREATEST(0, (b.paid - b.refunded) / b.total)) ELSE 0 END::float8 AS ratio,
         COALESCE(SUM(l.sell), 0)::float8 AS sell, COALESCE(SUM(l.cost), 0)::float8 AS cost,
         COALESCE(SUM(l.sell) FILTER (WHERE l.cost IS NOT NULL), 0)::float8 AS sell_known, COALESCE(SUM(l.sell) FILTER (WHERE l.cost IS NULL), 0)::float8 AS sell_unknown,
         COALESCE(SUM(l.sell * l.ratio), 0)::float8 AS realized_sell, COALESCE(SUM((l.sell - l.cost) * l.ratio) FILTER (WHERE l.cost IS NOT NULL), 0)::float8 AS realized_profit
-      FROM b LEFT JOIN l ON l.booking_id = b."id"
+      FROM b LEFT JOIN l ON l.booking_id = b."id" LEFT JOIN k ON k.booking_id = b."id"
       GROUP BY b."id", b."bookingCode", b."createdAt", b.status, b.total, b.paid, b.refunded
       ${having}
       ORDER BY b."createdAt" DESC, b."id"
@@ -180,7 +209,7 @@ export async function getBookingProfitRows(p: ReportParams, page: number, limit:
   return {
     total: count[0]!.n,
     rows: rows.map(r => ({
-      id: r.id, bookingCode: r.booking_code, createdAt: r.created_at.toISOString(), status: r.status,
+      id: r.id, bookingCode: r.booking_code, createdAt: r.created_at.toISOString(), createdDate: dateInApp(r.created_at), status: r.status, cash: cashOf(r),
       totalIdr: money(r.total), paidIdr: money(r.paid), refundedIdr: money(r.refunded), realizedRatio: Math.round(r.ratio * 10000) / 10000,
       ...figures(r),
     })),

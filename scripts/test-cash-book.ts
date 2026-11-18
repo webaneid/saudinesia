@@ -305,7 +305,7 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 await t('PENJAGA: hanya lib/cash/ledger.ts menulis cash_entries dan hanya lib/cash/accounts.ts menulis cash_accounts; process.ts memosting sesudah kunci di transaksi yang sama; halaman klien tak mengimpor modul berprisma', () => {
   const files = [...walk('app'), ...walk('lib')]
-  const entryWriters = files.filter(f => /cashEntry\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|"cash_entries"/.test(read(f)))
+  const entryWriters = files.filter(f => /cashEntry\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|(INSERT INTO|UPDATE|DELETE FROM|TRUNCATE)\s+"?cash_entries/.test(read(f))) // SQL mentah yang MEMBACA cash_entries (laporan) boleh; menulis tidak
   assert.deepEqual(entryWriters, ['lib/cash/ledger.ts'])
   const accountWriters = files.filter(f => /cashAccount\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(/.test(read(f)))
   assert.deepEqual(accountWriters, ['lib/cash/accounts.ts'])
