@@ -36,6 +36,7 @@ const TYPES: Array<{ value: string; label: string }> = [
   { value: 'visa', label: 'Visa' }, { value: 'flight', label: 'Pesawat' }, { value: 'hotel', label: 'Hotel' }, { value: 'transport', label: 'Transport' },
   { value: 'muthowif', label: 'Muthowif' }, { value: 'package', label: 'Paket Umroh' }, { value: 'tour_package', label: 'Paket Ziarah' }, { value: 'haji', label: 'Haji' },
   { value: 'catering', label: 'Katering' }, { value: 'hotel_service', label: 'Layanan Hotel' },
+  { value: 'cost_component', label: 'Komponen Biaya' },
 ]
 const FILTERS: Array<{ value: string; label: string; count: (c: Counts) => number }> = [
   { value: 'issues', label: 'Perlu perhatian', count: c => c.loss + c.thin + c.no_cost + c.unpriced },

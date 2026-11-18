@@ -1,6 +1,6 @@
 // Mesin harga terpadu (docs/arsitektur-harga-terpadu.md §4, §14). Satu tipe titik harga untuk semua yang dijual.
 
-export type PriceOwnerType = 'visa' | 'flight' | 'hotel' | 'transport' | 'muthowif' | 'package' | 'tour_package' | 'haji' | 'catering' | 'hotel_service'
+export type PriceOwnerType = 'visa' | 'flight' | 'hotel' | 'transport' | 'muthowif' | 'package' | 'tour_package' | 'haji' | 'catering' | 'hotel_service' | 'cost_component'
 export type PriceUnit = 'person' | 'room_night' | 'vehicle' | 'person_day' | 'package' | 'service'
 
 /** Hasil hitung satu varian dari modal (belum disimpan). */
@@ -41,6 +41,8 @@ export type PriceOwner = {
   /** Subset `ids` yang masih ada — untuk menyapu titik harga yatim. */
   existing: (ids: string[]) => Promise<string[]>
   resolve: (id: string) => Promise<ResolvedVariant[]>
+  /** Pemilik yang harganya DIBENTUK dari titik harga ini (komponen biaya → produk komposit): dihitung ulang setiap kali harga manual titik ini berubah. */
+  parent?: (id: string) => Promise<{ ownerType: PriceOwnerType; ownerId: string } | null>
 }
 
 export type OwnerVariant = { key: string; unit: PriceUnit; label: string; creatable: boolean; inheritsBase: boolean }

@@ -28,13 +28,13 @@ async function partsCost(parts: Part[]): Promise<number | null> {
 
 async function build(ownerType: 'package' | 'tour_package' | 'haji', components: ComponentBreakdown[], autoSell: number, parts: Part[]): Promise<ResolvedVariant[]> {
   const { defaultMarginPercent, roundingIncrement } = await resolveMarginRule(ownerType)
-  const componentCost = components.reduce((s, c) => s + c.hppRupiah, 0)
+  const componentCost = components.some(c => c.hppRupiah == null) ? null : components.reduce((s, c) => s + (c.hppRupiah ?? 0), 0)
   const partCost = await partsCost(parts)
   // Tanpa satu pun komponen maupun bagian bermodal → belum ada modal sama sekali.
   const hasAnyCost = components.length > 0 || parts.some(p => (p.price ?? 0) > 0)
   return [{
     variantKey: '', unit: 'package',
-    costIdr: hasAnyCost && partCost != null ? componentCost + partCost : null,
+    costIdr: hasAnyCost && partCost != null && componentCost != null ? componentCost + partCost : null,
     autoSellIdr: autoSell, // komposit SELALU punya titik harga (juga bernilai 0), seperti cache lama
     marginPctUsed: defaultMarginPercent, roundingUsed: roundingIncrement,
     fxRateIds: nums(components.map(c => c.rateId)), vendorIds: nums(components.map(c => c.vendorId)),

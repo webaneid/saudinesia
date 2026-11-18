@@ -21,8 +21,10 @@ export async function GET(req: Request) {
     if (!parsed.success) return NextResponse.json(err('Parameter tidak valid'), { status: 400 })
     const { ownerType, ownerId } = parsed.data
     const points = await getPricePoints(ownerType, ownerId)
+    // Komponen biaya memakai margin tipe produk INDUKNYA (rekomendasinya dihitung dengan aturan itu) — bukan aturan bernama `cost_component`.
+    const marginType = (await PRICE_OWNERS[ownerType].parent?.(ownerId))?.ownerType ?? ownerType
     const [rule, changes, warn, variants] = await Promise.all([
-      resolveMarginRule(ownerType),
+      resolveMarginRule(marginType),
       listPriceChanges(ownerType, ownerId, 10),
       prisma.pricingRule.findUnique({ where: { productType: 'global' }, select: { warnBelowPercent: true } }),
       PRICE_OWNERS[ownerType].variants?.(ownerId) ?? Promise.resolve([]),
