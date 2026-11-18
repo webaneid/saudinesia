@@ -32,9 +32,7 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
 - **`User.isPlatformProvider`** (boolean, bawaan false) — penanda akun Platform Provider (pola `isDeveloper` bantuanku). **Tidak bisa diubah dari UI/API mana pun**; diisi lewat skrip `scripts/set-platform-provider.ts` (dijalankan pemilik server). Akun ini staf (login admin), mengubah penanda menaikkan `sessionVersion`.
 - **`revenue_share_settings`** — versi berlaku (append-only): `percent` (0–50, bawaan 5), `basis` (`margin` | `markup`), `effectiveFrom`, `createdById` (harus Platform Provider), `note`. Versi terbaru = berlaku. Riwayat tak pernah ditimpa.
 - **Beku di invoice:** `Invoice.revenueSharePercent`, `Invoice.revenueShareBasis`, `Invoice.revenueShareSettingId` — diisi `issueInvoice` dari versi berlaku (P4).
-- **Beku per baris harga:** `price_snapshots.providerShareIdr` — bagian Platform Provider baris itu saat dipesan:
-  - opsi (2) markup: `persen × modal baris` (bagian ini sudah termasuk di harga jual otomatis);
-  - opsi (1) margin: `persen × (jual − modal)` baris bermodal (baris tanpa modal / rugi = 0).
+- **~~Beku per baris harga `price_snapshots.providerShareIdr`~~ — tidak dibuat (13b):** potensi DITURUNKAN dari dua hal yang sudah beku — aturan di invoice dan baris snapshot berlaku — lewat fungsi murni `lib/revenue-share/potential.ts` (lihat §5b). Kolom per baris tak menambah kepastian, malah menambah penulis.
 - **`revenue_share_entries`** (append-only, trigger DB): `bookingId`, sumber (`payment` | `refund` | `revision` | `completion`), `refId`, `amountIdr` bertanda (+ hak, − koreksi), `basis`, `percent`, `createdAt`. UNIQUE `(source, refId)` → idempoten.
 - **`revenue_share_payouts`** — pencairan ke Platform Provider: jumlah, tanggal, akun kas asal, rekening tujuan (beku), catatan, dicatat oleh, batal = `voidedAt` + pembalik. Memosting `out`/`bagi_hasil` di buku kas lewat `lib/cash/ledger.ts`.
 - **Rekening Platform Provider** — daftar rekening milik Platform Provider (diatur akun itu sendiri), dipilih saat mencatat pencairan.
@@ -81,12 +79,44 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
   - `test-table-consistency`: riwayat versi dicatat sebagai baca-saja.
 - Security: subagen `security-auditor` menemukan 0 Critical/High, 1 Medium, dan 4 Low (SEC-274..278); semuanya ditutup di fase ini (lihat `docs/lessons-learned.md`).
 
+## 5b. As-built 13b (2026-11-18)
+
+- **Tanpa akun Platform Provider aktif tidak ada bagi hasil** (`effectiveRevenueShare` = null): harga tidak diberi poin, invoice tidak membekukan apa pun. Penerimanya dipasang lewat skrip, jadi bagi hasil mulai berlaku sejak akun dipasang. Bawaannya 5% markup (tanpa versi tersimpan = bawaan).
+- **Opsi markup ke harga:** satu-satunya tempat poin masuk adalah `resolveMarginRule` (`lib/pricing/pricingHelpers.ts`). Fungsi ini mengembalikan:
+  - `defaultMarginPercent` = margin klien + poin; angka ini dipakai semua rumus harga (`computeSellPrice`, Komponen Biaya, komposit, simulasi);
+  - `clientMarginPercent` dan `providerMarkupPercent` untuk tampilan.
+  - PriceCard menulis "26% (20% + 6 poin Platform Provider)", tetapi rinciannya hanya dikirim ke superadmin (SEC-281). Peran lain melihat margin gabungan.
+- **Penyelaras harga** `lib/revenue-share/pricing.ts` (`ensurePricesFollowRevenueShare`):
+  - Bila kunci aturan berlaku (`none` atau `<persen>:<dasar>`) ≠ `revenue_share_pricing_state.ruleKey`, semua harga dihitung ulang lewat `refreshAllPricingCaches`, lalu aturan yang dipakai dicatat (persen, dasar, id versi).
+  - Dipicu saat boot (sesudah `repriceAll`), oleh cron 10 menit (`lib/cron/revenueShareJob.ts`, menangkap perubahan lewat skrip), dan sesudah setelan disimpan.
+  - Hanya satu putaran berjalan pada satu waktu dalam satu proses. Pemanggilan di tengah putaran menjadwalkan satu putaran lagi.
+  - Kegagalan sebagian tetap dicatat dan tidak diulang terus-menerus (SEC-280).
+- **Beku di invoice (P4):** `issueInvoice` membekukan `revenueSharePercent`/`revenueShareBasis`/`revenueShareSettingId` dari aturan yang SUDAH DITERAPKAN ke harga (`revenueShareForIssue` membaca penanda harga), bukan dari setelan terbaru. Dengan begitu bagian Platform Provider selalu dihitung dengan aturan yang sama dengan yang membentuk harga yang dijual (SEC-279).
+  - Jeda yang tersisa hanya selama putaran hitung ulang berjalan: sebagian titik harga sudah baru, penanda masih lama. Aturan yang dibekukan adalah aturan lama (konservatif).
+  - Ada CHECK bentuk dan FK Restrict ke versi setelan. Invoice lama tetap NULL.
+- **Potensi per booking** = `bookingSharePotential` (aturan beku + baris snapshot berlaku), dihitung dalam sen dan tidak pernah negatif:
+  - markup: persen × modal baris bermodal. Diskon/penyesuaian tidak mengurangi bagian, karena itu keputusan harga klien.
+  - margin: persen × (jual − modal) baris bermodal ± penyesuaian. Baris asli tanpa modal dihitung 0.
+  - Belum ditampilkan di mana pun; potensi vs hak dikerjakan di 13c.
+- **Belum:** pemisahan "untung klien vs bagian provider" di PriceCard/Laporan Untung (Untung di kartu harga masih termasuk poin provider). Dikerjakan di 13c/13e bersama hak.
+- Uji: `scripts/test-revenue-share-pricing.ts`. Mencakup:
+  - angka pemilik;
+  - tanpa provider;
+  - provider dipasang (penanda `none` → invoice tanpa bagi hasil sampai harga diterapkan);
+  - pergantian dasar;
+  - jeda simpan-sebelum-hitung-ulang;
+  - pencabutan;
+  - CHECK invoice dan penanda;
+  - penjaga sumber.
+  - Juga: `test-revenue-share` (TRUNCATE CASCADE di transaksi batal) dan `test-pricing-phase0` (bentuk `resolveMarginRule`).
+- Security: subagen menemukan 0 Critical/High, 1 Medium, 3 Low (SEC-279..282). Semua ditutup di fase ini.
+
 ## 6. Fase (satu PR per sub-fase)
 
 | Sub | Isi |
 |---|---|
 | 13a | `isPlatformProvider` + skrip, `revenue_share_settings` (bawaan 5% opsi yang dipilih pemilik), halaman Platform Provider tab Informasi + Setelan, `requirePlatformProvider` |
-| 13b | Beku ke invoice + `providerShareIdr` di snapshot; opsi (2) masuk `resolveMarginRule` + reprice saat setelan berubah |
+| 13b | **SELESAI 2026-11-18** — beku ke invoice (aturan yang diterapkan ke harga) + potensi diturunkan dari snapshot; opsi (2) masuk `resolveMarginRule` + penyelaras harga (§5b) |
 | 13c | `revenue_share_entries`: hak saat pembayaran terverifikasi (manual + gateway), refund, revisi; potensi vs hak |
 | 13d | Tandai selesai (status `completed` pertama kali ditulis) + koreksi opsi (1) bila Q1 = aktual |
 | 13e | Rekening Platform Provider, pencairan lewat buku kas (`bagi_hasil`), tab Pendapatan + CSV |

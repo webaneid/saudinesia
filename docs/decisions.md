@@ -3658,3 +3658,26 @@ Akun Platform Provider adalah **akun bayangan**: penandanya `users.isPlatformPro
 - Menyimpan nama penyimpan di riwayat: tidak dipakai karena akun bayangan.
 
 **Security check:** subagen `security-auditor` menemukan 0 Critical/High, 1 Medium (SEC-274: skrip penanda tak ada di image produksi), dan 4 Low (SEC-275..278). Semuanya diperbaiki di fase ini dan dibuktikan lewat uji atau browser. `bun audit` tidak berubah (2 high, 4 moderate, 1 low).
+
+## 2026-11-18 — Fase 13b: bagi hasil masuk harga dan dibekukan di invoice
+**Decision:**
+- Bagi hasil hanya berlaku bila ada akun Platform Provider aktif. Tanpa penerima tidak ada poin di harga dan tidak ada aturan beku.
+- Opsi markup masuk ke harga lewat SATU titik, `resolveMarginRule` (margin dipakai = margin klien + poin). Harga dihitung ulang oleh penyelaras (`ensurePricesFollowRevenueShare`) setiap kali aturan berlaku berubah: saat boot, lewat cron 10 menit, dan sesudah setelan disimpan.
+- Invoice membekukan aturan yang SUDAH DITERAPKAN ke harga (penanda `revenue_share_pricing_state`), bukan setelan terbaru.
+- Potensi per booking DITURUNKAN dari aturan beku + baris snapshot berlaku (fungsi murni). Kolom `price_snapshots.providerShareIdr` dari rencana tidak dibuat.
+- Markup: bagian = persen × modal, tidak berkurang oleh diskon klien. Margin: persen × (jual − modal) ± penyesuaian. Potensi tidak pernah negatif.
+- Rincian poin di kartu harga hanya untuk superadmin.
+
+**Rationale:**
+- Pemilik membuat akun Platform Provider sebagai akun bayangan yang dipasang skrip. Bagi hasil tanpa penerima tak bermakna, dan tes harga yang ada tidak berubah.
+- Membekukan aturan yang membentuk harga mencegah booking di jeda reprice membekukan aturan yang tak sesuai harganya (temuan audit SEC-279).
+- Snapshot dan aturan invoice sama-sama beku, jadi menurunkan potensi sama pastinya dengan menyimpannya per baris, dengan penulis lebih sedikit.
+- Markup tidak terpengaruh diskon karena 5 poin "milik Platform Provider" (P3), dan diskon adalah keputusan harga klien.
+
+**Alternatives considered:**
+- `providerShareIdr` per baris snapshot dan poin per titik harga: lebih banyak penulis; dipertimbangkan bila 13c membutuhkan bagian per baris.
+- Kunci advisory bersama penyimpan/penerbit: dihapus (SEC-282).
+- Menghitung ulang harga secara sinkron di POST setelan: respons lambat dan tidak menangkap perubahan lewat skrip.
+- Markup dikurangi diskon: ditolak, karena diskon keputusan klien. Bisa ditinjau pemilik.
+
+**Security check:** subagen `security-auditor` menemukan 0 Critical/High, 1 Medium (SEC-279) dan 3 Low (SEC-280..282). Semuanya diperbaiki dan diuji. `bun audit` tidak berubah (2 high, 4 moderate, 1 low).

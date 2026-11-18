@@ -22,7 +22,7 @@ export type ComponentBreakdown = {
 }
 
 /** Koneksi baca — `prisma` atau klien transaksi (jalur pesan membekukan hasilnya ke snapshot di dalam transaksi, SEC-212). */
-export type CostComponentsDb = Pick<typeof prisma, 'productCost' | 'pricingRule' | 'exchangeRate'>
+export type CostComponentsDb = Pick<typeof prisma, 'productCost' | 'pricingRule' | 'exchangeRate' | 'revenueShareSetting' | 'user'>
 
 export type CostComponentsResult = { components: ComponentBreakdown[]; totalSellPrice: number }
 

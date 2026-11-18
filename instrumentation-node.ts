@@ -22,6 +22,9 @@ export async function registerNode() {
   const { startExchangeRateJob } = await import('@/lib/cron/exchangeRateJob')
   startExchangeRateJob()
 
+  const { startRevenueSharePricingJob } = await import('@/lib/cron/revenueShareJob')
+  startRevenueSharePricingJob()
+
   void ensureMinioBucket()
   void repriceOnBoot()
   void import('@/lib/pii/keys').then(m => m.warnPiiKeysOnBoot()) // hanya memperingatkan: fitur NIK/paspor gagal-tertutup saat dipakai (docs/arsitektur-jamaah.md §6)
@@ -35,6 +38,9 @@ async function repriceOnBoot() {
     const { repriceAll } = await import('@/lib/pricing/engine')
     const failed = await repriceAll()
     if (failed.length > 0) console.error('[pricing] hitung ulang saat boot gagal untuk:', failed.join(', '))
+    // Lalu pastikan harga mengikuti aturan bagi hasil yang berlaku (hanya menghitung ulang lagi bila aturan berubah sejak terakhir diterapkan).
+    const { ensurePricesFollowRevenueShare } = await import('@/lib/revenue-share/pricing')
+    await ensurePricesFollowRevenueShare()
   } catch (e) {
     console.error('[pricing] hitung ulang saat boot gagal:', e instanceof Error ? e.message : e)
   }

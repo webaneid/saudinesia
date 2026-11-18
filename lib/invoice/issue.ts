@@ -7,6 +7,7 @@ import { allocateInvoiceNumber } from './numbering'
 import { billOf, billRefunds } from './bill'
 import { computeTax, type TaxRuleInput, type TaxResult } from './tax'
 import { SETTINGS_ID } from './settings'
+import { revenueShareForIssue } from '@/lib/revenue-share/settings'
 
 // Penerbitan invoice (docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a) — SATU-SATUNYA penulis tabel `invoices`. Dipanggil di transaksi yang SAMA dengan penerbitan booking
 // (terbit draf admin, `POST /bookings` jamaah): rollback membatalkan nomor (tanpa lompat), pajak, dan jatuh tempo bersama-sama.
@@ -57,6 +58,7 @@ export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: n
   // Sesudah nomor: baris penghitung nomor sudah terkunci, jadi penerbit serentak menunggu/diulang (Serializable) — dua invoice baru tak memilih kode dari daftar terpakai yang sama.
   const uniqueCode = s.uniqueCodeEnabled ? await allocateUniqueCode(tx, { min: s.uniqueCodeMin, max: s.uniqueCodeMax }, opts.random ?? Math.random) : null
   const invoiceDate = todayInApp(now)
+  const share = await revenueShareForIssue(tx) // bagi hasil Platform Provider beku saat terbit (docs/arsitektur-bagi-hasil.md P4); null = tanpa bagi hasil
   const inv = await tx.invoice.create({
     data: {
       bookingId, number, sequenceKey: key, sequence: seq, issuedAt: now,
@@ -64,6 +66,7 @@ export async function issueInvoice(tx: Tx, bookingId: string, opts: { dueDays: n
       taxLines: tax.lines as Prisma.InputJsonValue, taxAddedIdr: tax.addedIdr, taxIncludedIdr: tax.includedIdr,
       companySnapshot: company as Prisma.InputJsonValue, bankSnapshot: bankSnapshot as Prisma.InputJsonValue,
       termsDoc: s.termsDoc, footerNoteDoc: s.footerNoteDoc, issuedById: opts.byUserId, uniqueCode,
+      revenueSharePercent: share?.percent ?? null, revenueShareBasis: share?.basis ?? null, revenueShareSettingId: share?.settingId ?? null,
     },
     select: { id: true, number: true },
   }).catch((e: unknown) => {
