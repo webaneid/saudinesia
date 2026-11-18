@@ -87,12 +87,12 @@ await t('katering: katalog publik dan booking memilih kolom musim lewat SATU fun
 await t('aturan margin: nilai bawaan SATU tempat; override tipe mengalahkan global; global mengalahkan bawaan', async () => {
   // Nilai bawaan bisnis yang terdokumentasi (docs/arsitektur-harga.md §3.4): mengubahnya harus keputusan sadar, bukan efek samping.
   assert.equal(DEFAULT_MARGIN_PERCENT, 20); assert.equal(DEFAULT_ROUNDING_INCREMENT, 50000)
-  assert.deepEqual(await resolveMarginRule('hotel'), { defaultMarginPercent: DEFAULT_MARGIN_PERCENT, roundingIncrement: DEFAULT_ROUNDING_INCREMENT }, 'tanpa baris → bawaan')
+  assert.deepEqual(await resolveMarginRule('hotel'), { defaultMarginPercent: DEFAULT_MARGIN_PERCENT, clientMarginPercent: DEFAULT_MARGIN_PERCENT, providerMarkupPercent: 0, roundingIncrement: DEFAULT_ROUNDING_INCREMENT }, 'tanpa baris → bawaan')
   await prisma.pricingRule.create({ data: { productType: GLOBAL_RULE_KEY, defaultMarginPercent: 30, roundingIncrement: 100000 } })
-  assert.deepEqual(await resolveMarginRule('hotel'), { defaultMarginPercent: 30, roundingIncrement: 100000 })
+  assert.deepEqual(await resolveMarginRule('hotel'), { defaultMarginPercent: 30, clientMarginPercent: 30, providerMarkupPercent: 0, roundingIncrement: 100000 })
   await prisma.pricingRule.create({ data: { productType: 'hotel', defaultMarginPercent: 10, roundingIncrement: 1000 } })
-  assert.deepEqual(await resolveMarginRule('hotel'), { defaultMarginPercent: 10, roundingIncrement: 1000 })
-  assert.deepEqual(await resolveMarginRule('flight'), { defaultMarginPercent: 30, roundingIncrement: 100000 })
+  assert.deepEqual(await resolveMarginRule('hotel'), { defaultMarginPercent: 10, clientMarginPercent: 10, providerMarkupPercent: 0, roundingIncrement: 1000 })
+  assert.deepEqual(await resolveMarginRule('flight'), { defaultMarginPercent: 30, clientMarginPercent: 30, providerMarkupPercent: 0, roundingIncrement: 100000 })
   await prisma.pricingRule.deleteMany({})
   for (const f of ['lib/pricing/computeSellPrice.ts', 'lib/pricing/costComponents.ts', 'lib/pricing/simulateSellPrice.ts']) {
     const src = readFileSync(f, 'utf8')

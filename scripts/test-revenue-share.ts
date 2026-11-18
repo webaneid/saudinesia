@@ -72,7 +72,8 @@ await t('DB: append-only (UPDATE/DELETE/TRUNCATE ditolak trigger); CHECK persen 
   const id = (await currentRevenueShare()).id!
   await assert.rejects(prisma.revenueShareSetting.update({ where: { id }, data: { percent: 1 } }), /append-only/)
   await assert.rejects(prisma.revenueShareSetting.delete({ where: { id } }), /append-only/)
-  await assert.rejects(prisma.$executeRawUnsafe('TRUNCATE "revenue_share_settings"'), /append-only/)
+  // CASCADE (invoices merujuk tabel ini sejak 13b — tanpa CASCADE FK menolak lebih dulu); di transaksi yang selalu dibatalkan, jadi trigger yang dibuktikan.
+  await assert.rejects(prisma.$transaction(async tx => { await tx.$executeRawUnsafe('TRUNCATE "revenue_share_settings" CASCADE'); throw new Error('TRUNCATE lolos') }), /append-only/)
   await assert.rejects(prisma.revenueShareSetting.create({ data: { percent: 51, basis: 'markup', createdById: provider.id } }), /revenue_share_settings_percent/)
   await assert.rejects(prisma.revenueShareSetting.create({ data: { percent: -1, basis: 'markup', createdById: provider.id } }), /revenue_share_settings_percent/)
 })

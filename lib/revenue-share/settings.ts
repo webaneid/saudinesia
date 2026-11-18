@@ -29,9 +29,32 @@ export async function revenueShareHistory(limit = 50): Promise<RevenueShareVersi
   return rows.map(r => ({ id: r.id, percent: Number(r.percent), basis: r.basis, note: r.note, createdAt: r.createdAt }))
 }
 
+/** Aturan yang BERLAKU untuk harga dan invoice baru (Fase 13b): null bila belum ada akun Platform Provider aktif — tak ada bagi hasil tanpa penerimanya,
+ *  jadi harga tidak dinaikkan dan invoice tidak membekukan apa pun. Akun dipasang lewat scripts/set-platform-provider.ts. */
+export type EffectiveRevenueShare = { settingId: string | null; percent: number; basis: RevenueShareBasis }
+export async function effectiveRevenueShare(db: Pick<typeof prisma, 'revenueShareSetting' | 'user'> = prisma): Promise<EffectiveRevenueShare | null> {
+  const configured = await db.user.count({ where: { isPlatformProvider: true, isActive: true, role: 'superadmin' } })
+  if (configured === 0) return null
+  const c = await currentRevenueShare(db)
+  return { settingId: c.id, percent: c.percent, basis: c.basis }
+}
+
+/** Kunci teks aturan berlaku — dibandingkan dengan aturan yang sudah diterapkan ke harga (lib/revenue-share/pricing.ts). */
+export const revenueShareRuleKey = (r: EffectiveRevenueShare | null): string => (r ? `${r.percent}:${r.basis}` : 'none')
+
+/**
+ * Aturan untuk DIBEKUKAN di invoice yang sedang terbit (P4) — dipanggil HANYA lib/invoice/issue.ts di transaksi penerbitan. Yang dibekukan adalah aturan yang SUDAH
+ * DITERAPKAN ke harga (`revenue_share_pricing_state`), bukan setelan terbaru: selama hitung ulang belum selesai, harga yang dijual masih memakai aturan lama, dan bagian
+ * Platform Provider harus dihitung dengan aturan yang sama (SEC-279). Tanpa baris = belum pernah diterapkan = tanpa bagi hasil.
+ */
+export async function revenueShareForIssue(tx: Pick<Prisma.TransactionClient, 'revenueSharePricingState'>): Promise<EffectiveRevenueShare | null> {
+  const s = await tx.revenueSharePricingState.findUnique({ where: { id: 'global' }, select: { percent: true, basis: true, settingId: true } })
+  return s?.percent != null && s.basis ? { settingId: s.settingId, percent: Number(s.percent), basis: s.basis } : null
+}
+
 /** Ada akun Platform Provider aktif? (tab Informasi — hanya ya/tidak; akun bayangan tak pernah dibuka ke klien.) */
 export async function platformProviderConfigured(): Promise<boolean> {
-  return (await prisma.user.count({ where: { isPlatformProvider: true, isActive: true, role: 'superadmin' } })) > 0
+  return (await effectiveRevenueShare()) !== null
 }
 
 export async function saveRevenueShare(input: RevenueShareSettingInput, byUserId: string): Promise<CurrentRevenueShare> {

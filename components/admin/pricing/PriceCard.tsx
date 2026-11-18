@@ -22,7 +22,7 @@ type Point = {
 type Change = { id: string; variantKey: string; kind: string; oldSellIdr: number | null; newSellIdr: number | null; oldCostIdr: number | null; newCostIdr: number | null; note: string | null; at: string }
 type Payload = {
   points: Point[]
-  rule: { marginPercent: number; roundingIncrement: number; warnBelowPercent: number }
+  rule: { marginPercent: number; clientMarginPercent?: number; providerMarkupPercent?: number; roundingIncrement: number; warnBelowPercent: number }
   manualOnly: boolean
   creatable: string[]
   labels: Record<string, string>
@@ -86,7 +86,7 @@ export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, unt
         <p className="m-0 mt-1 text-xs text-admin-muted">
           {data.manualOnly
             ? 'Harga jual diisi langsung; modal opsional (untuk menghitung untung).'
-            : `Harga otomatis = modal × margin bawaan ${data.rule.marginPercent}%, dibulatkan ke kelipatan ${formatRupiah(data.rule.roundingIncrement)}. Margin hanyalah saran — harga jual boleh diatur manual.`}
+            : `Harga otomatis = modal × margin bawaan ${data.rule.providerMarkupPercent ? `${data.rule.marginPercent}% (${data.rule.clientMarginPercent}% + ${data.rule.providerMarkupPercent} poin Platform Provider)` : `${data.rule.marginPercent}%`}, dibulatkan ke kelipatan ${formatRupiah(data.rule.roundingIncrement)}. Margin hanyalah saran — harga jual boleh diatur manual.`}
         </p>
       </div>
 

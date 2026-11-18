@@ -116,7 +116,14 @@ export function PlatformProviderEditor() {
             </div>
             <p className="m-0 text-2xl font-extrabold tabular-nums">{pct(c.percent)} <span className="text-sm font-semibold text-admin-muted">· {REVENUE_SHARE_BASIS_LABEL[c.basis]}</span></p>
             <Example percent={c.percent} basis={c.basis} />
-            <p className="m-0 text-[12px] text-admin-muted">Aturan dibekukan saat invoice terbit: perubahan setelan hanya berlaku untuk booking baru.</p>
+            <p className="m-0 text-[12px] text-admin-muted">
+              {data?.configured
+                ? c.basis === 'markup'
+                  ? `Harga otomatis semua produk memakai margin bawaan ditambah ${pct(c.percent)} untuk Platform Provider; harga manual tidak berubah.`
+                  : 'Harga jual tidak berubah; bagian dihitung dari margin (jual − modal).'
+                : 'Belum berlaku: harga dan invoice baru memakai bagi hasil setelah akun Platform Provider ditetapkan.'}
+              {' '}Aturan dibekukan saat invoice terbit: perubahan setelan hanya berlaku untuk booking baru.
+            </p>
           </Card>
         )}
       </div>

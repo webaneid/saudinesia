@@ -2196,33 +2196,39 @@ model BookingRevision {
 /// Nomor dari `allocateInvoiceNumber` (tanpa lompat). Pajak, profil perusahaan, rekening, dan S&K DIBEKUKAN saat terbit — perubahan setelan tak mengubah invoice lama.
 /// Harga item TIDAK disalin ke sini: baris dan subtotal tetap dari `price_snapshots` (invarian I4); di sini hanya yang di atas subtotal (pajak) dan kop dokumen.
 model Invoice {
-  id              String   @id @default(uuid())
-  bookingId       String   @unique
-  number          String   @unique @db.VarChar(80)
-  sequenceKey     String   @db.VarChar(8) // kunci penghitung: tahun zona aplikasi (reset tahunan) atau 'all'
-  sequence        Int
-  issuedAt        DateTime @db.Timestamptz(3)
-  invoiceDate     DateTime @db.Date // tanggal tampil (zona aplikasi saat terbit)
-  dueDate         DateTime @db.Date // jatuh tempo = saran, tak mengikat (D4)
-  revision        Int      @default(1) // dinaikkan tiap edit setelah terbit (Fase 6b)
-  linkVersion     Int      @default(1) // versi tautan publik (Fase 6c); dinaikkan = tautan lama dicabut
+  id                    String             @id @default(uuid())
+  bookingId             String             @unique
+  number                String             @unique @db.VarChar(80)
+  sequenceKey           String             @db.VarChar(8) // kunci penghitung: tahun zona aplikasi (reset tahunan) atau 'all'
+  sequence              Int
+  issuedAt              DateTime           @db.Timestamptz(3)
+  invoiceDate           DateTime           @db.Date // tanggal tampil (zona aplikasi saat terbit)
+  dueDate               DateTime           @db.Date // jatuh tempo = saran, tak mengikat (D4)
+  revision              Int                @default(1) // dinaikkan tiap edit setelah terbit (Fase 6b)
+  linkVersion           Int                @default(1) // versi tautan publik (Fase 6c); dinaikkan = tautan lama dicabut
   /// Baris pajak beku: [{ name, ratePercent, basisPercent, mode: 'added'|'included', amountIdr }] — dihitung lib/invoice/tax.ts dari Σ snapshot.
-  taxLines        Json     @default("[]")
-  taxAddedIdr     Decimal  @default(0) @db.Decimal(14, 2) // pajak yang DITAMBAHKAN ke tagihan
-  taxIncludedIdr  Decimal  @default(0) @db.Decimal(14, 2) // porsi pajak di DALAM harga (hanya ditampilkan)
+  taxLines              Json               @default("[]")
+  taxAddedIdr           Decimal            @default(0) @db.Decimal(14, 2) // pajak yang DITAMBAHKAN ke tagihan
+  taxIncludedIdr        Decimal            @default(0) @db.Decimal(14, 2) // porsi pajak di DALAM harga (hanya ditampilkan)
   /// Kop beku: { name, taxId, address, phone, email, website } — data perusahaan, bukan data pribadi pelanggan. Logo dibaca terkini (merek, bukan data tagihan).
-  companySnapshot Json
+  companySnapshot       Json
   /// Rekening tujuan beku: [{ bankName, accountNumber, accountHolder, branch }].
-  bankSnapshot    Json     @default("[]")
-  termsDoc        String?  @db.Text
-  footerNoteDoc   String?  @db.Text
-  issuedById      String? // staf yang menerbitkan (tanpa FK, pola byUserId); NULL = jalur jamaah / migrasi
+  bankSnapshot          Json               @default("[]")
+  termsDoc              String?            @db.Text
+  footerNoteDoc         String?            @db.Text
+  issuedById            String? // staf yang menerbitkan (tanpa FK, pola byUserId); NULL = jalur jamaah / migrasi
   /// Kode unik transfer (Fase 7b-3): dialokasikan sekali oleh lib/invoice/issue.ts bila setelan aktif, beku (revisi tak mengubah). NULL = tanpa kode.
-  uniqueCode      Int?
-  createdAt       DateTime @default(now()) @db.Timestamptz(3)
-  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+  uniqueCode            Int?
+  /// Bagi hasil Platform Provider BEKU saat terbit (Fase 13b, P4): NULL = tidak ada bagi hasil (belum ada akun Platform Provider aktif / invoice lama).
+  /// `revenueShareSettingId` NULL dengan persen terisi = bawaan (belum ada versi tersimpan). CHECK: persen & dasar keduanya ada atau keduanya NULL.
+  revenueSharePercent   Decimal?           @db.Decimal(5, 2)
+  revenueShareBasis     RevenueShareBasis?
+  revenueShareSettingId String?
+  createdAt             DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt             DateTime           @updatedAt @db.Timestamptz(3)
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  booking             Booking              @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  revenueShareSetting RevenueShareSetting? @relation(fields: [revenueShareSettingId], references: [id], onDelete: Restrict)
 
   @@unique([sequenceKey, sequence])
   @@map("invoices")
@@ -2411,8 +2417,23 @@ model RevenueShareSetting {
   createdById String
   createdAt   DateTime          @default(now()) @db.Timestamptz(3)
 
-  createdBy User @relation("RevenueShareSettingAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdBy User      @relation("RevenueShareSettingAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  invoices  Invoice[]
 
   @@index([createdAt, id])
   @@map("revenue_share_settings")
+}
+
+/// Aturan bagi hasil yang terakhir DITERAPKAN ke harga otomatis (Fase 13b): satu baris 'global'. Ditulis HANYA lib/revenue-share/pricing.ts setelah putaran hitung ulang;
+/// kunci berbeda dengan aturan berlaku → hitung ulang (boot, cron 10 menit, sesudah setelan disimpan). Invoice MEMBEKUKAN aturan di baris ini (bukan setelan terbaru),
+/// supaya aturan beku selalu sama dengan aturan yang membentuk harga yang dijual (SEC-279). Tanpa baris = belum diterapkan = tanpa bagi hasil.
+model RevenueSharePricingState {
+  id        String             @id
+  ruleKey   String             @db.VarChar(40) // 'none' | '<persen>:<dasar>'
+  percent   Decimal?           @db.Decimal(5, 2)
+  basis     RevenueShareBasis?
+  settingId String? // versi setelan (NULL = bawaan); tanpa FK — jejak saja
+  appliedAt DateTime           @db.Timestamptz(3)
+
+  @@map("revenue_share_pricing_state")
 }
