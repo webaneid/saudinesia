@@ -8,6 +8,7 @@ import { checkTransaction, createDirect, ipaymuFromEnv, IpaymuError, listChannel
 import { confirmSeats, seatInclude } from '@/lib/payments/process'
 import { ensureGatewayCashAccount } from '@/lib/cash/accounts'
 import { postEntries, splitPaymentCredit } from '@/lib/cash/ledger'
+import { syncRevenueShare } from '@/lib/revenue-share/entitlement'
 import { appUrl } from '@/lib/email/templates'
 import { calendarDateOf, dateInApp, endOfDayExclusiveInApp, todayInApp } from '@/lib/time'
 import { notify } from '@/lib/notifications/notify'
@@ -202,6 +203,7 @@ async function confirmGatewayPayment(paymentId: string, st: TrxStatus, minimumFi
     // Kredit dipecah seperti verifikasi manual (pokok/ppn/kelebihan); biaya layanan = pemasukan terpisah (D15); MDR yang dipotong iPaymu = uang keluar.
     await postEntries(tx, { ...src, direction: 'in' }, [...splitPaymentCredit({ amount: credit, balanceBefore: live ? before.balance : 0, grandTotal: before.grandTotal, taxAdded: before.taxAdded }), { component: 'biaya_layanan', amountIdr: serviceFee }])
     await postEntries(tx, { ...src, direction: 'out' }, [{ component: 'mdr', amountIdr: st.fee }])
+    await syncRevenueShare(tx, booking.id, { source: 'payment', refId: p.id }) // hak bagi hasil (P5) — juga uang yang masuk sesudah batal (turun lagi saat direfund)
     const after = paymentLimits({ grandTotal: before.grandTotal, paid: before.paid + credit }, minimumFirstPaymentPercent)
     let seatConfirmed = false
     // Kursi hanya untuk booking yang masih hidup; uang yang masuk ke booking batal/hangus tetap tercatat (K9-4) dan dikembalikan lewat refund.

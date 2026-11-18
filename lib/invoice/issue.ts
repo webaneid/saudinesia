@@ -8,6 +8,7 @@ import { billOf, billRefunds } from './bill'
 import { computeTax, type TaxRuleInput, type TaxResult } from './tax'
 import { SETTINGS_ID } from './settings'
 import { revenueShareForIssue } from '@/lib/revenue-share/settings'
+import { syncRevenueShare } from '@/lib/revenue-share/entitlement'
 
 // Penerbitan invoice (docs/arsitektur-booking-engine-v2.md §10.4 Fase 6a) — SATU-SATUNYA penulis tabel `invoices`. Dipanggil di transaksi yang SAMA dengan penerbitan booking
 // (terbit draf admin, `POST /bookings` jamaah): rollback membatalkan nomor (tanpa lompat), pajak, dan jatuh tempo bersama-sama.
@@ -133,6 +134,8 @@ export async function reviseInvoice(tx: Tx, bookingId: string, opts: { invoiceDa
     select: { revision: true },
   })
   await tx.booking.update({ where: { id: bookingId }, data: { paymentDeadline: new Date(endOfDayExclusiveInApp(dueDate).getTime() - 1) } })
+  // Revisi dan penyesuaian total mengubah potensi/tagihan → hak bagi hasil direkonsiliasi (Fase 13c; pemanggil sudah mengunci booking).
+  await syncRevenueShare(tx, bookingId, { source: 'revision', refId: `${bookingId}:r${next.revision}` })
   return { revision: next.revision, taxBefore: Number(inv.taxAddedIdr), taxAfter: tax.addedIdr }
 }
 

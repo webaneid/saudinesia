@@ -3681,3 +3681,24 @@ Akun Platform Provider adalah **akun bayangan**: penandanya `users.isPlatformPro
 - Markup dikurangi diskon: ditolak, karena diskon keputusan klien. Bisa ditinjau pemilik.
 
 **Security check:** subagen `security-auditor` menemukan 0 Critical/High, 1 Medium (SEC-279) dan 3 Low (SEC-280..282). Semuanya diperbaiki dan diuji. `bun audit` tidak berubah (2 high, 4 moderate, 1 low).
+
+## 2026-11-18 — Fase 13c: hak bagi hasil dari pembayaran berhasil (rekonsiliasi)
+**Decision:** Hak bagi hasil Platform Provider disimpan di `revenue_share_entries` (append-only lewat trigger, satu penulis `lib/revenue-share/entitlement.ts`). Setiap kali terbayar atau tagihan berubah, `syncRevenueShare` menghitung target = potensi × min(1, terbayar ÷ tagihan) dan menulis SATU entri bertanda = target − Σ tercatat. Fungsi ini dipanggil di dalam kunci booking dan transaksi yang sama di empat jalur:
+- konfirmasi pembayaran manual;
+- konfirmasi lewat gateway (termasuk uang yang masuk ke booking batal);
+- refund dibayar;
+- `reviseInvoice` (revisi dan atur total).
+
+Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
+
+**Rationale:**
+- Rekonsiliasi menjamin hak tak pernah melebihi potensi, kelebihan bayar tak menambah hak, dan revisi, diskon, maupun refund terkoreksi sendiri. Delta per kejadian rawan selisih.
+- Terbayar dan tagihan dibaca lewat `billOf`, satu sumber dengan konfirmasi pembayaran, jadi PPN dan kode unik tidak ikut.
+- Booking batal: hak mengikuti uang yang masih ditahan klien.
+
+**Alternatives considered:**
+- Delta proporsional per pembayaran sesuai rumus awal §4: tidak menangani revisi atau penyesuaian tanpa entri koreksi terpisah.
+- Hak hanya saat lunas: bertentangan dengan P5 ("dihitung bila pembayaran berhasil").
+- Menyimpan hak di kolom booking: tidak berjejak dan tidak append-only.
+
+**Security check:** subagen `security-auditor` menemukan 0 Critical/High/Medium dan 3 Low (SEC-283..285). Semuanya diperbaiki dan diuji. `bun audit` tidak berubah (2 high, 4 moderate, 1 low).

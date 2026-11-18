@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { resolveCashTarget, type CashTarget } from '@/lib/cash/accounts'
 import { postEntries } from '@/lib/cash/ledger'
+import { syncRevenueShare } from '@/lib/revenue-share/entitlement'
 
 // Refund — SATU penulis tabel `refunds` (Fase 7b-2a, docs/arsitektur-booking-engine-v2.md §10.10). Siklus: pending → approved → paid | rejected.
 // Setiap operasi mengunci baris booking dulu lalu membaca ulang di dalam kunci; uang keluar (paid) memosting entri buku kas `refund` di transaksi yang sama.
@@ -145,6 +146,7 @@ export async function payRefund(refundId: string, input: { byUserId: string; cas
     if (!cashAccountId) return { kind: 'needs_account' as const }
     await tx.refund.update({ where: { id: r.id }, data: { status: 'paid', paidAt: input.paidAt, paidById: input.byUserId, cashAccountId, ...(input.notes ? { notes: input.notes } : {}), ...(input.recipient ? recipientData(input.recipient) : {}) } })
     await postEntries(tx, { refType: 'refund', refId: r.id, direction: 'out', cashAccountId, entryDate: input.paidAt, bookingId: r.bookingId, createdById: input.byUserId }, [{ component: 'refund', amountIdr: r.amount }])
+    await syncRevenueShare(tx, r.bookingId, { source: 'refund', refId: r.id }) // uang kembali → hak bagi hasil turun proporsional
     return { kind: 'done' as const }
   })
 }

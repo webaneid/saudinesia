@@ -111,13 +111,43 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
   - Juga: `test-revenue-share` (TRUNCATE CASCADE di transaksi batal) dan `test-pricing-phase0` (bentuk `resolveMarginRule`).
 - Security: subagen menemukan 0 Critical/High, 1 Medium, 3 Low (SEC-279..282). Semua ditutup di fase ini.
 
+## 5c. 13c — SELESAI (as-built 2026-11-18)
+
+- **Rekonsiliasi, bukan delta per kejadian:** satu fungsi `syncRevenueShare(tx, bookingId, { source, refId })` (`lib/revenue-share/entitlement.ts`) dipanggil di dalam kunci booking setiap kali terbayar atau tagihan berubah. Langkahnya:
+  1. Hitung target hak = `bulat(potensi × min(1, max(0, terbayar ÷ tagihan)))`. Terbayar dan tagihan dibaca lewat `billOf` (konfirmasi − refund dibayar; subtotal + pajak ditambahkan), potensi lewat `bookingSharePotential`.
+  2. Tulis SATU entri bertanda = target − Σ entri tercatat, bila tidak nol.
+  - Karena itu hak tak pernah melebihi potensi, kelebihan bayar tidak menambah hak, dan revisi otomatis terkoreksi.
+- **Pemicu (semuanya sudah memegang kunci booking):**
+  - `processPayment` konfirmasi → `payment`/id;
+  - `confirmGatewayPayment` (termasuk uang yang masuk sesudah batal) → `payment`/id;
+  - `payRefund` → `refund`/id;
+  - `reviseInvoice` (revisi dan penyesuaian total) → `revision`/`<booking>:r<revisi>`.
+  - Penolakan pembayaran tidak mengubah apa pun.
+- **Tabel `revenue_share_entries`** (append-only lewat trigger): `bookingId` (FK Restrict), `source` (`payment|refund|revision|completion`), `refId`, `amountIdr` bertanda, plus `potentialIdr`/`paidRatio`/`entitledIdr` sesudah entri (jejak), `createdAt`. UNIQUE `(source, refId)`. Tidak ada PII atau teks bebas.
+- **Booking batal:** hak mengikuti uang yang masih ditahan klien (keputusan "tahan" = hak tetap; refund dibayar = hak turun).
+- **Tampilan:** kotak "Bagi hasil Platform Provider" di detail booking admin berisi potensi, hak, dan persen terbayar, **hanya untuk superadmin** (sejalan SEC-281). Ringkasan Pendapatan dan pencairan ada di 13e.
+- **As-built:**
+  - Hitungan:
+    - Target dihitung EKSAK dengan BigInt atas sen bulat, dibulatkan setengah ke atas (SEC-284). `paidRatio` 6 desimal hanya sebagai jejak.
+    - Penyebab yang sama yang perlu koreksi lagi diberi akhiran `#<jumlah entri booking>` (selalu naik; SEC-283).
+    - CHECK `amountIdr ≠ 0`, `0 ≤ entitledAfter ≤ potential`, `0 ≤ rasio ≤ 1`.
+    - Revisi yang menurunkan potensi menghasilkan entri negatif.
+  - Pengujian:
+    - Diverifikasi di browser (DB audit): bukti transfer jamaah 10.000.000 atas tagihan 23.950.000 dengan potensi 957.500, lalu verifikasi admin → hak 399.791,23 (41,75%).
+    - Uji `scripts/test-revenue-share-entitlement.ts` mencakup: tanpa aturan, bayar sebagian/lunas/lebih, idempoten, refund, atur total, dasar margin + entri negatif, akhiran cadangan, angka besar, DB, dan penjaga sumber. Pembersihan ada di `finally` dan diikuti hitung ulang harga (SEC-285).
+    - Jalur gateway dijaga oleh penjaga sumber saja (belum ada uji integrasi iPaymu untuk hak).
+  - Security: subagen menemukan 0 Critical/High/Medium dan 3 Low (SEC-283..285), semuanya ditutup.
+  - **Catatan untuk pemilik:**
+    - Uang yang masuk ke booking yang sudah batal menaikkan hak sampai refundnya dibayar.
+    - Superadmin klien dapat melihat potensi dan hak per booking.
+
 ## 6. Fase (satu PR per sub-fase)
 
 | Sub | Isi |
 |---|---|
 | 13a | `isPlatformProvider` + skrip, `revenue_share_settings` (bawaan 5% opsi yang dipilih pemilik), halaman Platform Provider tab Informasi + Setelan, `requirePlatformProvider` |
 | 13b | **SELESAI 2026-11-18** — beku ke invoice (aturan yang diterapkan ke harga) + potensi diturunkan dari snapshot; opsi (2) masuk `resolveMarginRule` + penyelaras harga (§5b) |
-| 13c | `revenue_share_entries`: hak saat pembayaran terverifikasi (manual + gateway), refund, revisi; potensi vs hak |
+| 13c | **SELESAI 2026-11-18** — `revenue_share_entries`: hak saat pembayaran terverifikasi (manual + gateway), refund, revisi; potensi vs hak (§5c) |
 | 13d | Tandai selesai (status `completed` pertama kali ditulis) + koreksi opsi (1) bila Q1 = aktual |
 | 13e | Rekening Platform Provider, pencairan lewat buku kas (`bagi_hasil`), tab Pendapatan + CSV |
 

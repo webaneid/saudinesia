@@ -17,6 +17,7 @@ import type { BookingDraft } from '@/lib/validators/booking'
 import { currentRevenueShare, effectiveRevenueShare, revenueShareForIssue, revenueShareRuleKey, saveRevenueShare } from '@/lib/revenue-share/settings'
 import { bookingSharePotential, lineShareCents, sharePotential } from '@/lib/revenue-share/potential'
 import { ensurePricesFollowRevenueShare } from '@/lib/revenue-share/pricing'
+import { refreshAllPricingCaches } from '@/lib/pricing/refreshAll'
 
 await assertThrowawayDb()
 
@@ -193,6 +194,7 @@ await prisma.revenueSharePricingState.deleteMany({})
 for (const s of savedState) await prisma.revenueSharePricingState.create({ data: s })
 await prisma.pricingRule.deleteMany({})
 for (const r of savedRules) await prisma.pricingRule.create({ data: { productType: r.productType, defaultMarginPercent: r.defaultMarginPercent, roundingIncrement: r.roundingIncrement, warnBelowPercent: r.warnBelowPercent } })
+await refreshAllPricingCaches() // harga produk lain kembali tanpa poin uji (penyelaras menghitung ulang SEMUA harga selama uji)
 console.log(failed ? `\n${failed} GAGAL` : '\nSEMUA LULUS')
 await prisma.$disconnect()
 process.exit(failed ? 1 : 0)

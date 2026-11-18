@@ -841,27 +841,28 @@ model Booking {
   user        User  @relation(fields: [userId], references: [id])
   confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
 
-  groups         BookingGroup[]
-  pilgrims       BookingPilgrim[]
-  tripDocuments  PilgrimDocument[]
-  hotels         BookingHotel[]
-  transports     BookingTransport[]
-  flights        BookingFlight[]
-  muthowif       BookingMuthowif[]
-  catering       BookingCatering[]
-  tourPackages   BookingTourPackage[]
-  services       BookingService[]
-  haji           BookingHaji[]
-  packages       BookingPackage[]
-  priceSnapshots PriceSnapshot[]
-  adjustments    BookingAdjustment[]
-  costActuals    CostActual[]
-  payments       Payment[]
-  refunds        Refund[]
-  cancellation   BookingCancellation?
-  notifications  NotificationLog[]
-  invoice        Invoice?
-  revisions      BookingRevision[]
+  groups              BookingGroup[]
+  pilgrims            BookingPilgrim[]
+  tripDocuments       PilgrimDocument[]
+  hotels              BookingHotel[]
+  transports          BookingTransport[]
+  flights             BookingFlight[]
+  muthowif            BookingMuthowif[]
+  catering            BookingCatering[]
+  tourPackages        BookingTourPackage[]
+  services            BookingService[]
+  haji                BookingHaji[]
+  packages            BookingPackage[]
+  priceSnapshots      PriceSnapshot[]
+  adjustments         BookingAdjustment[]
+  costActuals         CostActual[]
+  payments            Payment[]
+  refunds             Refund[]
+  revenueShareEntries RevenueShareEntry[]
+  cancellation        BookingCancellation?
+  notifications       NotificationLog[]
+  invoice             Invoice?
+  revisions           BookingRevision[]
 
   @@index([userId])
   @@index([status])
@@ -2422,6 +2423,36 @@ model RevenueShareSetting {
 
   @@index([createdAt, id])
   @@map("revenue_share_settings")
+}
+
+/// Hak bagi hasil Platform Provider per booking (Fase 13c): APPEND-ONLY (trigger DB). Ditulis HANYA lib/revenue-share/entitlement.ts (rekonsiliasi: entri = target − Σ tercatat).
+/// Tanpa PII / teks bebas. Kolom `*After` = jejak keadaan sesudah entri.
+enum RevenueShareSource {
+  payment
+  refund
+  revision
+  completion
+
+  @@map("revenue_share_source")
+}
+
+model RevenueShareEntry {
+  id               String             @id @default(uuid())
+  bookingId        String
+  source           RevenueShareSource
+  refId            String             @db.VarChar(80)
+  amountIdr        Decimal            @db.Decimal(14, 2) // bertanda: + hak, − koreksi
+  potentialIdr     Decimal            @db.Decimal(14, 2) // potensi saat entri
+  paidRatio        Decimal            @db.Decimal(7, 6) // terbayar ÷ tagihan (0..1)
+  entitledAfterIdr Decimal            @db.Decimal(14, 2) // Σ hak booking sesudah entri
+  createdAt        DateTime           @default(now()) @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+
+  @@unique([source, refId])
+  @@index([bookingId, createdAt])
+  @@index([createdAt, id])
+  @@map("revenue_share_entries")
 }
 
 /// Aturan bagi hasil yang terakhir DITERAPKAN ke harga otomatis (Fase 13b): satu baris 'global'. Ditulis HANYA lib/revenue-share/pricing.ts setelah putaran hitung ulang;

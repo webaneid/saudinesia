@@ -7,6 +7,7 @@ import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { resolveCashTarget, type CashTarget } from '@/lib/cash/accounts'
 import { postEntries, splitPaymentCredit } from '@/lib/cash/ledger'
+import { syncRevenueShare } from '@/lib/revenue-share/entitlement'
 
 // Konfirmasi / penolakan pembayaran oleh admin (satu-satunya pemroses). Dalam SATU transaksi yang mengunci baris booking, status payment/booking DIBACA ULANG di dalam kunci: konfirmasi/penolakan
 // ganda atau paralel (dua admin, dobel klik) tak boleh menimpa jumlah yang sudah final, menjalankan konfirmasi kuota dua kali, menghidupkan booking yang sudah batal, atau membuka penyesuaian total
@@ -77,6 +78,7 @@ export async function processPayment(paymentId: string, input: ProcessInput): Pr
       await tx.payment.update({ where: { id: paymentId }, data: { status: 'confirmed', amount: verified, uniqueCodeIdr, notes: input.notes ?? null, confirmedById: input.byUserId, confirmedAt: now, destinationCashAccountId: cashAccountId } })
       await postEntries(tx, { refType: 'payment', refId: payment.id, direction: 'in', cashAccountId, entryDate: payment.transferredAt ?? now, bookingId: booking.id, createdById: input.byUserId },
         [...splitPaymentCredit({ amount: verified, balanceBefore: before.balance, grandTotal: before.grandTotal, taxAdded: before.taxAdded }), { component: 'kode_unik', amountIdr: uniqueCodeIdr }])
+      await syncRevenueShare(tx, booking.id, { source: 'payment', refId: payment.id }) // hak bagi hasil hanya dari pembayaran berhasil (P5)
       const after = paymentLimits({ grandTotal: before.grandTotal, paid: before.paid + verified }, minimumFirstPaymentPercent)
       balance = after.balance
       if (booking.confirmedAt === null && after.dpMet) {
