@@ -226,9 +226,9 @@ await t('BESAR (SEC-284): potensi Rp 2 miliar × terbayar ÷ tagihan triliunan t
 })
 
 const SRC = [...files('app'), ...files('components'), ...files('lib')]
-await t('PENJAGA: penulis tunggal revenue_share_entries; sinkron di empat jalur uang/tagihan; kotak hanya superadmin; entri tanpa teks bebas', () => {
+await t('PENJAGA: penulis tunggal revenue_share_entries; sinkron di empat jalur uang/tagihan + Tandai selesai/Buka kembali (13d); kotak hanya superadmin; entri tanpa teks bebas', () => {
   assert.deepEqual(SRC.filter(f => /revenueShareEntry\.(create|createMany|update|updateMany|upsert|delete|deleteMany)\(|(INSERT INTO|UPDATE|DELETE FROM|TRUNCATE)\s+"?revenue_share_entries/.test(read(f))), ['lib/revenue-share/entitlement.ts'])
-  assert.deepEqual(SRC.filter(f => /await syncRevenueShare\(tx/.test(read(f))).sort(), ['lib/invoice/issue.ts', 'lib/payments/gateway.ts', 'lib/payments/process.ts', 'lib/refunds/service.ts'])
+  assert.deepEqual(SRC.filter(f => /await syncRevenueShare\(tx/.test(read(f))).sort(), ['lib/booking/completion.ts', 'lib/invoice/issue.ts', 'lib/payments/gateway.ts', 'lib/payments/process.ts', 'lib/refunds/service.ts'])
   assert.match(read('lib/payments/process.ts'), /postEntries\([\s\S]*?\n\s*await syncRevenueShare\(tx, booking\.id, \{ source: 'payment', refId: payment\.id \}\)/)
   assert.match(read('lib/payments/gateway.ts'), /await syncRevenueShare\(tx, booking\.id, \{ source: 'payment', refId: p\.id \}\)/)
   assert.match(read('lib/refunds/service.ts'), /await syncRevenueShare\(tx, r\.bookingId, \{ source: 'refund', refId: r\.id \}\)/)

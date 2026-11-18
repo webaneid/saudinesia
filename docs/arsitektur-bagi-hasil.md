@@ -141,6 +141,77 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
     - Uang yang masuk ke booking yang sudah batal menaikkan hak sampai refundnya dibayar.
     - Superadmin klien dapat melihat potensi dan hak per booking.
 
+
+## 5d. 13d — SELESAI (as-built 2026-11-19)
+
+**Recheck kode (2026-11-19):**
+- Masih tak ada kode yang menulis `Booking.status = 'completed'`. Yang mengenal status itu hanya:
+  - `lifecycle.ts` (status tampilan);
+  - laporan untung ("recognized");
+  - periode hotel;
+  - label invoice "LUNAS".
+- Revisi dan atur total hanya untuk `active`. Pembayaran juga hanya `active` (`isOpenForPayment`).
+- Refund tetap boleh pada booking selesai (kelebihan bayar) dan sudah memanggil `syncRevenueShare`.
+- Pengeluaran vendor (`lib/costs/actuals.ts`) boleh pada booking non-draf dan TIDAK mengunci baris booking.
+
+**Tandai selesai** (`lib/booking/completion.ts`, satu-satunya penulis status `completed`):
+- Peran: semua admin (`canManageBookings`).
+- Dikerjakan dalam satu transaksi yang mengunci booking. Syarat dibaca ulang di dalam kunci:
+  1. status `active` dan sudah dikonfirmasi;
+  2. lunas (terbayar ≥ tagihan, `billOf`);
+  3. tak ada bukti transfer `pending` dan tak ada pembayaran gateway `awaiting`;
+  4. tanggal pulang (atau tanggal berangkat bila pulang kosong) ≤ hari ini di zona aplikasi; tanpa tanggal = boleh.
+- Syarat dinilai fungsi murni `completionBlockers` (dipakai server dan tampilan).
+- Kolom `Booking.completedAt`/`completedById` diisi.
+- Satu baris `booking_completion_events` ditulis: append-only, aksi `complete`/`reopen`, pelaku, dan potensi beku. Tanpa teks bebas.
+- `syncRevenueShare(…, { source: 'completion', refId: <id event> })` dipanggil.
+
+**Koreksi opsi (1) margin (Q1):**
+- Saat selesai, potensi dihitung ulang memakai pengeluaran vendor aktual lewat fungsi murni `finalSharePotential`, lalu DIBEKUKAN di event `complete`:
+  - modal tiap baris rencana = Σ pengeluaran aktif yang merujuknya bila ada, selain itu modal rencana;
+  - pengeluaran tanpa baris (atau pada baris yang sudah di-void) mengurangi margin;
+  - hasil tetap ≥ 0.
+- Opsi (2) markup tidak dikoreksi; potensinya tetap.
+- Selama booking `completed`, `bookingSharePotential` memakai potensi beku event `complete` terakhir. Refund sesudah selesai menghitung hak dari angka itu.
+- Pengeluaran yang dicatat SESUDAH selesai tidak mengubah hak. Admin perlu **Buka kembali** lalu tandai selesai lagi. Pilihan ini sengaja diambil: koreksi hanya terjadi saat "Tandai selesai" sesuai Q1, dan pengeluaran tak perlu mengunci booking.
+
+**Buka kembali** (CRUD — "manusia bisa salah"):
+- Hanya manager/superadmin.
+- Status kembali `active`, `completedAt` dikosongkan.
+- Event `reopen` ditulis, lalu sinkron hak dengan potensi rencana.
+
+**UI:** kotak "Penyelesaian" di detail booking:
+- tombol Tandai selesai dengan konfirmasi dua langkah (`useConfirm`);
+- daftar alasan bila belum bisa;
+- "Selesai pada … oleh …" + Buka kembali.
+
+**Route:** `POST /api/v1/admin/bookings/[id]/completion` dengan body `{ action: 'complete' | 'reopen' }`, divalidasi `.strict()`.
+
+**As-built (berbeda dari rencana di atas, sesudah audit):**
+- Potensi akhir dibekukan di kolom `Booking.completedPotentialIdr`, bukan dibaca dari event terakhir. Urutan event bisa bergantung waktu mulai transaksi; kolom ini tidak. Event tetap mencatat angka yang sama sebagai jejak.
+- CHECK `bookings_completed_shape` menjamin:
+  - penanda hanya pada `completed`;
+  - pelaku dan potensi beku hanya bersama penanda;
+  - potensi ≥ 0.
+- **Buka kembali** membaca akun pemilik `FOR SHARE` di dalam kunci (pola terbit draf). Akun terhapus (UU PDP) atau nonaktif → 409 `owner_unavailable`. Alasannya, booking selesai tak menahan penghapusan akun, jadi membukanya kembali akan menghidupkan jalur yang menerima PII jamaah baru.
+- `GET /api/v1/bookings/[id]` (jamaah) membuang `completedById` dan `completedPotentialIdr` (pola SEC-120).
+- Kalimat bagi hasil di dialog konfirmasi hanya tampil untuk superadmin. Nama penanda selesai yang merupakan akun Platform Provider tampil "Sistem" bagi staf klien.
+- Uji `scripts/test-booking-completion.ts` mencakup:
+  - syarat murni;
+  - potensi akhir murni;
+  - peran;
+  - penolakan server;
+  - booking tanpa aturan;
+  - markup tanpa koreksi + atur total ditolak;
+  - margin + aktual: koreksi −7.500, beku terhadap pengeluaran susulan, buka kembali +7.500, selesai lagi 7.500;
+  - buka kembali akun terhapus/nonaktif;
+  - DB;
+  - penjaga sumber.
+- Security: subagen menemukan 0 Critical/High, 1 Medium, dan 5 Low (SEC-286..291), semuanya ditutup.
+- **Catatan untuk pemilik:**
+  - Pengeluaran vendor yang dicatat tepat bersamaan dengan Tandai selesai mungkin tak ikut terhitung. Pengeluaran sesudah selesai sengaja tak mengubah hak; gunakan Buka kembali lalu tandai selesai lagi.
+  - Admin (bukan hanya manager) boleh menandai selesai sebelum manager mencatat pengeluaran aktual. Bila perlu, peran ini bisa diperketat di `lib/booking/policy.ts`.
+
 ## 6. Fase (satu PR per sub-fase)
 
 | Sub | Isi |
@@ -148,7 +219,7 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
 | 13a | `isPlatformProvider` + skrip, `revenue_share_settings` (bawaan 5% opsi yang dipilih pemilik), halaman Platform Provider tab Informasi + Setelan, `requirePlatformProvider` |
 | 13b | **SELESAI 2026-11-18** — beku ke invoice (aturan yang diterapkan ke harga) + potensi diturunkan dari snapshot; opsi (2) masuk `resolveMarginRule` + penyelaras harga (§5b) |
 | 13c | **SELESAI 2026-11-18** — `revenue_share_entries`: hak saat pembayaran terverifikasi (manual + gateway), refund, revisi; potensi vs hak (§5c) |
-| 13d | Tandai selesai (status `completed` pertama kali ditulis) + koreksi opsi (1) bila Q1 = aktual |
+| 13d | **SELESAI 2026-11-19** — Tandai selesai / Buka kembali (status `completed` pertama kali ditulis) + koreksi opsi (1) dengan pengeluaran aktual, potensi akhir beku (§5d) |
 | 13e | Rekening Platform Provider, pencairan lewat buku kas (`bagi_hasil`), tab Pendapatan + CSV |
 
 ## 7. Keputusan (dijawab pemilik 2026-11-18)

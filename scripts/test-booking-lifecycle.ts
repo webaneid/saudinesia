@@ -287,7 +287,7 @@ await t('PENJAGA: draf tak pernah sampai ke jamaah (daftar, detail, API, invoice
   const del = cancel.slice(cancel.indexOf('export async function DELETE'))
   assert.match(del, /userId: session\.userId, status: \{ not: 'draft' \}/, 'DELETE: draf = 404 (SEC-120)')
   assert.ok(del.indexOf("status: { in: ['pending', 'confirmed'] }") > del.indexOf('FOR UPDATE'), 'DELETE: bukti menunggu / uang masuk → tolak, diperiksa DI DALAM kunci (SEC-119, 7b-2a)')
-  assert.match(cancel, /const \{ confirmedById: _staff, \.\.\.visible \} = booking/, 'GET: id staf tak dikirim ke jamaah (SEC-120)')
+  assert.match(cancel, /const \{ confirmedById: _staff, completedById: _completer, completedPotentialIdr: _share, \.\.\.visible \} = booking/, 'GET: id staf tak dikirim ke jamaah (SEC-120)')
   assert.ok(!/ok\(\{ \.\.\.booking,/.test(cancel), 'GET tak lagi menyebar baris booking mentah')
   const bukti = read('app/api/v1/bookings/[id]/payment/bukti/route.ts')
   assert.match(bukti, /FOR UPDATE/); assert.match(bukti, /if \(fresh\.status !== 'active'\) return 'closed'/); assert.match(bukti, /claimRefusal\(paymentLimits\(billOf\(fresh\)/) // Fase 7a F3: terbuka selama ada sisa, dinilai di dalam kunci

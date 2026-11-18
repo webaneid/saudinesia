@@ -6,7 +6,7 @@ import { bookingSharePotential } from './potential'
 // Rekonsiliasi, bukan delta per kejadian: target = potensi × min(1, terbayar ÷ tagihan); entri = target − Σ tercatat. Hak tak pernah melebihi potensi, kelebihan
 // bayar tak menambah hak, dan revisi/penyesuaian/refund terkoreksi sendiri. HARUS dipanggil di dalam transaksi yang sudah mengunci baris booking (FOR UPDATE).
 
-type Tx = Pick<Prisma.TransactionClient, 'booking' | 'invoice' | 'priceSnapshot' | 'revenueShareEntry'>
+type Tx = Pick<Prisma.TransactionClient, 'booking' | 'invoice' | 'priceSnapshot' | 'revenueShareEntry' | 'costActual'>
 const cents = (x: number | Prisma.Decimal): number => Math.round(Number(x) * 100)
 
 /** Target hak (sen) = potensi × terbayar ÷ tagihan, EKSAK (BigInt atas sen bulat, setengah ke atas — hasil kali sen melewati 2^53 pada tagihan besar, SEC-284)
@@ -20,21 +20,21 @@ export function entitlementTarget(potentialIdr: number, paidIdr: number, grandTo
   return { ratio: Math.round((capped / grand) * 1e6) / 1e6, targetCents: target }
 }
 
-export type ShareStatus = { potentialIdr: number; entitledIdr: number; paidRatio: number; percent: number | null; basis: 'margin' | 'markup' | null }
+export type ShareStatus = { potentialIdr: number; entitledIdr: number; paidRatio: number; percent: number | null; basis: 'margin' | 'markup' | null; final: boolean }
 
 async function read(tx: Tx, bookingId: string) {
   const b = await tx.booking.findUniqueOrThrow({
     where: { id: bookingId },
-    select: { totalAmount: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds },
+    select: { status: true, totalAmount: true, invoice: { select: { taxAddedIdr: true, taxIncludedIdr: true } }, payments: { where: { status: 'confirmed' }, select: { status: true, amount: true } }, refunds: billRefunds },
   })
   const bill = billOf(b)
   const { rule, potentialIdr } = await bookingSharePotential(tx, bookingId)
   const recorded = await tx.revenueShareEntry.aggregate({ where: { bookingId }, _sum: { amountIdr: true } })
-  return { bill, rule, potentialIdr, recordedCents: cents(recorded._sum.amountIdr ?? 0) }
+  return { bill, rule, potentialIdr, recordedCents: cents(recorded._sum.amountIdr ?? 0), final: b.status === 'completed' }
 }
 
 /** Sinkronkan hak satu booking sesudah uang/tagihan berubah. Mengembalikan entri yang ditulis (sen) atau 0. Idempoten per (source, refId). */
-export async function syncRevenueShare(tx: Tx, bookingId: string, cause: { source: Exclude<RevenueShareSource, 'completion'>; refId: string }): Promise<number> {
+export async function syncRevenueShare(tx: Tx, bookingId: string, cause: { source: RevenueShareSource; refId: string }): Promise<number> {
   const { bill, potentialIdr, recordedCents } = await read(tx, bookingId)
   const { ratio, targetCents } = entitlementTarget(potentialIdr, bill.paid, bill.grandTotal)
   const delta = targetCents - recordedCents
@@ -51,6 +51,6 @@ export async function syncRevenueShare(tx: Tx, bookingId: string, cause: { sourc
 
 /** Potensi vs hak satu booking — HANYA untuk tampilan superadmin (rincian bagi hasil internal, SEC-281). */
 export async function bookingShareStatus(tx: Tx, bookingId: string): Promise<ShareStatus> {
-  const { bill, rule, potentialIdr, recordedCents } = await read(tx, bookingId)
-  return { potentialIdr, entitledIdr: recordedCents / 100, paidRatio: entitlementTarget(potentialIdr, bill.paid, bill.grandTotal).ratio, percent: rule?.percent ?? null, basis: rule?.basis ?? null }
+  const { bill, rule, potentialIdr, recordedCents, final } = await read(tx, bookingId)
+  return { final, potentialIdr, entitledIdr: recordedCents / 100, paidRatio: entitlementTarget(potentialIdr, bill.paid, bill.grandTotal).ratio, percent: rule?.percent ?? null, basis: rule?.basis ?? null }
 }

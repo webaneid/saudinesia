@@ -944,7 +944,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] 13a — akun Platform Provider (`isPlatformProvider`, hanya lewat skrip) + versi setelan append-only + halaman Sistem → Platform Provider (2026-11-18)
   - [x] 13b — aturan beku di invoice (yang sudah diterapkan ke harga) + potensi diturunkan dari snapshot; opsi markup masuk `resolveMarginRule` + penyelaras harga (boot, cron 10 menit, sesudah simpan) (2026-11-18)
   - [x] 13c — hak bagi hasil (`revenue_share_entries` append-only, rekonsiliasi potensi × terbayar ÷ tagihan) dari konfirmasi pembayaran manual/gateway, refund dibayar, revisi/atur total + kotak potensi vs hak (superadmin) (2026-11-18)
-  - [ ] 13d — Tandai selesai + koreksi opsi margin dengan pengeluaran aktual
+  - [x] 13d — Tandai selesai / Buka kembali (status `completed` pertama kali ditulis, `booking_completion_events` append-only) + koreksi opsi margin dengan pengeluaran aktual, potensi akhir beku di booking (2026-11-19)
   - [ ] 13e — rekening Platform Provider, pencairan lewat buku kas (`bagi_hasil`), tab Pendapatan + CSV
 
 ## Kuota tanggal Transport lewat admin (`docs/arsitektur-transportasi.md` §10, 2026-11-06)

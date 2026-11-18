@@ -1,5 +1,5 @@
 import type { UserRole } from '@prisma/client'
-import { ADMIN_ROLES } from '@/lib/auth/roles'
+import { ADMIN_ROLES, MANAGER_ROLES } from '@/lib/auth/roles'
 import { requireSession, type SessionPayload } from '@/lib/auth/session'
 
 // SATU titik keputusan "siapa boleh mengelola booking" (docs/arsitektur-booking-engine-v2.md D16): untuk sementara semua peran admin boleh semuanya
@@ -9,5 +9,15 @@ export const canManageBookings = (role: UserRole): boolean => ADMIN_ROLES.includ
 export async function requireBookingManage(): Promise<SessionPayload> {
   const session = await requireSession()
   if (!canManageBookings(session.role)) throw new Error('Forbidden')
+  return session
+}
+
+/** Tandai selesai (Fase 13d): semua peran admin, sama dengan mengelola booking. Buka kembali: manager/superadmin (mengubah hak bagi hasil) — diperiksa di route sesudah aksi diketahui. */
+export const canCompleteBooking = (role: UserRole): boolean => canManageBookings(role)
+export const canReopenBooking = (role: UserRole): boolean => MANAGER_ROLES.includes(role)
+
+export async function requireBookingComplete(): Promise<SessionPayload> {
+  const session = await requireSession()
+  if (!canCompleteBooking(session.role)) throw new Error('Forbidden')
   return session
 }

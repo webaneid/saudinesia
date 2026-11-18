@@ -3702,3 +3702,29 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 - Menyimpan hak di kolom booking: tidak berjejak dan tidak append-only.
 
 **Security check:** subagen `security-auditor` menemukan 0 Critical/High/Medium dan 3 Low (SEC-283..285). Semuanya diperbaiki dan diuji. `bun audit` tidak berubah (2 high, 4 moderate, 1 low).
+
+## 2026-11-19 — Fase 13d: Tandai selesai / Buka kembali + koreksi bagi hasil margin
+**Decision:**
+- Status `completed` ditulis HANYA oleh `lib/booking/completion.ts`.
+- **Tandai selesai** boleh dilakukan semua admin, dengan syarat yang dinilai ulang di dalam kunci booking:
+  - aktif;
+  - dikonfirmasi;
+  - lunas;
+  - tanpa bukti atau VA/QRIS terbuka;
+  - tanggal pulang ≤ hari ini.
+- **Buka kembali** hanya untuk manager/superadmin, dan ditolak bila akun pemilik terhapus atau nonaktif.
+- Riwayat dicatat di `booking_completion_events` (append-only, tanpa teks bebas).
+- Dasar margin dikoreksi ke pengeluaran vendor aktual saat selesai. Potensi akhir DIBEKUKAN di `Booking.completedPotentialIdr`. Hak disinkronkan lewat `syncRevenueShare` dengan source `completion` di transaksi yang sama.
+- Dasar markup tidak dikoreksi.
+
+**Rationale:**
+- Q1 pemilik: koreksi ke untung akhir dilakukan saat Tandai selesai.
+- Pembekuan membuat hak tidak bergeser diam-diam oleh pengeluaran susulan dan tidak memaksa pengeluaran vendor mengunci booking. Koreksi ulang = Buka kembali lalu tandai selesai lagi.
+- Buka kembali ada karena prinsip "manusia bisa salah".
+
+**Alternatives considered:**
+- Potensi hidup (sinkron di setiap pengeluaran vendor sesudah selesai): pengeluaran harus mengunci booking dan ada jalur pemicu kelima.
+- Membaca potensi dari event terakhir: bergantung urutan waktu antar transaksi (SEC-289).
+- Selesai otomatis setelah tanggal pulang: bertentangan dengan P6 (manual).
+
+**Security check:** subagen `security-auditor` menemukan 0 Critical/High, 1 Medium, dan 5 Low (SEC-286..291). Semuanya diperbaiki dan diuji. `bun audit`: tanpa dependency baru; 6 advisory (1 high, 4 moderate, 1 low), satu high lebih sedikit dari baseline 13c karena basis data advisory, bukan perubahan fase ini.
