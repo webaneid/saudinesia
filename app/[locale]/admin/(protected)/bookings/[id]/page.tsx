@@ -30,6 +30,9 @@ import { refundableOf } from '@/lib/refunds/service'
 import { suggestedRefund } from '@/lib/booking/adminCancel'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
+import { RevenueShareBox } from './RevenueShareBox'
+import { bookingShareStatus } from '@/lib/revenue-share/entitlement'
+import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { DATE_LONG, DATE_NUMERIC, DATETIME_FULL, formatCalendarDate, formatInstant } from '@/lib/time'
 import { itemSellTotals, visaTierTexts } from '@/lib/pricing/engine/snapshot'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
@@ -361,6 +364,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
 
       {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
       <BookingPriceCard bookingId={id} status={st} />
+      {SUPERADMIN_ROLES.includes(session.role) && <RevenueShareBox s={await bookingShareStatus(prisma, id)} />}
       <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} refundsHref={`/${locale}/admin/finance/refunds`} />
       {booking.status === 'active' && canCancelBooking(session.role) && (
         <CancelBookingBox bookingId={id} paid={refundable.paid} suggested={suggestedRefund(refundable.paid, booking.departureDate)} canMoney={canMoney} pendingProof={!!pendingPayment} />

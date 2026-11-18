@@ -943,7 +943,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [ ] Fase 13 — Bagi Hasil Platform Provider (`docs/arsitektur-bagi-hasil.md`, rencana disetujui 2026-11-18: bawaan 5% tambah poin marjin; opsi bagi margin; beku saat terbit; hak hanya dari pembayaran berhasil; Tandai selesai manual; pencairan dicatat superadmin)
   - [x] 13a — akun Platform Provider (`isPlatformProvider`, hanya lewat skrip) + versi setelan append-only + halaman Sistem → Platform Provider (2026-11-18)
   - [x] 13b — aturan beku di invoice (yang sudah diterapkan ke harga) + potensi diturunkan dari snapshot; opsi markup masuk `resolveMarginRule` + penyelaras harga (boot, cron 10 menit, sesudah simpan) (2026-11-18)
-  - [ ] 13c — hak per pembayaran terverifikasi / refund / revisi (potensi vs hak)
+  - [x] 13c — hak bagi hasil (`revenue_share_entries` append-only, rekonsiliasi potensi × terbayar ÷ tagihan) dari konfirmasi pembayaran manual/gateway, refund dibayar, revisi/atur total + kotak potensi vs hak (superadmin) (2026-11-18)
   - [ ] 13d — Tandai selesai + koreksi opsi margin dengan pengeluaran aktual
   - [ ] 13e — rekening Platform Provider, pencairan lewat buku kas (`bagi_hasil`), tab Pendapatan + CSV
 
