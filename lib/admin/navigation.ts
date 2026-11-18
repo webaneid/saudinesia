@@ -82,6 +82,8 @@ export const LABEL_SEGMEN: Record<string, string> = {
   variance: 'Selisih HPP vs Aktual',
   finance: 'Keuangan',
   'platform-provider': 'Platform Provider',
+  accounts: 'Rekening',
+  payouts: 'Pencairan',
   'cash-book': 'Buku Kas',
   'cash-flow': 'Arus Kas',
   transfers: 'Transfer Antar Akun',

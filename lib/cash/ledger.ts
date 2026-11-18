@@ -6,7 +6,7 @@ type Tx = Prisma.TransactionClient
 // koreksi = entri pembalik. Posting idempoten lewat UNIQUE (refType, refId, component): memosting ulang sumber yang sama melempar P2002, bukan menggandakan uang.
 // Dipanggil HANYA di dalam transaksi pemilik sumbernya (verifikasi pembayaran, refund dibayar, pengeluaran vendor), sesudah baris sumber dikunci.
 
-export type CashRefType = 'payment' | 'refund' | 'cost_actual' | 'transfer_out' | 'transfer_in' // transfer: dua sumber per baris cash_transfers (UNIQUE refType+refId+komponen)
+export type CashRefType = 'payment' | 'refund' | 'cost_actual' | 'transfer_out' | 'transfer_in' | 'revenue_share_payout' // transfer: dua sumber per baris cash_transfers (UNIQUE refType+refId+komponen); pencairan bagi hasil (13e-1)
 export type CashLine = { component: CashComponent; amountIdr: number }
 
 const cents = (n: number) => Math.round(n * 100)

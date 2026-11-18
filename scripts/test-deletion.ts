@@ -655,6 +655,8 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'Refund.paidById': 'dipertahankan (staf yang membayar refund)',
     'CashTransfer.createdById': 'dipertahankan (staf yang mencatat transfer antar akun kas perusahaan; tak menyangkut pelanggan)',
     'CashTransfer.voidedById': 'dipertahankan (staf yang membatalkan transfer antar akun kas)',
+    'RevenueSharePayout.createdById': 'dipertahankan (superadmin yang mencatat pencairan bagi hasil ke Platform Provider; uang perusahaan, tak menyangkut pelanggan)',
+    'RevenueSharePayout.voidedById': 'dipertahankan (superadmin yang membatalkan pencairan bagi hasil)',
     'Booking.completedById': 'dipertahankan (staf yang menandai booking selesai, Fase 13d; tak pernah dikirim ke jamaah)',
     'BookingCompletionEvent.byUserId': 'dipertahankan (staf yang menandai selesai/membuka kembali; riwayat append-only tanpa teks bebas, tak menyangkut data pribadi pelanggan)',
     'RevenueShareSetting.createdById': 'dipertahankan (akun Platform Provider yang menyimpan versi kesepakatan bagi hasil; riwayat append-only, tak menyangkut pelanggan)',

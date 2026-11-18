@@ -27,6 +27,8 @@ const MODULES: Array<{ list: string; news: string[] }> = [
   { list: 'customers', news: ['customers/new'] },
   { list: 'finance/refunds', news: ['finance/refunds/new'] },
   { list: 'finance/transfers', news: ['finance/transfers/new'] },
+  { list: 'system/platform-provider/accounts', news: ['system/platform-provider/accounts/new'] },
+  { list: 'system/platform-provider/payouts', news: ['system/platform-provider/payouts/new'] },
   { list: 'customers/[id]', news: ['customers/[id]/pilgrims/new'] },
 ]
 

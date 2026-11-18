@@ -1,7 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { BadgeCheck, Info, Lock, SlidersHorizontal } from 'lucide-react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { BadgeCheck, HandCoins, Info, Landmark, Lock, SlidersHorizontal } from 'lucide-react'
 import type { RevenueShareBasis } from '@prisma/client'
 import { cn, formatRupiah } from '@/lib/utils'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
@@ -20,7 +22,8 @@ import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 
 type Current = { id: string | null; percent: number; basis: RevenueShareBasis; isDefault: boolean }
 type Version = { id: string; percent: number; basis: RevenueShareBasis; note: string | null; createdAt: string }
-type Data = { current: Current; history: Version[]; configured: boolean; canEdit: boolean }
+type Balance = { entitledIdr: number; paidOutIdr: number; balanceIdr: number }
+type Data = { current: Current; history: Version[]; configured: boolean; balance: Balance; canEdit: boolean }
 type Tab = 'info' | 'setelan'
 
 const TABS: readonly TabItem<Tab>[] = [{ id: 'info', label: 'Informasi', icon: Info }, { id: 'setelan', label: 'Setelan bagi hasil', icon: SlidersHorizontal }]
@@ -48,6 +51,8 @@ function Example({ percent, basis }: { percent: number; basis: RevenueShareBasis
 }
 
 export function PlatformProviderEditor() {
+  const { locale } = useParams() as { locale: string }
+  const base = `/${locale}/admin/system/platform-provider`
   const [tab, setTab] = useState<Tab>('info')
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -108,6 +113,20 @@ export function PlatformProviderEditor() {
           <p className="m-0 text-[13px] text-admin-muted">Platform Provider menyediakan dan memelihara aplikasi ini. Bagiannya dihitung per transaksi, hanya dari pembayaran yang berhasil.</p>
           <p className="m-0 text-[13px]">Akun Platform Provider: <span className="font-semibold">{data ? (data.configured ? 'sudah ditetapkan' : 'belum ditetapkan') : '…'}</span></p>
         </Card>
+        {data && (
+          <Card className="space-y-3 p-4">
+            <h2 className="m-0 text-sm font-bold">Hak dan pencairan</h2>
+            <dl className="m-0 grid gap-3 sm:grid-cols-3">
+              <div><dt className="text-[11px] text-admin-muted">Hak tercatat</dt><dd className="m-0 text-lg font-semibold tabular-nums">{formatRupiah(data.balance.entitledIdr)}</dd></div>
+              <div><dt className="text-[11px] text-admin-muted">Sudah dicairkan</dt><dd className="m-0 text-lg font-semibold tabular-nums">{formatRupiah(data.balance.paidOutIdr)}</dd></div>
+              <div><dt className="text-[11px] text-admin-muted">Saldo belum dicairkan</dt><dd className="m-0 text-lg font-semibold tabular-nums">{formatRupiah(data.balance.balanceIdr)}</dd></div>
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              <Link href={`${base}/payouts`} className="admin-btn-sm"><HandCoins className="size-4" /> Pencairan</Link>
+              <Link href={`${base}/accounts`} className="admin-btn-sm"><Landmark className="size-4" /> Rekening Platform Provider</Link>
+            </div>
+          </Card>
+        )}
         {c && (
           <Card className="space-y-3 p-4">
             <div className="flex flex-wrap items-center gap-2">

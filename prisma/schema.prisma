@@ -45,6 +45,8 @@ model User {
   confirmedBookings         Booking[]                @relation("BookingConfirmedBy")
   completedBookings         Booking[]                @relation("BookingCompletedBy")
   bookingCompletionEvents   BookingCompletionEvent[] @relation("BookingCompletionBy")
+  revenueSharePayoutsCreated RevenueSharePayout[]   @relation("RevenueSharePayoutCreatedBy")
+  revenueSharePayoutsVoided  RevenueSharePayout[]   @relation("RevenueSharePayoutVoidedBy")
   approvedRefunds           Refund[]                 @relation("ApprovedBy")
   notifications             NotificationLog[]
   authTokens                AuthToken[]
@@ -2302,6 +2304,7 @@ enum CashComponent {
   mdr
   pindah_akun // Fase 12b: transfer antar akun (keluar di akun asal, masuk di akun tujuan)
   biaya_transfer // Fase 12b: biaya bank/gateway saat memindahkan saldo (keluar di akun asal)
+  bagi_hasil // Fase 13e-1: pencairan bagi hasil ke Platform Provider (keluar)
 
   @@map("cash_component")
 }
@@ -2323,6 +2326,7 @@ model CashAccount {
   costActuals  CostActual[]
   transfersOut CashTransfer[] @relation("CashTransferFrom")
   transfersIn  CashTransfer[] @relation("CashTransferTo")
+  revenueSharePayouts RevenueSharePayout[]
 
   @@map("cash_accounts")
 }
@@ -2486,6 +2490,51 @@ model BookingCompletionEvent {
 
   @@index([bookingId, createdAt])
   @@map("booking_completion_events")
+}
+
+/// Rekening penerimaan Platform Provider (Fase 13e-1, docs/arsitektur-bagi-hasil.md §5e). Ditulis HANYA lib/revenue-share/accounts.ts, oleh akun Platform Provider.
+/// Rekening usaha penyedia platform (bukan data pelanggan). Hapus sungguhan hanya bila belum dipakai pencairan; selain itu nonaktif.
+model PlatformProviderBankAccount {
+  id            String   @id @default(uuid())
+  bankName      String   @db.VarChar(100)
+  accountNumber String   @db.VarChar(40)
+  accountHolder String   @db.VarChar(120)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(3)
+
+  payouts RevenueSharePayout[]
+
+  @@unique([bankName, accountNumber])
+  @@map("platform_provider_bank_accounts")
+}
+
+/// Pencairan bagi hasil ke Platform Provider (Fase 13e-1). Ditulis HANYA lib/revenue-share/payouts.ts (superadmin klien, bukan akun Platform Provider).
+/// Beku (trigger): satu-satunya perubahan = batal sekali (voidedAt/voidedById/voidReason). Uang keluar diposting `out`/`bagi_hasil` (refType revenue_share_payout); batal = pembalik.
+/// Rekening tujuan dibekukan (bank/nomor/nama saat dibayar).
+model RevenueSharePayout {
+  id                 String    @id @default(uuid())
+  amountIdr          Decimal   @db.Decimal(14, 2)
+  paidAt             DateTime  @db.Timestamptz(3)
+  cashAccountId      String
+  recipientAccountId String
+  recipientBankName  String    @db.VarChar(100)
+  recipientNumber    String    @db.VarChar(40)
+  recipientHolder    String    @db.VarChar(120)
+  note               String?   @db.VarChar(200)
+  createdById        String
+  createdAt          DateTime  @default(now()) @db.Timestamptz(3)
+  voidedAt           DateTime? @db.Timestamptz(3)
+  voidedById         String?
+  voidReason         String?   @db.VarChar(200)
+
+  cashAccount      CashAccount                 @relation(fields: [cashAccountId], references: [id], onDelete: Restrict)
+  recipientAccount PlatformProviderBankAccount @relation(fields: [recipientAccountId], references: [id], onDelete: Restrict)
+  createdBy        User                        @relation("RevenueSharePayoutCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  voidedBy         User?                       @relation("RevenueSharePayoutVoidedBy", fields: [voidedById], references: [id], onDelete: Restrict)
+
+  @@index([paidAt, id])
+  @@map("revenue_share_payouts")
 }
 
 /// Aturan bagi hasil yang terakhir DITERAPKAN ke harga otomatis (Fase 13b): satu baris 'global'. Ditulis HANYA lib/revenue-share/pricing.ts setelah putaran hitung ulang;
