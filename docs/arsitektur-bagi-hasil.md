@@ -1,6 +1,6 @@
 # Arsitektur Bagi Hasil — Platform Provider (Fase 13)
 
-> Status: **RENCANA DISETUJUI (2026-11-18, keputusan terbuka dijawab pemilik §7).** Kode belum ada — dieksekusi per sub-fase §6. Menggantikan §6b dan K1 di `docs/arsitektur-booking-engine-v2.md`
+> Status: **RENCANA DISETUJUI (2026-11-18, keputusan terbuka dijawab pemilik §7).** Dieksekusi per sub-fase §6 — 13a–13d dan 13e-1 selesai; 13e-2 berikutnya. Menggantikan §6b dan K1 di `docs/arsitektur-booking-engine-v2.md`
 > sesudah disetujui. Pola acuan: `bantuanku/docs/arsitektur-revenue-share.md` + `apps/admin/src/app/dashboard/settings/developer` (repo terpisah).
 
 ## 1. Konteks dan keputusan pemilik
@@ -212,6 +212,52 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
   - Pengeluaran vendor yang dicatat tepat bersamaan dengan Tandai selesai mungkin tak ikut terhitung. Pengeluaran sesudah selesai sengaja tak mengubah hak; gunakan Buka kembali lalu tandai selesai lagi.
   - Admin (bukan hanya manager) boleh menandai selesai sebelum manager mencatat pengeluaran aktual. Bila perlu, peran ini bisa diperketat di `lib/booking/policy.ts`.
 
+## 5e. Rencana rinci 13e (2026-11-19) — dipecah 13e-1 dan 13e-2
+
+**Recheck kode (2026-11-19):**
+- Buku kas:
+  - Entri ditulis HANYA lewat `postEntries`/`reverseEntries` (`lib/cash/ledger.ts`), idempoten per `(refType, refId, component)`.
+  - Komponen adalah enum DB `cash_component`; belum ada `bagi_hasil`.
+  - Label komponen ada di `lib/cash/labels.ts`.
+  - Laporan untung per booking hanya membaca entri ber-`bookingId`. Pencairan tanpa booking tidak mengganggunya. Arus kas dan saldo memuatnya otomatis.
+- Pola acuan uang keluar non-booking adalah transfer antar akun (`lib/cash/transfers.ts`):
+  - baris beku + trigger;
+  - batal = `voidedAt` + pembalik;
+  - halaman daftar/`new`/`[id]` di Keuangan;
+  - akun asal lewat `CashTarget` (`resolveCashTarget` tanpa `incoming` menolak QRIS).
+- Halaman Sistem → Platform Provider saat ini punya dua tab (Informasi, Setelan). Hak tercatat di `revenue_share_entries`. Belum ada rekening Platform Provider atau pencairan.
+
+**13e-1 — Rekening + Pencairan:**
+- **Rekening Platform Provider** = tabel `platform_provider_bank_accounts` (bank, nomor, atas nama, aktif). Ditulis HANYA oleh `lib/revenue-share/accounts.ts`.
+  - Buat, ubah, dan hapus hanya oleh akun Platform Provider (`requirePlatformProvider`).
+  - Hapus aman: hapus sungguhan bila belum pernah dipakai pencairan; selain itu dinonaktifkan dan bisa diaktifkan kembali.
+  - Superadmin klien dapat MELIHAT rekening aktif, karena ia yang mentransfer.
+- **Pencairan** = tabel `revenue_share_payouts`. Ditulis HANYA oleh `lib/revenue-share/payouts.ts`.
+  - Isi: jumlah, waktu bayar, akun kas asal (bukan QRIS), rekening tujuan dengan bank/nomor/nama dibekukan, catatan ≤ 200, pencatat.
+  - Baris beku (trigger). Batal = `voidedAt` + alasan + entri pembalik, sekali saja.
+  - Memosting `out`/`bagi_hasil` (refType `revenue_share_payout`) di transaksi yang sama.
+  - Dicatat dan dibatalkan HANYA oleh superadmin klien, BUKAN akun Platform Provider (Q3: uang keluar dari kas klien; pemisahan tugas). Platform Provider melihat daftar dan detail.
+  - Jumlah ≤ saldo Platform Provider (Σ hak − Σ pencairan berlaku), dinilai di bawah advisory lock pencairan. Saldo bisa turun lagi sesudahnya (refund mengurangi hak); saldo negatif ditampilkan apa adanya.
+  - Waktu bayar ≤ sekarang + 5 menit dan ≥ 1 tahun ke belakang (pola transfer).
+- **Halaman:**
+  - `system/platform-provider/accounts` (daftar, `new`, `[id]`);
+  - `system/platform-provider/payouts` (daftar berhalaman server + ringkasan saldo, `new`, `[id]` dengan kotak batal);
+  - tab Informasi menautkan keduanya dan menampilkan saldo.
+
+**13e-2 — Pendapatan + CSV:**
+- Tab/halaman Pendapatan untuk superadmin, termasuk Platform Provider. Per bulan (zona aplikasi): hak masuk, dicairkan, saldo.
+- Daftar per booking: potensi, hak, persen terbayar. Potensi lewat fungsi batch di `potential.ts`, bukan rumus kedua.
+- Ekspor CSV lewat `lib/reports/csv.ts`.
+
+**13e-1 as-built (2026-11-19):**
+- Skema: `PlatformProviderBankAccount` (`platform_provider_bank_accounts`, UNIQUE bank+nomor, CHECK nomor 4–40 digit) dan `RevenueSharePayout` (`revenue_share_payouts`, salinan rekening beku, CHECK jumlah > 0 + batal semua-atau-tak-ada, FK Restrict, trigger `revenue_share_payouts_frozen` termasuk `id`); enum `cash_component` + `bagi_hasil`. Migrasi `20261207090000_revenue_share_payouts`.
+- Layanan: `lib/revenue-share/accounts.ts` (CRUD hapus-aman, jejak `settings_audit` entitas `platform_provider_account` dengan nomor disamarkan, ubah/hapus `FOR UPDATE`), `lib/revenue-share/payouts.ts` (`providerBalance`, `createPayout`, `voidPayout`, `listPayouts`, `getPayout`), `policy.ts` (`canRecordPayout` = superadmin && bukan Platform Provider), `http.ts` (galat → 400/404/409/422).
+- `createPayout` urutan: waktu (≤ sekarang + 5 menit, ≥ 366 hari ke belakang) → akun kas (QRIS ditolak) → advisory lock `revenue_share_payout` → rekening tujuan `FOR SHARE` (aktif, `updatedAt` = `recipientVersion` yang dilihat pencatat, SEC-292) → tolak kirim-ulang persis (SEC-294) → saldo → `resolveCashTarget` → baris + `postEntries out/bagi_hasil`. Penolakan tak menulis apa pun.
+- Route `api/v1/admin/system/platform-provider/`: `accounts` (GET superadmin, POST provider), `accounts/[id]` (GET superadmin + `canEdit`, PUT/DELETE provider), `payouts` (GET superadmin, POST pencatat), `payouts/[id]` (POST batal, pencatat), `payouts/options` (pencatat: akun kas tanpa QRIS, rekening aktif + versi, saldo). GET `platform-provider` kini memuat `balance`.
+- Halaman: `system/platform-provider/accounts` (+`new`, `[id]` EditPage — superadmin klien baca saja), `payouts` (ringkasan saldo + daftar berhalaman + filter status), `payouts/new`, `payouts/[id]` (EditorShell: ringkasan, entri kas termasuk pembalik, riwayat, batal). Tab Informasi menampilkan hak/dicairkan/saldo + tautan.
+- Uji: `scripts/test-revenue-share-payouts.ts` (peran, validator, saldo, penolakan tanpa tulis, entri kas, versi rekening, jejak, kirim-ulang, batal + pembalik, beku/CHECK, hapus-aman, penjaga penulis tunggal + peran route). Diverifikasi di browser (DB audit): rekening dibuat sebagai provider, pencairan dicatat dan dibatalkan sebagai superadmin klien, superadmin klien ditolak 403 menambah rekening.
+- Diterima: entri `bagi_hasil` tampil di buku kas untuk semua admin (SEC-293, buku kas harus lengkap).
+
 ## 6. Fase (satu PR per sub-fase)
 
 | Sub | Isi |
@@ -220,7 +266,7 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
 | 13b | **SELESAI 2026-11-18** — beku ke invoice (aturan yang diterapkan ke harga) + potensi diturunkan dari snapshot; opsi (2) masuk `resolveMarginRule` + penyelaras harga (§5b) |
 | 13c | **SELESAI 2026-11-18** — `revenue_share_entries`: hak saat pembayaran terverifikasi (manual + gateway), refund, revisi; potensi vs hak (§5c) |
 | 13d | **SELESAI 2026-11-19** — Tandai selesai / Buka kembali (status `completed` pertama kali ditulis) + koreksi opsi (1) dengan pengeluaran aktual, potensi akhir beku (§5d) |
-| 13e | Rekening Platform Provider, pencairan lewat buku kas (`bagi_hasil`), tab Pendapatan + CSV |
+| 13e | Dipecah (§5e): **13e-1 SELESAI 2026-11-19** rekening Platform Provider + pencairan lewat buku kas (`bagi_hasil`); **13e-2** Pendapatan + CSV |
 
 ## 7. Keputusan (dijawab pemilik 2026-11-18)
 

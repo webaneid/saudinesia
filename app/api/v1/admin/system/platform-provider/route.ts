@@ -4,6 +4,7 @@ import { revenueShareSettingSchema } from '@/lib/validators/revenueShare'
 import { requirePlatformProvider, requireSuperAdmin } from '@/lib/auth/session'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { ensurePricesFollowRevenueShare } from '@/lib/revenue-share/pricing'
+import { providerBalance } from '@/lib/revenue-share/payouts'
 import { currentRevenueShare, platformProviderConfigured, revenueShareHistory, RevenueShareError, saveRevenueShare } from '@/lib/revenue-share/settings'
 
 // Sistem → Platform Provider (docs/arsitektur-bagi-hasil.md, Fase 13a). Baca: superadmin (klien melihat kesepakatan). Ubah: HANYA akun Platform Provider.
@@ -11,8 +12,8 @@ import { currentRevenueShare, platformProviderConfigured, revenueShareHistory, R
 export async function GET() {
   try {
     const session = await requireSuperAdmin()
-    const [current, history, configured] = await Promise.all([currentRevenueShare(), revenueShareHistory(), platformProviderConfigured()])
-    return NextResponse.json(ok({ current, history, configured, canEdit: session.isPlatformProvider }))
+    const [current, history, configured, balance] = await Promise.all([currentRevenueShare(), revenueShareHistory(), platformProviderConfigured(), providerBalance()])
+    return NextResponse.json(ok({ current, history, configured, balance, canEdit: session.isPlatformProvider }))
   } catch (e) {
     return authFailureResponse(e, 'admin/system/platform-provider/GET')
   }

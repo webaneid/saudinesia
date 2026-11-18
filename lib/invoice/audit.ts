@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { qrisMerchantName } from '@/lib/qris/emv'
 
 type Tx = Prisma.TransactionClient
-export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page'
+export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account'
 export type AuditAction = 'create' | 'update' | 'delete' | 'toggle'
 
 /** Tulis satu baris jejak (SEC-109) DI DALAM transaksi perubahan — tanpa jejak, perubahan ikut dibatalkan. Tabel append-only (trigger). */
@@ -19,7 +19,7 @@ export function auditView(entity: AuditEntity, row: Record<string, unknown>): Re
   const out: Record<string, Prisma.InputJsonValue | null> = {}
   for (const [k, v] of Object.entries(row)) {
     if (k === 'id' || k === 'createdAt' || k === 'updatedAt') continue
-    if (entity === 'bank_account' && k === 'accountNumber') out[k] = maskAccountNumber(String(v))
+    if ((entity === 'bank_account' || entity === 'platform_provider_account') && k === 'accountNumber') out[k] = maskAccountNumber(String(v))
     else if (entity === 'qris_account' && k === 'emvPayload') out[k] = v == null ? null : qrisAuditView(String(v))
     else out[k] = v === undefined ? null : (v as Prisma.InputJsonValue | null)
   }
