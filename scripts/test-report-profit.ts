@@ -11,6 +11,8 @@ import { prisma } from '@/lib/db'
 import { getBookingProfitRows, getProfitReport, periodBounds, ReportInputError, type ReportParams } from '@/lib/reports/profit'
 import { assertThrowawayDb } from './lib/testDb'
 import { ensureMainCashAccount } from '@/lib/cash/accounts'
+import { postEntries, reverseEntries, type CashRefType } from '@/lib/cash/ledger'
+import { getAdminNavigation } from '@/lib/admin/navigation'
 import { legacyBookingState, type LegacyBookingStatus } from './lib/legacyStatus'
 
 await assertThrowawayDb()
@@ -45,16 +47,17 @@ async function mk(code: string, at: string, status: LegacyBookingStatus, lines: 
 }
 
 // ── dunia uji (semua tahun 2090 — tak bertabrakan dengan data lain; tanggal dalam UTC, WIB = UTC+7) ───────────────────────────────────────────────
-await mk('B1', '2090-03-10T05:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 7_200_000, cost: 6_000_000, vendors: [v1.id] }], [{ amount: 7_200_000, status: 'confirmed' }])
+const bookingId: Record<string, string> = {}
+bookingId.B1 = await mk('B1', '2090-03-10T05:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 7_200_000, cost: 6_000_000, vendors: [v1.id] }], [{ amount: 7_200_000, status: 'confirmed' }])
 await mk('B2', '2090-03-31T18:00:00Z', 'completed', [ // 1 April 01:00 WIB → BULAN APRIL
   { itemType: 'visa', sell: 2_000_000, cost: 1_500_000, vendors: [v1.id, v2.id] }, { itemType: 'catering', sell: 600_000, cost: null }], [{ amount: 1_300_000, status: 'confirmed' }])
-await mk('B3', '2090-03-20T03:00:00Z', 'confirmed', [
+bookingId.B3 = await mk('B3', '2090-03-20T03:00:00Z', 'confirmed', [
   { itemType: 'tourPackage', lineKey: 'komponen:x', sell: 1_200_000, cost: 1_000_000, vendors: [v2.id] }, { itemType: 'tourPackage', lineKey: 'penyesuaian', sell: -200_000, cost: null }],
   [{ amount: 1_000_000, status: 'confirmed' }], [{ amount: 250_000, status: 'approved' }, { amount: 100_000, status: 'pending' }, { amount: 50_000, status: 'rejected' }]) // pending/rejected tak mengurangi
 await mk('B4', '2090-03-22T03:00:00Z', 'awaiting_payment', [{ itemType: 'transport', sell: 500_000, cost: 400_000, vendors: [v1.id] }])
 await mk('B5', '2090-03-12T03:00:00Z', 'cancelled', [{ itemType: 'hotel', sell: 3_000_000, cost: 2_000_000, vendors: [v1.id] }], [{ amount: 3_000_000, status: 'confirmed' }], [{ amount: 2_400_000, status: 'paid' }])
 await mk('B6', '2090-03-25T03:00:00Z', 'confirmed', [{ itemType: 'booking', lineKey: 'penyesuaian', label: 'Penyesuaian data lama', sell: 400_000, cost: null }])
-await mk('B7', '2090-02-28T16:59:59Z', 'confirmed', [{ itemType: 'hotel', sell: 900_000, cost: 700_000, vendors: [v1.id] }]) // 28 Feb 23:59:59 WIB
+bookingId.B7 = await mk('B7', '2090-02-28T16:59:59Z', 'confirmed', [{ itemType: 'hotel', sell: 900_000, cost: 700_000, vendors: [v1.id] }]) // 28 Feb 23:59:59 WIB
 await mk('B8', '2090-03-31T16:00:00Z', 'active', [{ itemType: 'transport', sell: 100_000, cost: 50_000, vendors: [v1.id] }], [{ amount: 100_000, status: 'pending' }, { amount: 100_000, status: 'rejected' }]) // 31 Mar 23:00 WIB
 await mk('B9', '2090-05-10T03:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 1_000_000, cost: 800_000, vendors: [v1.id] }], [{ amount: 1_500_000, status: 'confirmed' }])          // dibayar berlebih → rasio dijepit 1
 await mk('B10', '2090-05-11T03:00:00Z', 'confirmed', [{ itemType: 'hotel', sell: 1_000_000, cost: 800_000, vendors: [v1.id] }], [{ amount: 500_000, status: 'confirmed' }], [{ amount: 700_000, status: 'approved' }]) // refund > bayar → rasio dijepit 0
@@ -134,6 +137,48 @@ await t('daftar booking: terbaru dulu, angka per booking benar, berhalaman (tota
   assert.deepEqual([b3.totalIdr, b3.sellIdr, b3.costKnownIdr, b3.profitIdr, b3.paidIdr, b3.refundedIdr, b3.realizedRatio, b3.realizedProfitIdr, b3.realizedSellIdr], [1_000_000, 1_000_000, 1_000_000, 0, 1_000_000, 250_000, 0.75, 0, 750_000])
   const b6 = p1.rows.find(r => r.bookingCode.endsWith('-B6'))!
   assert.deepEqual([b6.sellUnknownCostIdr, b6.profitIdr, b6.marginPct, b6.costCoveragePct], [400_000, 0, null, 0])
+})
+// ── kas per booking (Fase 12d, K12-2): entri buku kas lewat penulis tunggal; pembalik dihitung pada komponen ASALNYA ───────────────────────────────
+const acct = await prisma.$transaction(tx => ensureMainCashAccount(tx))
+const at = new Date('2090-04-02T03:00:00Z')
+async function post(code: string, refType: CashRefType, ref: string, direction: 'in' | 'out', lines: Array<[Parameters<typeof postEntries>[2][number]['component'], number]>) {
+  await prisma.$transaction(tx => postEntries(tx, { refType, refId: `${tag}-${ref}`, direction, cashAccountId: acct, entryDate: at, bookingId: bookingId[code]!, createdById: null }, lines.map(([component, amountIdr]) => ({ component, amountIdr }))))
+}
+const reverse = (refType: CashRefType, ref: string) => prisma.$transaction(tx => reverseEntries(tx, { refType, refId: `${tag}-${ref}` }, { createdById: null, entryDate: at }))
+await post('B1', 'payment', 'p1', 'in', [['pokok', 7_000_000], ['ppn', 200_000]])
+await post('B1', 'payment', 'p1b', 'in', [['pokok', 100_000]]); await reverse('payment', 'p1b')                          // verifikasi dikoreksi → tak dihitung masuk
+await post('B3', 'payment', 'p3', 'in', [['pokok', 1_000_000], ['kelebihan', 50_000], ['kode_unik', 123]])
+await post('B3', 'payment', 'g3', 'in', [['biaya_layanan', 4_000]]); await post('B3', 'payment', 'g3m', 'out', [['mdr', 5_000]])
+await post('B3', 'refund', 'r3', 'out', [['refund', 250_000]])
+await post('B3', 'cost_actual', 'c3:1', 'out', [['biaya_vendor', 300_000]]); await reverse('cost_actual', 'c3:1')       // ubah biaya vendor = pembalik + versi baru
+await post('B3', 'cost_actual', 'c3:2', 'out', [['biaya_vendor', 400_000]])
+await post('B7', 'payment', 'p7', 'in', [['pokok', 900_000]])                                                              // Februari: di luar ringkasan Maret
+
+await t('KAS PER BOOKING (12d): masuk/refund/vendor/lainnya/bersih per booking; pembalik ikut komponen asal (masuk maupun keluar); invarian masuk − refund − vendor + lainnya = bersih', async () => {
+  const rows = (await getBookingProfitRows(mar, 1, 50)).rows
+  const cash = (c: string) => rows.find(r => r.bookingCode === `${tag}-${c}`)!.cash
+  assert.deepEqual(cash('B1'), { inIdr: 7_200_000, refundIdr: 0, vendorIdr: 0, otherIdr: 0, netIdr: 7_200_000 })
+  assert.deepEqual(cash('B3'), { inIdr: 1_050_000, refundIdr: 250_000, vendorIdr: 400_000, otherIdr: -877, netIdr: 399_123 })
+  assert.deepEqual(cash('B6'), { inIdr: 0, refundIdr: 0, vendorIdr: 0, otherIdr: 0, netIdr: 0 }, 'tanpa entri → nol, bukan null')
+  for (const r of rows) assert.equal(Math.round((r.cash.inIdr - r.cash.refundIdr - r.cash.vendorIdr + r.cash.otherIdr) * 100), Math.round(r.cash.netIdr * 100), r.bookingCode)
+  const rep = await getProfitReport(mar)
+  assert.deepEqual(rep.cash, { inIdr: 8_250_000, refundIdr: 250_000, vendorIdr: 400_000, otherIdr: -877, netIdr: 7_599_123 }) // B7 (Februari) tak ikut
+  assert.equal((await getProfitReport({ from: '2090-02-01', to: '2090-02-28', scope: 'recognized' })).cash.inIdr, 900_000)
+  assert.deepEqual((await getProfitReport({ from: '2090-08-01', to: '2090-08-31', scope: 'recognized' })).cash, { inIdr: 0, refundIdr: 0, vendorIdr: 0, otherIdr: 0, netIdr: 0 })
+})
+await t('tanggal pesan per booking menurut zona aplikasi (31 Mar 18:00 UTC = 1 Apr WIB), bukan potongan ISO UTC', async () => {
+  const rows = (await getBookingProfitRows({ from: '2090-04-01', to: '2090-04-30', scope: 'recognized' }, 1, 50)).rows
+  assert.equal(rows.find(r => r.bookingCode === `${tag}-B2`)!.createdDate, '2090-04-01')
+})
+await t('MENU KEUANGAN (12d): satu grup untuk semua admin — Buku Kas, Arus Kas, Transfer, Refund, PPN, Laporan Untung, Selisih HPP; tak lagi di Operasional', () => {
+  const want = ['/admin/finance/cash-book', '/admin/finance/cash-flow', '/admin/finance/transfers', '/admin/finance/refunds', '/admin/finance/tax', '/admin/reports', '/admin/reports/variance']
+  for (const role of [{ isManager: false, isSuperAdmin: false }, { isManager: true, isSuperAdmin: true }]) {
+    const groups = getAdminNavigation(role)
+    assert.deepEqual(groups.find(g => g.label === 'Keuangan')?.items.map(i => i.path), want)
+    assert.ok(!groups.find(g => g.label === 'Operasional')!.items.some(i => want.includes(i.path)))
+  }
+  const all = getAdminNavigation({ isManager: true, isSuperAdmin: true }).flatMap(g => g.items.map(i => i.path))
+  assert.equal(new Set(all).size, all.length, 'tak ada menu ganda')
 })
 await t('masukan: format/urutan/rentang tanggal salah → ReportInputError; halaman/batas liar ditolak; periode kosong → angka nol (bukan galat)', async () => {
   for (const [f, tt] of [['2090-3-1', '2090-03-31'], ['2090-03-31', '2090-03-01'], ['2090-02-30', '2090-03-01'], ['1990-01-01', '2090-01-01']] as const) {
