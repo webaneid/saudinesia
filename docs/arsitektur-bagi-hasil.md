@@ -1,6 +1,6 @@
 # Arsitektur Bagi Hasil — Platform Provider (Fase 13)
 
-> Status: **RENCANA DISETUJUI (2026-11-18, keputusan terbuka dijawab pemilik §7).** Dieksekusi per sub-fase §6 — 13a–13d dan 13e-1 selesai; 13e-2 berikutnya. Menggantikan §6b dan K1 di `docs/arsitektur-booking-engine-v2.md`
+> Status: **RENCANA DISETUJUI (2026-11-18, keputusan terbuka dijawab pemilik §7).** Dieksekusi per sub-fase §6 — seluruh sub-fase 13a–13e selesai (2026-11-19). Menggantikan §6b dan K1 di `docs/arsitektur-booking-engine-v2.md`
 > sesudah disetujui. Pola acuan: `bantuanku/docs/arsitektur-revenue-share.md` + `apps/admin/src/app/dashboard/settings/developer` (repo terpisah).
 
 ## 1. Konteks dan keputusan pemilik
@@ -249,6 +249,16 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
 - Daftar per booking: potensi, hak, persen terbayar. Potensi lewat fungsi batch di `potential.ts`, bukan rumus kedua.
 - Ekspor CSV lewat `lib/reports/csv.ts`.
 
+**13e-2 rinci (recheck 2026-11-19):**
+- Recheck: `bookingSharePotential` hanya per booking (3 kueri); belum ada pembaca agregat `revenue_share_entries` selain `providerBalance` (total); `csvResponse`/`csvCell` siap; batas bulan = `startOfDayInApp` atas tanggal kalender `YYYY-MM-01` (+ `addMonths`).
+- Modul baca SATU: `lib/revenue-share/income.ts` (baca saja, tanpa tulis):
+  - `monthlyIncome(year)`: 12 baris bulan (zona aplikasi) — hak masuk (Σ entri menurut `createdAt`, bertanda: refund/revisi bisa negatif), dicairkan (Σ pencairan BERLAKU menurut `paidAt`), saldo akhir bulan (kumulatif sejak awal); saldo awal tahun. SQL ber-parameter (`AT TIME ZONE` zona aplikasi atas kolom `timestamptz`), batas tahun dikirim sebagai instan.
+  - `bookingIncome(filter, list)`: booking yang invoicenya membekukan aturan bagi hasil, berhalaman (urut terbit terbaru, tie-breaker id), filter status siklus hidup + cari kode; kolom kode, nomor invoice, terbit, status, aturan (persen · dasar), potensi berlaku, hak tercatat, hak ÷ potensi.
+  - Potensi batch = `bookingSharePotentials(db, ids)` di `potential.ts` (3 kueri untuk satu halaman) memakai `sharePotential` yang sama + potensi beku booking selesai — diuji sama dengan `bookingSharePotential` per booking.
+- Halaman `system/platform-provider/income` (superadmin, termasuk akun Platform Provider): ringkasan tahun (pilih tahun) + tabel bulanan (12 baris tetap) + daftar per booking. Tanpa nama jamaah/pemesan — hanya kode booking/invoice.
+- CSV: `GET …/platform-provider/income/export?kind=monthly&year=` dan `?kind=bookings&status=&q=` (maks `CSV_MAX_ROWS`), superadmin; nama berkas dari nilai tervalidasi.
+- Tautan dari tab Informasi.
+
 **13e-1 as-built (2026-11-19):**
 - Skema: `PlatformProviderBankAccount` (`platform_provider_bank_accounts`, UNIQUE bank+nomor, CHECK nomor 4–40 digit) dan `RevenueSharePayout` (`revenue_share_payouts`, salinan rekening beku, CHECK jumlah > 0 + batal semua-atau-tak-ada, FK Restrict, trigger `revenue_share_payouts_frozen` termasuk `id`); enum `cash_component` + `bagi_hasil`. Migrasi `20261207090000_revenue_share_payouts`.
 - Layanan: `lib/revenue-share/accounts.ts` (CRUD hapus-aman, jejak `settings_audit` entitas `platform_provider_account` dengan nomor disamarkan, ubah/hapus `FOR UPDATE`), `lib/revenue-share/payouts.ts` (`providerBalance`, `createPayout`, `voidPayout`, `listPayouts`, `getPayout`), `policy.ts` (`canRecordPayout` = superadmin && bukan Platform Provider), `http.ts` (galat → 400/404/409/422).
@@ -258,6 +268,14 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
 - Uji: `scripts/test-revenue-share-payouts.ts` (peran, validator, saldo, penolakan tanpa tulis, entri kas, versi rekening, jejak, kirim-ulang, batal + pembalik, beku/CHECK, hapus-aman, penjaga penulis tunggal + peran route). Diverifikasi di browser (DB audit): rekening dibuat sebagai provider, pencairan dicatat dan dibatalkan sebagai superadmin klien, superadmin klien ditolak 403 menambah rekening.
 - Diterima: entri `bagi_hasil` tampil di buku kas untuk semua admin (SEC-293, buku kas harus lengkap).
 
+**13e-2 as-built (2026-11-19):**
+- `lib/revenue-share/income.ts` (baca saja): `monthBounds` (batas bulan = `startOfDayInApp` atas `YYYY-MM-01`), `monthlyIncome(year)` (saldo awal + 12 bulan hak/dicairkan/saldo akhir; SQL ber-parameter `AT TIME ZONE` zona aplikasi atas kolom `timestamptz`, empat kueri dalam satu transaksi RepeatableRead — SEC-297), `firstIncomeYear` (entri pertama atau pencairan berlaku pertama), `bookingIncome` (booking ber-aturan beku, berhalaman, filter status siklus hidup + cari kode lewat `escapeLike`).
+- `bookingSharePotentials(db, ids)` di `potential.ts`: tiga kueri per halaman, rumus dan urutan prioritas sama dengan `bookingSharePotential` (diuji setara untuk markup, margin, selesai beku, tanpa aturan, batal).
+- Route `GET api/v1/admin/system/platform-provider/income/export?kind=monthly|bookings` (superadmin, `revenueShareIncomeExportSchema` strict, `csvResponse`, tanggal terbit `dateInApp`).
+- Halaman `system/platform-provider/income`: pilihan tahun, kartu saldo awal/hak/dicairkan/saldo akhir, tabel 12 bulan, daftar per booking (tautan ke detail booking), dua tombol CSV; tautan dari tab Informasi.
+- Uji `scripts/test-revenue-share-income.ts` (dijalankan dengan TZ proses UTC dan Los Angeles): batas 00.30 WIB tanggal 1 masuk bulan itu, hak bertanda, pencairan batal tak dihitung, saldo kumulatif, filter/escape/paginasi, penjaga peran dan baca-saja. Diverifikasi di browser (DB audit) termasuk lebar HP.
+- Diterima: CSV per booking dipotong di 10.000 baris seperti ekspor lain (SEC-298).
+
 ## 6. Fase (satu PR per sub-fase)
 
 | Sub | Isi |
@@ -266,7 +284,7 @@ Menggantikan usulan lama K1 (A/B/C gross-up) — opsi (2) di atas sama dengan "C
 | 13b | **SELESAI 2026-11-18** — beku ke invoice (aturan yang diterapkan ke harga) + potensi diturunkan dari snapshot; opsi (2) masuk `resolveMarginRule` + penyelaras harga (§5b) |
 | 13c | **SELESAI 2026-11-18** — `revenue_share_entries`: hak saat pembayaran terverifikasi (manual + gateway), refund, revisi; potensi vs hak (§5c) |
 | 13d | **SELESAI 2026-11-19** — Tandai selesai / Buka kembali (status `completed` pertama kali ditulis) + koreksi opsi (1) dengan pengeluaran aktual, potensi akhir beku (§5d) |
-| 13e | Dipecah (§5e): **13e-1 SELESAI 2026-11-19** rekening Platform Provider + pencairan lewat buku kas (`bagi_hasil`); **13e-2** Pendapatan + CSV |
+| 13e | Dipecah (§5e): **13e-1 SELESAI 2026-11-19** rekening Platform Provider + pencairan lewat buku kas (`bagi_hasil`); **13e-2 SELESAI 2026-11-19** Pendapatan + CSV |
 
 ## 7. Keputusan (dijawab pemilik 2026-11-18)
 

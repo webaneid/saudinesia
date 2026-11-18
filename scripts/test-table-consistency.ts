@@ -41,6 +41,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'app/[locale]/admin/(protected)/finance/transfers/[id]/page.tsx': { count: 1, reason: 'entri buku kas SATU transfer (≤ 3 entri + ≤ 3 pembalik; daftar bersarang milik satu induk)' },
   'app/[locale]/admin/(protected)/system/platform-provider/payouts/[id]/page.tsx': { count: 1, reason: 'entri buku kas SATU pencairan (1 entri + ≤ 1 pembalik; daftar bersarang milik satu induk)' },
   'app/[locale]/admin/(protected)/system/platform-provider/accounts/page.tsx': { count: 1, reason: 'rekening Platform Provider: master data kecil (≤ 100, take di listProviderAccounts)' },
+  'app/[locale]/admin/(protected)/system/platform-provider/income/page.tsx': { count: 1, reason: 'ringkasan bulanan Pendapatan: ukuran tetap 12 baris (satu per bulan); daftar per booking di halaman yang sama berpaginasi' },
   'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': { count: 1, reason: 'arus uang buku kas SATU booking (daftar bersarang milik satu induk, dibatasi 200 entri dengan penanda); buku kas lengkap berpaginasi' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },
 }

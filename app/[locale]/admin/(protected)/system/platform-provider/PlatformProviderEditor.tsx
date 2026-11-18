@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
-import { BadgeCheck, HandCoins, Info, Landmark, Lock, SlidersHorizontal } from 'lucide-react'
+import { BadgeCheck, ChartColumn, HandCoins, Info, Landmark, Lock, SlidersHorizontal } from 'lucide-react'
 import type { RevenueShareBasis } from '@prisma/client'
 import { cn, formatRupiah } from '@/lib/utils'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
@@ -122,6 +122,7 @@ export function PlatformProviderEditor() {
               <div><dt className="text-[11px] text-admin-muted">Saldo belum dicairkan</dt><dd className="m-0 text-lg font-semibold tabular-nums">{formatRupiah(data.balance.balanceIdr)}</dd></div>
             </dl>
             <div className="flex flex-wrap gap-2">
+              <Link href={`${base}/income`} className="admin-btn-sm"><ChartColumn className="size-4" /> Pendapatan</Link>
               <Link href={`${base}/payouts`} className="admin-btn-sm"><HandCoins className="size-4" /> Pencairan</Link>
               <Link href={`${base}/accounts`} className="admin-btn-sm"><Landmark className="size-4" /> Rekening Platform Provider</Link>
             </div>
