@@ -37,3 +37,11 @@ export const revenueSharePayoutVoidSchema = z.object({
   action: z.literal('void'),
   reason: z.string().trim().min(3, { error: 'Alasan pembatalan wajib diisi (minimal 3 karakter)' }).max(200),
 }).strict()
+
+// Ekspor CSV Pendapatan Platform Provider (Fase 13e-2). `year` hanya untuk ringkasan bulanan; `status`/`q` hanya untuk daftar per booking.
+export const revenueShareIncomeExportSchema = z.object({
+  kind: z.enum(['monthly', 'bookings'], { error: 'Jenis ekspor tidak dikenal' }),
+  year: z.coerce.number().int().min(2000).max(2100).optional(),
+  status: z.enum(['active', 'completed', 'cancelled', 'expired']).optional(),
+  q: z.string().trim().max(60).optional(),
+}).strict()

@@ -92,3 +92,32 @@ export async function bookingSharePotential(db: Db, bookingId: string): Promise<
   if (b?.status === 'completed' && b.completedPotentialIdr != null) return { rule, potentialIdr: Number(b.completedPotentialIdr) }
   return { rule, potentialIdr: sharePotential(await planLines(db, bookingId), rule) }
 }
+
+/**
+ * Potensi BERLAKU banyak booking sekaligus (daftar Pendapatan, Fase 13e-2) — aturan dan rumus sama dengan `bookingSharePotential`, hanya dimuat dalam 3 kueri
+ * untuk satu halaman. Booking tanpa aturan beku → `rule: null`, potensi 0.
+ */
+export async function bookingSharePotentials(db: Db, bookingIds: readonly string[]): Promise<Map<string, { rule: ShareRule | null; potentialIdr: number }>> {
+  const ids = [...new Set(bookingIds)]
+  const out = new Map<string, { rule: ShareRule | null; potentialIdr: number }>()
+  if (ids.length === 0) return out
+  const [invoices, bookings, lines] = await Promise.all([
+    db.invoice.findMany({ where: { bookingId: { in: ids } }, select: { bookingId: true, revenueSharePercent: true, revenueShareBasis: true } }),
+    db.booking.findMany({ where: { id: { in: ids } }, select: { id: true, status: true, completedPotentialIdr: true } }),
+    db.priceSnapshot.findMany({ where: { bookingId: { in: ids }, voidedAt: null }, select: { bookingId: true, itemType: true, lineKey: true, totalCostIdr: true, totalSellIdr: true } }),
+  ])
+  const rules = new Map(invoices.map(i => [i.bookingId, i.revenueSharePercent != null && i.revenueShareBasis ? { percent: Number(i.revenueSharePercent), basis: i.revenueShareBasis } : null]))
+  const byBooking = new Map<string, ShareLine[]>()
+  for (const l of lines) {
+    const arr = byBooking.get(l.bookingId) ?? []
+    arr.push({ itemType: l.itemType, lineKey: l.lineKey, totalCostIdr: l.totalCostIdr == null ? null : Number(l.totalCostIdr), totalSellIdr: Number(l.totalSellIdr) })
+    byBooking.set(l.bookingId, arr)
+  }
+  const frozen = new Map(bookings.filter(b => b.status === 'completed' && b.completedPotentialIdr != null).map(b => [b.id, Number(b.completedPotentialIdr)]))
+  for (const id of ids) {
+    const rule = rules.get(id) ?? null
+    if (!rule) { out.set(id, { rule: null, potentialIdr: 0 }); continue }
+    out.set(id, { rule, potentialIdr: frozen.get(id) ?? sharePotential(byBooking.get(id) ?? [], rule) })
+  }
+  return out
+}

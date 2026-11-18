@@ -84,6 +84,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   'platform-provider': 'Platform Provider',
   accounts: 'Rekening',
   payouts: 'Pencairan',
+  income: 'Pendapatan',
   'cash-book': 'Buku Kas',
   'cash-flow': 'Arus Kas',
   transfers: 'Transfer Antar Akun',

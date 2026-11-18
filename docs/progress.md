@@ -946,7 +946,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] 13c — hak bagi hasil (`revenue_share_entries` append-only, rekonsiliasi potensi × terbayar ÷ tagihan) dari konfirmasi pembayaran manual/gateway, refund dibayar, revisi/atur total + kotak potensi vs hak (superadmin) (2026-11-18)
   - [x] 13d — Tandai selesai / Buka kembali (status `completed` pertama kali ditulis, `booking_completion_events` append-only) + koreksi opsi margin dengan pengeluaran aktual, potensi akhir beku di booking (2026-11-19)
   - [x] 13e-1 — rekening Platform Provider (berjejak) + pencairan lewat buku kas (`bagi_hasil`, beku, batal = pembalik, ≤ saldo, dicatat superadmin klien) (2026-11-19)
-  - [ ] 13e-2 — tab Pendapatan (hak/dicairkan/saldo per bulan, per booking) + CSV
+  - [x] 13e-2 — halaman Pendapatan (hak/dicairkan/saldo per bulan zona aplikasi, potensi vs hak per booking) + CSV (2026-11-19)
 
 ## Kuota tanggal Transport lewat admin (`docs/arsitektur-transportasi.md` §10, 2026-11-06)
 
