@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, History, Loader2, Pencil, RotateCcw, Wallet } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, History, Loader2, Pencil, RotateCcw, TrendingUp, Wallet } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
@@ -146,9 +146,10 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
   const belowCost = point?.costIdr != null && Number(sell) > 0 && Number(sell) < point.costIdr
   // Peringatan saat mengetik — HANYA mengingatkan, tidak pernah mematikan tombol Simpan (docs/arsitektur-harga-terpadu.md §21)
   const typed = Number(sell)
-  const belowAuto = !belowCost && point?.autoSellIdr != null && !manualOnly && typed > 0 && typed < point.autoSellIdr
+  const typedNote = !belowCost && !manualOnly ? marginNote(typed, point, rule, inherits) : null
   const loss = point != null && point.profitIdr != null && point.profitIdr < 0
   const thin = point != null && !loss && point.marginPct != null && rule.warnBelowPercent > 0 && point.marginPct < rule.warnBelowPercent
+  const savedNote = point?.mode === 'manual' && !manualOnly && !loss ? marginNote(point.sellIdr, point, rule, inherits) : null
   const incomplete = point != null && point.costIdr == null
   const unpriced = point != null && point.sellIdr === 0
 
@@ -183,6 +184,7 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
       {thin && <Warn>Margin {point!.marginPct!.toFixed(1)}% di bawah ambang peringatan {rule.warnBelowPercent}%.</Warn>}
       {incomplete && !manualOnly && <Warn>Modal belum lengkap, jadi untung belum bisa dihitung. Lengkapi biaya produk ini.</Warn>}
       {unpriced && <Warn>Harga jual 0 — produk ini belum bisa dipesan.</Warn>}
+      {savedNote && !editing && <MarginNote note={savedNote} />}
       {point?.mode === 'manual' && !manualOnly && (
         <p className="m-0 text-[11px] text-admin-muted">
           Harga manual{point.manualNote ? <> — “{point.manualNote}”</> : null}.{point.autoSellIdr != null && <> {inherits ? 'Harga paket' : 'Harga otomatis'} saat ini: <b>{formatRupiah(point.autoSellIdr)}</b>.</>}
@@ -211,7 +213,7 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
             <button type="button" className="text-[11px] font-semibold text-admin-accent underline" onClick={() => setSell(String(point.autoSellIdr))}>{inherits ? 'Pakai harga paket' : 'Pakai harga otomatis'} ({formatRupiah(point.autoSellIdr)})</button>
           )}
           {belowCost && <Warn>Di bawah modal ({formatRupiah(point!.costIdr!)}) — rugi {formatRupiah(point!.costIdr! - typed)} per satuan. Peringatan internal; tetap bisa disimpan.</Warn>}
-          {belowAuto && <Warn>Di bawah harga otomatis ({formatRupiah(point!.autoSellIdr!)}) — lebih rendah dari rekomendasi. Peringatan internal; tetap bisa disimpan.</Warn>}
+          {typedNote && <MarginNote note={typedNote} />}
           {error && <p className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={save} loading={busy}><Check className="size-4" /> Simpan harga</Button>
@@ -229,6 +231,27 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
       )}
     </div>
   )
+}
+
+type Note = { below: boolean; text: string }
+
+/**
+ * Selisih harga jual (diketik atau tersimpan) terhadap rekomendasi = modal + margin bawaan (`autoSellIdr`). HANYA catatan internal — harga jual tetap bebas
+ * (docs/arsitektur-harga-terpadu.md §21); di bawah modal ditangani peringatan rugi tersendiri. Varian keberangkatan dibandingkan dengan harga paket.
+ */
+function marginNote(sell: number, point: Point | null, rule: Payload['rule'], inherits: boolean): Note | null {
+  if (!point || point.autoSellIdr == null || !(sell > 0)) return null
+  const diff = sell - point.autoSellIdr
+  if (diff === 0) return null
+  const ref = inherits ? `harga paket (${formatRupiah(point.autoSellIdr)})` : `harga margin ${rule.marginPercent}% (${formatRupiah(point.autoSellIdr)})`
+  return diff < 0
+    ? { below: true, text: inherits ? `Lebih kecil ${formatRupiah(-diff)} dari ${ref}.` : `Lebih kecil dari margin yang ditentukan (${rule.marginPercent}%) — kurang ${formatRupiah(-diff)} dari ${ref}. Tetap bisa disimpan.` }
+    : { below: false, text: `Lebih tinggi ${formatRupiah(diff)} dari ${ref}.` }
+}
+
+function MarginNote({ note }: { note: Note }) {
+  if (note.below) return <Warn>{note.text}</Warn>
+  return <p className="m-0 flex items-start gap-1.5 text-xs font-medium text-admin-ok"><TrendingUp className="mt-0.5 size-3.5 shrink-0" /> {note.text}</p>
 }
 
 function Stat({ label, value, hint, tone, strong, muted }: { label: string; value: string; hint?: string; tone?: 'ok' | 'warning' | 'danger'; strong?: boolean; muted?: boolean }) {

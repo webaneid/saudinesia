@@ -9,6 +9,7 @@ import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
+import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -241,10 +242,11 @@ export default function FlightEditPage({ params }: Props) {
             <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
           </div>
           <div>
-            <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
+            <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi</p>
             <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
           </div>
         </div>
+        <RecommendationNote />
 
         <div className="flex gap-2 pt-1">
           <button

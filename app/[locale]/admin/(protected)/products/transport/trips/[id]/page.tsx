@@ -10,6 +10,7 @@ import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { TransportQuotaPanel } from './TransportQuotaPanel'
+import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -149,10 +150,11 @@ function PricingRow({ pricing, onChanged }: {
           <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink text-sm">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
         </div>
         <div>
-          <p className="text-[11px] text-admin-muted mb-1">Harga Jual (otomatis)</p>
+          <p className="text-[11px] text-admin-muted mb-1">Harga Jual Rekomendasi</p>
           <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink text-sm">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
         </div>
       </div>
+      <RecommendationNote />
 
       <button onClick={handleSave} disabled={saving || !canSave}
         className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
