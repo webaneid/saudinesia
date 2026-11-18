@@ -31,6 +31,9 @@ import { suggestedRefund } from '@/lib/booking/adminCancel'
 import { BookingPriceCard } from './BookingPriceCard'
 import { CostActualsPanel } from './CostActualsPanel'
 import { RevenueShareBox } from './RevenueShareBox'
+import { CompletionBox } from './CompletionBox'
+import { COMPLETION_BLOCKER_LABEL, completionBlockers, completionFacts } from '@/lib/booking/completion'
+import { canReopenBooking } from '@/lib/booking/policy'
 import { bookingShareStatus } from '@/lib/revenue-share/entitlement'
 import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { DATE_LONG, DATE_NUMERIC, DATETIME_FULL, formatCalendarDate, formatInstant } from '@/lib/time'
@@ -365,6 +368,15 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
       {/* Harga: tiga total + atur total (semua admin) + pengeluaran aktual vendor (manager+; daftar vendor hanya terbuka untuk manager+) */}
       <BookingPriceCard bookingId={id} status={st} />
       {SUPERADMIN_ROLES.includes(session.role) && <RevenueShareBox s={await bookingShareStatus(prisma, id)} />}
+      {(booking.status === 'active' || booking.status === 'completed') && await (async () => {
+        // Tandai selesai / Buka kembali (Fase 13d): syarat dari fungsi murni yang sama dengan server (dinilai ulang di dalam kunci saat disimpan).
+        const facts = await completionFacts(prisma, id)
+        const by = booking.completedById ? await prisma.user.findUnique({ where: { id: booking.completedById }, select: { fullName: true, isPlatformProvider: true } }) : null
+        // Akun bayangan Platform Provider tak pernah disebut namanya ke staf klien (docs/arsitektur-bagi-hasil.md §5).
+        const byName = by ? (by.isPlatformProvider && !session.isPlatformProvider ? 'Sistem' : by.fullName) : null
+        const completedText = booking.completedAt ? `Selesai ${formatInstant(booking.completedAt, DATETIME_FULL)}${byName ? ` oleh ${byName}` : ''}` : null
+        return <CompletionBox bookingId={id} completed={booking.status === 'completed'} completedText={completedText} blockers={facts ? completionBlockers(facts).map(b => COMPLETION_BLOCKER_LABEL[b]) : []} canReopen={canReopenBooking(session.role)} showShareNote={SUPERADMIN_ROLES.includes(session.role)} />
+      })()}
       <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} refundsHref={`/${locale}/admin/finance/refunds`} />
       {booking.status === 'active' && canCancelBooking(session.role) && (
         <CancelBookingBox bookingId={id} paid={refundable.paid} suggested={suggestedRefund(refundable.paid, booking.departureDate)} canMoney={canMoney} pendingProof={!!pendingPayment} />

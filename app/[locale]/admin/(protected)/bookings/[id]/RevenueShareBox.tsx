@@ -19,11 +19,11 @@ export function RevenueShareBox({ s }: { s: ShareStatus }) {
         <span className="text-[12px] text-admin-muted">{pct(s.percent)} · {REVENUE_SHARE_BASIS_LABEL[s.basis]} (beku di invoice)</span>
       </div>
       <dl className="m-0 grid grid-cols-3 gap-3 text-[13px]">
-        <div><dt className="text-admin-muted">Potensi</dt><dd className="m-0 font-semibold tabular-nums">{formatRupiah(s.potentialIdr)}</dd></div>
+        <div><dt className="text-admin-muted">{s.final ? 'Potensi akhir' : 'Potensi'}</dt><dd className="m-0 font-semibold tabular-nums">{formatRupiah(s.potentialIdr)}</dd></div>
         <div><dt className="text-admin-muted">Hak (dari pembayaran)</dt><dd className="m-0 font-semibold tabular-nums">{formatRupiah(s.entitledIdr)}</dd></div>
         <div><dt className="text-admin-muted">Terbayar</dt><dd className="m-0 font-semibold tabular-nums">{pct(s.paidRatio * 100)}</dd></div>
       </dl>
-      <p className="m-0 text-[12px] text-admin-muted">Hak dihitung hanya dari pembayaran yang terverifikasi, sebanding dengan bagian tagihan yang terbayar; refund dan revisi menyesuaikannya.</p>
+      <p className="m-0 text-[12px] text-admin-muted">Hak dihitung hanya dari pembayaran yang terverifikasi, sebanding dengan bagian tagihan yang terbayar; refund dan revisi menyesuaikannya.{s.final && s.basis === 'margin' ? ' Potensi akhir dibekukan saat Tandai selesai memakai pengeluaran vendor yang tercatat saat itu.' : ''}</p>
     </Card>
   )
 }

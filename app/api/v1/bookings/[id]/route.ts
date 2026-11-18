@@ -32,7 +32,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
     // `status` = siklus hidup tersimpan; `displayStatus` = status yang dilihat jamaah (menunggu bayar / diverifikasi / dikonfirmasi / …)
     const hasPending = (await prisma.payment.count({ where: { bookingId: booking.id, status: 'pending' } })) > 0
-    const { confirmedById: _staff, ...visible } = booking // id staf yang mengonfirmasi = internal (SEC-120)
+    const { confirmedById: _staff, completedById: _completer, completedPotentialIdr: _share, ...visible } = booking // id staf / bagi hasil = internal (SEC-120, 13d)
     return NextResponse.json(ok({ ...visible, displayStatus: displayStatus({ status: booking.status, confirmedAt: booking.confirmedAt, hasPendingPayment: hasPending, departureDate: booking.departureDate, returnDate: booking.returnDate }) }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') {

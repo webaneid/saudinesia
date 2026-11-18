@@ -43,6 +43,8 @@ model User {
   bookings                  Booking[]
   confirmedPayments         Payment[]                @relation("ConfirmedBy")
   confirmedBookings         Booking[]                @relation("BookingConfirmedBy")
+  completedBookings         Booking[]                @relation("BookingCompletedBy")
+  bookingCompletionEvents   BookingCompletionEvent[] @relation("BookingCompletionBy")
   approvedRefunds           Refund[]                 @relation("ApprovedBy")
   notifications             NotificationLog[]
   authTokens                AuthToken[]
@@ -835,11 +837,17 @@ model Booking {
   // Isi draf (status `draft`, docs/arsitektur-booking-engine-v2.md §10.3): masukan pesan berbentuk skema jalur pesan, TANPA item/kuota/snapshot. Dikosongkan saat terbit.
   draft           Json?
   confirmedById   String?
+  // Fase 13d (docs/arsitektur-bagi-hasil.md §5d): penanda "Tandai selesai" saat ini — ditulis HANYA lib/booking/completion.ts. Riwayat di booking_completion_events.
+  completedAt     DateTime?     @db.Timestamptz(3)
+  completedById   String?
+  // Potensi bagi hasil yang DIBEKUKAN saat Tandai selesai berlaku (dibaca bookingSharePotential selama `completed`; tidak bergantung urutan event — SEC audit 13d).
+  completedPotentialIdr Decimal? @db.Decimal(14, 2)
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
   user        User  @relation(fields: [userId], references: [id])
   confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
+  completedBy User? @relation("BookingCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
 
   groups              BookingGroup[]
   pilgrims            BookingPilgrim[]
@@ -859,6 +867,7 @@ model Booking {
   payments            Payment[]
   refunds             Refund[]
   revenueShareEntries RevenueShareEntry[]
+  completionEvents    BookingCompletionEvent[]
   cancellation        BookingCancellation?
   notifications       NotificationLog[]
   invoice             Invoice?
@@ -2453,6 +2462,30 @@ model RevenueShareEntry {
   @@index([bookingId, createdAt])
   @@index([createdAt, id])
   @@map("revenue_share_entries")
+}
+
+enum BookingCompletionAction {
+  complete
+  reopen
+
+  @@map("booking_completion_action")
+}
+
+/// Riwayat Tandai selesai / Buka kembali (Fase 13d, docs/arsitektur-bagi-hasil.md §5d) — append-only (trigger DB), ditulis HANYA lib/booking/completion.ts.
+/// `potentialIdr` = potensi bagi hasil yang DIBEKUKAN saat aksi (complete: dengan pengeluaran aktual bila dasar margin; reopen: potensi rencana). Tanpa teks bebas.
+model BookingCompletionEvent {
+  id           String                  @id @default(uuid())
+  bookingId    String
+  action       BookingCompletionAction
+  byUserId     String
+  potentialIdr Decimal                 @db.Decimal(14, 2)
+  createdAt    DateTime                @default(now()) @db.Timestamptz(3)
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Restrict)
+  byUser  User    @relation("BookingCompletionBy", fields: [byUserId], references: [id], onDelete: Restrict)
+
+  @@index([bookingId, createdAt])
+  @@map("booking_completion_events")
 }
 
 /// Aturan bagi hasil yang terakhir DITERAPKAN ke harga otomatis (Fase 13b): satu baris 'global'. Ditulis HANYA lib/revenue-share/pricing.ts setelah putaran hitung ulang;
