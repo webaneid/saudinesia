@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { Pencil, Plus, Save, Trash2, Wallet } from 'lucide-react'
 import { VendorCurrencyField } from './VendorCurrencyField'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { RecommendationNote } from './RecommendationNote'
 
 type CostRow = { id: string; costComponent: string; vendorId: string; vendorName: string; currency: string; cost: number; hppRupiah: number | null; sellPrice: number | null }
 type Preview = { hppRupiah: number; sellPrice: number }
@@ -160,10 +161,11 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
               <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? rupiah(preview.hppRupiah) : '—'}</p>
             </div>
             <div>
-              <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
+              <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi</p>
               <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? rupiah(preview.sellPrice) : '—'}</p>
             </div>
           </div>
+          <RecommendationNote />
 
           <div className="flex gap-2">
             <button onClick={save} disabled={saving || !form.costComponent || !form.vendorId || !form.cost}

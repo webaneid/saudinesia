@@ -11,6 +11,7 @@ import { CatalogActions, CatalogList } from '@/components/admin/data-table/Catal
 import { Badge } from '@/components/admin/ui/Badge'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
+import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -126,10 +127,11 @@ export default function MuthowifPage() {
             <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
           </div>
           <div>
-            <p className="text-xs text-admin-muted mb-1">Harga Jual (otomatis)</p>
+            <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi</p>
             <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
           </div>
         </div>
+        <RecommendationNote />
 
         <button onClick={handleSavePrice} disabled={savingPrice || !canSavePrice} className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
           <Save className="h-3.5 w-3.5" />
