@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 const createSchema = z.object({
   name:            z.string().min(1),
@@ -18,7 +19,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/hotels/room-types/GET]', e)
+    logError('admin/products/hotels/room-types/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/hotels/room-types/POST]', e)
+    logError('admin/products/hotels/room-types/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

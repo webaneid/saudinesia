@@ -3791,3 +3791,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 
 **Security check:** security-review route baru (admin `requireBookingManage`, id uuid, batas laju per booking sebelum kirim, galat lewat `authFailureResponse`, respons tanpa PII), modul penyusun (isi hanya dari DB, tanpa teks bebas), komponen klien (tanpa impor server) — 0 temuan. `bun audit` tetap baseline 6. Bug Low pre-existing (waktu log di zona proses) diperbaiki dengan `formatInstant`.
 
+## 2026-11-19 — Satu pintu pencatatan galat tanpa data pribadi (audit go-live G1)
+**Decision:** Galat dicatat HANYA lewat `lib/log` (`logError`/`errorSummary`/`redactPii`): nama + kode + pesan tersamar + 3 lokasi kode; pesan galat validasi Prisma dibuang; klien Prisma memancarkan galat sebagai event yang diringkas. Objek galat mentah, `.message`, dan `JSON.stringify` tak boleh masuk `console.*` server (dijaga `scripts/test-log-pii.ts`).
+**Rationale:** Audit go-live (`docs/rencana-audit-golive.md` §1) membuktikan pesan galat Prisma memuat seluruh argumen query (email, HP) — baik di `catch` kita (±190 tempat) maupun di log `prisma:error` klien sendiri. Pemilik memilih "nama + kode + pesan disamarkan" supaya galat 500 tetap bisa didiagnosis.
+**Alternatives considered:** Hanya nama + kode (paling aman, sulit didiagnosis); `errorFormat: 'minimal'` (dibuktikan tetap memuat argumen); memperbaiki per route tanpa penjaga (akan kambuh).
+
+**Security check:** audit OWASP Top 10 oleh subagent `security-auditor` (230 route): 0 Critical/High baru; Medium SEC-303 (peran DB superuser) dan SEC-304 (jejak staf/ZIP) dijadwalkan G2/G3 sebelum go-live atas keputusan pemilik; Low SEC-305..307 dicatat. G1 sendiri: security-review berkas berubah (log, klien Prisma, route) — 0 temuan baru, menutup SEC-228; `bun audit` baseline 6.
+

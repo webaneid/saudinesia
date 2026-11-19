@@ -11,7 +11,7 @@ export async function registerNode() {
     const [{ loadAppTimezone }, { startBookingLifecycleJobs }] = await Promise.all([import('@/lib/invoice/settings'), import('@/lib/cron/bookingLifecycleJob')])
     await loadAppTimezone()
     startBookingLifecycleJobs()
-  })().catch(e => console.error('[cron] gagal menjadwalkan siklus hidup booking:', e))
+  })().catch(e => logError('cron gagal menjadwalkan siklus hidup booking', e))
 
   const { startAuthTokenCleanupJob } = await import('@/lib/cron/authTokenJob')
   startAuthTokenCleanupJob()
@@ -42,7 +42,7 @@ async function repriceOnBoot() {
     const { ensurePricesFollowRevenueShare } = await import('@/lib/revenue-share/pricing')
     await ensurePricesFollowRevenueShare()
   } catch (e) {
-    console.error('[pricing] hitung ulang saat boot gagal:', e instanceof Error ? e.message : e)
+    logError('pricing hitung ulang saat boot gagal', e)
   }
 }
 
@@ -57,10 +57,12 @@ async function ensureMinioBucket() {
       return
     } catch (e) {
       if (attempt === 5) {
-        console.error('[minio] Gagal memastikan bucket setelah 5 percobaan:', e instanceof Error ? e.message : e)
+        logError('minio Gagal memastikan bucket setelah 5 percobaan', e)
         return
       }
       await new Promise((r) => setTimeout(r, 3000))
     }
   }
 }
+
+import { logError } from '@/lib/log'

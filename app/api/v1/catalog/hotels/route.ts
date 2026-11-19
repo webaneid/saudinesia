@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
 import { addDays, dbDateOf, todayInApp } from '@/lib/time'
+import { logError } from '@/lib/log'
 
 const querySchema = z.object({
   city:      z.enum(['makkah', 'madinah']).optional(),
@@ -66,7 +67,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(ok(data, { total: data.length }))
   } catch (error) {
-    console.error('[catalog/hotels]', error)
+    logError('catalog/hotels', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

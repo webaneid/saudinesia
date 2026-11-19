@@ -6,6 +6,7 @@ import { loginSchema } from '@/lib/validators/auth'
 import { ok } from '@/lib/validators'
 import { accountKey, clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Hash bcrypt cost 12 yang valid, tidak cocok dengan password mana pun yang dipakai pengguna — hanya untuk menyamakan waktu.
 const DUMMY_HASH = '$2b$12$mMjECRUCpXjI1zuGrztAd.jA/C6.JUsjG4mWPzlh9aGhJLtg1mD7C'
@@ -85,7 +86,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(ok({ role: user.role }))
   } catch (error) {
-    console.error('[auth/login]', error instanceof Error ? error.name : error)
+    logError('auth/login', error)
     return apiErrorJson('internal', 500)
   }
 }

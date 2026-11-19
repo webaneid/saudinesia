@@ -5,6 +5,7 @@ import { authFailureResponse, isAuthError } from '@/lib/admin/errors'
 import { departureUpdateSchema } from '@/lib/validators/package'
 import { deleteOrDeactivateDeparture, updateDeparture } from '@/lib/packages/departures'
 import { departureFailureResponse } from '@/lib/packages/http'
+import { logError } from '@/lib/log'
 
 // Ubah / hapus-aman satu keberangkatan, dicakup ke paketnya (id keberangkatan paket lain = 404).
 type Ctx = { params: Promise<{ id: string; departureId: string }> }
@@ -20,7 +21,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (isAuthError(e)) return authFailureResponse(e, 'admin/packages/departures/PUT')
     const known = departureFailureResponse(e)
     if (known) return known
-    console.error('[admin/packages/departures/PUT]', e)
+    logError('admin/packages/departures/PUT', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -36,7 +37,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
     if (isAuthError(e)) return authFailureResponse(e, 'admin/packages/departures/DELETE')
     const known = departureFailureResponse(e)
     if (known) return known
-    console.error('[admin/packages/departures/DELETE]', e)
+    logError('admin/packages/departures/DELETE', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

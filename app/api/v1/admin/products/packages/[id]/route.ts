@@ -11,6 +11,7 @@ import { cateringSeasonPrices, sellPrice, sellPrices, visaPriceSummary } from '@
 import { documentRequirementListSchema } from '@/lib/validators/documents'
 import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
 import { packageDetailFields, readExclusions, readItinerary } from '@/lib/validators/package'
+import { logError } from '@/lib/log'
 
 const modeEnum = z.enum(['included', 'user_choice', 'none'])
 
@@ -123,7 +124,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/packages/[id]/GET]', e)
+    logError('admin/products/packages/[id /GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -248,7 +249,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Paket umroh tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/packages/[id]/PUT]', e)
+    logError('admin/products/packages/[id /PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -266,7 +267,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Paket umroh tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/packages/[id]/DELETE]', e instanceof Error ? e.name : e)
+    logError('admin/products/packages/[id /DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

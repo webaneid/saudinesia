@@ -12,6 +12,7 @@ import { formatRupiah } from '@/lib/utils'
 import { safeLocale } from '@/lib/utils/locale'
 import { DATE_SHORT_MONTH_2D, formatCalendarDate } from '@/lib/time'
 import { LocaleSwitcher } from '@/components/shared/LocaleSwitcher'
+import { logError } from '@/lib/log'
 
 // Invoice PUBLIK tanpa login (docs/arsitektur-booking-engine-v2.md §10.4 6c, K6): siapa pun yang memegang tautan melihat invoice terkini (status, pembayaran, revisi).
 // Isi = bentuk invoice yang sama dengan PDF (harga jual beku, pajak, rekening beku, S&K; pembeli lengkap — keputusan pemilik P1). Tanpa HPP/modal/catatan staf/paspor.
@@ -57,7 +58,7 @@ export default async function PublicInvoicePage({ params }: Props) {
         try {
           return [{ id: q.id, name: q.name, src: `data:image/svg+xml;base64,${Buffer.from(await qrisSvg(buildDynamicQris(q.payload, qrisTotal, d.invoiceNumber))).toString('base64')}` }]
         } catch (e) {
-          console.error('[invoice publik] QR QRIS gagal dibuat', e instanceof Error ? e.message : String(e))
+          logError('invoice publik QR QRIS gagal dibuat', e)
           return []
         }
       }))).flat()

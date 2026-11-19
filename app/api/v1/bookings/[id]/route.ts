@@ -8,6 +8,7 @@ import { cancelBooking } from '@/lib/booking/cancel'
 import { expireAwaitingPayments } from '@/lib/payments/awaiting'
 import { displayStatus, isPilgrimCancellable } from '@/lib/booking/lifecycle'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -38,7 +39,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)
     }
-    console.error('[bookings/id/GET]', error)
+    logError('bookings/id/GET', error)
     return apiErrorJson('internal', 500)
   }
 }
@@ -74,7 +75,7 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)
     }
-    console.error('[bookings/id/DELETE]', error)
+    logError('bookings/id/DELETE', error)
     return apiErrorJson('internal', 500)
   }
 }

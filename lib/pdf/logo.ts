@@ -2,6 +2,7 @@ import sharp from 'sharp'
 import { prisma } from '@/lib/db'
 import { getObjectBuffer } from '@/lib/storage/minio'
 import { SETTINGS_ID } from '@/lib/invoice/settings'
+import { logError } from '@/lib/log'
 
 // Logo kop invoice = logo TERKINI di Pengaturan Invoice (merek, bukan data tagihan; tak dibekukan). Media universal menyimpan webp,
 // sedangkan @react-pdf hanya menerima PNG/JPEG → dikonversi ke PNG kecil. Gagal apa pun (tak ada logo, MinIO mati, berkas rusak) → null: invoice tetap terbit tanpa logo.
@@ -21,7 +22,7 @@ export async function loadInvoiceLogo(): Promise<Buffer | null> {
     cached = { key: img.key, png }
     return png
   } catch (e) {
-    console.error('[invoice-logo] logo tidak dapat dimuat:', e instanceof Error ? e.name : 'unknown')
+    logError('invoice-logo logo tidak dapat dimuat', e)
     return null
   }
 }

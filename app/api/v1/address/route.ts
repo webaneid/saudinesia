@@ -7,6 +7,7 @@ import { prepareAddressData } from '@/lib/address/prepare'
 import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { onboardingRefusal } from '@/lib/auth/contact'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // docs/arsitektur-alamat.md §3.1 — Address adalah entitas nilai reusable, siapa pun yang login
 // boleh membuat baris baru (dipakai pilgrim mengisi manifest, bukan cuma admin).
@@ -27,7 +28,7 @@ export async function POST(req: Request) {
     return NextResponse.json(ok(address), { status: 201 })
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[address/POST]', e)
+    logError('address/POST', e)
     return apiErrorJson('internal', 500)
   }
 }

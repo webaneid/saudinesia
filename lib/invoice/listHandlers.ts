@@ -6,6 +6,7 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
 import { ok, err } from '@/lib/validators'
 import { auditView, writeAudit, type AuditEntity } from '@/lib/invoice/audit'
+import { logError } from '@/lib/log'
 
 // Handler CRUD bersama untuk daftar kecil di Pengaturan Invoice (rekening bank, akun QRIS, aturan pajak). Satu implementasi: auth superadmin di baris pertama, Zod `.strict()`,
 // galat dibedakan (401/403 · 400 · 404 · 409 · 500+log), dan SETIAP perubahan menulis jejak append-only di transaksi yang sama (SEC-109). Route tipis hanya mengikat adapter model.
@@ -38,7 +39,7 @@ export function createListHandlers<T>(opts: {
     if (isRecordNotFound(e)) return NextResponse.json(err(`${label} tidak ditemukan`), { status: 404 })
     if (codeOf(e) === 'P2002') return NextResponse.json(err(`${label} yang sama sudah ada`), { status: 409 })
     if (codeOf(e) === 'P2003') return NextResponse.json(err(`${label} masih dipakai — nonaktifkan saja`), { status: 409 })
-    console.error(`[${tag}/${action}]`, e instanceof Error ? e.name : e)
+    logError(`${tag}/${action}`, e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
   async function staff(action: string): Promise<{ staffId: string } | { response: NextResponse }> {

@@ -12,6 +12,7 @@ import { visaFeeRules, visaPriceSummary } from '@/lib/pricing/engine/read'
 import { visaRequiredComponentsSchema } from '@/lib/validators/visa'
 import { manifestFieldListSchema } from '@/lib/validators/manifest'
 import { manifestFieldsForEditor, writeManifestFields } from '@/lib/manifest/fields'
+import { logError } from '@/lib/log'
 
 // price TIDAK ada di sini secara sengaja — VisaProduct.price cuma boleh diisi oleh
 // repriceOwner('visa', id) (lib/pricing/engine) (docs/arsitektur-harga.md §17), bukan input admin manual.
@@ -45,7 +46,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/visa/[id]/GET]', e)
+    logError('admin/products/visa/[id /GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -80,7 +81,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Produk visa tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/visa/[id]/PUT]', e)
+    logError('admin/products/visa/[id /PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -96,7 +97,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Produk visa tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/visa/[id]/DELETE]', e instanceof Error ? e.name : e)
+    logError('admin/products/visa/[id /DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

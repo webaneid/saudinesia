@@ -4,6 +4,7 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-transportasi.md §9, pola sama Flight) —
 // kombinasi rute×kendaraan baru dibuat dengan price:0, terisi otomatis setelah admin mengisi
@@ -28,7 +29,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/transport/pricing/GET]', e)
+    logError('admin/products/transport/pricing/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/transport/pricing/POST]', e)
+    logError('admin/products/transport/pricing/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

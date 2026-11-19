@@ -3,6 +3,7 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { simulateSellPrice, type SimulateComponent } from '@/lib/pricing/simulateSellPrice'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 const querySchema = z.object({
   visaCost: z.coerce.number().positive(),
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/visa/simulate/GET]', e)
+    logError('admin/products/visa/simulate/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -6,6 +6,7 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteTourismSite } from '@/lib/admin/productDelete'
+import { logError } from '@/lib/log'
 
 const updateSchema = z.object({
   name:        z.string().min(1).optional(),
@@ -28,7 +29,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/tourism-sites/[id]/GET]', e)
+    logError('admin/products/tourism-sites/[id /GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -50,7 +51,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Situs wisata tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/tourism-sites/[id]/PUT]', e)
+    logError('admin/products/tourism-sites/[id /PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -66,7 +67,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Situs wisata tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/tourism-sites/[id]/DELETE]', e instanceof Error ? e.name : e)
+    logError('admin/products/tourism-sites/[id /DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

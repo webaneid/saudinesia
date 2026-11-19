@@ -7,6 +7,7 @@ import { revokeInvoiceLinksOfUser } from '@/lib/invoice/issue'
 import { countErasableIdentities, eraseSavedPilgrimsOf } from '@/lib/pilgrims/service'
 import { sendEmail, type EmailInput, type EmailResult } from '@/lib/email/resend'
 import { accountDeletedEmail, deletionRejectedEmail, deletionRequestedEmail } from '@/lib/email/accountTemplates'
+import { logError } from '@/lib/log'
 
 // Penghapusan akun UU PDP (SEC-44) — docs/arsitektur-hapus-akun.md. ANONIMISASI, bukan hard delete: baris Booking/Payment/Refund
 // dipertahankan (kewajiban pembukuan/pajak), data pribadi dihapus/diacak. Satu transaksi: kunci baris permintaan + pengguna, cek ulang syarat,
@@ -247,7 +248,7 @@ export async function executeDeletion(
   // Dibatasi waktu (S57-LOW3): MinIO yang menggantung / booking grup besar tak boleh membuat request superadmin menunggu (504 di proxy) —
   // penghapusan sudah final; yang tersisa dijamin cron harian.
   const sweep = sweepErasedAccount(userId, { deleteByPrefix: deps.deleteByPrefix }).catch((e) => {
-    console.error('[account-deletion] sapuan awal gagal; cron harian akan mengulang:', e instanceof Error ? e.name : e)
+    logError('account-deletion sapuan awal gagal; cron harian akan mengulang', e)
   })
   await Promise.race([sweep, new Promise<void>((resolve) => setTimeout(resolve, deps.sweepTimeoutMs ?? 10_000).unref())])
   return { ok: true, summary }

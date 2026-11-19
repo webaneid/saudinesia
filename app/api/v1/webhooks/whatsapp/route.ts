@@ -3,6 +3,7 @@ import { clientIp } from '@/lib/auth/rateLimit'
 import { whatsapp } from '@/lib/whatsapp/client'
 import { WEBHOOK_MAX_BODY_BYTES, processWebhook, webhookSecret } from '@/lib/whatsapp/webhook'
 import { ok, err } from '@/lib/validators'
+import { logError } from '@/lib/log'
 
 // Webhook GOWA untuk pesan MASUK (ADR-0002, docs/arsitektur-whatsapp-verifikasi.md §3). Endpoint publik: SATU-SATUNYA penjaganya adalah tanda tangan
 // HMAC (lib/whatsapp/webhook.ts — semua logikanya diuji otomatis). GOWA mencoba ulang sampai 5 kali pada non-2xx dan menunggu ≤10 dtk → semua
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(ok({ handled: out.handled === true }))
   } catch (error) {
-    console.error('[webhooks/whatsapp]', error instanceof Error ? error.name : error)
+    logError('webhooks/whatsapp', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { ok } from '@/lib/validators'
 import { escapeLike } from '@/lib/utils/search'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Publik, tanpa auth — rata-rata ~11-12 desa/kelurahan per kecamatan (83.762/7.285), tapi
 // beberapa kecamatan bisa jauh lebih banyak — dukung filter teks `q` (server-side) untuk kasus
@@ -21,7 +22,7 @@ export async function GET(req: Request) {
     })
     return NextResponse.json(ok(villages))
   } catch (e) {
-    console.error('[address/wilayah/villages/GET]', e)
+    logError('address/wilayah/villages/GET', e)
     return apiErrorJson('internal', 500)
   }
 }

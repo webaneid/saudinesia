@@ -7,6 +7,7 @@ import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
 import { syncAndNotify } from '@/lib/payments/gateway'
 import { gatewayView, gatewayViewSelect } from '@/lib/payments/gatewayView'
+import { logError } from '@/lib/log'
 
 // "Periksa status" pembayaran online oleh pemilik booking: status dibaca dari iPaymu (/transaction), lalu dikonfirmasi otomatis bila lunas.
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string; paymentId: string }> }) {
@@ -25,7 +26,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     return NextResponse.json(ok(await gatewayView(row)), { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[bookings/id/payment/gateway/check]', error instanceof Error ? error.name : 'galat')
+    logError('bookings/id/payment/gateway/check', error)
     return apiErrorJson('internal', 500)
   }
 }

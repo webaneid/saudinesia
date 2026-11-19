@@ -6,6 +6,7 @@ import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/li
 import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { logError } from '@/lib/log'
 
 const createSchema = z.object({
   name:        z.string().min(1),
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/tourism-sites/GET]', e)
+    logError('admin/products/tourism-sites/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/tourism-sites/POST]', e)
+    logError('admin/products/tourism-sites/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

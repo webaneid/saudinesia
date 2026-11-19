@@ -18,6 +18,7 @@ import { claimRefusal, paymentLimits, type ClaimRefusal } from '@/lib/payments/l
 import { paymentTransferSchema, TRANSFER_KEYS } from '@/lib/validators/paymentTransfer'
 import { formatRupiah } from '@/lib/utils'
 import { payableQris } from '@/lib/qris/payable'
+import { logError } from '@/lib/log'
 
 const CLOCK_SKEW_MS = 5 * 60_000 // jam perangkat pelanggan boleh sedikit meleset dari server
 
@@ -136,11 +137,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)
     }
-    console.error('[bookings/id/payment/bukti]', error)
+    logError('bookings/id/payment/bukti', error)
     return apiErrorJson('internal', 500)
   }
 }
 
 async function discardUpload(objectKey: string): Promise<void> {
-  await deleteObject(objectKey).catch((e: unknown) => console.error('[bookings/id/payment/bukti] gagal membuang berkas yatim', e instanceof Error ? e.message : String(e)))
+  await deleteObject(objectKey).catch((e: unknown) => logError('bookings/id/payment/bukti gagal membuang berkas yatim', e))
 }

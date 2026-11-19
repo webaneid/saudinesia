@@ -11,6 +11,7 @@ import { canViewCost } from '@/lib/pricing/policy'
 import { documentRequirementListSchema } from '@/lib/validators/documents'
 import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
 import { writeDefaultManifestFields } from '@/lib/manifest/fields'
+import { logError } from '@/lib/log'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-harga.md §17) — produk baru dibuat
 // dengan price:0, baru terisi otomatis setelah admin mengisi komponen HPP di halaman edit.
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/visa/GET]', e)
+    logError('admin/products/visa/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/visa/POST]', e)
+    logError('admin/products/visa/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

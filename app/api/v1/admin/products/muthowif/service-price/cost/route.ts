@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { SYSTEM_VENDOR_KEYS } from '@/lib/constants/vendor'
+import { logError } from '@/lib/log'
 
 // Muthowif punya persis 1 komponen HPP tetap, tidak day-based — pola identik Flight
 // (docs/arsitektur-muthowif.md §10).
@@ -55,7 +56,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/muthowif/service-price/cost/GET]', e)
+    logError('admin/products/muthowif/service-price/cost/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -99,7 +100,7 @@ export async function PUT(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/muthowif/service-price/cost/PUT]', e)
+    logError('admin/products/muthowif/service-price/cost/PUT', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

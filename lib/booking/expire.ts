@@ -5,6 +5,7 @@ import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { cancelBooking, type CancellableBooking } from '@/lib/booking/cancel'
 import { DEPARTURE_REMINDER_DAYS, type DepartureReminderType } from '@/lib/notifications/departure'
 import { addDays, dbDateOf, endOfDayExclusiveInApp, startOfDayInApp, todayInApp } from '@/lib/time'
+import { logError } from '@/lib/log'
 
 // Hangus & pengingat (docs/arsitektur-booking-engine-v2.md §10.1 poin 5). Jatuh tempo TIDAK mengikat (D4): ia hanya batas bayar yang ditampilkan ke jamaah; pembayaran terlambat
 // tetap diterima admin. Yang menghanguskan booking: "belum ada uang masuk sama sekali sampai N hari sebelum tanggal berangkat" (setelan `expireDaysBeforeReference`, 0 = mati),
@@ -57,7 +58,7 @@ export async function expireOverdueBookings(now: Date = new Date()): Promise<Exp
       else result.skipped++
     } catch (e) {
       result.skipped++
-      console.error(`[cron] gagal menghanguskan booking ${id}:`, e instanceof Error ? e.message : String(e))
+      logError('cron hangus', e, { booking: id })
     }
   }
   return result

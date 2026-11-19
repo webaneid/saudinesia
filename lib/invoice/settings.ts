@@ -4,6 +4,7 @@ import { upsertAddress } from '@/lib/address/prepare'
 import { isValidTimezone, setAppTimezone } from '@/lib/time'
 import { changedFields, writeAudit } from '@/lib/invoice/audit'
 import type { InvoiceSettingsInput } from '@/lib/validators/invoiceSettings'
+import { logError } from '@/lib/log'
 
 // Pengaturan Invoice (docs/arsitektur-booking-engine-v2.md §6): SATU baris 'global'. Pembaca/penulis tunggal — halaman, penerbitan invoice, dan halaman bayar membaca lewat sini.
 export const SETTINGS_ID = 'global'
@@ -38,7 +39,7 @@ export async function loadAppTimezone(opts: { attempts?: number; delayMs?: numbe
       if (row && isValidTimezone(row.appTimezone)) { setAppTimezone(row.appTimezone); return row.appTimezone }
       return null
     } catch (e) {
-      console.error(`[waktu] gagal memuat zona aplikasi (percobaan ${i}/${attempts}):`, e instanceof Error ? e.message : String(e))
+      logError('waktu gagal memuat zona aplikasi', e, { attempt: i, of: attempts })
       if (i < attempts) await new Promise(r => setTimeout(r, delayMs))
     }
   }

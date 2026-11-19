@@ -1,6 +1,7 @@
 // Satu-satunya tempat yang memanggil Resend (docs/arsitektur-notifikasi.md). Pola mengikuti smart-ai: HTTP API langsung,
 // tanpa SDK. `sendEmail` TIDAK PERNAH melempar — email tidak boleh menggagalkan operasi bisnis — tetapi mengembalikan hasil
 // jujur: 'sent' (diterima Resend; bukan jaminan masuk inbox), 'skipped' (kredensial belum diisi) atau 'failed'.
+import { redactPii } from '@/lib/log'
 
 export type EmailInput = {
   to: string
@@ -95,6 +96,6 @@ export async function sendEmail(input: EmailInput): Promise<EmailResult> {
 
     if (attempt < MAX_ATTEMPTS) await sleep(retryAfterMs || BACKOFF_MS[attempt - 1] || 1500)
   }
-  console.error(`[email] gagal setelah ${MAX_ATTEMPTS} percobaan: ${lastError}`)
+  console.error(`[email] gagal setelah ${MAX_ATTEMPTS} percobaan: ${redactPii(lastError)}`)
   return { status: 'failed', error: lastError }
 }

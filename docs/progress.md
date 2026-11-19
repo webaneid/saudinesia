@@ -613,9 +613,9 @@ Rencana: `docs/arsitektur-i18n-frontend.md` (fase I1–I6; keputusan pemilik K1�
 - [x] Server-side MIME + size validation on every file upload — **Rapikan 2026-11-19:** tertutup — dokumen `prepareDocumentFile`, foto `lib/media`, bukti bayar dari isi berkas (SEC-216)
 - [x] Rate limiting on OTP (Redis) + payment confirmation endpoints — **Rapikan 2026-11-19:** tertutup — OTP dihapus (ADR-0001); batas `lib/auth/rateLimit.ts` di auth, `POST /bookings`, unggah bukti
 - [x] Role check inside every admin/superadmin Route Handler (beyond middleware) — **Rapikan 2026-11-19:** tertutup — dijaga `scripts/test-routes.ts` + `requireAdminPage` (`test-session.ts`)
-- [ ] No PII in application logs (audit all console.log calls)
+- [x] No PII in application logs (audit all console.log calls) — **2026-11-19 (`docs/rencana-audit-golive.md` G1, SEC-228):** satu pintu `lib/log` (`logError`/`errorSummary`/`redactPii`), klien Prisma tak lagi mencetak argumen query, ±210 pemanggilan diganti; dijaga `scripts/test-log-pii.ts`
 - [~] UU PDP compliance notice — registrasi **selesai** (lihat section Retrofit Gaps #2, consent checkbox + `/privacy`), notice di layar upload dokumen **masih pending**
-- [ ] Penetration-test checklist (OWASP Top 10)
+- [~] Penetration-test checklist (OWASP Top 10) — **2026-11-19:** audit A01–A10 selesai (`docs/rencana-audit-golive.md` §2: 0 Critical/High baru); sisa sebelum go-live: G2 peran DB terpisah (SEC-303), G3 jejak staf/ZIP (SEC-304); Low SEC-305..307 menyusul; cek manual VPS (firewall, SSH, backup + uji restore, alert)
 
 ---
 

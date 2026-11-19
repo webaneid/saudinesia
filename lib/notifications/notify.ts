@@ -5,6 +5,7 @@ import { whatsapp } from '@/lib/whatsapp/client'
 import { sendEmail } from '@/lib/email/resend'
 import { emailContent } from '@/lib/email/templates'
 import { waMessage, type NotificationEvent } from '@/lib/notifications/events'
+import { errorSummary } from '@/lib/log'
 
 // SATU pintu notifikasi (docs/arsitektur-notifikasi.md §3). Dipanggil dari route/cron; TIDAK PERNAH melempar —
 // notifikasi tidak boleh menggagalkan operasi bisnis (aturan CLAUDE.md § WhatsApp, kini berlaku untuk email juga).
@@ -39,7 +40,7 @@ export async function notify(input: NotifyInput): Promise<ChannelOutcome[]> {
   try {
     return await run(input)
   } catch (e) {
-    console.error('[notify] kegagalan tak terduga:', safeErr(e))
+    console.error('[notify] kegagalan tak terduga:', errorSummary(e))
     return []
   }
 }
@@ -104,7 +105,7 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   const out: ChannelOutcome[] = []
   for (const r of settled) {
     if (r.status === 'fulfilled') out.push(r.value)
-    else console.error('[notify] satu kanal gagal tak terduga:', safeErr(r.reason))
+    else console.error('[notify] satu kanal gagal tak terduga:', errorSummary(r.reason))
   }
 
   // Peringatan keras bila TIDAK ADA kanal yang sampai (mis. WhatsApp mati DAN email dimatikan/belum dikonfigurasi): pengguna tidak
@@ -156,17 +157,11 @@ async function deliverOne(
       },
     })
   } catch (e) {
-    console.error('[notify] gagal menulis log:', safeErr(e))
+    console.error('[notify] gagal menulis log:', errorSummary(e))
   }
   return { channel, status: result.status }
 }
 
-// Pesan galat Prisma memuat argumen query (alamat email, nomor) — PII tidak boleh masuk log aplikasi; cukup jenis & kode galat.
-function safeErr(e: unknown): string {
-  if (!(e instanceof Error)) return 'galat tak dikenal'
-  const code = (e as { code?: unknown }).code
-  return typeof code === 'string' ? `${e.name} (${code})` : e.name
-}
 
 const EMAIL_SHAPE = /^[^\s@<>"',;]+@[^\s@<>"',;]+\.[^\s@<>"',;]+$/
 

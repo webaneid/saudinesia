@@ -1,6 +1,7 @@
 import cron from 'node-cron'
 import { prisma } from '@/lib/db'
 import { refreshAllPricingCaches } from '@/lib/pricing/refreshAll'
+import { logError } from '@/lib/log'
 
 const API_BASE = 'https://open.er-api.com/v6/latest'
 const PAIRS: Array<{ from: string; to: string }> = [
@@ -57,7 +58,7 @@ export async function refreshExchangeRates(): Promise<void> {
       console.log(`[cron] ExchangeRate ${from}->${to}: mid=${midRate} sell=${sellRate.toFixed(4)}`)
     } catch (err) {
       // Satu pasangan gagal tidak boleh menggagalkan yang lain — lihat docs/arsitektur-harga.md §4.2
-      console.error(`[cron] ExchangeRate fetch gagal untuk ${from}->${to}:`, err)
+      logError('cron ExchangeRate fetch gagal', err, { pair: `${from}->${to}` })
     }
   }
 
