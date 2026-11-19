@@ -12,6 +12,7 @@ import { computeCostComponents } from '@/lib/pricing/costComponents'
 import { compositeLines, lineTotalRecommended, sumSell } from '@/lib/pricing/engine/snapshot'
 import { createCostComponentHandlers } from '@/lib/pricing/costComponentHandlers'
 import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
+import { marginNote } from '@/lib/pricing/marginNote'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -145,6 +146,26 @@ await t('Visa (juga memakai ProductCost) tidak menjadi pemilik cost_component; k
   } finally {
     await prisma.productCost.delete({ where: { id: visa.id } })
   }
+})
+
+await t('C2: GET komponen membawa titik harga komponen (rekomendasi · jual berlaku · mode) + margin tipe produk', async () => {
+  await setManualSell({ ownerType: 'cost_component', ownerId: hotel, sellIdr: 650_000, note: 'uji C2', byUserId: who })
+  const res = await H.collectionGET(new Request('http://test.local/x'), ctx(haji.id))
+  const j = (await res.json()) as { data: Array<{ id: string; price: { autoSellIdr: number | null; sellIdr: number; mode: string; manualNote: string | null } | null }>; meta: { marginPercent: number } }
+  assert.equal(j.meta.marginPercent, 20)
+  assert.deepEqual(j.data.find(r => r.id === hotel)?.price, { autoSellIdr: 600_000, sellIdr: 650_000, mode: 'manual', manualNote: 'uji C2' })
+  await clearManualSell({ ownerType: 'cost_component', ownerId: hotel, byUserId: who })
+})
+
+await t('C2: marginNote — di bawah margin / di atas / pembanding komponen & paket / sama = tanpa catatan', () => {
+  assert.match(marginNote({ sell: 1_100_000, recommended: 1_200_000, ref: 'margin', marginPercent: 20 })!.text, /^Lebih kecil dari margin yang ditentukan \(20%\) — kurang Rp\s?100\.000/)
+  const up = marginNote({ sell: 1_300_000, recommended: 1_200_000, ref: 'margin', marginPercent: 20 })!
+  assert.equal(up.below, false); assert.match(up.text, /^Lebih tinggi Rp\s?100\.000 dari harga margin 20%/)
+  assert.match(marginNote({ sell: 900, recommended: 1_000, ref: 'components', marginPercent: 20 })!.text, /jumlah harga komponen/)
+  assert.match(marginNote({ sell: 900, recommended: 1_000, ref: 'package', marginPercent: 20 })!.text, /harga paket/)
+  assert.equal(marginNote({ sell: 1_000, recommended: 1_000, ref: 'margin', marginPercent: 20 }), null)
+  assert.equal(marginNote({ sell: 0, recommended: 1_000, ref: 'margin', marginPercent: 20 }), null)
+  assert.equal(marginNote({ sell: 1_000, recommended: null, ref: 'margin', marginPercent: 20 }), null)
 })
 
 await t('ditolak: modal manual komponen (modal milik Komponen Biaya), harga manual atas ProductCost Visa / id tak dikenal', async () => {

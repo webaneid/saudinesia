@@ -1,12 +1,18 @@
 'use client'
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Pencil, Plus, Save, Trash2, Wallet } from 'lucide-react'
+import { Pencil, Plus, Save, Tag, Trash2, Wallet } from 'lucide-react'
 import { VendorCurrencyField } from './VendorCurrencyField'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { RecommendationNote } from './RecommendationNote'
+import { CostComponentPriceEditor } from './CostComponentPriceEditor'
+import { MarginNote } from './MarginNote'
+import { Badge } from '@/components/admin/ui/Badge'
+import { marginNote } from '@/lib/pricing/marginNote'
 
-type CostRow = { id: string; costComponent: string; vendorId: string; vendorName: string; currency: string; cost: number; hppRupiah: number | null; sellPrice: number | null }
+/** `price` = titik harga komponen (§22 docs/arsitektur-harga-terpadu.md): rekomendasi, jual BERLAKU, mode — null bila belum ada (mis. kurs belum tersedia). */
+type ComponentPrice = { autoSellIdr: number | null; sellIdr: number; mode: 'auto' | 'manual'; manualNote: string | null }
+type CostRow = { id: string; costComponent: string; vendorId: string; vendorName: string; currency: string; cost: number; hppRupiah: number | null; sellPrice: number | null; price: ComponentPrice | null }
 type Preview = { hppRupiah: number; sellPrice: number }
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR'] as const
@@ -42,6 +48,8 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
   const [preview, setPreview] = useState<Preview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [forbidden, setForbidden] = useState(false)
+  const [pricingId, setPricingId] = useState<string | null>(null)
+  const [marginPercent, setMarginPercent] = useState(0)
 
   const loadCosts = useCallback(async () => {
     const r = await fetch(apiBase)
@@ -50,6 +58,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
     setForbidden(r.status === 401 || r.status === 403)
     const j = await r.json().catch(() => null)
     setCosts(j?.data ?? [])
+    setMarginPercent(Number(j?.meta?.marginPercent ?? 0))
   }, [apiBase])
 
   useEffect(() => { loadCosts() }, [loadCosts])
@@ -121,7 +130,10 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
     )
   }
 
-  const total = costs.reduce((sum, c) => sum + (c.sellPrice ?? 0), 0)
+  // Jual BERLAKU per komponen (harga manual komponen menang); rekomendasi = HPP × margin. Total = harga otomatis produk dari komponen (§22).
+  const sellOf = (c: CostRow) => c.price?.sellIdr ?? c.sellPrice
+  const recOf = (c: CostRow) => c.price?.autoSellIdr ?? c.sellPrice
+  const total = costs.reduce((sum, c) => sum + (sellOf(c) ?? 0), 0)
 
   return (
     <div className="admin-form-panel space-y-4">
@@ -178,25 +190,48 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
       )}
 
       <div className="space-y-2">
-        {costs.map(c => (
-          <div key={c.id} className="flex items-center justify-between rounded-lg border border-admin-line px-4 py-2.5">
-            <div>
-              <p className="text-[13px] font-medium text-admin-ink">{c.costComponent}</p>
-              <p className="text-[11px] text-admin-muted">{c.vendorName} · {c.currency} {c.cost.toLocaleString('id-ID')}{c.hppRupiah != null && ` · HPP ${rupiah(c.hppRupiah)}`}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {c.sellPrice != null && <p className="text-[13px] font-bold text-admin-accent-strong">{rupiah(c.sellPrice)}</p>}
-              <div className="flex items-center gap-1.5">
-                <button onClick={() => openForm(c)} aria-label={`Ubah ${c.costComponent}`} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
-                  <Pencil className="h-3.5 w-3.5" />
-                </button>
-                <button onClick={() => remove(c.id)} aria-label={`Hapus ${c.costComponent}`} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
+        {costs.map(c => {
+          const sell = sellOf(c), rec = recOf(c), manual = c.price?.mode === 'manual'
+          const saved = manual && sell != null && (c.hppRupiah == null || sell >= c.hppRupiah) ? marginNote({ sell, recommended: rec, ref: 'margin', marginPercent }) : null
+          return (
+            <div key={c.id} className="space-y-2 rounded-lg border border-admin-line px-4 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-1.5 text-[13px] font-medium text-admin-ink">
+                    {c.costComponent} {manual && <Badge tone="warning">Manual</Badge>}
+                  </p>
+                  <p className="text-[11px] text-admin-muted">{c.vendorName} · {c.currency} {c.cost.toLocaleString('id-ID')}{c.hppRupiah != null && ` · HPP ${rupiah(c.hppRupiah)}`}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    {sell != null && <p className="text-[13px] font-bold text-admin-accent-strong">{rupiah(sell)}</p>}
+                    {manual && rec != null && <p className="text-[11px] text-admin-muted">rekomendasi {rupiah(rec)}</p>}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button onClick={() => setPricingId(pricingId === c.id ? null : c.id)} aria-label={`Atur harga jual ${c.costComponent}`} title="Atur harga jual" className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
+                      <Tag className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => openForm(c)} aria-label={`Ubah ${c.costComponent}`} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button onClick={() => remove(c.id)} aria-label={`Hapus ${c.costComponent}`} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                </div>
               </div>
+              {manual && c.price?.manualNote && pricingId !== c.id && <p className="text-[11px] text-admin-muted">Catatan: “{c.price.manualNote}”</p>}
+              {saved && pricingId !== c.id && <MarginNote note={saved} />}
+              {pricingId === c.id && (
+                <CostComponentPriceEditor
+                  costId={c.id} name={c.costComponent} hppIdr={c.hppRupiah} recommendedIdr={rec} sellIdr={sell} manual={manual}
+                  note={c.price?.manualNote ?? null} marginPercent={marginPercent}
+                  onSaved={async () => { setPricingId(null); await afterChange() }} onCancel={() => setPricingId(null)}
+                />
+              )}
             </div>
-          </div>
-        ))}
+          )
+        })}
         {costs.length === 0 && <p className="text-sm text-admin-muted/70 py-2">Belum ada komponen biaya.</p>}
         {costs.length > 0 && (
           <div className="flex items-center justify-between rounded-lg bg-admin-spot/40 px-4 py-2">

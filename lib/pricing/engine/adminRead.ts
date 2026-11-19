@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
-import type { PriceOwnerType } from './types'
+import type { PriceOwnerType, PriceView } from './types'
+import { toView } from './view'
 
 // Pembaca KHUSUS ADMIN untuk daftar produk (docs/arsitektur-harga-terpadu.md §6, §16): harga jual + modal + untung per baris. Memuat modal/untung — pemanggil WAJIB
 // memastikan peran lewat lib/pricing/policy.ts (`canViewCost`) sebelum menyertakannya; yang keluar ke publik hanya `read.ts` (harga jual).
@@ -25,4 +26,11 @@ export async function withAdminPrices<T extends { id: string }>(ownerType: Price
       marginPct: cost == null || cost <= 0 ? null : ((sell - cost) / cost) * 100,
     }
   })
+}
+
+/** Titik harga utama (varian "") per id, lengkap (modal · otomatis · jual · mode · catatan) — untuk baris Komponen Biaya (§22). Khusus admin, seperti di atas. */
+export async function pricePointViews(ownerType: PriceOwnerType, ids: readonly string[]): Promise<Map<string, PriceView>> {
+  if (ids.length === 0) return new Map()
+  const rows = await prisma.pricePoint.findMany({ where: { ownerType, ownerId: { in: [...ids] }, variantKey: '' } })
+  return new Map(rows.map(p => [p.ownerId, toView(p)]))
 }

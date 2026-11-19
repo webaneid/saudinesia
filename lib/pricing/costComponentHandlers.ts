@@ -9,6 +9,8 @@ import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
 import { COST_OWNERS, type CostOwnerKey } from './costComponentOwners'
 import { repriceOwner } from './engine'
+import { pricePointViews } from './engine/adminRead'
+import { resolveMarginRule } from './pricingHelpers'
 
 // Handler CRUD Komponen Biaya yang dipakai semua pemilik (docs/arsitektur-komponen-biaya.md §3.1). Berkas route per modul hanya mengekspor
 // ulang hasil `createCostComponentHandlers(...)`. Semua endpoint superadmin-only (menyusun biaya = superadmin). Membaca modal/harga per komponen untuk semua peran
@@ -38,16 +40,21 @@ export function createCostComponentHandlers(key: CostOwnerKey, options: CostHand
         orderBy: { costComponent: 'asc' },
       })
       // hppRupiah/sellPrice per baris (bukan hanya di /breakdown) supaya setiap baris langsung tampil dengan harga terhitung.
+      // `price` = titik harga komponen (§22): rekomendasi (`autoSellIdr`), jual BERLAKU, mode, catatan — sumber harga baris; `sellPrice` = pratinjau rekomendasi saat titik belum ada.
+      const points = await pricePointViews('cost_component', costs.map(c => c.id))
       const data = await Promise.all(costs.map(async (c) => {
         const cost = (c.costTiers as unknown as CostTier[])[0]?.cost ?? 0
         const preview = await simulateSellPrice(owner.productType, [{ currency: c.currency, cost }])
+        const p = points.get(c.id)
         return {
           id: c.id, costComponent: c.costComponent, vendorId: c.vendorId, vendorName: c.vendor.name,
           currency: c.currency, cost,
           hppRupiah: preview?.hppRupiah ?? null, sellPrice: preview?.sellPrice ?? null,
+          price: p ? { autoSellIdr: p.autoSellIdr, sellIdr: p.sellIdr, mode: p.mode, manualNote: p.manualNote } : null,
         }
       }))
-      return NextResponse.json(ok(data))
+      const rule = await resolveMarginRule(owner.productType)
+      return NextResponse.json(ok(data, { marginPercent: rule.defaultMarginPercent }))
     } catch (e) {
       return authFailureResponse(e, tag('GET'))
     }

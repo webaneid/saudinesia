@@ -3749,3 +3749,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Alternatives considered:** Varian `komponen:<id>` di titik produk (ditolak: pembaca harga produk — `sellPrices`, "mulai dari" varian termurah Paket Umroh — akan ikut memungut harga komponen); kolom `manualSell` di `ProductCost` (ditolak: melanggar aturan satu sumber harga).
 
 **Security check:** `security-auditor`: 0 Critical/High/Medium, 4 Low — SEC-300/302 diperbaiki, SEC-301 sebagian diperbaiki (c) sisanya diterima, SEC-299 diterima pemilik (semua peran admin boleh melihat HPP per komponen; ubah komponen tetap superadmin). `bun audit` tetap 6 (tak ada yang baru).
+
+## 2026-11-19 — UI harga per komponen: editor sebaris + satu fungsi catatan selisih (§22 C2–C3)
+**Decision:** Harga jual per komponen diatur sebaris di panel Komponen Biaya (`CostComponentPriceEditor`) lewat route `admin/pricing/points` yang sama dengan PriceCard; catatan "Lebih kecil dari margin / Lebih tinggi Rp …" dihitung SATU fungsi murni `lib/pricing/marginNote.ts` untuk kedua tempat.
+**Rationale:** Arahan pemilik (harga per komponen di tempat komponen diinput); satu aturan catatan mencegah dua tafsir. Tanpa route/kolom baru.
+**Alternatives considered:** PriceCard terpisah per komponen di bawah panel (ditolak: menjauhkan harga dari barisnya, layar memanjang); popup (ditolak: pola sebaris sudah dipakai PriceCard dan draf booking).
+
+**Security check:** security-review 7 berkas — 0 temuan; `bun audit` tetap 6 (tak ada yang baru).
