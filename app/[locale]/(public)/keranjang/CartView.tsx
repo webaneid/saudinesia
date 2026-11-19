@@ -4,12 +4,14 @@ import { useState, useSyncExternalStore } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ArrowRight, ShoppingCart, Trash2, UsersRound } from 'lucide-react'
+import { ArrowRight, ShoppingCart, Trash2 } from 'lucide-react'
 import type { CatalogKey } from '@/lib/catalog/availability'
 import type { RequiredComponentType } from '@/lib/validators/visa'
-import { cartBody, clearCart, readCart, removeFromCart, serverCart, setCartPeople, subscribeCart } from '@/lib/checkout/cartStore'
+import { cartBody, clearCart, entryInput, isGroupedCart, readCart, removeFromCart, serverCart, setEntryGroup, subscribeCart } from '@/lib/checkout/cartStore'
+import { groupMark } from '@/lib/booking/groupNames'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { GroupsPanel } from './GroupsPanel'
 import { CheckoutSummary } from '../checkout/[kind]/CheckoutSummary'
-import { PeopleStepper } from '../checkout/[kind]/PeopleStepper'
 import { useCheckoutPreview } from '../checkout/[kind]/useCheckoutPreview'
 import { entrySummary } from '../checkout/[kind]/fields'
 import { useApiError } from '@/components/shared/useApiError'
@@ -19,8 +21,10 @@ const CATALOG_FOR: Record<RequiredComponentType, CatalogKey> = {
   flight: 'flight', hotel_makkah: 'hotels', hotel_madinah: 'hotels', transport: 'transport', muthowif: 'muthowif', tour: 'tours', catering: 'catering',
 }
 
-// Isi keranjang (perangkat) + satu jumlah jamaah untuk semua produk (satu rombongan, K11c-2) + ringkasan dari pratinjau server. Pesan = POST /bookings
+// Isi keranjang (perangkat) + jumlah jamaah (satu rombongan, K11c-2; beberapa rombongan sejak 11d-3 — `GroupsPanel` + pilihan sasaran per produk) + ringkasan dari pratinjau server. Pesan = POST /bookings
 // dengan seluruh isi; sukses → keranjang dikosongkan, ke detail booking untuk mengisi data jamaah dan membayar.
+const ALL = 'all'
+
 export function CartView({ locale, maxPeople, available, orderBlocked = false }: { locale: string; maxPeople: number; available: CatalogKey[]; orderBlocked?: boolean }) {
   const router = useRouter()
   const t = useTranslations('cart')
@@ -60,6 +64,10 @@ export function CartView({ locale, maxPeople, available, orderBlocked = false }:
     )
   }
 
+  // Rombongan (11d-3): setiap produk memilih sasarannya — semua jamaah atau satu rombongan (visa wajib satu rombongan).
+  const grouped = isGroupedCart(cart)
+  const groupOptions = cart.groups.map((g, i) => ({ id: String(i), label: g.label.trim() || t('groupUnnamed', { mark: groupMark(i) }) }))
+
   // Komponen yang diwajibkan visa tetapi belum ada → tautan ke katalognya (hanya katalog berproduk).
   const missingTypes = preview.status === 'error' ? [...new Set(preview.violations.flatMap(v => (v.missing === 'rule' ? [] : [v.missing])))] : []
   const links = [...new Set(missingTypes.map(t => CATALOG_FOR[t]))].filter(k => available.includes(k))
@@ -67,23 +75,32 @@ export function CartView({ locale, maxPeople, available, orderBlocked = false }:
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_24rem]">
       <div className="min-w-0 space-y-5">
-        <div className="checkout-panel">
-          <label htmlFor="cart-people" className="checkout-label flex items-center gap-1.5"><UsersRound className="h-4 w-4 text-brand" aria-hidden /> {t('people')}</label>
-          <PeopleStepper id="cart-people" value={cart.people} onChange={setCartPeople} max={maxPeople} />
-          <p className="text-xs text-muted-foreground">{t('peopleHint')}</p>
-        </div>
+        <GroupsPanel cart={cart} maxPeople={maxPeople} />
 
         <ul className="space-y-3">
           {cart.entries.map(e => {
             // Ringkasan dan nama layanan muthowif dibangun dalam bahasa halaman (bukan teks yang tersimpan di perangkat).
             const title = e.kind === 'muthowif' ? tc('common.muthowifService') : e.title
-            const summary = entrySummary(e.input, locale)
+            const summary = entrySummary(entryInput(cart, e), locale)
             return (
             <li key={e.id} className="checkout-panel flex items-start justify-between gap-3 space-y-0">
               <div className="min-w-0">
                 <p className="text-xs font-semibold uppercase tracking-wide text-brand">{tc(`kinds.${e.kind}`)}</p>
                 <p className="font-semibold text-foreground">{title}</p>
                 <p className="text-sm text-muted-foreground">{tc(`entry.${summary.key}`, summary.values)}</p>
+                {grouped && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
+                    <span className="font-semibold text-brand-dark">{t('forLabel')}:</span>
+                    <ChoiceSelect
+                      className="min-w-48"
+                      ariaLabel={t('forGroup', { title })}
+                      options={[...(e.kind === 'visa' ? [] : [{ id: ALL, label: t('forAll') }]), ...groupOptions]}
+                      value={e.group === undefined ? (e.kind === 'visa' ? '' : ALL) : String(e.group)}
+                      onChange={v => setEntryGroup(e.id, v === ALL || v === '' ? undefined : Number(v))}
+                      clearable={false}
+                    />
+                  </div>
+                )}
               </div>
               <button type="button" onClick={() => removeFromCart(e.id)} aria-label={t('remove', { title })}
                 className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border text-destructive transition-colors hover:border-destructive">

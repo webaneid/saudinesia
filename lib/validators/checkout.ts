@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import type { BookingInput } from '@/lib/booking/create'
 import type { BookingItemInput } from '@/lib/validators/booking'
+import { groupLabelSchema } from '@/lib/validators/groupLabel'
 import { daysBetween } from '@/lib/time'
 
 // Checkout pelanggan (docs/arsitektur-booking-engine-v2.md §10.5): SATU produk per pesanan, hanya pilihan + jumlah orang. Tanpa harga/total/tanggal booking/data
@@ -215,17 +216,41 @@ export function withPeople(c: CheckoutInput, n: number): CheckoutInput {
   }
 }
 
+/** Rombongan keranjang (Fase 11d-3, §10.8): ukuran + nama opsional (aturan nama = `groupLabelSchema`, sama dengan draf admin `bookingGroupSchema`). */
+const cartGroupSchema = z.object({ size: people, label: groupLabelSchema.optional() }).strict()
+
 export const checkoutCartSchema = z.object({
   items: z.array(checkoutSchema).min(1, 'Keranjang kosong').max(CART_MAX_ITEMS, `Maksimal ${CART_MAX_ITEMS} produk per pesanan`),
+  /** Tanpa = satu rombongan (perilaku 11c persis). Bila ada: ≥ 2 rombongan, Σ ukuran ≤ CHECKOUT_MAX_PEOPLE; jumlah orang entri DITURUNKAN server dari ukuran sasaran. */
+  groups: z.array(cartGroupSchema).max(CHECKOUT_MAX_PEOPLE).optional(),
+  /** Sejajar `items`: indeks rombongan sasaran, null = semua jamaah. Hanya bersama `groups`. */
+  itemGroups: z.array(z.number().int().min(0).max(CHECKOUT_MAX_PEOPLE - 1).nullable()).max(CART_MAX_ITEMS).optional(),
 }).strict().superRefine((cart, ctx) => {
-  if (cart.items.length > 1 && cart.items.some(c => c.kind === 'haji')) {
+  if (cart.items.some(c => c.kind === 'haji') && (cart.items.length > 1 || cart.groups)) {
     ctx.addIssue({ code: 'custom', message: 'Haji dipesan tersendiri — tidak dapat digabung dengan produk lain', path: ['items'] })
   }
-  if (cart.items.filter(c => c.kind === 'visa').length > 1) {
-    ctx.addIssue({ code: 'custom', message: 'Satu pesanan hanya dapat memuat satu jenis visa', path: ['items'] })
+  if (!cart.groups) {
+    if (cart.itemGroups) ctx.addIssue({ code: 'custom', message: 'Rombongan tidak dikenal', path: ['itemGroups'] })
+    if (cart.items.filter(c => c.kind === 'visa').length > 1) {
+      ctx.addIssue({ code: 'custom', message: 'Satu pesanan hanya dapat memuat satu jenis visa', path: ['items'] })
+    }
+    const people = new Set(cart.items.map(entryPeople))
+    if (people.size > 1) ctx.addIssue({ code: 'custom', message: 'Jumlah jamaah setiap produk di keranjang harus sama (satu rombongan)', path: ['items'] })
+    return
   }
-  const people = new Set(cart.items.map(entryPeople))
-  if (people.size > 1) ctx.addIssue({ code: 'custom', message: 'Jumlah jamaah setiap produk di keranjang harus sama (satu rombongan)', path: ['items'] })
+  const n = cart.groups.length
+  if (n < 2) { ctx.addIssue({ code: 'custom', message: 'Rombongan dipakai bila lebih dari satu', path: ['groups'] }); return }
+  if (cart.groups.reduce((sum, g) => sum + g.size, 0) > CHECKOUT_MAX_PEOPLE) {
+    ctx.addIssue({ code: 'custom', message: `Maksimal ${CHECKOUT_MAX_PEOPLE} orang per pesanan`, path: ['groups'] })
+  }
+  const targets = cart.itemGroups
+  if (!targets || targets.length !== cart.items.length || targets.some(g => g !== null && g >= n)) {
+    ctx.addIssue({ code: 'custom', message: 'Rombongan tidak dikenal', path: ['itemGroups'] }); return
+  }
+  // Setiap jamaah paling banyak satu visa: visa berrombongan wajib menunjuk satu rombongan, satu visa per rombongan.
+  const visaGroups = cart.items.flatMap((c, i) => (c.kind === 'visa' ? [targets[i]] : []))
+  if (visaGroups.some(g => g === null)) ctx.addIssue({ code: 'custom', message: 'Pilih rombongan untuk visa', path: ['itemGroups'] })
+  else if (new Set(visaGroups).size !== visaGroups.length) ctx.addIssue({ code: 'custom', message: 'Satu rombongan hanya dapat memuat satu jenis visa', path: ['itemGroups'] })
 })
 
 export type CheckoutCart = z.infer<typeof checkoutCartSchema>
@@ -236,6 +261,7 @@ export type CheckoutCart = z.infer<typeof checkoutCartSchema>
  */
 export function cartInput(cart: CheckoutCart): BookingInput {
   const parts = cart.items.map(checkoutInput)
+  if (cart.groups && cart.itemGroups) return groupedCartInput(cart.groups, cart.itemGroups, cart.items, parts)
   if (parts.length === 1) return parts[0]!
   const n = Math.max(...cart.items.map(entryPeople))
   const visa = parts.find(p => p.pilgrims.some(x => x.visaProductId))
@@ -244,5 +270,30 @@ export function cartInput(cart: CheckoutCart): BookingInput {
     pilgrims: visa ? visa.pilgrims.slice(0, n) : Array.from({ length: n }, () => ({ fieldValues: {} })),
     totalPilgrims: n,
     ...(visa?.plannedTravelDate ? { plannedTravelDate: visa.plannedTravelDate } : {}),
+  }
+}
+
+/**
+ * Keranjang berrombongan (Fase 11d-3) → masukan mesin: jamaah dibuat per rombongan (`group` = indeks), visa melekat ke jamaah rombongannya dan rencana
+ * berangkatnya jadi rencana rombongan itu; item membawa `group` (null = semua). Jumlah orang item ditimpa ukuran sasaran oleh mesin (`normalizeGroups`).
+ */
+function groupedCartInput(groups: NonNullable<CheckoutCart['groups']>, targets: ReadonlyArray<number | null>, entries: readonly CheckoutInput[], parts: BookingInput[]): BookingInput {
+  const visaOf = (g: number) => {
+    const i = entries.findIndex((c, k) => c.kind === 'visa' && targets[k] === g)
+    return i < 0 ? null : { entry: entries[i] as Extract<CheckoutInput, { kind: 'visa' }>, pilgrim: parts[i]!.pilgrims[0]! }
+  }
+  const pilgrims: BookingInput['pilgrims'] = []
+  const outGroups = groups.map((g, gi) => {
+    const visa = visaOf(gi)
+    for (let k = 0; k < g.size; k++) {
+      pilgrims.push({ fieldValues: {}, group: gi, ...(visa ? { visaProductId: visa.pilgrim.visaProductId, selectedDurationDays: visa.pilgrim.selectedDurationDays } : {}) })
+    }
+    return { ...(g.label ? { label: g.label } : {}), ...(visa ? { plannedTravelDate: visa.entry.plannedTravelDate } : {}) }
+  })
+  return {
+    items: parts.flatMap((p, i) => p.items.map(it => (targets[i] === null || targets[i] === undefined ? it : { ...it, group: targets[i]! }))),
+    pilgrims,
+    totalPilgrims: pilgrims.length,
+    groups: outGroups,
   }
 }

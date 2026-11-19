@@ -1356,7 +1356,7 @@
     "emptyTitle": "Your cart is empty",
     "emptyHint": "Choose products from the catalog, then press “Add to cart” to order several services at once.",
     "browse": "Browse services",
-    "people": "Number of pilgrims (one group)",
+    "people": "Number of pilgrims",
     "peopleHint": "Applies to every product in the cart. The number of hotel rooms does not change — adjust it if needed.",
     "remove": "Remove {title} from the cart",
     "completeTitle": "Complete your cart",
@@ -1371,7 +1371,18 @@
       "muthowif": "Muthowif",
       "tours": "Ziyarah Tours",
       "catering": "Catering"
-    }
+    },
+    "addGroup": "Add group",
+    "groupsTitle": "Groups",
+    "groupsHint": "Each group can have its own products (e.g. different flights or visas). Choose who each product below is for.",
+    "groupName": "{name} name (optional)",
+    "groupSize": "Number of pilgrims in {name}",
+    "removeGroup": "Remove {name}",
+    "forLabel": "For",
+    "forAll": "All pilgrims",
+    "forGroup": "{title} is for",
+    "totalPeople": "Total {count} pilgrims",
+    "groupUnnamed": "Group {mark}"
   },
   "pilgrimArea": {
     "nav": {
@@ -1954,6 +1965,8 @@
     "onlinePaymentFailed": "Could not create the online payment. Please try again shortly.",
     "onlinePaymentNotAwaiting": "This payment is no longer awaiting payment",
     "onlinePaymentActive": "An online payment is still pending. Cancel it before uploading a transfer proof.",
-    "tooManyPaymentRequests": "Too many online payment requests. Please try again later."
+    "tooManyPaymentRequests": "Too many online payment requests. Please try again later.",
+    "visaNeedsGroup": "Choose a group for the visa.",
+    "oneVisaPerGroup": "One group can contain only one visa type."
   }
 }

@@ -24,7 +24,8 @@ import { cartDateRefusal, checkoutDateRefusal } from '@/lib/checkout/dates'
 import { bookingFailure, simulateBooking } from '@/lib/booking/simulate'
 import { CART_MAX_ITEMS, cartInput, checkoutCartSchema, checkoutInput, checkoutSchema, type CheckoutCart, type CheckoutInput } from '@/lib/validators/checkout'
 import { billOf, billSelect } from '@/lib/invoice/bill'
-import { addDays, todayInApp } from '@/lib/time'
+import { addDays, calendarDateOf, todayInApp } from '@/lib/time'
+import { addCartGroup, addToCart, cartBody, readCart, removeCartGroup, setCartGroup, setEntryGroup } from '@/lib/checkout/cartStore'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -395,6 +396,81 @@ await t('keranjang campur: Visa Plus + Tiket + Hotel = SATU booking + SATU invoi
   assert.equal(Number(row.totalAmount), p.total); assert.equal(billOf(row).grandTotal, p.grandTotal)
   assert.equal(row.pilgrims.length, 2); assert.ok(row.pilgrims.every(x => x.visaApplication?.visaProductId === visaPlus.id))
   assert.equal(row.flights.length, 1); assert.deepEqual(row.hotels, [{ numGuests: 2, numRooms: 1 }])
+})
+
+// ── keranjang berrombongan (§10.8, Fase 11d-3) ──────────────────────────────────────────────────────────────────────────────────────────────
+await t('checkoutCartSchema berrombongan: ≥ 2 rombongan, itemGroups sejajar, visa wajib satu rombongan dan satu per rombongan, Σ ≤ 100, Haji tidak; tanpa rombongan aturan 11c tetap', () => {
+  const ok = (v: unknown) => checkoutCartSchema.safeParse(v).success
+  const G2 = [{ size: 3, label: 'Keluarga Ali' }, { size: 2 }]
+  assert.equal(ok({ items: [VISA, HOTEL, MUTHOWIF], groups: G2, itemGroups: [0, null, 1] }), true, 'jumlah orang entri boleh beda — diturunkan server')
+  assert.equal(ok({ items: [VISA, { ...VISA, plannedTravelDate: '2090-06-08' }], groups: G2, itemGroups: [0, 1] }), true, 'visa per rombongan')
+  assert.equal(ok({ items: [VISA, VISA], groups: G2, itemGroups: [0, 0] }), false, 'dua visa satu rombongan')
+  assert.equal(ok({ items: [VISA], groups: G2, itemGroups: [null] }), false, 'visa untuk semua saat berrombongan')
+  assert.equal(ok({ items: [HOTEL], groups: [{ size: 3 }], itemGroups: [null] }), false, 'satu rombongan tidak diisi')
+  assert.equal(ok({ items: [HOTEL], groups: G2 }), false, 'itemGroups wajib')
+  assert.equal(ok({ items: [HOTEL, MUTHOWIF], groups: G2, itemGroups: [null] }), false, 'itemGroups tidak sejajar')
+  assert.equal(ok({ items: [HOTEL], groups: G2, itemGroups: [2] }), false, 'rombongan tak dikenal')
+  assert.equal(ok({ items: [HOTEL], itemGroups: [null] }), false, 'itemGroups tanpa groups')
+  assert.equal(ok({ items: [HOTEL], groups: [{ size: 60 }, { size: 41 }], itemGroups: [null] }), false, 'Σ > 100')
+  assert.equal(ok({ items: [HAJI], groups: G2, itemGroups: [0] }), false, 'Haji tetap sendirian')
+  assert.equal(ok({ items: [HOTEL], groups: [{ size: 1, label: 'x'.repeat(61) }, { size: 1 }], itemGroups: [null] }), false, 'nama > 60')
+  assert.equal(ok({ items: [HOTEL], groups: [{ size: 1, extra: 1 }, { size: 1 }], itemGroups: [null] }), false, 'kunci liar')
+})
+
+await t('keranjang berrombongan: SATU booking, dua rombongan (nama + "Rombongan B"); jumlah orang = ukuran sasaran; visa per rombongan dengan rencananya sendiri; pratinjau = pesanan', async () => {
+  const before = await bookingsOfUser()
+  const cart = checkoutCartSchema.parse({
+    items: [VISA, { ...VISA, plannedTravelDate: '2090-06-08' }, { ...HOTEL, numGuests: 1 }, { ...MUTHOWIF, numPeople: 9 }],
+    groups: [{ size: 3, label: 'Keluarga Ali' }, { size: 2 }],
+    itemGroups: [0, 1, null, 1],
+  })
+  const p = await simulateBooking({ userId: user.id }, cartInput(cart), 3)
+  assert.equal(await bookingsOfUser(), before, 'pratinjau tidak menyimpan')
+  await park(user.id)
+  const b = await placeCheckout(user.id, cart, 3)
+  assert.equal(await bookingsOfUser(), before + 1, 'satu booking')
+  const row = await prisma.booking.findUniqueOrThrow({ where: { id: b.id }, select: {
+    ...billSelect,
+    groups: { select: { id: true, position: true, label: true, plannedTravelDate: true }, orderBy: { position: 'asc' } },
+    pilgrims: { select: { groupId: true, visaApplication: { select: { plannedTravelDate: true } } } },
+    hotels: { select: { numGuests: true, groupId: true } }, muthowif: { select: { numPeople: true, groupId: true } },
+  } })
+  assert.equal(Number(row.totalAmount), p.total, 'pratinjau = pesanan'); assert.equal(billOf(row).grandTotal, p.grandTotal)
+  assert.deepEqual(row.groups.map(g => [g.position, g.label, g.plannedTravelDate && calendarDateOf(g.plannedTravelDate)]), [[1, 'Keluarga Ali', '2090-06-01'], [2, null, '2090-06-08']])
+  const [a, bb] = row.groups
+  assert.equal(row.pilgrims.length, 5)
+  assert.equal(row.pilgrims.filter(x => x.groupId === a!.id).length, 3); assert.equal(row.pilgrims.filter(x => x.groupId === bb!.id).length, 2)
+  const planned = (gid: string) => row.pilgrims.filter(x => x.groupId === gid).map(x => x.visaApplication?.plannedTravelDate && calendarDateOf(x.visaApplication.plannedTravelDate))
+  assert.deepEqual(planned(a!.id), ['2090-06-01', '2090-06-01', '2090-06-01']); assert.deepEqual(planned(bb!.id), ['2090-06-08', '2090-06-08'])
+  assert.deepEqual(row.hotels, [{ numGuests: 5, groupId: null }], 'hotel untuk semua = 5 tamu (masukan 1 diabaikan)')
+  assert.deepEqual(row.muthowif, [{ numPeople: 2, groupId: bb!.id }], 'muthowif rombongan B = 2 orang (masukan 9 diabaikan)')
+  assert.ok(p.lines.some(l => l.section), 'ringkasan dikelompokkan per rombongan')
+})
+
+await t('keranjang perangkat: v1 dibaca jadi v2; tambah rombongan memindahkan visa ke A; visa kedua → rombongan B; hapus rombongan kembali ke satu; cartBody sesuai skema', () => {
+  const store = new Map<string, string>()
+  const fake = { localStorage: { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => { store.set(k, v) }, removeItem: (k: string) => { store.delete(k) } }, dispatchEvent: () => true }
+  ;(globalThis as unknown as { window: typeof fake }).window = fake
+  store.set('snd-cart', JSON.stringify({ v: 1, people: 4, entries: [{ id: 'e1', kind: 'visa', productId: visa.id, title: 'Visa', input: { ...VISA, numPeople: 4 } }] }))
+  assert.deepEqual(readCart().groups, [{ size: 4, label: '' }], 'v1 → satu rombongan 4 orang')
+  assert.deepEqual(cartBody(readCart()), { items: [{ ...VISA, numPeople: 4 }] }, 'satu rombongan = badan 11c')
+  assert.equal(addToCart({ kind: 'visa', productId: visa.id, title: 'Visa', input: VISA }), 'oneVisa', 'visa kedua ditolak selama satu rombongan')
+  addCartGroup()
+  let cart = readCart()
+  assert.deepEqual(cart.groups, [{ size: 4, label: '' }, { size: 1, label: '' }]); assert.equal(cart.entries[0]!.group, 0, 'visa lama ikut rombongan A')
+  assert.equal(addToCart({ kind: 'visa', productId: visa.id, title: 'Visa', input: VISA }), null)
+  assert.equal(addToCart({ kind: 'hotel', productId: room.id, title: 'Hotel', input: HOTEL }), null)
+  cart = readCart()
+  assert.deepEqual(cart.entries.map(e => e.group), [0, 1, undefined], 'visa kedua → B, hotel → semua')
+  setCartGroup(1, { size: 2, label: '  Keluarga Budi ' })
+  setEntryGroup(cart.entries[2]!.id, 1)
+  const body = cartBody(readCart())!
+  assert.deepEqual(body.groups, [{ size: 4 }, { size: 2, label: 'Keluarga Budi' }]); assert.deepEqual(body.itemGroups, [0, 1, 1])
+  assert.equal(checkoutCartSchema.safeParse(body).success, true, 'badan perangkat lolos skema server')
+  removeCartGroup(0)
+  cart = readCart()
+  assert.equal(cart.groups.length, 1); assert.ok(cart.entries.every(e => e.group === undefined), 'kembali ke satu rombongan')
+  store.set('snd-cart', '{rusak'); assert.equal(readCart().entries.length, 0, 'isi rusak = kosong')
 })
 
 await t('tanggal lampau ditolak 400 (paket, visa, kuota transport lampau); hari ini boleh', async () => {

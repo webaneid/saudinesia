@@ -3763,3 +3763,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Alternatives considered:** Mempertahankan dua jalur (form + ikon baris) — ditolak, dua cara untuk hal yang sama membingungkan.
 
 **Security check:** security-review 1 berkas (`CostComponentsPanel.tsx`, klien; memanggil route yang sudah ada dan sudah diuji penolakannya di `test-cost-component-prices`) — 0 temuan; tak ada dependensi baru.
+
+## 2026-11-19 — Fase 11d-3: keranjang pelanggan berrombongan
+**Decision:** Keranjang pelanggan mendukung beberapa rombongan: `checkoutCartSchema` + `groups`/`itemGroups` (tanpa = perilaku 11c persis), keranjang perangkat v2 (v1 diubah otomatis), setiap produk memilih sasaran "Semua jamaah" atau satu rombongan (visa wajib satu rombongan, satu visa per rombongan). Jumlah orang item selalu diturunkan dari ukuran sasaran — di server oleh mesin, di perangkat oleh SATU fungsi `entryInput` yang dipakai badan permintaan dan teks baris.
+**Rationale:** Mesin (11d-1/2) sudah berrombongan; front-end cukup mengirim bentuk yang sama dengan draf admin. Satu fungsi untuk jumlah orang mencegah tampilan berbeda dari yang dihitung (ditemukan saat uji browser).
+**Alternatives considered:** Halaman keranjang terpisah per rombongan — ditolak, satu booking = satu invoice; menyimpan jumlah orang per entri berrombongan — ditolak, dua sumber kebenaran.
+
+**Security check:** security-review berkas berubah (validator checkout, cartStore, CartView/GroupsPanel, pesan i18n) — 0 temuan; harga tetap dihitung server, larik berbatas `.max()`, nama rombongan lewat `bookingGroupSchema` (≤ 60, tanpa karakter kontrol, dikosongkan saat hapus akun). `bun audit` 6 (baseline, tak ada yang baru). Uji penuh menangkap satu masalah sebelum PR: impor nilai `bookingGroupSchema` ke skema checkout menarik kode server ke bundel klien → aturan nama dipindah ke `lib/validators/groupLabel.ts`.

@@ -1356,7 +1356,7 @@
     "emptyTitle": "Keranjang masih kosong",
     "emptyHint": "Pilih produk dari katalog, lalu tekan “Tambah ke keranjang” untuk memesan beberapa layanan sekaligus.",
     "browse": "Lihat layanan",
-    "people": "Jumlah jamaah (satu rombongan)",
+    "people": "Jumlah jamaah",
     "peopleHint": "Berlaku untuk semua produk di keranjang. Jumlah kamar hotel tidak ikut berubah — sesuaikan bila perlu.",
     "remove": "Hapus {title} dari keranjang",
     "completeTitle": "Lengkapi keranjang",
@@ -1371,7 +1371,18 @@
       "muthowif": "Muthowif",
       "tours": "Paket Ziarah",
       "catering": "Katering"
-    }
+    },
+    "addGroup": "Tambah rombongan",
+    "groupsTitle": "Rombongan",
+    "groupsHint": "Setiap rombongan bisa punya produk sendiri (mis. tiket atau visa berbeda). Pilih untuk siapa setiap produk di bawah.",
+    "groupName": "Nama {name} (opsional)",
+    "groupSize": "Jumlah jamaah {name}",
+    "removeGroup": "Hapus {name}",
+    "forLabel": "Untuk",
+    "forAll": "Semua jamaah",
+    "forGroup": "Produk {title} untuk",
+    "totalPeople": "Total {count} jamaah",
+    "groupUnnamed": "Rombongan {mark}"
   },
   "pilgrimArea": {
     "nav": {
@@ -1954,6 +1965,8 @@
     "onlinePaymentFailed": "Gagal membuat pembayaran online. Coba lagi beberapa saat lagi.",
     "onlinePaymentNotAwaiting": "Pembayaran ini sudah tidak menunggu pembayaran",
     "onlinePaymentActive": "Masih ada pembayaran online yang menunggu. Batalkan dulu sebelum mengunggah bukti transfer.",
-    "tooManyPaymentRequests": "Terlalu banyak permintaan pembayaran online. Coba lagi nanti."
+    "tooManyPaymentRequests": "Terlalu banyak permintaan pembayaran online. Coba lagi nanti.",
+    "visaNeedsGroup": "Pilih rombongan untuk visa",
+    "oneVisaPerGroup": "Satu rombongan hanya dapat memuat satu jenis visa"
   }
 }
