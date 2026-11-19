@@ -27,10 +27,12 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Versi MinIO dari Dockerfile
-        run: echo "MINIO_VERSION=$(sed -n 's/^ARG MINIO_VERSION=//p' infra/minio/Dockerfile)" >> "$GITHUB_ENV"
+      - name: Versi MinIO + revisi image dari Dockerfile
+        run: |
+          echo "MINIO_VERSION=$(sed -n 's/^ARG MINIO_VERSION=//p' infra/minio/Dockerfile)" >> "$GITHUB_ENV"
+          echo "IMAGE_REV=$(sed -n 's/^ARG IMAGE_REV=//p' infra/minio/Dockerfile)" >> "$GITHUB_ENV"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: infra/minio
           push: true
-          tags: ghcr.io/${{ env.IMAGE_REPO }}/minio:${{ env.MINIO_VERSION }}
+          tags: ghcr.io/${{ env.IMAGE_REPO }}/minio:${{ env.MINIO_VERSION }}-r${{ env.IMAGE_REV }}

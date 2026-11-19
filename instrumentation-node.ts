@@ -46,8 +46,8 @@ async function repriceOnBoot() {
   }
 }
 
-// Bucket dibuat otomatis bila belum ada (idempotent) — tanpa ini deploy pertama gagal saat unggah pertama
-// karena tidak ada langkah manual `mc mb` di production. Fire-and-forget + retry: MinIO boleh belum siap saat web
+// Bucket dibuat otomatis bila belum ada (idempotent) — untuk dev lokal. Di production bucket dibuat kontainer `minio-setup` (SEC-305) dan
+// user aplikasi tak berhak `makeBucket`; di sana pemanggilan ini hanya memeriksa keberadaan bucket. Fire-and-forget + retry: MinIO boleh belum siap saat web
 // start; kegagalan hanya dicatat, TIDAK menjatuhkan boot (halaman non-storage tetap harus jalan).
 async function ensureMinioBucket() {
   const { ensureBucketExists } = await import('@/lib/storage/minio')

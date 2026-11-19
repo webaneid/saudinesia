@@ -662,3 +662,13 @@ Verifikasi browser + API end-to-end:
 **Catatan proses**: selama verifikasi, ditemukan (lagi) `transportTripId` paket sempat ter-null oleh interaksi browser-automation yang tidak disengaja (kemungkinan besar artefak alat baca aksesibilitas pada elemen `<select>`) — data dipulihkan tiap kali ditemukan. Ini bukan bug aplikasi (dikonfirmasi lewat log server: request `PUT` sungguhan terkirim, bukan sekadar state UI yang salah baca) — dicatat sebagai risiko operasional alat testing, bukan risiko produksi (browser pengguna asli tidak menjalankan automation semacam ini).
 
 > **Pembaruan 2026-10-25:** `TourPackage.description` dan `TourismSite.description` kini **teks kaya** (JSON dokumen Tiptap di kolom `String?` yang sama; teks polos lama tetap sah). Form admin memakai `RichTextEditor`; `POST/PUT` memvalidasi lewat `richTextField()`; kartu publik paket ziarah memakai `RichTextView`. Deskripsi **Situs Wisata tidak tampil di halaman publik** (hanya ada di API katalog, apa adanya). Lihat `docs/arsitektur-editor-teks.md` §9.
+
+## 13. Deskripsi Situs Wisata di halaman publik (2026-11-20)
+
+**Keputusan pemilik:** buka-tutup di kartu (bukan halaman per situs, bukan ringkasan selalu terlihat).
+
+- Katalog Paket Ziarah (`app/[locale]/(public)/tours/page.tsx`): situs yang deskripsinya berisi (`hasContent`, `lib/rich-text/doc.ts`) dirender sebagai `<details>`/`<summary>` bawaan — tanpa JavaScript klien, bisa dibuka dengan papan ketik; isi lewat `RichTextView` (daftar putih node yang sama dengan editor). Situs tanpa deskripsi tetap baris biasa. Tautan "Peta" di baris ringkasan tetap tautan (tidak membuka/menutup).
+- Kelas `.site-summary` di `app/globals.css` (penanda bawaan peramban disembunyikan, cincin fokus brand). Tak ada teks UI baru (nama situs = isi ringkasan; ikon `ChevronDown` dekoratif), jadi tak ada kunci pesan baru; deskripsi = data admin satu bahasa, sama dengan deskripsi paket.
+- Data sudah ikut dimuat sebelumnya (`include: { tourismSite: true }`); tak ada perubahan API/skema.
+- Catatan (bukan perubahan): situs yang dinonaktifkan (`TourismSite.isActive = false`) tetap tampil bila masih tertaut ke paket aktif — perilaku lama, tidak disentuh.
+

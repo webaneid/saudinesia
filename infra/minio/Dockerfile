@@ -4,11 +4,19 @@
 # Dibangun oleh .github/workflows/minio-image.yml → ghcr.io/<repo>/minio:<versi>.
 FROM golang:1.24-alpine AS build
 ARG MINIO_VERSION=RELEASE.2025-10-15T17-29-55Z
+# Klien `mc` untuk penyiapan sekali jalan (setup.sh, SEC-305): bucket privat + user aplikasi berpolicy satu bucket.
+ARG MC_VERSION=RELEASE.2025-08-13T08-35-41Z
+# Revisi isi image di luar versi MinIO (tag = <MINIO_VERSION>-r<IMAGE_REV>): naikkan setiap isi image berubah supaya server menarik image baru,
+# bukan memakai tag lama yang tersimpan. Harus sama dengan tag di docker-compose.prod.yml (dijaga scripts/test-minio-setup.ts).
+ARG IMAGE_REV=2
 RUN CGO_ENABLED=0 go install github.com/minio/minio@${MINIO_VERSION}
+RUN CGO_ENABLED=0 go install github.com/minio/mc@${MC_VERSION}
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates && adduser -D -u 1000 minio && mkdir /data && chown minio:minio /data
 COPY --from=build /go/bin/minio /usr/bin/minio
+COPY --from=build /go/bin/mc /usr/bin/mc
+COPY --chmod=0755 setup.sh /usr/local/bin/minio-setup
 # Non-root; volume baru mewarisi kepemilikan /data dari image.
 USER minio
 EXPOSE 9000 9001

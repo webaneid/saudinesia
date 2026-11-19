@@ -131,5 +131,5 @@ Keputusan pemilik (2026-10-25): deskripsi Haji **tampil di halaman publik**; edi
 
 ### 9.2 Ringkasan Fase 4-8
 
-Seluruh kolom deskripsi produk kini memakai editor yang sama: Visa, Hotel, Muthowif (`bio`), Haji, Paket Umroh, Paket Ziarah, Situs Wisata, Katering. Tersisa tanpa editor: `HotelService.description` (teks pendek) dan instruksi per dokumen visa (satu baris). Batasan yang masih berlaku: Situs Wisata tidak tampil di publik (keputusan produk), admin Haji dan Katering belum punya halaman edit, API katalog mengembalikan kolom apa adanya (§8 butir 1).
+Seluruh kolom deskripsi produk kini memakai editor yang sama: Visa, Hotel, Muthowif (`bio`), Haji, Paket Umroh, Paket Ziarah, Situs Wisata, Katering. Tersisa tanpa editor: `HotelService.description` (teks pendek) dan instruksi per dokumen visa (satu baris). Batasan yang masih berlaku: ~~Situs Wisata tidak tampil di publik~~ (tampil sejak 2026-11-20 sebagai buka-tutup per situs di katalog Paket Ziarah, `docs/arsitektur-ziarah.md` §13), ~~admin Haji dan Katering belum punya halaman edit~~ (sudah ada), API katalog mengembalikan kolom apa adanya (§8 butir 1).
 
