@@ -59,6 +59,12 @@ if (!superuser) {
   }
   try {
     await t('peran diterapkan lewat prisma db execute, dua kali (idempoten)', () => { apply(); apply() })
+    await t('peran tersimpan: LOGIN, sandi ber-hash SCRAM', async () => {
+      const r = await owner.$queryRawUnsafe<{ login: boolean; kind: string | null; enc: string }[]>(
+        `SELECT rolcanlogin AS login, left(rolpassword, 13) AS kind, current_setting('password_encryption') AS enc FROM pg_authid WHERE rolname = '${role}'`)
+      const hba = await owner.$queryRawUnsafe<unknown[]>('SELECT type, database, user_name, address, auth_method FROM pg_hba_file_rules').catch((e: unknown) => String(e))
+      assert.deepEqual(r, [{ login: true, kind: 'SCRAM-SHA-256', enc: 'scram-sha-256' }], JSON.stringify({ r, hba }))
+    })
     await t('peran aplikasi: bukan superuser, tak bisa membuat db/peran, bukan pemilik tabel', async () => {
       const [r] = await app.$queryRaw<{ u: string; s: boolean; db: boolean; cr: boolean; owned: bigint }[]>`
         SELECT current_user AS u, r.rolsuper AS s, r.rolcreatedb AS db, r.rolcreaterole AS cr,
