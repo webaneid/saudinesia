@@ -7,7 +7,7 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 
 Centang lama yang basi sudah ditandai di tempatnya ("Rapikan 2026-11-19": tertutup, atau dicoret bila tidak berlaku lagi). Yang benar-benar masih terbuka:
 
-- **Kode:** kirim ulang/kirim manual WhatsApp dari log notifikasi; deskripsi Situs Wisata di halaman publik; force-majeure + persetujuan superadmin; taksonomi/kategori produk (F3, menunggu keputusan model); service worker; audit Core Web Vitals; audit PII di log; checklist OWASP.
+- **Kode:** kirim ulang/kirim manual WhatsApp dari log notifikasi; force-majeure + persetujuan superadmin; taksonomi/kategori produk (F3, menunggu keputusan model); service worker; audit Core Web Vitals; audit PII di log; checklist OWASP.
 - **Menunggu kunci dari pemilik:** Fase 10 Xendit; uji sandbox iPaymu sungguhan.
 - **Entri data pemilik (lewat UI):** harga Transport dan Paket Ziarah; rekening bank di Pengaturan Invoice.
 - **Sebelum go-live (M15):** VPS, Docker Compose, TLS, `migrate deploy` pertama, GOWA nyata, smoke test, backup; tiga sisa hardening SEC-10; SEC-123 (High dependency).
@@ -700,7 +700,7 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] **SEC-60** (dependensi): salinan ProseMirror bersarang di `bun.lock` membuat editor error saat Enter/daftar → `overrides` `prosemirror-model`/`prosemirror-transform` + tes penjaga lockfile. Terverifikasi di dev dan artefak produksi.
 - [x] **Fase 3 — Editor di Hotel, Muthowif (`bio`), dan Haji** (2026-10-23): form admin + validator server + tampilan publik (`RichTextView`; beranda/daftar Muthowif memakai `plainText`). Haji: `hajiProductCreateSchema` baru (POST sebelumnya tanpa Zod), `GET`/`DELETE` Haji dibenahi dari `catch → 403`. Tes `scripts/test-rich-text.ts` jadi 17. Lihat `docs/arsitektur-editor-teks.md` §8 untuk batasan (admin Haji belum punya halaman edit; halaman publik Haji belum menampilkan deskripsi).
 - [x] **Editor di Paket Umroh, Paket Ziarah, Situs Wisata, Katering + deskripsi Haji tampil di publik** (2026-10-25, Fase 4-8, `docs/arsitektur-editor-teks.md` §9): lima fase, tiap fase typecheck + build produksi terisolasi + uji browser + uji penolakan API + security check. Katering butuh kolom baru (migrasi aditif `add_catering_description`); POST Katering sebelumnya tanpa Zod → kini skema ketat. Tes `scripts/test-rich-text.ts` jadi 18.
-- [ ] Keputusan produk (tersisa): tampilkan deskripsi Situs Wisata di halaman publik; halaman edit produk Haji dan Katering di admin. — **Rapikan 2026-11-19:** halaman edit Haji dan Katering SUDAH ada; tersisa deskripsi Situs Wisata di halaman publik
+- [x] Keputusan produk: tampilkan deskripsi Situs Wisata di halaman publik; halaman edit produk Haji dan Katering di admin. — **Rapikan 2026-11-19:** halaman edit Haji dan Katering SUDAH ada. **2026-11-20:** deskripsi Situs Wisata tampil sebagai buka-tutup per situs di kartu katalog Paket Ziarah (`/tours`, keputusan pemilik; `docs/arsitektur-ziarah.md` §13)
 - [x] **SEC-61(a)** (2026-10-23): `P2025` → 404 di 28 handler tulis by-id (17 route) lewat `lib/admin/errors.ts`; `seasons/[id]` DELETE tak lagi menjawab 403 untuk semua galat. Terbukti sebelum 500 → sesudah 404.
 - [x] SEC-61(b) (Low): akses daftar vendor untuk peran `manager` — selesai 2026-10-25 (Fase C).
 

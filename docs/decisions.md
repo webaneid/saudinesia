@@ -3791,3 +3791,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 
 **Security check:** security-review route baru (admin `requireBookingManage`, id uuid, batas laju per booking sebelum kirim, galat lewat `authFailureResponse`, respons tanpa PII), modul penyusun (isi hanya dari DB, tanpa teks bebas), komponen klien (tanpa impor server) — 0 temuan. `bun audit` tetap baseline 6. Bug Low pre-existing (waktu log di zona proses) diperbaiki dengan `formatInstant`.
 
+## 2026-11-20 — Deskripsi Situs Wisata tampil buka-tutup di katalog Paket Ziarah
+**Decision:** Deskripsi Situs Wisata (teks kaya) tampil di kartu katalog Paket Ziarah sebagai `<details>` per situs; situs tanpa deskripsi tetap satu baris.
+**Rationale:** Keputusan pemilik (`docs/arsitektur-ziarah.md` §13): kartu tetap ringkas, tanpa halaman/route baru dan tanpa JavaScript klien.
+**Alternatives considered:** halaman publik per situs (lebih kaya/SEO, tapi butuh metadata, sitemap, i18n); ringkasan selalu terlihat (kartu memanjang).
+
+**Security check:** security-review berkas berubah (halaman publik server, CSS) — 0 temuan: isi lewat `RichTextView` (daftar putih node, tanpa HTML mentah), tak ada route/masukan baru. `bun audit` 6 (baseline).
+
