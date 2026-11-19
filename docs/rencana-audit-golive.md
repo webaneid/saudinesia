@@ -55,7 +55,7 @@ Perlu dicek manual (VPS/produksi): branch protection, SSH key-only + firewall, b
 ## 3. Urutan eksekusi
 
 - **G1 — SELESAI 2026-11-19** — PII di log: `lib/log` + klien Prisma + penggantian pemanggil + penjaga + aturan CLAUDE.md (menutup SEC-228).
-- **G2** — peran database terpisah (G-1): `migrator` pemilik skema, `app` DML saja; compose + `.env.production.example` + `docs/deployment.md` + uji bahwa peran app tak bisa mematikan trigger.
+- **G2 — SELESAI 2026-11-19** — peran database terpisah (G-1): `migrator` pemilik skema, `app` DML saja; compose + `.env.production.example` + `docs/deployment.md` + uji bahwa peran app tak bisa mematikan trigger.
 - **G3** — jejak staf + ZIP (G-2): tabel jejak append-only, ditulis di transaksi yang sama oleh `lib/auth/adminUsers.ts`, login staf, dan unduhan ZIP.
 - G-1 = SEC-303, G-2 = SEC-304; G-3/G-4/G-5 = SEC-305..307 di Register Temuan Security, menyusul sesudah go-live.
 
@@ -65,3 +65,14 @@ Perlu dicek manual (VPS/produksi): branch protection, SSH key-only + firewall, b
 - `lib/db/index.ts` — galat/peringatan Prisma = event, dicatat tersamar; development tetap mencetak query (SQL tanpa nilai).
 - 193 pemanggilan `console.error/warn(tag, e…)` di 121 berkas → `logError`/`logWarn` (codemod), ±20 sisanya manual (template literal, `authFailureResponse`, `lib/pilgrims/http.ts`, `listHandlers`, harga, cron, `lastError` email/WhatsApp). `notify()` memakai `errorSummary` (pengganti `safeErr`). Log sapuan akun terhapus menulis kolom eksplisit, bukan `JSON.stringify`.
 - Penjaga `scripts/test-log-pii.ts`: pemindai AST setiap `console.*` server (objek galat mentah, `.message`/`.stack`, `JSON.stringify`, nama kolom data pribadi, argumen tak dikenal → merah; pengecualian hanya `// log-pii-ok: <alasan>` sebaris — kini satu: tautan auth dev-only), uji mutan, dan galat validasi Prisma SUNGGUHAN (pesan aslinya memuat email/HP; ringkasan dan event klien tidak). `scripts/test-routes.ts` menerima `logError` sebagai jalur log di `catch`.
+
+## 5. Hasil G2 (2026-11-19, menutup SEC-303)
+
+- Dua peran: `saudinesia` (POSTGRES_USER, pemilik skema/superuser bootstrap) dipakai HANYA kontainer `migrate` lewat `MIGRATE_DATABASE_URL`; `saudinesia_app` dipakai web lewat `DATABASE_URL` — LOGIN, NOSUPERUSER/NOCREATEDB/NOCREATEROLE/NOREPLICATION/NOBYPASSRLS, bukan pemilik apa pun, hanya SELECT/INSERT/UPDATE/DELETE + sekuens (tanpa TRUNCATE/TRIGGER, `_prisma_migrations` tertutup, `CREATE` di skema `public` dicabut).
+- Peran dibuat/diperbarui oleh image `migrate` SESUDAH setiap `prisma migrate deploy` (`prisma/apply-app-role.ts` → SQL `prisma/appRole.ts` lewat `prisma db execute --stdin`; idempoten, sandi `APP_DB_PASSWORD` alfanumerik ≥ 32 tak muncul di argumen proses). Tabel baru ikut terbuka lewat `ALTER DEFAULT PRIVILEGES` dan GRANT ulang tiap deploy.
+- Web tak lagi memegang kredensial pemilik: `POSTGRES_PASSWORD`, `MIGRATE_DATABASE_URL`, `APP_DB_PASSWORD` dikosongkan di `environment` web. `scripts/buat-env-production.sh` membuat dua sandi berbeda.
+- Kebutuhan runtime dicek: aplikasi tak menjalankan DDL; `LOCK TABLE booking_code_lock IN EXCLUSIVE MODE` cukup dengan hak UPDATE; advisory lock dan `SET LOCAL` tak butuh hak khusus.
+- Penjaga `scripts/test-db-roles.ts` (DB sekali pakai + koneksi superuser; peran uji acak, dihapus di akhir): SQL menolak sandi/nama tak sah; penerapan idempoten lewat jalur produksi; peran bukan superuser/pemilik; setiap tabel DML saja; mematikan trigger di SETIAP tabel bertrigger, `DROP`/`ALTER`/`TRUNCATE`/`CREATE TABLE`/`COPY … TO PROGRAM`/`session_replication_role`/`ALTER ROLE … SUPERUSER` ditolak; `LOCK TABLE` kode booking + advisory jalan; default privileges untuk tabel baru. Juga mengunci isi compose/Dockerfile/`.env.production.example`.
+- CI (`docker` smoke): web memakai `saudinesia_app` dan punya koneksi aktif sebagai peran itu, peran bukan superuser/pemilik, kredensial pemilik tak terbaca di web, `ALTER TABLE cash_entries DISABLE TRIGGER ALL` sebagai `saudinesia_app` ditolak — di atas seluruh smoke yang sudah ada (checkout, invoice PDF, login) yang kini berjalan dengan peran DML saja.
+- Uji nyata lokal: server dev dengan peran DML saja pada DB audit — checkout visa (kode booking + nomor invoice + snapshot), atur total booking (snapshot penyesuaian + pajak ulang), batal oleh staf, halaman admin utama: semua berhasil, tanpa galat izin; seluruh koneksi aplikasi tercatat sebagai peran DML.
+

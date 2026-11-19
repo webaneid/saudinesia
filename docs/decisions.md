@@ -3791,3 +3791,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 
 **Security check:** audit OWASP Top 10 oleh subagent `security-auditor` (230 route): 0 Critical/High baru; Medium SEC-303 (peran DB superuser) dan SEC-304 (jejak staf/ZIP) dijadwalkan G2/G3 sebelum go-live atas keputusan pemilik; Low SEC-305..307 dicatat. G1 sendiri: security-review berkas berubah (log, klien Prisma, route) — 0 temuan baru, menutup SEC-228; `bun audit` baseline 6.
 
+## 2026-11-19 — Peran database terpisah: web DML saja (audit go-live G2)
+**Decision:** Web terhubung sebagai `saudinesia_app` (NOSUPERUSER, bukan pemilik, hanya SELECT/INSERT/UPDATE/DELETE + sekuens); `saudinesia` (pemilik/superuser bootstrap) hanya dipakai kontainer `migrate`, yang sesudah `prisma migrate deploy` membuat/memperbarui peran aplikasi secara idempoten (`prisma/apply-app-role.ts` + `prisma/appRole.ts`). Web tak memegang kredensial pemilik.
+**Rationale:** SEC-303 — dengan superuser, proses web yang dibobol bisa mematikan trigger append-only (buku kas, snapshot harga, jejak) dan menjalankan perintah OS lewat `COPY … TO PROGRAM`. Peran dibuat oleh image migrate (bukan skrip init Postgres) supaya berlaku juga untuk DB yang sudah ada dan GRANT diulang tiap deploy.
+**Alternatives considered:** skrip `/docker-entrypoint-initdb.d` (hanya jalan saat volume baru, perlu berkas tambahan di server); migrator non-superuser (migrasi lama mematikan trigger dan membuat ekstensi — cukup pemilik, tetapi superuser bootstrap tetap ada dan hanya dipakai kontainer sekali jalan); skrip manual `pisah-role-db.sh` ala smart-ai (bisa terlupa).
+
+**Security check:** security-review berkas berubah (compose, Dockerfile, `.env.production.example`, `buat-env-production.sh`, workflow CI, `prisma/appRole.ts`, `prisma/apply-app-role.ts`, uji) — 0 temuan baru: sandi divalidasi alfanumerik sebelum ditempel ke `ALTER ROLE` dan dikirim lewat stdin, nama peran konstan, tak ada port/rahasia baru di image. Menutup SEC-303. `bun audit` 6 (baseline).
+
