@@ -1,18 +1,22 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { AlertTriangle, Check, ChevronDown, History, Loader2, Pencil, RotateCcw, TrendingUp, Wallet } from 'lucide-react'
+import { AlertTriangle, Check, ChevronDown, History, Loader2, Pencil, RotateCcw, Wallet } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
 import { formatRupiah } from '@/lib/utils'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
+import { marginNote, type NoteRef } from '@/lib/pricing/marginNote'
+import { MarginNote } from './MarginNote'
 
 // Satu kartu harga untuk SEMUA produk (docs/arsitektur-harga-terpadu.md §6, §16): Modal · Harga Jual · Untung seragam, mode Otomatis/Manual, peringatan, atur / kembalikan
 // harga manual, riwayat. Sumbernya satu: GET /api/v1/admin/pricing/points (titik harga). Rincian MODAL tetap editor biayanya masing-masing (di atas/di samping kartu ini);
 // kartu ini tak pernah mengubah modal pemilik berbasis perhitungan — kecuali pemilik manual-only (katering, layanan hotel) yang modalnya opsional diisi di sini.
 
-export type PriceOwnerKind = 'visa' | 'flight' | 'hotel' | 'transport' | 'muthowif' | 'package' | 'tour_package' | 'haji' | 'catering' | 'hotel_service'
+export type PriceOwnerKind = 'visa' | 'flight' | 'hotel' | 'transport' | 'muthowif' | 'package' | 'tour_package' | 'haji' | 'catering' | 'hotel_service' | 'cost_component'
+/** Produk komposit: harga otomatisnya = jumlah harga Komponen Biaya (rekomendasi atau harga manual tiap komponen, §22). */
+const COMPOSITE: ReadonlySet<PriceOwnerKind> = new Set(['package', 'tour_package', 'haji'])
 
 type Point = {
   ownerType: PriceOwnerKind; ownerId: string; variantKey: string; unit: string
@@ -86,6 +90,8 @@ export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, unt
         <p className="m-0 mt-1 text-xs text-admin-muted">
           {data.manualOnly
             ? 'Harga jual diisi langsung; modal opsional (untuk menghitung untung).'
+            : COMPOSITE.has(ownerType)
+            ? `Harga otomatis = jumlah harga jual Komponen Biaya (rekomendasi margin ${data.rule.marginPercent}% atau harga yang diatur per komponen) + bagian yang termasuk. Harga total tetap boleh diatur manual.`
             : `Harga otomatis = modal × margin bawaan ${data.rule.providerMarkupPercent ? `${data.rule.marginPercent}% (${data.rule.clientMarginPercent}% + ${data.rule.providerMarkupPercent} poin Platform Provider)` : `${data.rule.marginPercent}%`}, dibulatkan ke kelipatan ${formatRupiah(data.rule.roundingIncrement)}. Margin hanyalah saran — harga jual boleh diatur manual.`}
         </p>
       </div>
@@ -146,10 +152,12 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
   const belowCost = point?.costIdr != null && Number(sell) > 0 && Number(sell) < point.costIdr
   // Peringatan saat mengetik — HANYA mengingatkan, tidak pernah mematikan tombol Simpan (docs/arsitektur-harga-terpadu.md §21)
   const typed = Number(sell)
-  const typedNote = !belowCost && !manualOnly ? marginNote(typed, point, rule, inherits) : null
+  const noteRef: NoteRef = inherits ? 'package' : COMPOSITE.has(ownerType) ? 'components' : 'margin'
+  const noteFor = (sellIdr: number) => marginNote({ sell: sellIdr, recommended: point?.autoSellIdr ?? null, ref: noteRef, marginPercent: rule.marginPercent })
+  const typedNote = !belowCost && !manualOnly ? noteFor(typed) : null
   const loss = point != null && point.profitIdr != null && point.profitIdr < 0
   const thin = point != null && !loss && point.marginPct != null && rule.warnBelowPercent > 0 && point.marginPct < rule.warnBelowPercent
-  const savedNote = point?.mode === 'manual' && !manualOnly && !loss ? marginNote(point.sellIdr, point, rule, inherits) : null
+  const savedNote = point?.mode === 'manual' && !manualOnly && !loss ? noteFor(point.sellIdr) : null
   const incomplete = point != null && point.costIdr == null
   const unpriced = point != null && point.sellIdr === 0
 
@@ -231,27 +239,6 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
       )}
     </div>
   )
-}
-
-type Note = { below: boolean; text: string }
-
-/**
- * Selisih harga jual (diketik atau tersimpan) terhadap rekomendasi = modal + margin bawaan (`autoSellIdr`). HANYA catatan internal — harga jual tetap bebas
- * (docs/arsitektur-harga-terpadu.md §21); di bawah modal ditangani peringatan rugi tersendiri. Varian keberangkatan dibandingkan dengan harga paket.
- */
-function marginNote(sell: number, point: Point | null, rule: Payload['rule'], inherits: boolean): Note | null {
-  if (!point || point.autoSellIdr == null || !(sell > 0)) return null
-  const diff = sell - point.autoSellIdr
-  if (diff === 0) return null
-  const ref = inherits ? `harga paket (${formatRupiah(point.autoSellIdr)})` : `harga margin ${rule.marginPercent}% (${formatRupiah(point.autoSellIdr)})`
-  return diff < 0
-    ? { below: true, text: inherits ? `Lebih kecil ${formatRupiah(-diff)} dari ${ref}.` : `Lebih kecil dari margin yang ditentukan (${rule.marginPercent}%) — kurang ${formatRupiah(-diff)} dari ${ref}. Tetap bisa disimpan.` }
-    : { below: false, text: `Lebih tinggi ${formatRupiah(diff)} dari ${ref}.` }
-}
-
-function MarginNote({ note }: { note: Note }) {
-  if (note.below) return <Warn>{note.text}</Warn>
-  return <p className="m-0 flex items-start gap-1.5 text-xs font-medium text-admin-ok"><TrendingUp className="mt-0.5 size-3.5 shrink-0" /> {note.text}</p>
 }
 
 function Stat({ label, value, hint, tone, strong, muted }: { label: string; value: string; hint?: string; tone?: 'ok' | 'warning' | 'danger'; strong?: boolean; muted?: boolean }) {

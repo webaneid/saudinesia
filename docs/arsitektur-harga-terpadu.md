@@ -473,7 +473,7 @@ Persetujuan bertingkat atas diskon besar, margin minimum yang memblokir, notifik
 - **Hardening yang disarankan, belum dikerjakan:** `invoiceBookingInclude` memuat `priceSnapshots` penuh (kolom modal/rekomendasi ikut dimuat walau tak pernah keluar ke `InvoiceData`); mengganti ke `select` kolom jual akan menutup risiko bila ada yang kelak menserialisasi objek itu.
 - **Verifikasi akhir:** `bun run test` penuh 628 PASS / 0 FAIL (dijalankan ulang setelah perbaikan SEC-102 juga hijau), build produksi terisolasi hijau, `bun audit` tanpa temuan, `tsc` bersih, verifikasi browser (§21.11). Mutasi: 6 (8B) + 7 (8C) + cek penjaga I5 + cek batas total — semuanya tertangkap.
 
-## 22. Harga jual manual PER KOMPONEN BIAYA (RENCANA DISETUJUI 2026-11-19; C1 selesai)
+## 22. Harga jual manual PER KOMPONEN BIAYA (SELESAI & TERVERIFIKASI 2026-11-19, C1–C3)
 
 ### 22.1 Arahan pemilik
 "Harga Jual Rekomendasi" di Komponen Biaya (Haji, Paket Umroh, Paket Ziarah) adalah SARAN: admin harus bisa mengubah harga jual **tiap komponen** (mis. Kereta Cepat rekomendasi Rp 1.200.000 dijual Rp 1.100.000), dengan catatan "Lebih kecil dari margin yang ditentukan" / "Lebih tinggi Rp … dari harga margin". Total produk mengikuti jumlah komponen. Harga tidak pernah dikunci (sejalan §21: peringatan hanya mengingatkan).
@@ -509,3 +509,13 @@ Harga manual per komponen pada Visa (tier hari) dan modul berbasis jadwal/tier (
 - Penghapus: `dropPolymorphic`, `lib/haji/delete.ts`, `costComponentHandlers` (hanya bila komponen milik produk di URL) — dijaga `scripts/test-cost-component-prices.ts` (11 kasus) + daftar penghapus di `test-price-engine`.
 - Route `admin/pricing/points` menerima `cost_component`; aturan margin yang dikirim = tipe induk.
 - Verifikasi: `bun run test` 1535 PASS / 0 FAIL, build produksi terisolasi hijau, `bun audit` tetap 6 (1 high, 4 moderate, 1 low; tak ada yang baru). Audit `security-auditor`: 0 Critical/High/Medium, 4 Low (SEC-299..302).
+
+### 22.7 As-built C2 (2026-11-19) — UI
+- `GET …/costs` (handler bersama, superadmin) menyertakan per baris `price` = titik `cost_component` (`autoSellIdr`, `sellIdr`, `mode`, `manualNote`; pembaca admin `pricePointViews` di `engine/adminRead.ts`) dan `meta.marginPercent` (margin tipe produk).
+- `CostComponentsPanel`: tiap baris = harga jual BERLAKU + lencana Manual + "rekomendasi Rp …", ikon `Tag` "Atur harga jual" membuka `CostComponentPriceEditor` (sebaris: harga, catatan, "Pakai rekomendasi", "Kembalikan ke rekomendasi", peringatan di bawah modal, catatan selisih margin) — menyimpan lewat route `admin/pricing/points` yang sama dengan PriceCard; "Total Komponen" = Σ harga berlaku.
+- Catatan selisih = SATU fungsi murni `lib/pricing/marginNote.ts` (`marginNote`, pembanding `margin`/`package`/`components`) + tampilan `components/admin/pricing/MarginNote.tsx`, dipakai PriceCard dan baris komponen. PriceCard produk komposit menjelaskan otomatis = jumlah harga komponen dan membandingkan dengan "jumlah harga komponen".
+- Verifikasi: `bun run test` 1535 PASS / 0 FAIL (+2 kasus C2 di `test-cost-component-prices.ts`, kini 13), build produksi hijau, `bun audit` tetap 6. Browser (DB audit): Haji — komponen 4.200.000 → manual 4.000.000, catatan "Lebih kecil dari margin … kurang Rp 200.000" tampil saat mengetik dan sesudah simpan, kartu harga Haji ikut 4.000.000 (mode Otomatis), dikembalikan ke rekomendasi; Paket Umroh — 5 baris komponen dengan tombol atur harga, teks komposit di kartu harga.
+- Keamanan (security-review atas 7 berkas): 0 temuan — data baru hanya pada endpoint biaya superadmin; penulisan lewat route harga yang sudah memakai `requirePricingEdit`; catatan dirender sebagai teks; tidak ada route/kolom baru.
+
+### 22.8 Penutup (C3)
+Aturan baru di `CLAUDE.md` (entri Komponen Biaya) dan `docs/arsitektur-komponen-biaya.md` §9.6. Produk komposit baru yang memakai Komponen Biaya dengan harga per komponen = entri `COMPOSITE_COST_TYPES` (`lib/pricing/costComponents.ts`) + `PARENT_OWNERS` (`engine/owners/costComponent.ts`).
