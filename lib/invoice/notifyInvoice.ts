@@ -5,6 +5,7 @@ import { formatRupiah } from '@/lib/utils'
 import { billOf } from './bill'
 import { invoiceLinkToken } from './link'
 import { appUrl } from '@/lib/email/templates'
+import { logError } from '@/lib/log'
 
 // Notifikasi "invoice terbit" berisi tautan invoice publik (docs/arsitektur-booking-engine-v2.md §10.4 6c, P2) — SATU pemanggil `notify` untuk kejadian ini:
 // terbit draf admin, checkout jamaah, dan "Kirim ulang invoice". Dipanggil SETELAH transaksi commit; `notify` tak pernah melempar (WhatsApp/email best-effort).
@@ -12,7 +13,7 @@ export async function sendInvoiceNotification(bookingId: string, opts: { dedupe:
   try {
     return await send(bookingId, opts)
   } catch (e) {
-    console.error('[invoice-notify] gagal menyiapkan notifikasi:', e instanceof Error ? e.name : 'unknown') // tak pernah melempar: dipanggil `void` setelah commit
+    logError('invoice-notify gagal menyiapkan notifikasi', e) // tak pernah melempar: dipanggil `void` setelah commit
     return null
   }
 }

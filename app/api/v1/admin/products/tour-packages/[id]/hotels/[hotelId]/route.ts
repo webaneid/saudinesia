@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 const updateSchema = z.object({
   nights:        z.coerce.number().int().min(1).optional(),
@@ -32,7 +33,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Hotel paket tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/tour-packages/[id]/hotels/[hotelId]/PUT]', e)
+    logError('admin/products/tour-packages/[id /hotels/[hotelId]/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -51,7 +52,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Hotel paket tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/tour-packages/[id]/hotels/[hotelId]/DELETE]', e)
+    logError('admin/products/tour-packages/[id /hotels/[hotelId]/DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

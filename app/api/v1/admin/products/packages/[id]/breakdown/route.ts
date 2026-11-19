@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { computePackageBreakdown } from '@/lib/pricing/computePackagePrice'
+import { logError } from '@/lib/log'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -17,7 +18,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/packages/[id]/breakdown/GET]', e)
+    logError('admin/products/packages/[id /breakdown/GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

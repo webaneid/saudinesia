@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
 import { seasonCreateSchema } from '@/lib/validators/adminUpdates'
 import { isAuthError } from '@/lib/admin/errors'
+import { logError } from '@/lib/log'
 
 export async function GET(req: Request) {
   try {
@@ -14,7 +15,7 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(items, meta))
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/products/seasons/GET]', e instanceof Error ? e.name : e)
+    logError('admin/products/seasons/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -28,7 +29,7 @@ export async function POST(req: Request) {
     return NextResponse.json(ok(s), { status: 201 })
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/products/seasons/POST]', e instanceof Error ? e.name : e)
+    logError('admin/products/seasons/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

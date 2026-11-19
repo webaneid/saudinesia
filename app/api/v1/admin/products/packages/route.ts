@@ -11,6 +11,7 @@ import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
 import { canViewCost } from '@/lib/pricing/policy'
 import { documentRequirementListSchema } from '@/lib/validators/documents'
 import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
+import { logError } from '@/lib/log'
 
 // price TIDAK ada di sini secara sengaja — cache dari computePackageBreakdown()
 // (docs/arsitektur-paket-umroh.md §5), diisi lewat komponen biaya/mode di package builder,
@@ -37,7 +38,7 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(await withAdminPrices('package', items, { includeCost: canViewCost(session.role) }), meta))
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/products/packages/GET]', e instanceof Error ? e.name : e)
+    logError('admin/products/packages/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -59,7 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json(ok(result), { status: 201 })
   } catch (e) {
     if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/products/packages/POST]', e instanceof Error ? e.name : e)
+    logError('admin/products/packages/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

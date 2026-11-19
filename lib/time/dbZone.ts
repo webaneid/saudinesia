@@ -1,5 +1,6 @@
 // Pemeriksaan zona sesi database saat boot (docs/arsitektur-booking-engine-v2.md §5.5). Khusus server (memakai Prisma) — SENGAJA terpisah dari `lib/time/index.ts` yang murni dan dipakai klien.
 import { prisma } from '@/lib/db'
+import { logError } from '@/lib/log'
 
 const UTC_NAMES = new Set(['UTC', 'Etc/UTC', 'GMT', 'Etc/GMT', 'Zulu'])
 
@@ -15,7 +16,7 @@ export async function checkDatabaseTimezone(client: { $queryRaw: typeof prisma.$
     if (!ok) console.error(`[waktu] Zona sesi database = "${zone}", bukan UTC. SQL mentah dengan now()/CURRENT_TIMESTAMP pada kolom tanpa zona akan menyimpan waktu yang salah. Jalankan migrasi (prisma migrate deploy) atau set timezone UTC pada database.`)
     return { ok, zone }
   } catch (e) {
-    console.error('[waktu] Gagal memeriksa zona database:', e instanceof Error ? e.message : String(e))
+    logError('waktu Gagal memeriksa zona database', e)
     return { ok: false, zone: '(gagal)' }
   }
 }

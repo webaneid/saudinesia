@@ -3,6 +3,7 @@ import { notify } from '@/lib/notifications/notify'
 import { formatDeadline } from '@/lib/notifications/events'
 import { departureReminders, dueReminders, expireOverdueBookings } from '@/lib/booking/expire'
 import { DATE_LONG, formatCalendarDate, getAppTimezone } from '@/lib/time'
+import { logError } from '@/lib/log'
 
 // Siklus hidup booking v2 (docs/arsitektur-booking-engine-v2.md §10.1). Jadwal mengikuti zona waktu APLIKASI (Pengaturan Invoice), bukan zona proses.
 // Dua pekerjaan harian: hanguskan booking tanpa uang masuk menjelang berangkat, dan ingatkan batas bayar (H-1 dan hari-H) + keberangkatan (H-7 dan H-1). Pengingat TIDAK membatalkan apa pun.
@@ -14,7 +15,7 @@ export async function runExpireJob(now: Date = new Date()): Promise<void> {
       await notify({ userId: b.userId, bookingId: b.id, event: { type: 'booking_expired', code: b.code }, dedupe: true })
       console.log(`[cron] Booking hangus: ${b.code}`)
     } catch (err) {
-      console.error(`[cron] Gagal memberi tahu booking hangus ${b.code}:`, err)
+      logError('cron notifikasi hangus', err, { booking: b.code })
     }
   }
 }
@@ -32,18 +33,18 @@ export async function runReminderJob(now: Date = new Date()): Promise<void> {
       const outcomes = await notify({ userId: r.userId, bookingId: r.id, event: { type: r.type, code: r.code, date: formatCalendarDate(r.departureDate, DATE_LONG) }, dedupe: true })
       console.log(`[cron] ${r.type} ${r.code}: ${outcomes.map(o => `${o.channel}=${o.status}`).join(' ') || 'tidak ada kanal'}`)
     } catch (err) {
-      console.error(`[cron] Gagal mengirim ${r.type} ${r.code}:`, err instanceof Error ? err.name : err)
+      logError('cron pengingat', err, { type: r.type, booking: r.code })
     }
   }
 }
 
 export function startBookingLifecycleJobs(): void {
   const timezone = getAppTimezone()
-  cron.schedule('20 0 * * *', () => { runExpireJob().catch(err => console.error('[cron] expire job:', err)) }, { timezone })
-  cron.schedule('0 8 * * *', () => { runReminderJob().catch(err => console.error('[cron] reminder job:', err)) }, { timezone })
+  cron.schedule('20 0 * * *', () => { runExpireJob().catch(err => logError('cron expire job', err)) }, { timezone })
+  cron.schedule('0 8 * * *', () => { runReminderJob().catch(err => logError('cron reminder job', err)) }, { timezone })
   // Fase 9: pembayaran online yang menunggu dicocokkan ke iPaymu (cadangan bila callback tak sampai) — setiap 10 menit.
   cron.schedule('*/10 * * * *', () => {
-    import('@/lib/payments/gateway').then(m => m.reconcileGatewayPayments()).catch(err => console.error('[cron] rekonsiliasi gateway:', err instanceof Error ? err.name : err))
+    import('@/lib/payments/gateway').then(m => m.reconcileGatewayPayments()).catch(err => logError('cron rekonsiliasi gateway', err))
   }, { timezone })
   console.log(`[cron] Booking lifecycle jobs scheduled (hangus 00:20, pengingat bayar + keberangkatan 08:00 — ${timezone})`)
 }

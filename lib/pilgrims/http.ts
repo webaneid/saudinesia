@@ -5,6 +5,7 @@ import { parseListParams } from '@/lib/table/pagination'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, failureJson, zodFailure } from '@/lib/errors/api'
 import type { DeleteResult, ListOptions, ServiceError, WriteResult } from './service'
+import { logError } from '@/lib/log'
 
 // Lapisan HTTP bersama route kartu jamaah — jamaah (`/api/v1/account/pilgrims`) dan admin atas nama pelanggan
 // (`/api/v1/admin/customers/[id]/pilgrims`). Penulis tetap lib/pilgrims/service.ts; di sini hanya pemetaan masukan/keluaran.
@@ -60,6 +61,6 @@ export async function ipLimited(req: Request): Promise<NextResponse | null> {
 export function routeFailure(e: unknown, tag: string): NextResponse {
   if (e instanceof Error && e.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
   if (e instanceof Error && e.message === 'Forbidden') return apiErrorJson('forbidden', 403)
-  console.error(`[${tag}]`, e instanceof Error ? e.name : e) // nama galat saja — pesan bisa memuat data masukan
+  logError(tag, e) // ringkasan tersamar — pesan mentah bisa memuat data masukan
   return apiErrorJson('internal', 500)
 }

@@ -6,6 +6,7 @@ import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/li
 import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
+import { logError } from '@/lib/log'
 
 // Harga TIDAK ada di sini secara sengaja — sekarang milik MuthowifServicePrice, satu layanan
 // flat, bukan per-orang (docs/arsitektur-muthowif.md §9).
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/muthowif/GET]', e)
+    logError('admin/products/muthowif/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -44,7 +45,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/muthowif/POST]', e)
+    logError('admin/products/muthowif/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -6,6 +6,7 @@ import { maskE164 } from '@/lib/utils/phone'
 import { registerSchema } from '@/lib/validators/auth'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Pendaftaran manual (docs/arsitektur-auth.md §3.2): TIDAK membuat akun — mengirim tautan ke email. Respons SERAGAM untuk
 // email baru maupun yang sudah terdaftar (tidak membocorkan keberadaan akun).
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(ok({ sent: true }))
   } catch (error) {
-    console.error('[auth/register]', error instanceof Error ? error.name : error)
+    logError('auth/register', error)
     return apiErrorJson('internal', 500)
   }
 }

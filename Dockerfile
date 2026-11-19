@@ -2,7 +2,7 @@
 #
 # Dua image dibangun dari file ini (workflow deploy memakai --target):
 #   --target runner   → aplikasi Next.js (standalone). Ini target BAWAAN (stage terakhir).
-#   --target migrate  → sekali-jalan `prisma migrate deploy` (CLI Prisma TIDAK ada di image runner).
+#   --target migrate  → sekali-jalan `prisma migrate deploy` + peran aplikasi DML-saja (CLI Prisma TIDAK ada di image runner).
 
 FROM oven/bun:1-slim AS base
 WORKDIR /app
@@ -59,7 +59,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
 COPY prisma ./prisma
 USER bun
-CMD ["bunx", "prisma", "migrate", "deploy"]
+# Sesudah migrasi: peran aplikasi `saudinesia_app` (DML saja) dibuat/diperbarui — web tak pernah memakai peran pemilik (SEC-303).
+CMD ["sh", "-c", "bunx prisma migrate deploy && bun prisma/apply-app-role.ts"]
 
 # ── Production runtime ──────────────────────────────────────────
 FROM base AS runner

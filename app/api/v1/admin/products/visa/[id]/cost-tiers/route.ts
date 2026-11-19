@@ -6,6 +6,7 @@ import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { assertVendorUsable } from '@/lib/vendors/integrity'
 import { vendorNotUsableResponse } from '@/lib/vendors/http'
+import { logError } from '@/lib/log'
 
 // Visa punya persis 2 komponen HPP tetap (dikonfirmasi user 2026-07-18) — lihat docs/arsitektur-harga.md §14.
 const COMPONENT_VISA = 'individu'
@@ -62,7 +63,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/visa/[id]/cost-tiers/GET]', e)
+    logError('admin/products/visa/[id /cost-tiers/GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -147,7 +148,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
     const vendorError = vendorNotUsableResponse(e)
     if (vendorError) return vendorError
-    console.error('[admin/products/visa/[id]/cost-tiers/PUT]', e)
+    logError('admin/products/visa/[id /cost-tiers/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Jalankan DI SERVER BARU, sekali:  bash scripts/buat-env-production.sh <APP_DOMAIN> <FILES_DOMAIN> [DIR]
 #   mis. bash scripts/buat-env-production.sh saudinesia.com berkas.saudinesia.com /opt/app
-# Membuat DIR/.env.production dari .env.production.example dengan rahasia acak (password Postgres, kunci MinIO,
+# Membuat DIR/.env.production dari .env.production.example dengan rahasia acak (password Postgres pemilik + peran aplikasi, kunci MinIO,
 # JWT_SECRET). Rahasia TIDAK ditampilkan. Nilai yang harus diisi manual (WhatsApp, Resend) dibiarkan kosong dan
 # dilaporkan di akhir. Tidak pernah menimpa .env.production yang sudah ada.
 # Pola mengikuti smart-ai (scripts/buat-env-production.sh).
@@ -22,6 +22,7 @@ cd "$DIR"
 
 acak() { openssl rand -hex "$1"; }
 PW_DB="$(acak 24)"
+PW_APP="$(acak 24)"
 PW_REDIS="$(acak 24)"
 
 # umask di subshell supaya file tidak sempat terbaca user lain sebelum chmod.
@@ -32,7 +33,9 @@ PW_REDIS="$(acak 24)"
     -e "s#^APP_URL=\$#APP_URL=https://$APP_DOMAIN#" \
     -e "s#^MINIO_PUBLIC_URL=\$#MINIO_PUBLIC_URL=https://$FILES_DOMAIN#" \
     -e "s#^POSTGRES_PASSWORD=\$#POSTGRES_PASSWORD=$PW_DB#" \
-    -e "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://saudinesia:$PW_DB@postgres:5432/saudinesia#" \
+    -e "s#^MIGRATE_DATABASE_URL=.*#MIGRATE_DATABASE_URL=postgresql://saudinesia:$PW_DB@postgres:5432/saudinesia#" \
+    -e "s#^APP_DB_PASSWORD=\$#APP_DB_PASSWORD=$PW_APP#" \
+    -e "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://saudinesia_app:$PW_APP@postgres:5432/saudinesia#" \
     -e "s#^REDIS_PASSWORD=\$#REDIS_PASSWORD=$PW_REDIS#" \
     -e "s#^REDIS_URL=.*#REDIS_URL=redis://:$PW_REDIS@redis:6379#" \
     -e "s#^MINIO_ACCESS_KEY=\$#MINIO_ACCESS_KEY=saudinesia$(acak 4)#" \

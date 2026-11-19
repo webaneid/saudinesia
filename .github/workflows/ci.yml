@@ -245,7 +245,7 @@ jobs:
           grep -qE '^rl:login(AcctIp|Ip|Acct):' /tmp/rl-keys.txt || { echo "kunci rate limit TIDAK ada di Redis — limiter jatuh ke memori"; exit 1; }
 
       # Hardening kontainer (SEC-10) dibuktikan pada kontainer yang BENAR-BENAR jalan, bukan hanya pada berkas compose.
-      - name: Smoke - hardening kontainer (no-new-privileges, cap_drop, Redis berpassword, rahasia DB tak ada di web)
+      - name: Smoke - hardening kontainer (no-new-privileges, cap_drop, Redis berpassword, rahasia DB tak ada di web, peran DB aplikasi)
         run: |
           C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
           for SVC in web postgres redis; do
@@ -261,6 +261,13 @@ jobs:
           # Rahasia database tidak boleh terbaca proses web (DATABASE_URL tetap ada karena aplikasi memerlukannya)
           test -z "$($C exec -T web printenv POSTGRES_PASSWORD)" || { echo "POSTGRES_PASSWORD terbaca di kontainer web"; exit 1; }
           $C exec -T web printenv DATABASE_URL > /dev/null || { echo "DATABASE_URL hilang dari web"; exit 1; }
+          # Peran database (SEC-303): web memakai `saudinesia_app` (bukan superuser, bukan pemilik) dan tak memegang kredensial pemilik.
+          for K in MIGRATE_DATABASE_URL APP_DB_PASSWORD; do test -z "$($C exec -T web printenv $K)" || { echo "$K terbaca di kontainer web"; exit 1; }; done
+          $C exec -T web printenv DATABASE_URL | grep -q '^postgresql://saudinesia_app:' || { echo "web tidak memakai peran saudinesia_app"; exit 1; }
+          test "$($C exec -T postgres psql -U saudinesia -d saudinesia -tAc "select rolsuper::text || (select count(*) from pg_class where relowner = r.oid) from pg_roles r where rolname = 'saudinesia_app'")" = "false0" || { echo "saudinesia_app superuser/pemilik"; exit 1; }
+          # Koneksi sungguhan aplikasi = saudinesia_app, dan peran itu tak bisa mematikan trigger buku kas.
+          test "$($C exec -T postgres psql -U saudinesia -d saudinesia -tAc "select count(*) > 0 from pg_stat_activity where usename = 'saudinesia_app'")" = "t" || { echo "tak ada koneksi web sebagai saudinesia_app"; exit 1; }
+          if $C exec -T postgres psql -U saudinesia_app -d saudinesia -v ON_ERROR_STOP=1 -c 'ALTER TABLE cash_entries DISABLE TRIGGER ALL'; then echo "saudinesia_app bisa mematikan trigger"; exit 1; fi
 
       # Auth email + Google di image produksi (tanpa kredensial Resend/Google — itu justru kondisi yang harus aman): pendaftaran & lupa password
       # membalas seragam, tautan/token tak terbaca dari respons, rute OTP lama sudah tidak ada, Google mati dengan sopan, dan pengaman callback

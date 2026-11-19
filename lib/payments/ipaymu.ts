@@ -1,5 +1,6 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto'
 import { parseAppDateTime } from '@/lib/time'
+import { logError } from '@/lib/log'
 
 // Klien iPaymu API v2 (Fase 9, docs/arsitektur-booking-engine-v2.md §10.12) — SATU-SATUNYA tempat yang memanggil iPaymu.
 // Kunci dari env (`IPAYMU_VA`, `IPAYMU_API_KEY`), tak pernah dari DB/klien; mode sandbox/produksi dari Pengaturan Invoice (`gatewaySandbox`).
@@ -96,7 +97,7 @@ export async function listChannels(cfg: IpaymuConfig): Promise<IpaymuChannelGrou
     channelCache.set(key, { expiresAt: Date.now() + CHANNEL_TTL_MS, groups })
     return groups
   } catch (e) {
-    console.error('[ipaymu/channels]', e instanceof Error ? e.message : 'galat')
+    logError('ipaymu/channels', e)
     channelCache.set(key, { expiresAt: Date.now() + 60_000, groups: [] })
     return []
   }

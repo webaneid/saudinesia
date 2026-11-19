@@ -4,6 +4,7 @@ import { prisma } from '@/lib/db'
 import { ownerOf, type MediaProductType } from './owners'
 import { processImage, ImageRejectedError } from './image'
 import { minioMediaStorage, type MediaStorage } from './storage'
+import { logError } from '@/lib/log'
 
 // Layanan media produk universal (docs/arsitektur-media.md). SATU-SATUNYA penulis tabel `product_images` dan objek foto produk. Invarian yang
 // ditegakkan di sini (bukan indeks DB): mode featured = tepat satu baris (unggah baru MENGGANTI); gallery = ≤ `max` baris dan, bila tidak kosong,
@@ -136,6 +137,6 @@ export const mediaService = createMediaService()
  * sudah berhasil — dicatat (tanpa data pribadi) dan dilewati; objek yang tertinggal dapat disapu lewat `removeAll` nanti.
  */
 export async function purgeProductMedia(type: MediaProductType, productId: string): Promise<void> {
-  try { await mediaService.removeAll(type, productId) } catch (e) { console.error('[media/purge]', type, e instanceof Error ? e.name : e) }
+  try { await mediaService.removeAll(type, productId) } catch (e) { logError('media/purge', e, { type }) }
 }
 

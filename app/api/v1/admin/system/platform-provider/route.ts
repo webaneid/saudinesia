@@ -6,6 +6,7 @@ import { authFailureResponse } from '@/lib/admin/errors'
 import { ensurePricesFollowRevenueShare } from '@/lib/revenue-share/pricing'
 import { providerBalance } from '@/lib/revenue-share/payouts'
 import { currentRevenueShare, platformProviderConfigured, revenueShareHistory, RevenueShareError, saveRevenueShare } from '@/lib/revenue-share/settings'
+import { logError } from '@/lib/log'
 
 // Sistem → Platform Provider (docs/arsitektur-bagi-hasil.md, Fase 13a). Baca: superadmin (klien melihat kesepakatan). Ubah: HANYA akun Platform Provider.
 
@@ -26,7 +27,7 @@ export async function POST(req: Request) {
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
     const current = await saveRevenueShare(parsed.data, session.userId)
     // Persen/dasar berubah → harga otomatis dihitung ulang di latar (satu pintu; booking terbit tetap beku). Gagal = dicoba lagi cron 10 menit.
-    void ensurePricesFollowRevenueShare().catch(e => console.error('[revenue-share] hitung ulang harga gagal:', e instanceof Error ? e.message : e))
+    void ensurePricesFollowRevenueShare().catch(e => logError('revenue-share hitung ulang harga gagal', e))
     return NextResponse.json(ok({ current }), { status: 201 })
   } catch (e) {
     if (e instanceof RevenueShareError) return NextResponse.json(err(e.message), { status: e.status })

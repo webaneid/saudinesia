@@ -6,6 +6,7 @@ import { toView } from './view'
 import { departureVariantKey } from './variantKeys'
 import { repriceOwner } from './service'
 import type { PriceOwnerType, PriceUnit, PriceView } from './types'
+import { logError } from '@/lib/log'
 
 // HARGA MANUAL (docs/arsitektur-harga-terpadu.md §2 I2/I6, §16): admin menetapkan harga jual sendiri; margin default hanyalah saran. Hidup di `price_points`
 // (manualSellIdr), diubah HANYA di sini, dan tiap perubahan tercatat di `price_changes`. Hitung-ulang tak pernah menimpanya (modal bergerak, jual tetap, untung ikut).
@@ -38,7 +39,7 @@ async function repriceParent(ownerType: PriceOwnerType, ownerId: string): Promis
   if (!parent) return
   // Harga titik ini SUDAH tersimpan; gagal menghitung ulang induk tak boleh menjadi 500 — induk tertinggal sampai hitung ulang berikutnya (cron/ubah biaya),
   // dan booking tetap konsisten karena baris selisih snapshot selalu menutup ke harga induk yang tersimpan.
-  try { await repriceOwner(parent.ownerType, parent.ownerId) } catch (e) { console.error(`[pricing] hitung ulang ${parent.ownerType} ${parent.ownerId} sesudah harga komponen berubah gagal:`, e) }
+  try { await repriceOwner(parent.ownerType, parent.ownerId) } catch (e) { logError('pricing hitung ulang induk sesudah harga komponen berubah', e, { owner: parent.ownerType, id: parent.ownerId }) }
 }
 
 async function ensureOwner(ownerType: PriceOwnerType, ownerId: string): Promise<void> {

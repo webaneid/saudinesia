@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { err } from '@/lib/validators'
+import { logError } from '@/lib/log'
 
 /**
  * Prisma `P2025` = baris yang mau di-update/delete tidak ada. Untuk id dari URL itu artinya 404, bukan 500 (SEC-61).
@@ -21,6 +22,6 @@ export function isAuthError(e: unknown): boolean {
  */
 export function authFailureResponse(e: unknown, tag: string): NextResponse {
   if (isAuthError(e)) return NextResponse.json(err('Forbidden'), { status: 403 })
-  console.error(`[${tag}]`, e instanceof Error ? e.name : e)
+  logError(tag, e)
   return NextResponse.json(err('Internal server error'), { status: 500 })
 }

@@ -6,6 +6,7 @@ import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { notify } from '@/lib/notifications/notify'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Lengkapi data / ubah nomor telepon & WhatsApp (docs/arsitektur-auth.md §3.5).
 export async function PUT(request: Request) {
@@ -33,7 +34,7 @@ export async function PUT(request: Request) {
     return NextResponse.json(ok({ saved: true }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[auth/contact]', error instanceof Error ? error.name : error)
+    logError('auth/contact', error)
     return apiErrorJson('internal', 500)
   }
 }

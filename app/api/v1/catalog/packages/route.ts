@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { withSellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 export async function GET() {
   try {
@@ -20,5 +21,5 @@ export async function GET() {
       hasAddOns: [p.hotelMakkahMode, p.hotelMadinahMode, p.transportMode, p.muthowifMode, p.visaMode, p.flightMode, p.cateringMode]
         .includes('user_choice'),
     })), { total: packages.length }))
-  } catch (e) { console.error('[catalog/packages]', e); return NextResponse.json(err('Internal server error'), { status: 500 }) }
+  } catch (e) { logError('catalog/packages', e); return NextResponse.json(err('Internal server error'), { status: 500 }) }
 }

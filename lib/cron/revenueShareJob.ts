@@ -1,5 +1,6 @@
 import cron from 'node-cron'
 import { ensurePricesFollowRevenueShare } from '@/lib/revenue-share/pricing'
+import { logError } from '@/lib/log'
 
 /**
  * Setiap 10 menit: harga otomatis mengikuti aturan bagi hasil Platform Provider yang berlaku (docs/arsitektur-bagi-hasil.md, Fase 13b). Menangkap perubahan yang
@@ -7,6 +8,6 @@ import { ensurePricesFollowRevenueShare } from '@/lib/revenue-share/pricing'
  */
 export function startRevenueSharePricingJob(): void {
   cron.schedule('*/10 * * * *', () => {
-    ensurePricesFollowRevenueShare().catch(e => console.error('[cron] harga bagi hasil gagal:', e instanceof Error ? e.message : e))
+    ensurePricesFollowRevenueShare().catch(e => logError('cron harga bagi hasil gagal', e))
   })
 }

@@ -6,6 +6,7 @@ import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/li
 import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 // origin/destination wajib — struktur rute meniru FlightRoute (docs/arsitektur-transportasi.md §9.1)
 const createSchema = z.object({
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/transport/trips/GET]', e)
+    logError('admin/products/transport/trips/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/transport/trips/POST]', e)
+    logError('admin/products/transport/trips/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -6,6 +6,7 @@ import { assignMuthowifToBooking, MuthowifAssignError } from '@/lib/muthowif/ass
 import { QuotaExhaustedError } from '@/lib/booking/errors'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 // `bookingMuthowifId` wajib (§10.8, 11d-2b): booking berrombongan bisa memuat beberapa layanan muthowif — penugasan harus menyebut itemnya.
 const schema = z.object({ bookingMuthowifId: z.string().min(1).max(64), muthowifId: z.string().min(1).max(64) }).strict()
@@ -27,7 +28,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/bookings/[id]/muthowif/assign/GET]', e)
+    logError('admin/bookings/[id /muthowif/assign/GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -59,7 +60,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (e instanceof MuthowifAssignError || e instanceof QuotaExhaustedError) {
       return NextResponse.json(err(e.message), { status: 409 })
     }
-    console.error('[admin/bookings/[id]/muthowif/assign/POST]', e)
+    logError('admin/bookings/[id /muthowif/assign/POST]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

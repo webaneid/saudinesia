@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireSession } from '@/lib/auth/session'
 import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Dipoll halaman profil selama menunggu pengguna mengirim pesan verifikasi.
 export async function GET() {
@@ -13,7 +14,7 @@ export async function GET() {
     return NextResponse.json(ok({ hasNumber: Boolean(u.whatsapp), verified: Boolean(u.whatsappVerifiedAt && u.verifiedWhatsapp === u.whatsapp) }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[auth/whatsapp/status]', error instanceof Error ? error.name : error)
+    logError('auth/whatsapp/status', error)
     return apiErrorJson('internal', 500)
   }
 }

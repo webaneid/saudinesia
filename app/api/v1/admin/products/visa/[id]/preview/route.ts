@@ -3,6 +3,7 @@ import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { computeSellPrice } from '@/lib/pricing/computeSellPrice'
 import { prisma } from '@/lib/db'
+import { logError } from '@/lib/log'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -28,7 +29,7 @@ export async function GET(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/visa/[id]/preview/GET]', e)
+    logError('admin/products/visa/[id /preview/GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

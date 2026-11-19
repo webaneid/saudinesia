@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { toCatalogHaji } from '@/lib/haji/catalog'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const q = z.object({ hajiType: z.string().optional(), year: z.coerce.number().optional() })
 
@@ -25,5 +26,5 @@ export async function GET(request: Request) {
     const items = products.map(p => ({ ...toCatalogHaji(p, prices.get(p.id) ?? 0), coverUrl: covers.get(p.id)?.src ?? null, coverAlt: covers.get(p.id)?.alt ?? null }))
     items.sort((a, b) => Number(!a.priced) - Number(!b.priced)) // sort stabil: urutan tahun/harga dipertahankan di dalam tiap kelompok
     return NextResponse.json(ok(items, { total: items.length }))
-  } catch (e) { console.error('[catalog/haji]', e); return NextResponse.json(err('Internal server error'), { status: 500 }) }
+  } catch (e) { logError('catalog/haji', e); return NextResponse.json(err('Internal server error'), { status: 500 }) }
 }

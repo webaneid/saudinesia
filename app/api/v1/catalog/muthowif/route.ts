@@ -4,6 +4,7 @@ import { getFeaturedCardUrls } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { getMuthowifServicePrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const querySchema = z.object({
   language: z.string().optional(),
@@ -39,7 +40,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(ok(data, { total: data.length, pricePerDay }))
   } catch (error) {
-    console.error('[catalog/muthowif]', error)
+    logError('catalog/muthowif', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

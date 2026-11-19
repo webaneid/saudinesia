@@ -4,6 +4,7 @@ import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
 import { addDays, dbDateOf, todayInApp } from '@/lib/time'
+import { logError } from '@/lib/log'
 
 const querySchema = z.object({
   category: z.string().optional(),
@@ -88,7 +89,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(ok(data, { total: data.length, byTrip }))
   } catch (error) {
-    console.error('[catalog/transport]', error)
+    logError('catalog/transport', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

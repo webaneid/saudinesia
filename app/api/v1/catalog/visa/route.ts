@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ok, err } from '@/lib/validators'
 import { visaPriceSummary } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 export async function GET() {
   try {
@@ -25,7 +26,7 @@ export async function GET() {
       { total: products.length }
     ))
   } catch (e) {
-    console.error('[catalog/visa]', e)
+    logError('catalog/visa', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

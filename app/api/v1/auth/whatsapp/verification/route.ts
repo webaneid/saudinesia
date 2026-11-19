@@ -5,6 +5,7 @@ import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { businessWaDigits } from '@/lib/constants/payment'
 import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Terbitkan kode verifikasi WhatsApp: pengguna mengirim `VERIF <KODE>` dari nomornya ke nomor bisnis (ADR-0002).
 export async function POST() {
@@ -29,7 +30,7 @@ export async function POST() {
     }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[auth/whatsapp/verification]', error instanceof Error ? error.name : error)
+    logError('auth/whatsapp/verification', error)
     return apiErrorJson('internal', 500)
   }
 }

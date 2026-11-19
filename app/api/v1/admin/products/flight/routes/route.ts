@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { activeFilter, paginateCatalog, pickParam, readCatalogQuery } from '@/lib/admin/catalogQuery'
 import { escapeLike } from '@/lib/utils/search'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 const createSchema = z.object({
   origin:      z.string().min(1),
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/flight/routes/GET]', e)
+    logError('admin/products/flight/routes/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/flight/routes/POST]', e)
+    logError('admin/products/flight/routes/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

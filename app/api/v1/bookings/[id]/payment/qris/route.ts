@@ -10,6 +10,7 @@ import { buildDynamicQris } from '@/lib/qris/emv'
 import { payableQris } from '@/lib/qris/payable'
 import { qrisSvg } from '@/lib/qris/render'
 import { formatRupiah } from '@/lib/utils'
+import { logError } from '@/lib/log'
 
 const querySchema = z.object({
   qris: z.uuid(),
@@ -61,7 +62,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[bookings/id/payment/qris]', error instanceof Error ? error.message : String(error))
+    logError('bookings/id/payment/qris', error)
     return apiErrorJson('internal', 500)
   }
 }

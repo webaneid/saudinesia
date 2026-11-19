@@ -5,6 +5,7 @@ import { detectSeason } from '@/lib/utils/season'
 import { cateringPricePerPersonPerDay } from '@/lib/pricing/computeCateringPrice'
 import { ok, err } from '@/lib/validators'
 import { cateringSeasonPrices } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 export async function GET() {
   try {
@@ -20,7 +21,7 @@ export async function GET() {
     }))
     return NextResponse.json(ok(data, { total: data.length, season }))
   } catch (error) {
-    console.error('[catalog/catering]', error)
+    logError('catalog/catering', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

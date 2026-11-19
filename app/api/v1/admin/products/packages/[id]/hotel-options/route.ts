@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 // Opsi hotel untuk mode user_choice (docs/arsitektur-paket-umroh.md §3) — daftar tipe kamar yang
 // DITAWARKAN ke pilgrim per slot (Makkah/Madinah), bukan dikunci. Harga live dari
@@ -38,7 +39,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/packages/[id]/hotel-options/POST]', e)
+    logError('admin/products/packages/[id /hotel-options/POST]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -58,7 +59,7 @@ export async function DELETE(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/packages/[id]/hotel-options/DELETE]', e)
+    logError('admin/products/packages/[id /hotel-options/DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

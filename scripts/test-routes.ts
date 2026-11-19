@@ -88,7 +88,7 @@ await t('SEC-08: tidak ada catch yang menjawab 403 tanpa jalur 500/log (galat DB
   const bad: string[] = []
   for (const f of routes) {
     for (const b of tryCatchBlocks(read(f))) {
-      const collapses = /\b403\b/.test(b.catchBody) && !/\b500\b/.test(b.catchBody) && !/console\.error/.test(b.catchBody)
+      const collapses = /\b403\b/.test(b.catchBody) && !/\b500\b/.test(b.catchBody) && !/console\.error|logError/.test(b.catchBody)
       // `catch (e) { return authFailureResponse(e, …) }` sudah memetakan non-auth → 500, jadi tidak mengandung literal 403.
       if (collapses) bad.push(`${rel(f)}:${b.line}`)
     }

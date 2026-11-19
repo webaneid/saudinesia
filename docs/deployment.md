@@ -83,7 +83,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 | Workflow build+push image & deploy | `deploy.yml` (scp compose → SSH → `pull && up -d` → health check; rollback manual ke tag mana pun) | **belum ditulis** — kontrak sudah ada: image `ghcr.io/<repo>/web` & `/migrate`, `.env.deploy`, health endpoint |
 | Versi & changelog otomatis | semantic-release | belum; `package.json` `0.1.0` manual |
 | Staging (`develop`) | `deploy-staging.yml` | belum |
-| Role DB terpisah (pemilik vs aplikasi) | `scripts/pisah-role-db.sh` | belum — satu role `saudinesia` memegang migrasi dan runtime |
+| Role DB terpisah (pemilik vs aplikasi) | `scripts/pisah-role-db.sh` | **ada (2026-11-19, SEC-303)** — `saudinesia` pemilik (hanya kontainer migrate), `saudinesia_app` DML saja (web); dibuat otomatis oleh image migrate, lihat "Peran database" |
 | Backup terjadwal + uji restore | `backup-produksi.sh` ke Drive, dipantau | `backup-db.sh`/`backup-minio.sh` ada, **belum dijadwalkan** |
 | Update dependency | Dependabot | belum |
 
@@ -172,3 +172,12 @@ Migrasi memuat perbaikan data: pembayaran **terkonfirmasi bernilai 0** diisi tot
 
 ### Buku kas append-only (Fase 7b-1, 2026-11-16)
 Migrasi `20261125090000_cash_book` memasang trigger `cash_entries_no_update` (UPDATE/DELETE) dan `cash_entries_no_truncate`. Pasca-deploy periksa `select tgname, tgenabled from pg_trigger where tgname like 'cash_entries_no_%'` = `'O'` untuk keduanya. Trigger hanya melindungi dari kode aplikasi: peran pemilik tabel dapat menonaktifkannya (pola sama dengan `price_snapshots`, SEC-88) — kredensial DB tetap rahasia tingkat tertinggi.
+
+## Catatan operasional: peran database (SEC-303, 2026-11-19)
+
+- **Dua peran.** `saudinesia` (= `POSTGRES_USER`, pemilik skema + superuser bootstrap image Postgres) hanya dipakai kontainer `migrate` (`MIGRATE_DATABASE_URL`) dan `scripts/backup-db.sh`. `saudinesia_app` dipakai web (`DATABASE_URL`): bukan superuser, bukan pemilik, hanya SELECT/INSERT/UPDATE/DELETE — tak bisa mematikan trigger append-only (buku kas, snapshot harga, jejak), DDL, TRUNCATE, atau `COPY … TO PROGRAM`.
+- **Dibuat otomatis**: image `migrate` menjalankan `prisma migrate deploy` lalu `prisma/apply-app-role.ts` (idempoten, setiap deploy) dengan `APP_DB_PASSWORD`. Tak ada langkah manual di server baru — `scripts/buat-env-production.sh` mengisi `POSTGRES_PASSWORD`, `MIGRATE_DATABASE_URL`, `APP_DB_PASSWORD`, dan `DATABASE_URL` (`saudinesia_app`) dengan dua sandi acak berbeda.
+- **Server yang sudah berjalan dengan satu peran** (belum ada saat ditulis): tambahkan `APP_DB_PASSWORD` (`openssl rand -hex 24`) dan `MIGRATE_DATABASE_URL` (= `DATABASE_URL` lama) ke `.env.production`, ganti `DATABASE_URL` jadi `postgresql://saudinesia_app:<APP_DB_PASSWORD>@postgres:5432/saudinesia`, lalu deploy ulang (migrate membuat peran sebelum web naik).
+- **Ganti sandi peran aplikasi**: ubah `APP_DB_PASSWORD` dan sandi di `DATABASE_URL` bersamaan, deploy ulang (migrate menjalankan `ALTER ROLE … PASSWORD`).
+- Kode aplikasi TIDAK BOLEH memerlukan DDL atau hak pemilik saat berjalan; perubahan skema hanya lewat migrasi. Cek: `select rolsuper from pg_roles where rolname = 'saudinesia_app'` = `f`.
+

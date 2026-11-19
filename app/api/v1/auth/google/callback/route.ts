@@ -7,6 +7,7 @@ import { createSession } from '@/lib/auth/session'
 import { appUrl } from '@/lib/email/templates'
 import { clientIp, consume, policy } from '@/lib/auth/rateLimit'
 import { afterAuthPath } from '@/lib/auth/nextPath'
+import { logError } from '@/lib/log'
 
 const same = (a: string, b: string) => a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b))
 
@@ -48,7 +49,7 @@ export async function GET(request: Request) {
     await setSignupCookie(await signSignupCookie(result.identity, undefined, stateCookie.next ?? null))
     return go('/register/google')
   } catch (error) {
-    console.error('[auth/google/callback]', error instanceof Error ? error.name : error)
+    logError('auth/google/callback', error)
     return fail('google_failed')
   }
 }

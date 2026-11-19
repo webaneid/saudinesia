@@ -2,6 +2,7 @@
 // All WhatsApp sends go through this file. Never call GOWA directly elsewhere.
 // sendMessage NEVER throws — WA must never block a booking operation — but it RETURNS the outcome so callers can log the
 // truth (dulu hasilnya ditelan dan log notifikasi selalu mencatat "sent", termasuk saat gateway belum dikonfigurasi).
+import { redactPii } from '@/lib/log'
 
 const RETRY_ATTEMPTS = 2
 const RETRY_DELAY_MS = 2000
@@ -65,7 +66,7 @@ async function sendMessage(payload: SendPayload): Promise<WhatsAppResult> {
   }
 
   // Best-effort: never throw. Nomor telepon sengaja TIDAK dicatat di log (PII) — SEC-09.
-  console.error(`[whatsapp] Failed to send after retries: ${lastError}`)
+  console.error(`[whatsapp] Failed to send after retries: ${redactPii(lastError ?? 'unknown')}`)
   return { status: 'failed', error: lastError ?? 'unknown' }
 }
 
