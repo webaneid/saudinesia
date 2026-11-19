@@ -6,7 +6,8 @@
 # adalah bentuk awal/dev yang MEMBANGUN image di mesin sendiri dan membuka port — jangan dipakai di production.
 #
 # Pola mengikuti smart-ai (docker-compose.prod.yml), disesuaikan: satu app Next.js (bukan api+web+worker), Redis
-# (rate limit auth), GOWA eksternal di Sumopod (tidak ada service WhatsApp di sini), satu role database.
+# (rate limit auth), GOWA eksternal di Sumopod (tidak ada service WhatsApp di sini). Dua peran database (SEC-303): pemilik skema
+# `saudinesia` (POSTGRES_USER, hanya kontainer migrate) dan `saudinesia_app` (DML saja, dipakai web).
 #
 # RESOURCE LIMITS: tanpa batas, satu container yang bocor/spike menghabiskan RAM dan memicu OOM-kill container
 # LAIN (termasuk postgres — data berisiko). Angka di bawah titik awal untuk VPS ±4 GB — sesuaikan dengan
@@ -32,8 +33,12 @@ services:
     env_file: .env.production
     # POSTGRES_PASSWORD hanya dibutuhkan kontainer postgres (+ tertanam di DATABASE_URL); `environment` mengalahkan `env_file`, jadi nilainya
     # DIKOSONGKAN di sini — satu salinan rahasia DB yang tak perlu terbaca proses web yang dihadapkan ke internet (SEC-10).
+    # Begitu pula sandi/URL peran PEMILIK (MIGRATE_DATABASE_URL) dan APP_DB_PASSWORD: web hanya memegang DATABASE_URL peran aplikasi
+    # `saudinesia_app` (DML saja, bukan pemilik — tak bisa mematikan trigger append-only; SEC-303).
     environment:
       POSTGRES_PASSWORD: ""
+      MIGRATE_DATABASE_URL: ""
+      APP_DB_PASSWORD: ""
       TZ: UTC
     <<: *hardening
     # Non-root (user `bun`) dan tak butuh capability apa pun — port 3000 bukan port istimewa.
@@ -58,13 +63,15 @@ services:
     logging: *logging
 
   # Migrasi skema, sekali jalan tiap deploy (`prisma migrate deploy` — TIDAK PERNAH `db push` di production).
-  # Image terpisah karena CLI Prisma tidak ikut ke image web.
+  # Image terpisah karena CLI Prisma tidak ikut ke image web. Berjalan sebagai PEMILIK skema (MIGRATE_DATABASE_URL), lalu membuat/memperbarui
+  # peran aplikasi `saudinesia_app` (prisma/apply-app-role.ts) — satu-satunya kontainer yang memegang kredensial pemilik.
   migrate:
     image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/migrate:${IMAGE_TAG:-latest}
     restart: "no"
-    # HANYA DATABASE_URL — kontainer ini tak butuh JWT_SECRET/GOOGLE_CLIENT_SECRET/RESEND_API_KEY/token GOWA (minimum hak; SEC-10).
+    # HANYA URL pemilik + sandi peran aplikasi — kontainer ini tak butuh JWT_SECRET/GOOGLE_CLIENT_SECRET/RESEND_API_KEY/token GOWA (minimum hak; SEC-10).
     environment:
-      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL belum diisi}
+      DATABASE_URL: ${MIGRATE_DATABASE_URL:?MIGRATE_DATABASE_URL belum diisi}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?APP_DB_PASSWORD belum diisi}
     <<: *hardening
     cap_drop: [ALL]
     depends_on:
