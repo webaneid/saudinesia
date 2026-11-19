@@ -174,3 +174,21 @@ Urutan saat produksi: (1) daftar domain di Resend → pasang DNS **SPF, DKIM, da
 **Keputusan pemilik (2026-11-19):** K1 = H-7 dan H-1. K2 = hanya booking `active` dengan kursi terkonfirmasi (`confirmedAt` terisi). K3 = WhatsApp DIAKTIFKAN untuk kejadian ini (syarat biasa: nomor terverifikasi + persetujuan), selain itu email saja — email tetap selalu dikirim (jaring pengaman `notify`); lingkup WA ADR-0001 bertambah satu kejadian. K4 = isi hanya pengingat ramah + tanggal berangkat + tautan booking (tanpa sisa tagihan/status data). Kejadian: `departure_reminder_7d` / `departure_reminder_1d` `{ code, date }`.
 
 **As-built (2026-11-19):** kejadian `departure_reminder_7d`/`_1d` `{ code, date }` di `NotificationEvent`; jarak hari SATU tempat `lib/notifications/departure.ts` (`DEPARTURE_REMINDER_DAYS`, modul sendiri supaya `events.ts` ↔ `email/templates.ts` tak melingkar); WA `waTemplates.departureReminder(code, days, date)` (template lama diberi tanggal, kini terpakai); email "Keberangkatan … lagi" + kode + tanggal + tautan booking. Pemilih `departureReminders(now)` (`lib/booking/expire.ts`): `status = active`, `confirmedAt` terisi, `departureDate = dbDateOf(addDays(todayInApp(now), N))`. Dijalankan di `runReminderJob` (08:00 zona aplikasi) sesudah pengingat bayar; kegagalan satu booking tak menghentikan sisanya. Tanggal di pesan = `formatCalendarDate(…, DATE_LONG)` (tanggal kalender, tak bergeser zona). Uji: `test-booking-lifecycle` di 4 `TZ` (00.30 WIB = hari berikutnya; belum bayar/batal/selesai/draf/tanpa tanggal/H-2/H-8/hari ini tidak), `test-email` (isi utuh), `test-notify` (WA terkirim untuk kedua tipe, email sebagai jaring pengaman), jalan ujung-ke-ujung `runReminderJob` di DB uji (log `departure_reminder_7d` tercatat, `skipped` tanpa kunci Resend → dicoba lagi besok).
+
+## 14. Kirim ulang dari log notifikasi (SELESAI 2026-11-19)
+
+**Recheck kode (2026-11-19):** halaman `admin/notifications` = daftar `NotificationLog` berpaginasi + filter, tanpa aksi; waktu dirender `toLocaleString('id-ID')` (zona proses, bukan zona aplikasi — bug Low pre-existing, diperbaiki di sini). Log menyimpan jenis, kanal, penerima, booking, cuplikan — BUKAN isi kejadian, jadi pesan asli tak bisa diulang persis.
+
+**Keputusan pemilik:**
+- **N1** — yang bisa dikirim ulang: `invoice_issued`, `payment_reminder_d1/d0`, `payment_confirmed`, `departure_reminder_7d/1d` (`RESENDABLE_TYPES`). Jenis lain (hangus, batal, status visa, pemeriksaan jamaah, akun) tidak.
+- **N2** — kirim ulang lewat email + WhatsApp seperti notifikasi biasa (bukan hanya kanal baris log).
+- **N3** — TIDAK ada kirim WhatsApp teks bebas dari admin (risiko blokir nomor gateway, ADR-0001).
+- **N4** — semua peran admin (`requireBookingManage`).
+
+**As-built:**
+- `lib/notifications/resend.ts` — SATU-SATUNYA penyusun ulang. `resendTarget(logId)` (baris ada, jenis didukung, terkait booking) lalu `resendNotification(bookingId, type)` menyusun kejadian dari data booking TERKINI lalu `notify()` tanpa dedupe (aturan kanal tetap: WA hanya nomor terverifikasi + persetujuan + batas 10/nomor/hari; email ke alamat terverifikasi). Invoice lewat `sendInvoiceNotification` (tautan terkini).
+- Penolakan: `inactive` (booking bukan `active`; pembayaran diterima juga boleh untuk `completed`), `not_applicable` (pengingat bayar tanpa jatuh tempo/sudah lunas, pembayaran diterima tanpa uang masuk, invoice tak ada, pengingat berangkat belum terkonfirmasi atau hari-H/terlewat).
+- Pengingat berangkat menyebut SISA HARI SEBENARNYA: kejadian `departure_reminder_*` punya `days?` opsional (diisi kirim ulang; kosong = jarak tipe) — kirim ulang H-7 pada H-5 berkata "5 hari lagi".
+- Route `POST /api/v1/admin/notifications/[id]/resend` — id uuid, batas `notificationResendBooking` (5/jam per booking) SEBELUM mengirim, respons = status per kanal saja.
+- UI: kolom aksi Log Notifikasi, ikon Kirim ulang (`ResendAction`: `ActionButton` + `ConfirmDialog`, hasil per kanal ditampilkan) hanya bila `canResendLog`; waktu lewat `formatInstant`. Tiap kirim ulang = baris log baru.
+- Dijaga `scripts/test-notification-resend.ts`.
