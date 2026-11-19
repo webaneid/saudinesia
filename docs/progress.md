@@ -3,6 +3,15 @@
 Track every major milestone here. Check off items as they are completed.
 See `docs/spec.md` for full feature descriptions. Append decisions to `docs/decisions.md`.
 
+## Sisa terbuka (dirapikan 2026-11-19)
+
+Centang lama yang basi sudah ditandai di tempatnya ("Rapikan 2026-11-19": tertutup, atau dicoret bila tidak berlaku lagi). Yang benar-benar masih terbuka:
+
+- **Kode:** 11d-3 keranjang pelanggan berombongan; pengingat keberangkatan (template ada, belum dijadwalkan); kirim ulang/kirim manual WhatsApp dari log notifikasi; deskripsi Situs Wisata di halaman publik; linimasa status visa per jamaah; force-majeure + persetujuan superadmin; taksonomi/kategori produk (F3, menunggu keputusan model); service worker; audit Core Web Vitals; audit PII di log; checklist OWASP.
+- **Menunggu kunci dari pemilik:** Fase 10 Xendit; uji sandbox iPaymu sungguhan.
+- **Entri data pemilik (lewat UI):** harga Transport dan Paket Ziarah; rekening bank di Pengaturan Invoice.
+- **Sebelum go-live (M15):** VPS, Docker Compose, TLS, `migrate deploy` pertama, GOWA nyata, smoke test, backup; tiga sisa hardening SEC-10; SEC-123 (High dependency).
+
 ---
 
 ## M1 — Project Foundation
@@ -19,8 +28,8 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 - [x] Run `prisma migrate dev` on a live DB to generate first migration (`20260509174718_init`)
 - [x] Migration `add_haji_visa_package` — tambah HajiProduct, VisaProduct, Package, PackageItem, BookingHaji, BookingVisa
 - [x] Bucket `saudinesia-docs` dibuat manual via `mc mb local/saudinesia-docs` (dev local)
-- [ ] Set up Nginx reverse proxy on Hostinger VPS
-- [ ] Configure Let's Encrypt TLS (certbot)
+- [x] ~~Set up Nginx reverse proxy on Hostinger VPS~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: Caddy dipakai sebagai reverse proxy (`Caddyfile`), bukan Nginx
+- [x] ~~Configure Let's Encrypt TLS (certbot)~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: TLS otomatis oleh Caddy; tersisa di M15
 
 ---
 
@@ -78,12 +87,12 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 - [x] `POST /api/v1/bookings` — atomic `prisma.$transaction(Serializable)`, reserve semua quota
 - [x] Booking confirmation page — kode booking, status, detail layanan, instruksi bayar
 - [x] UX decision: dokumen diupload dari dashboard setelah booking, tidak memblok wizard
-- [ ] `POST /api/v1/bookings/[id]/payment/bukti` — upload bukti (M8, butuh MinIO)
-- [ ] **BUG kritis ditemukan saat audit (`docs/arsitektur-umroh.md` §7 Gap #1):** Haji tidak bisa dibooking sama sekali — `createBookingSchema` tidak punya field `haji`, tidak ada `reserveHajiQuota()`, tidak ada `tx.bookingHaji.create()`. `HajiProduct` juga tidak punya kolom `pendingQuota` (beda dari pola Hotel/Transport) — risiko overbooking jika fitur ini dibangun tanpa perbaikan skema dulu.
-- [ ] **BUG kritis (Gap #2):** Self-cancel jamaah (`DELETE /api/v1/bookings/[id]`) tidak pernah melepas kuota hotel/transport/muthowif yang sudah direservasi — beda dengan auto-cancel cron yang benar. Kuota bocor permanen setiap self-cancel.
-- [ ] **BUG kritis (Gap #3):** Tidak ada satu pun record `Refund` yang pernah dibuat di kode — model lengkap ada di schema tapi fondasi datanya belum ada, bukan cuma UI-nya yang belum ada.
-- [ ] **Gap (Gap #4):** `totalAmount` dipercaya dari payload klien di `POST /api/v1/bookings`, tidak dihitung ulang server-side.
-- [ ] **Gap (kecil, dead code):** `app/api/v1/internal/autocancel/route.ts` dan `.../internal/reminders/route.ts` — stub tak terpakai, mekanisme aktual node-cron via `instrumentation.ts`
+- [x] `POST /api/v1/bookings/[id]/payment/bukti` — upload bukti (M8, butuh MinIO) — **Rapikan 2026-11-19:** tertutup — `app/api/v1/bookings/[id]/payment/bukti` (SEC-216)
+- [x] **BUG kritis ditemukan saat audit (`docs/arsitektur-umroh.md` §7 Gap #1):** Haji tidak bisa dibooking sama sekali — `createBookingSchema` tidak punya field `haji`, tidak ada `reserveHajiQuota()`, tidak ada `tx.bookingHaji.create()`. `HajiProduct` juga tidak punya kolom `pendingQuota` (beda dari pola Hotel/Transport) — risiko overbooking jika fitur ini dibangun tanpa perbaikan skema dulu. — **Rapikan 2026-11-19:** tertutup — Haji dipesan lewat checkout (Fase 11a, H1 = b), kuota `hajiAdapter`
+- [x] **BUG kritis (Gap #2):** Self-cancel jamaah (`DELETE /api/v1/bookings/[id]`) tidak pernah melepas kuota hotel/transport/muthowif yang sudah direservasi — beda dengan auto-cancel cron yang benar. Kuota bocor permanen setiap self-cancel. — **Rapikan 2026-11-19:** tertutup — `lib/booking/cancel.ts` (Step 3) lalu `lib/booking/adminCancel.ts` (Fase 7b-2a)
+- [x] **BUG kritis (Gap #3):** Tidak ada satu pun record `Refund` yang pernah dibuat di kode — model lengkap ada di schema tapi fondasi datanya belum ada, bukan cuma UI-nya yang belum ada. — **Rapikan 2026-11-19:** tertutup — `lib/refunds/service.ts` (Fase 7b-2a, SEC-244)
+- [x] **Gap (Gap #4):** `totalAmount` dipercaya dari payload klien di `POST /api/v1/bookings`, tidak dihitung ulang server-side. — **Rapikan 2026-11-19:** tertutup — harga 100% server (`price_snapshots`, Step 5 + harga terpadu Fase 4)
+- [x] **Gap (kecil, dead code):** `app/api/v1/internal/autocancel/route.ts` dan `.../internal/reminders/route.ts` — stub tak terpakai, mekanisme aktual node-cron via `instrumentation.ts` — **Rapikan 2026-11-19:** tertutup — folder `app/api/v1/internal` sudah tidak ada
 
 ---
 
@@ -98,7 +107,7 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 - [x] Pilgrim layout dengan nav (Dashboard, Buat Booking, Profil, Keluar)
 - [x] Semua status label dari `lib/constants/booking.ts` — tidak hardcode
 - [x] Bank account dari env `NEXT_PUBLIC_BANK_*` — tidak hardcode, ganti env saja
-- [ ] `GET /api/v1/bookings/[id]/invoice` — PDF invoice (M11, butuh @react-pdf/renderer)
+- [x] `GET /api/v1/bookings/[id]/invoice` — PDF invoice (M11, butuh @react-pdf/renderer) — **Rapikan 2026-11-19:** tertutup — `app/api/v1/bookings/[id]/invoice` (Step 7)
 
 ---
 
@@ -121,14 +130,14 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 
 ---
 ## M6 — Group Booking
-- [ ] Group creation flow (group name, size)
-- [ ] Mode A: leader fills all pilgrim data in one session
-- [ ] Mode B: leader generates invite links per member
-- [ ] Member invite page (unique token-based) for self-service data entry
-- [ ] Group dashboard: per-member document status, overall payment status
-- [ ] `POST /api/v1/groups` + `GET /api/v1/groups/[id]`
-- [ ] `POST /api/v1/groups/[id]/invite` — generate member invite link
-- [ ] Consolidated group invoice
+- [x] ~~Group creation flow (group name, size)~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: Group Booking lama dihapus 2026-10-30; diganti rombongan dalam satu booking (Fase 11d)
+- [x] ~~Mode A: leader fills all pilgrim data in one session~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: lihat Fase 11d
+- [x] ~~Mode B: leader generates invite links per member~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: lihat Fase 11d
+- [x] ~~Member invite page (unique token-based) for self-service data entry~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: lihat Fase 11d
+- [x] ~~Group dashboard: per-member document status, overall payment status~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: lihat Fase 11d
+- [x] ~~`POST /api/v1/groups` + `GET /api/v1/groups/[id]`~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: tabel `groups` dihapus 2026-10-30
+- [x] ~~`POST /api/v1/groups/[id]/invite` — generate member invite link~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: tabel `groups` dihapus 2026-10-30
+- [x] ~~Consolidated group invoice~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: satu booking = satu invoice (Fase 6a), rombongan di 11d
 
 ---
 
@@ -153,15 +162,15 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 - [x] Dipasang di pilgrim booking detail + admin booking detail
 - [x] `next.config.ts` — bodySizeLimit 6mb untuk upload 5MB + overhead
 - [ ] Visa status timeline per pilgrim (visual stepper)
-- [ ] Visa type selection per pilgrim (Umroh / Visit / Business / Work)
+- [x] ~~Visa type selection per pilgrim (Umroh / Visit / Business / Work)~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: visa kini produk (`VisaProduct`) dipilih per jamaah (Visa V1–V5)
 - [x] `PUT /api/v1/admin/visa/[pilgrimId]/status` — admin updates status (sudah ada, sudah di-wire di M9 VisaActions)
 - [x] WhatsApp notification on each visa status change — wired ke route handler
-- [ ] **Gap ditemukan saat audit (`docs/arsitektur-visa.md` §7):** `POST /api/v1/bookings` tidak set `visaApplication.visaProductId` — `app/api/v1/bookings/route.ts:146-156`
-- [ ] **Gap:** wizard belum punya step pilih `VisaProduct` dari katalog — `app/[locale]/(pilgrim)/bookings/new/pilgrims/page.tsx`
-- [ ] **Gap:** `visaType` di validator booking masih `z.enum([...])`, kontradiksi dengan `VisaProduct.visaType` free text — `lib/validators/booking.ts:64`
-- [ ] **Gap:** `DocumentGrid`/`PilgrimDocuments` dipanggil tanpa prop `requirements` sehingga requirements dinamis per produk visa tidak pernah terlihat user — `app/[locale]/(pilgrim)/bookings/[id]/page.tsx:147-151`, `app/[locale]/admin/(protected)/bookings/[id]/page.tsx:118-124`
-- [ ] **Gap (ditemukan lewat sweep kelengkapan, `docs/arsitektur-visa.md` §7 Gap #5):** validasi transisi status visa hanya ada di client (`VisaActions.tsx` `TRANSITIONS` map) — `PUT /api/v1/admin/visa/[pilgrimId]/status` menerima lompatan status apa pun tanpa cek status saat ini
-- [ ] **Gap (Gap #6):** semua 5 handler CRUD produk visa collapse semua error jadi `403 Forbidden` polos, termasuk error DB non-auth — melanggar konvensi API sendiri di `CLAUDE.md`, akan menyamarkan error FK constraint begitu `BookingVisa` mulai diisi (lihat rencana `docs/arsitektur-booking.md`)
+- [x] ~~**Gap ditemukan saat audit (`docs/arsitektur-visa.md` §7):** `POST /api/v1/bookings` tidak set `visaApplication.visaProductId` — `app/api/v1/bookings/route.ts:146-156`~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: wizard lama dihapus; visa per jamaah lewat checkout (Visa V1–V5)
+- [x] ~~**Gap:** wizard belum punya step pilih `VisaProduct` dari katalog — `app/[locale]/(pilgrim)/bookings/new/pilgrims/page.tsx`~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: wizard lama dihapus; checkout visa (Fase 11a)
+- [x] ~~**Gap:** `visaType` di validator booking masih `z.enum([...])`, kontradiksi dengan `VisaProduct.visaType` free text — `lib/validators/booking.ts:64`~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: validator booking lama diganti `checkoutSchema`/`bookingItemSchema`
+- [x] ~~**Gap:** `DocumentGrid`/`PilgrimDocuments` dipanggil tanpa prop `requirements` sehingga requirements dinamis per produk visa tidak pernah terlihat user — `app/[locale]/(pilgrim)/bookings/[id]/page.tsx:147-151`, `app/[locale]/admin/(protected)/bookings/[id]/page.tsx:118-124`~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: diganti `pilgrimRequirements` + `DocumentChecklist` (jamaah §7, Visa V4c)
+- [x] **Gap (ditemukan lewat sweep kelengkapan, `docs/arsitektur-visa.md` §7 Gap #5):** validasi transisi status visa hanya ada di client (`VisaActions.tsx` `TRANSITIONS` map) — `PUT /api/v1/admin/visa/[pilgrimId]/status` menerima lompatan status apa pun tanpa cek status saat ini — **Rapikan 2026-11-19:** tertutup — server memeriksa `isValidVisaStatusTransition` di route status
+- [x] **Gap (Gap #6):** semua 5 handler CRUD produk visa collapse semua error jadi `403 Forbidden` polos, termasuk error DB non-auth — melanggar konvensi API sendiri di `CLAUDE.md`, akan menyamarkan error FK constraint begitu `BookingVisa` mulai diisi (lihat rencana `docs/arsitektur-booking.md`) — **Rapikan 2026-11-19:** tertutup — SEC-08 (`lib/admin/errors.ts`)
 
 ---
 
@@ -174,7 +183,7 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 - [x] T+12h and T+22h payment reminder notifications (cron) — `startPaymentReminderJob()`
 - [x] Auto-cancel notification + quota release (cron) — `startAutoCancelJob()`
 - [x] WA notification on payment confirmed / rejected — wired ke `POST /api/v1/admin/payments/[id]/confirm`
-- [ ] Refund request form + `RefundStatus` tracking — lihat `docs/arsitektur-umroh.md` §7 Gap #3: bahkan `prisma.refund.create()` belum pernah dipanggil di mana pun, jadi ini butuh fondasi data dulu sebelum UI
+- [x] Refund request form + `RefundStatus` tracking — lihat `docs/arsitektur-umroh.md` §7 Gap #3: bahkan `prisma.refund.create()` belum pernah dipanggil di mana pun, jadi ini butuh fondasi data dulu sebelum UI — **Rapikan 2026-11-19:** tertutup — Keuangan → Refund (Fase 7b-2a, SEC-244)
 - [ ] Force-majeure flag + super admin approval for overrides
 - [x] **Booking engine universal** (`docs/arsitektur-booking.md`) — adapter registry kuota + satu fungsi cancel + `items[]` generik + `totalAmount` server-computed + checkout pendek + invoice PDF. **Seluruh 8 step SELESAI & TERVERIFIKASI (2026-07-24/25)**, menutup Gap #1 (parsial — API/skema, UI Haji sengaja dikeluarkan), #2-#4 `arsitektur-umroh.md` §7. Dokumen sekarang SOURCE OF TRUTH as-built, bukan lagi rencana — lihat entri Booking Engine Step 1-8 di atas.
 
@@ -226,7 +235,7 @@ Mengikuti Fase Eksekusi SOP `CLAUDE.md`, rencana ditulis di `docs/arsitektur-vis
   - `app/[locale]/(pilgrim)/bookings/[id]/page.tsx` — Prisma include `visaApplication: { include: { visaProduct: true } }`, `DocumentGrid` sekarang terima `requirements={parseRequirements(p.visaApplication.visaProduct.requirements)}`
   - `app/[locale]/admin/(protected)/bookings/[id]/page.tsx` — include sama, `PilgrimDocuments` terima `requirements` yang sama; badge counter "X/Y dok" juga diperbaiki (sebelumnya `REQUIRED_DOCUMENTS.length` hardcode di semua kasus, sekarang hitung dari requirements produk yang sebenarnya, fallback ke hardcode kalau produk tidak punya `visaProduct` ter-link)
   - Diverifikasi: `bun run build` 0 error; dibuat booking uji langsung di database (produk "Visa Reguler" yang punya 3 requirements: Passport/KTP/KK) → halaman admin booking detail dikonfirmasi tampil **"0/3 dok"** (bukan "0/5" dari fallback hardcode); `GET /api/v1/pilgrims/[bookingId]/[pilgrimId]/documents` dikonfirmasi mengembalikan 3 `requirements` yang sama persis. Halaman pilgrim (`DocumentGrid`) tidak dites langsung di browser (tidak ada akun pilgrim aktif untuk login) — tapi query Prisma dan pola passing prop **identik** dengan halaman admin yang sudah terverifikasi langsung, dan `DocumentGrid`/`PilgrimDocuments` berbagi pola `requirements` prop yang sama persis (dikonfirmasi baca kode kedua komponen). Data uji dibersihkan (cascade delete) setelah verifikasi.
-- [ ] Step 3 — Fitur varian: `requiredComponents` kondisional wizard + input durasi (§9.1-9.4) — **DITUNDA**, menyentuh wizard lintas-modul, lihat `docs/decisions.md` 2026-07-18
+- [x] ~~Step 3 — Fitur varian: `requiredComponents` kondisional wizard + input durasi (§9.1-9.4) — **DITUNDA**, menyentuh wizard lintas-modul, lihat `docs/decisions.md` 2026-07-18~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: diganti Visa V3 (`requiredComponents` 7 jenis di `lib/booking/rules.ts`) dan durasi per paket
 - [x] **Step 4 — Pembersihan legacy form harga manual** (`docs/arsitektur-harga.md` §13 Gap #5) — dieksekusi via `docs/arsitektur-harga.md` §17 (2026-07-18), lihat entri "Komponen Harga Jadi Satu-Satunya Sumber Kebenaran" di atas — dicatat lagi di sini supaya tidak terlihat masih pending di section ini
 - [x] **Step 5 — Validasi transisi status server-side** (2026-07-18): menutup Gap #5 §7.
   - `lib/validators/visaStatus.ts` (baru) — `VISA_STATUS_TRANSITIONS` map + `isValidVisaStatusTransition()`, satu sumber kebenaran dipakai client dan server (sebelumnya cuma ada di `VisaActions.tsx`, endpoint bisa dipanggil langsung untuk melompat status sembarangan)
@@ -420,8 +429,8 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 - [x] `POST /api/v1/admin/payments/[id]/confirm` — confirm/reject + confirm quota
 - [x] `GET /api/v1/admin/bookings` — list bookings with status filter
 - [x] `GET /api/v1/admin/quotas` — quota overview
-- [ ] ZIP download dokumen (butuh MinIO)
-- [ ] Manual WhatsApp send
+- [x] ZIP download dokumen (butuh MinIO) — **Rapikan 2026-11-19:** tertutup — `admin/bookings/[id]/documents/zip`
+- [ ] Manual WhatsApp send — **Rapikan 2026-11-19:** masih terbuka — belum ada kirim manual WhatsApp dari admin
 
 ---
 
@@ -457,8 +466,8 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
   - API: `GET|POST /api/v1/admin/products/transport/trips`, `GET|PUT|DELETE /trips/[id]`
   - API: `GET|POST /api/v1/admin/products/transport/pricing`, `PUT|DELETE /pricing/[id]`
   - Old `routes/` API folder dihapus (referensi `prisma.transportRoute` yang sudah tidak ada)
-  - [ ] **Gap ditemukan saat audit (`docs/arsitektur-transportasi.md` §7):** wizard tidak punya input field untuk `pickupDetail`/`dropoffDetail` walau trip punya `originHint`/`destinationHint` — selalu terkirim string kosong. `app/[locale]/(pilgrim)/bookings/new/transport/page.tsx:91-92,119-120`
-  - [ ] **Gap (kecil, dead code):** `app/api/v1/admin/transport/route.ts` (stub tak terpakai) dan `components/booking/TransportPicker.tsx` (`return null`, tak ter-import) — sisa refactor v2, aman dihapus
+  - [x] **Gap ditemukan saat audit (`docs/arsitektur-transportasi.md` §7):** wizard tidak punya input field untuk `pickupDetail`/`dropoffDetail` walau trip punya `originHint`/`destinationHint` — selalu terkirim string kosong. `app/[locale]/(pilgrim)/bookings/new/transport/page.tsx:91-92,119-120` — **Rapikan 2026-11-19:** tertutup — wizard lama dihapus 2026-07-25; checkout baru
+  - [x] **Gap (kecil, dead code):** `app/api/v1/admin/transport/route.ts` (stub tak terpakai) dan `components/booking/TransportPicker.tsx` (`return null`, tak ter-import) — sisa refactor v2, aman dihapus — **Rapikan 2026-11-19:** tertutup — kedua berkas sudah tidak ada
   - Seed: 5 kendaraan, 6 trip, 20 pricing rows, 186 quota slot (90 hari ke depan)
 - [x] Muthowif — arsitektur & audit as-built: `docs/arsitektur-muthowif.md` §1-§7 (per 2026-07-08)
 - [x] **Muthowif: Booking Generik + Assignment Admin — SELESAI & TERVERIFIKASI (2026-07-20)** — `docs/arsitektur-muthowif.md` §9. Perombakan model bisnis: jamaah tidak lagi pilih muthowif by name saat booking (dulu marketplace-style), Saudinesia (admin) yang menentukan siapa bertugas setelah booking masuk, sesuai positioning "curated operator". Harga pindah dari per-orang jadi satu layanan flat (`MuthowifServicePrice`). Kapasitas jadi 2 lapis: pool (gabungan semua muthowif aktif, dicek saat booking dibuat) + individual (dicek saat admin assign). Detail lengkap fase eksekusi: §9.10.
@@ -562,27 +571,27 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 - [x] Header diperbarui: nav tambah Paket, Haji, Visa
 - [x] Catalog API: `GET /api/v1/catalog/haji`, `/visa`, `/packages`
 - [x] DB migration: `add_haji_visa_package` — 6 tabel baru
-- [ ] Financial reports (M11)
-- [ ] Refund approval (M8)
+- [x] Financial reports (M11) — **Rapikan 2026-11-19:** tertutup — Fase 12 (Buku Kas, arus kas, PPN, Laporan Untung)
+- [x] Refund approval (M8) — **Rapikan 2026-11-19:** tertutup — Fase 7b-2a / SEC-244
 
 ---
 
 ## M11 — Notifications
-- [ ] WhatsApp templates wired to all 11 trigger events (see `docs/spec.md` §8)
-- [ ] Email templates (Resend) for booking confirmed, visa update, auto-cancel
-- [ ] Notification log entries written for every send attempt
-- [ ] Delivery failure logged with error field (never throws)
-- [ ] Admin: notification log page with manual re-send
+- [x] ~~WhatsApp templates wired to all 11 trigger events (see `docs/spec.md` §8)~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: cakupan WhatsApp sengaja kecil (ADR-0001); email untuk semua kejadian
+- [x] ~~Email templates (Resend) for booking confirmed, visa update, auto-cancel~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: template email ada per kejadian di `lib/notifications/events.ts`; batal otomatis 24 jam tidak ada lagi (Fase 3)
+- [x] Notification log entries written for every send attempt — **Rapikan 2026-11-19:** tertutup — `lib/notifications/notify.ts` menulis `notification_logs`
+- [x] Delivery failure logged with error field (never throws) — **Rapikan 2026-11-19:** tertutup — kegagalan dicatat, `notify()` tak pernah melempar
+- [ ] Admin: notification log page with manual re-send — **Rapikan 2026-11-19:** halaman log berpaginasi sudah ada; kirim ulang manual belum
 
 ---
 
 ## M12 — PWA & Performance
-- [ ] `public/manifest.json` (name, icons, theme color)
+- [x] `public/manifest.json` (name, icons, theme color) — **Rapikan 2026-11-19:** tertutup — `public/manifest.json` ada
 - [ ] Service worker (basic offline cache for public pages)
 - [x] Hotel catalog images via `next/image` (presigned URL, unoptimized) — selesai
 - [x] Transport catalog images — cover photo kendaraan, hapus emoji, route display tanpa tripType
-- [ ] Lazy-load heavy components (Tiptap, PDF renderer) with `next/dynamic`
-- [ ] Paginate all admin list views
+- [x] Lazy-load heavy components (Tiptap, PDF renderer) with `next/dynamic` — **Rapikan 2026-11-19:** tertutup — `RichTextEditor` lewat `next/dynamic`; PDF dirender di server
+- [x] Paginate all admin list views — **Rapikan 2026-11-19:** tertutup — kit tabel `docs/arsitektur-tabel.md` (`parseListParams` + `paginate`, dijaga `test-table-consistency`)
 - [ ] Core Web Vitals audit (LCP < 2.5s on mobile 4G)
 
 ---
@@ -601,9 +610,9 @@ Rencana: `docs/arsitektur-i18n-frontend.md` (fase I1–I6; keputusan pemilik K1�
 ---
 
 ## M14 — Security Hardening
-- [ ] Server-side MIME + size validation on every file upload
-- [ ] Rate limiting on OTP (Redis) + payment confirmation endpoints
-- [ ] Role check inside every admin/superadmin Route Handler (beyond middleware)
+- [x] Server-side MIME + size validation on every file upload — **Rapikan 2026-11-19:** tertutup — dokumen `prepareDocumentFile`, foto `lib/media`, bukti bayar dari isi berkas (SEC-216)
+- [x] Rate limiting on OTP (Redis) + payment confirmation endpoints — **Rapikan 2026-11-19:** tertutup — OTP dihapus (ADR-0001); batas `lib/auth/rateLimit.ts` di auth, `POST /bookings`, unggah bukti
+- [x] Role check inside every admin/superadmin Route Handler (beyond middleware) — **Rapikan 2026-11-19:** tertutup — dijaga `scripts/test-routes.ts` + `requireAdminPage` (`test-session.ts`)
 - [ ] No PII in application logs (audit all console.log calls)
 - [~] UU PDP compliance notice — registrasi **selesai** (lihat section Retrofit Gaps #2, consent checkbox + `/privacy`), notice di layar upload dokumen **masih pending**
 - [ ] Penetration-test checklist (OWASP Top 10)
@@ -613,7 +622,7 @@ Rencana: `docs/arsitektur-i18n-frontend.md` (fase I1–I6; keputusan pemilik K1�
 ## M15 — Production Deployment
 - [ ] Hostinger VPS provisioned
 - [ ] Docker Compose deployed and running
-- [ ] **Hardening security sebelum go-live** — SEC-05 (17 advisory high dependency) **wajib Selesai** (SEC-04 rate limit login/OTP Selesai 2026-10-21, jalur Redis menunggu CI); Medium/Low lainnya di Register Temuan Security (`docs/lessons-learned.md`). SEC-01/02/03/06 sudah Selesai 2026-10-21
+- [ ] **Hardening security sebelum go-live** — SEC-05 (17 advisory high dependency) **wajib Selesai** (SEC-04 rate limit login/OTP Selesai 2026-10-21, jalur Redis menunggu CI); Medium/Low lainnya di Register Temuan Security (`docs/lessons-learned.md`). SEC-01/02/03/06 sudah Selesai 2026-10-21 — **Rapikan 2026-11-19:** SEC-05 sisa 5 advisory diterima dengan bukti; SEC-123 (High dependency) masih Terbuka di register
 - [~] ~~Nginx~~ **Caddy** configured as reverse proxy — diputuskan 2026-10-21 (mengikuti smart-ai); `Caddyfile` + `docker-compose.prod.yml` + `Dockerfile` sudah ditulis dan diuji di CI, **belum dijalankan di server**. Lihat `docs/deployment.md` §4–§6
 - [ ] TLS certificate (Let's Encrypt) issued and auto-renewed
 - [ ] First `prisma migrate deploy` run against production DB
@@ -691,7 +700,7 @@ sengaja di-skip — lihat `docs/RETROFIT-GAPS.md`).
 - [x] **SEC-60** (dependensi): salinan ProseMirror bersarang di `bun.lock` membuat editor error saat Enter/daftar → `overrides` `prosemirror-model`/`prosemirror-transform` + tes penjaga lockfile. Terverifikasi di dev dan artefak produksi.
 - [x] **Fase 3 — Editor di Hotel, Muthowif (`bio`), dan Haji** (2026-10-23): form admin + validator server + tampilan publik (`RichTextView`; beranda/daftar Muthowif memakai `plainText`). Haji: `hajiProductCreateSchema` baru (POST sebelumnya tanpa Zod), `GET`/`DELETE` Haji dibenahi dari `catch → 403`. Tes `scripts/test-rich-text.ts` jadi 17. Lihat `docs/arsitektur-editor-teks.md` §8 untuk batasan (admin Haji belum punya halaman edit; halaman publik Haji belum menampilkan deskripsi).
 - [x] **Editor di Paket Umroh, Paket Ziarah, Situs Wisata, Katering + deskripsi Haji tampil di publik** (2026-10-25, Fase 4-8, `docs/arsitektur-editor-teks.md` §9): lima fase, tiap fase typecheck + build produksi terisolasi + uji browser + uji penolakan API + security check. Katering butuh kolom baru (migrasi aditif `add_catering_description`); POST Katering sebelumnya tanpa Zod → kini skema ketat. Tes `scripts/test-rich-text.ts` jadi 18.
-- [ ] Keputusan produk (tersisa): tampilkan deskripsi Situs Wisata di halaman publik; halaman edit produk Haji dan Katering di admin.
+- [ ] Keputusan produk (tersisa): tampilkan deskripsi Situs Wisata di halaman publik; halaman edit produk Haji dan Katering di admin. — **Rapikan 2026-11-19:** halaman edit Haji dan Katering SUDAH ada; tersisa deskripsi Situs Wisata di halaman publik
 - [x] **SEC-61(a)** (2026-10-23): `P2025` → 404 di 28 handler tulis by-id (17 route) lewat `lib/admin/errors.ts`; `seasons/[id]` DELETE tak lagi menjawab 403 untuk semua galat. Terbukti sebelum 500 → sesudah 404.
 - [x] SEC-61(b) (Low): akses daftar vendor untuk peran `manager` — selesai 2026-10-25 (Fase C).
 
@@ -723,8 +732,8 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
   Daftar ini juga ada di `docs/deployment.md` §6 (butir 0) dan register SEC-10.
 
 **Produk & operasional (arah besar, perlu keputusan):**
-- [ ] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya.
-- [ ] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan.
+- [x] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya. — **Rapikan 2026-11-19:** tertutup — Fase 11a/11b/11c (semua jenis produk di `/checkout/[jenis]`)
+- [ ] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan. — **Rapikan 2026-11-19:** refund (7b-2a), laporan keuangan (Fase 12) selesai, Group Booking diganti 11d; tersisa pengingat keberangkatan (template `departureReminder` ada, belum dijadwalkan)
 - [ ] M15 deployment: VPS, TLS, `migrate deploy`, uji GOWA nyata, smoke test; jadwalkan backup (`scripts/backup-*.sh`).
 
 ---
@@ -878,8 +887,8 @@ Rencana: `docs/rencana-visa-produk.md` (disetujui 2026-11-03, V3–V5 direvisi +
 - [x] V4c — syarat dokumen jamaah = GABUNGAN produk yang memuatnya (`pilgrimRequirements`: Paket → Haji → Visa, satu baris per jenis, wajib bila salah satu mewajibkan, label produk pertama, sumber per produk); pengajuan/verifikasi, checklist admin & jamaah, dan buka-ulang dokumen memakainya; checklist menampilkan "Diminta oleh …" (2026-11-04)
 - [x] V5 — dokumentasi: `docs/arsitektur-visa.md` ditulis ulang as-built (skema, harga tier, route, alur, katalog, gap, uji); `arsitektur-booking-engine-v2.md` dikoreksi (pelonggaran dihapus, 7 jenis, nama fungsi aktual); komentar basi `schema.prisma`/validator/route dirapikan; CLAUDE.md. Rencana Visa V1–V5 tuntas (2026-11-04)
 - [x] Kolom data jamaah per produk visa — tab "Data jamaah" (`lib/manifest/fields.ts`, `ManifestFieldsEditor`), 9 kolom bawaan untuk produk baru, kolom bebas, kunci tipe sesudah dipesan — selesai 2026-11-04 (`docs/arsitektur-manifest.md` §9)
-- [ ] V4c — penilaian syarat gabungan per jamaah + "Diminta oleh"
-- [ ] V5 — dokumentasi arsitektur + drift lama (§6 rencana)
+- [x] V4c — penilaian syarat gabungan per jamaah + "Diminta oleh" — **Rapikan 2026-11-19:** tertutup — Visa V4c (`pilgrimRequirements`, lihat CLAUDE.md)
+- [x] V5 — dokumentasi arsitektur + drift lama (§6 rencana) — **Rapikan 2026-11-19:** tertutup — `docs/arsitektur-visa.md` ditulis ulang as-built (Visa V5, 2026-11-04)
 
 ## Booking Engine v2 (admin lebih dulu, invoice, pembayaran bertahap, buku kas) — dirancang 2026-10-30
 Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0 recheck, §5 zona waktu, §10 fase); ADR-0004 (Proposed).
@@ -901,15 +910,15 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] F2 Lokasi Google Maps (tanpa API key): `Address.mapsUrl/latitude/longitude`, whitelist host `lib/address/maps.ts`, `AddressPicker withMap`, tombol publik "Lihat di Google Maps" (SEC-162)
   - [x] F3 Booking: pemilih Jenis → Hotel → Kamar, periode otomatis (`lib/booking/hotelPick.ts`), kolom "Harga jual", katalog hanya periode aktif + mesin menolak kamar/periode/hotel nonaktif (SEC-163) — selesai 2026-11-02
   - [x] 6c — invoice publik tanpa login (tautan HMAC dapat dicabut, halaman + PDF, noindex/no-store), notifikasi `invoice_issued` saat terbit admin & checkout jamaah + kirim ulang, salin/cabut di admin — selesai 2026-11-01 (§10.4); menutup K5-1
-- [ ] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal)
+- [x] Fase 7 — Pembayaran manual (ledger, kode unik, verifikasi, bertahap, refund, buku kas minimal) — **Rapikan 2026-11-19:** tertutup — 7a, 7b-1..7b-3 selesai
   - Fase 7a — data transfer + pembayaran bertahap manual (T1 + inti K2, §10.7; P1–P3 disetujui 2026-11-15):
     - [x] F1 skema aditif data transfer (`Payment.claimedAmountIdr/transferredAt/senderBank/senderAccountName/destinationLabel/payerNote`, CHECK nominal > 0), validator `paymentTransferSchema`, batas murni `paymentLimits` (DP/sisa/ambang konfirmasi), penghapusan akun membersihkan nama pengirim + catatan — selesai 2026-11-15 (uji murni + migrasi DB sekali pakai, `test-deletion`, build)
     - [x] F2 formulir pelanggan + route unggah (`readFileWithFields`, nominal dinilai `claimRefusal` di dalam kunci booking; unggah sesudah terkonfirmasi dipindah ke F3) — selesai 2026-11-15 (uji murni, build, browser + 8 kasus `fetch` di server audit)
     - [x] F3 verifikasi admin + aturan konfirmasi P1/P2 + label status (`resolveVerifiedAmount`, kursi dikonfirmasi sekali saat terbayar ≥ DP, unggah pelunasan sesudah terkonfirmasi, antrean `pendingPaymentWhere`, label "DP diterima · sisa"/"Lunas") — selesai 2026-11-15 (suite, build, browser alur DP → pelunasan)
     - [x] F4 pengingat selama ada sisa (menyebut sisa, termasuk booking terkonfirmasi lewat DP), setelan gateway iPaymu/Xendit disembunyikan, dokumentasi penutup — selesai 2026-11-15. **Fase 7a selesai.**
-- [ ] Fase 8 — QRIS dinamis (porting Facport)
+- [x] Fase 8 — QRIS dinamis (porting Facport) — **Rapikan 2026-11-19:** tertutup — selesai 2026-11-17 (§10.11)
 - [x] Fase 9 — iPaymu (2026-11-17, §10.12) · [ ] Fase 10 — Xendit (butuh akun sandbox + kunci dari pemilik)
-- [ ] Fase 11 — Front-end pelanggan memakai engine
+- [ ] Fase 11 — Front-end pelanggan memakai engine — **Rapikan 2026-11-19:** tersisa 11d-3
   - [x] 11a — checkout pelanggan Paket Umroh, Visa, Transport, Haji (Haji tanpa visa umroh, H1 = b): satu halaman `/{locale}/checkout/[jenis]?id=`, pratinjau server (`lib/booking/simulate.ts`, dipakai bersama draf admin), pesan = `lib/checkout/place.ts` (invoice langsung terbit, data jamaah sesudahnya), alamat kembali aman sesudah login/daftar/Google/lengkapi-data (`lib/auth/nextPath.ts`), pita "Pesanan diterbitkan"; form lama Visa/Transport dihapus — selesai 2026-11-10 (§10.5)
   - [x] 11a+ — rincian pesanan ringkas "pakai rumus" (baris identik digabung: "Visa Umroh Longstay · 3 jamaah × Rp 6.250.000 = Rp 18.750.000", satu helper `lib/booking/orderSummary.ts` dipakai detail booking jamaah, detail admin, dan ringkasan checkout; satu kartu "Rincian Pesanan" + total menggantikan kartu per layanan), jamaah booking bernomor dan berurutan tetap (`orderBy id`), "Tambah jamaah baru" dan "Jadikan saya jamaah" sebaris di booking (kartu lewat API Jamaah Saya, lalu ditautkan), pita "Pesanan diterbitkan" hanya menampilkan langkah yang masih relevan — selesai 2026-11-10
   - [x] 11a++ — tambah jamaah / "Jadikan saya jamaah" lewat popup (`components/shared/Modal`, `PilgrimCardDialog`; kartu "Saya sendiri" baru ikut terisi alamat profil); "Kelengkapan dokumen" dirombak (`DocumentChecklist`: progres "n dari m", status berupa kalimat, "Diminta oleh" sekali bila satu sumber, tombol Unggah/Ganti/Lihat membuka `DocumentRepeater` dalam popup — dokumen pribadi ke kartu, dokumen perjalanan ke booking; jamaah belum dipilih = daftar dokumen yang dibutuhkan, tanpa lencana merah); keduanya komponen BERSAMA (`components/shared/documents/DocumentChecklist`, `components/shared/pilgrims/PilgrimCardDialog`) dan dipakai juga di detail booking admin (route admin atas nama pelanggan, tombol "Jadikan pemesan jamaah") — selesai 2026-11-10
@@ -935,12 +944,12 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
   - [x] Fase 8 — QRIS dinamis (2026-11-17): payload dibaca dari foto QRIS statis (tak disimpan), QR dinamis nominal + kode unik di halaman bayar jamaah dan invoice publik (QRIS aktif terkini), tujuan bukti QRIS → akun kas QRIS (hanya uang masuk) — §10.11
   - [x] Fase 9 — iPaymu (2026-11-17): bayar online langsung di halaman booking (semua kanal aktif, biaya layanan per kelompok kanal), konfirmasi OTOMATIS dari `/transaction` (callback hanya pemicu, cron rekonsiliasi), buku kas akun iPaymu (biaya layanan masuk, MDR keluar), uang telat = kelebihan → refund — §10.12. Uji tiruan lulus; **uji sandbox sungguhan menunggu kunci `IPAYMU_VA`/`IPAYMU_API_KEY`**
   - [x] SEC-244 — halaman refund khusus (2026-11-17): Keuangan → Refund → Buat Refund (pilih booking bersisa dana, jumlah ≤ batas, rekening tujuan) dan detail per refund (ringkasan, arus uang booking dari buku kas, rekening tujuan, riwayat, tindakan Setujui/Ubah/Tolak/Bayar); tindakan refund dipindah dari halaman booking — §10.13
-- [ ] Fase 12 — Menu Keuangan (rancangan DISETUJUI 2026-11-18, `docs/arsitektur-booking-engine-v2.md` §10.14)
+- [x] Fase 12 — Menu Keuangan (rancangan DISETUJUI 2026-11-18, `docs/arsitektur-booking-engine-v2.md` §10.14) — **Rapikan 2026-11-19:** tertutup — 12a–12d selesai
   - [x] 12a — saldo awal/akhir per akun di Buku Kas, halaman Arus Kas (per akun + per komponen), CSV Buku Kas & Arus Kas (2026-11-18)
   - [x] 12b — transfer antar akun (`cash_transfers`, `pindah_akun`, biaya transfer; batal = pembalik) (2026-11-18)
   - [x] 12c — laporan PPN (ditagihkan vs diterima, proporsional) + CSV (2026-11-18)
   - [x] 12d — kas per booking di Laporan Untung + menu Keuangan dirapikan (2026-11-18) — Fase 12 selesai
-- [ ] Fase 13 — Bagi Hasil Platform Provider (`docs/arsitektur-bagi-hasil.md`, rencana disetujui 2026-11-18: bawaan 5% tambah poin marjin; opsi bagi margin; beku saat terbit; hak hanya dari pembayaran berhasil; Tandai selesai manual; pencairan dicatat superadmin)
+- [x] Fase 13 — Bagi Hasil Platform Provider (`docs/arsitektur-bagi-hasil.md`, rencana disetujui 2026-11-18: bawaan 5% tambah poin marjin; opsi bagi margin; beku saat terbit; hak hanya dari pembayaran berhasil; Tandai selesai manual; pencairan dicatat superadmin) — **Rapikan 2026-11-19:** tertutup — 13a–13e-2 selesai
   - [x] 13a — akun Platform Provider (`isPlatformProvider`, hanya lewat skrip) + versi setelan append-only + halaman Sistem → Platform Provider (2026-11-18)
   - [x] 13b — aturan beku di invoice (yang sudah diterapkan ke harga) + potensi diturunkan dari snapshot; opsi markup masuk `resolveMarginRule` + penyelaras harga (boot, cron 10 menit, sesudah simpan) (2026-11-18)
   - [x] 13c — hak bagi hasil (`revenue_share_entries` append-only, rekonsiliasi potensi × terbayar ÷ tagihan) dari konfirmasi pembayaran manual/gateway, refund dibayar, revisi/atur total + kotak potensi vs hak (superadmin) (2026-11-18)
@@ -960,7 +969,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] Semua produk yang ditagih tampil di halaman jamaah dan admin, dijaga `scripts/test-payment-path.ts`.
 - [x] Peringatan rekening kosong di editor draf dan kotak invoice; invoice bersnapshot kosong memakai rekening aktif.
 - [ ] Isi rekening bank sungguhan di Pengaturan Invoice (entri data pemilik).
-- [ ] Batal booking lunas, tombol batal jamaah dan admin, serta pemrosesan refund: belum ada, butuh keputusan aturan refund.
+- [x] Batal booking lunas, tombol batal jamaah dan admin, serta pemrosesan refund: belum ada, butuh keputusan aturan refund. — **Rapikan 2026-11-19:** tertutup — Fase 7b-2a: pembatalan admin + keputusan uang, refund di Keuangan → Refund
 
 ## Front-end publik (`docs/arsitektur-frontend-publik.md`, 2026-11-06)
 
