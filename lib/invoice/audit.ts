@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { qrisMerchantName } from '@/lib/qris/emv'
 
 type Tx = Prisma.TransactionClient
-export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account'
+export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account' | 'refund_settings'
 export type AuditAction = 'create' | 'update' | 'delete' | 'toggle'
 
 /** Tulis satu baris jejak (SEC-109) DI DALAM transaksi perubahan — tanpa jejak, perubahan ikut dibatalkan. Tabel append-only (trigger). */

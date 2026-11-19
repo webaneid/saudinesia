@@ -10,11 +10,14 @@ import { approveRefund, payRefund, proposeRefund, rejectRefund, updateRefundAmou
 import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { ensureMainCashAccount } from '@/lib/cash/accounts'
 import { assertThrowawayDb } from './lib/testDb'
+import { evaluateRefundApproval, type ApprovalFacts } from '@/lib/refunds/approval'
+import { getRefundSettings, saveRefundSettings } from '@/lib/refunds/settings'
+import { addDays, todayInApp } from '@/lib/time'
 
 await assertThrowawayDb()
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
-  try { await fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split('\n').slice(0, 8).join('\n     ')}`) }
+  try { await fn(); console.log(`PASS ${name}`) } catch (e) { failed++; console.log(`FAIL ${name}\n     ${(e as Error).message.split("\n").slice(0, 20).join('\n     ')}`) }
 }
 const root = process.cwd()
 const read = (f: string) => readFileSync(join(root, f), 'utf8')
@@ -94,7 +97,7 @@ await t('SIKLUS: ubah hanya saat pending; bayar hanya approved; bayar memosting 
   assert.deepEqual(await updateRefundAmount(rf.id, { amount: 900_000, reason: 'naik' }), { kind: 'over_limit', max: 800_000 })
   assert.equal((await updateRefundAmount(rf.id, { amount: 600_000, reason: 'disepakati' })).kind, 'done')
   assert.equal((await payRefund(rf.id, { ...by, cashAccount: { kind: 'cash' }, paidAt: new Date(), notes: null })).kind, 'conflict', 'belum disetujui')
-  assert.equal((await approveRefund(rf.id, staff.id)).kind, 'done')
+  assert.equal((await approveRefund(rf.id, staff.id, { isSuperadmin: false })).kind, 'done')
   assert.equal((await updateRefundAmount(rf.id, { amount: 100_000, reason: 'x' })).kind, 'conflict', 'disetujui = jumlah terkunci')
   assert.equal((await payRefund(rf.id, { ...by, cashAccount: { kind: 'cash' }, paidAt: new Date(Date.now() + 3_600_000), notes: null })).kind, 'invalid_date')
   const at = new Date(Date.now() - 60_000) // sesudah disetujui (toleransi jam 5 menit)
@@ -125,9 +128,9 @@ await t('AUDIT 7b-2a: tagihan naik sesudah usulan (revisi) → setujui/bayar dit
   const a = await proposeRefund(id, { amount: 200_000, reason: 'lebih', ...by })
   const rid = a.kind === 'done' ? a.refundId : ''
   await prisma.booking.update({ where: { id }, data: { totalAmount: 1_150_000 } }) // seperti revisi: tagihan 1.260.000 → kelebihan tinggal 50.000
-  assert.deepEqual(await approveRefund(rid, staff.id), { kind: 'over_limit', max: 50_000 })
+  assert.deepEqual(await approveRefund(rid, staff.id, { isSuperadmin: false }), { kind: 'over_limit', max: 50_000 })
   await prisma.booking.update({ where: { id }, data: { totalAmount: 1_000_000 } })
-  assert.equal((await approveRefund(rid, staff.id)).kind, 'done')
+  assert.equal((await approveRefund(rid, staff.id, { isSuperadmin: false })).kind, 'done')
   await prisma.booking.update({ where: { id }, data: { totalAmount: 1_150_000 } })
   assert.deepEqual(await payRefund(rid, { ...by, cashAccount: { kind: 'cash' }, paidAt: new Date(), notes: null }), { kind: 'over_limit', max: 50_000 })
   await prisma.booking.update({ where: { id }, data: { totalAmount: 1_000_000 } })
@@ -147,7 +150,7 @@ await t('REKENING TUJUAN (SEC-244): bayar dari bank tanpa rekening → needs_rec
   const id = await mk({ paid: 1_510_000 }) // kelebihan 400.000
   const a = await proposeRefund(id, { amount: 100_000, reason: 'lebih', ...by })
   const rid = a.kind === 'done' ? a.refundId : ''
-  assert.equal((await approveRefund(rid, staff.id)).kind, 'done')
+  assert.equal((await approveRefund(rid, staff.id, { isSuperadmin: false })).kind, 'done')
   assert.equal((await payRefund(rid, { ...by, cashAccount: target, paidAt: new Date(), notes: null })).kind, 'needs_recipient')
   assert.equal((await payRefund(rid, { ...by, cashAccount: { kind: 'qris', qrisAccountId: bank.id }, paidAt: new Date(), notes: null, recipient: rec })).kind, 'needs_account', 'QRIS tak boleh untuk uang keluar')
   assert.equal(await prisma.cashEntry.count({ where: { refType: 'refund', refId: rid } }), 0)
@@ -159,10 +162,94 @@ await t('REKENING TUJUAN (SEC-244): bayar dari bank tanpa rekening → needs_rec
   assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: rid2 } })).recipientBank, 'BCA')
   assert.equal((await updateRefundAmount(rid2, { amount: 90_000, reason: 'kurangi', recipient: null })).kind, 'done')
   assert.equal((await prisma.refund.findUniqueOrThrow({ where: { id: rid2 } })).recipientBank, null)
-  assert.equal((await approveRefund(rid2, staff.id)).kind, 'done')
+  assert.equal((await approveRefund(rid2, staff.id, { isSuperadmin: false })).kind, 'done')
   assert.equal((await payRefund(rid2, { ...by, cashAccount: { kind: 'cash' }, paidAt: new Date(), notes: null })).kind, 'done', 'tunai tanpa rekening')
   await assert.rejects(prisma.refund.update({ where: { id: rid2 }, data: { recipientBank: 'BCA' } }), /refunds_recipient_shape/, 'sebagian terisi')
   await assert.rejects(prisma.refund.update({ where: { id: rid2 }, data: { recipientBank: 'BCA', recipientAccountNumber: '12ab', recipientAccountName: 'X' } }), /refunds_recipient_shape/, 'nomor bukan angka')
+})
+await t('FORCE-MAJEURE aturan murni: hanya refund pembatalan; di atas kebijakan wajib FM; tiga mode persetujuan', () => {
+  const f = (o: Partial<ApprovalFacts>): ApprovalFacts => ({ source: 'cancellation', amount: 100, otherCancellation: 0, otherAll: 0, policyCap: 100, grandTotal: 1000, ...o })
+  assert.deepEqual(evaluateRefundApproval(f({ source: 'overpayment', amount: 900, policyCap: 0 }), 'either', null), { abovePolicy: false, aboveHalf: false, needsForceMajeure: false, needsSuperadmin: false })
+  assert.deepEqual(evaluateRefundApproval(f({}), 'either', null), { abovePolicy: false, aboveHalf: false, needsForceMajeure: false, needsSuperadmin: false }, 'tepat di batas = sesuai kebijakan')
+  assert.equal(evaluateRefundApproval(f({ amount: 101 }), 'above_policy', null).needsForceMajeure, true)
+  assert.equal(evaluateRefundApproval(f({ amount: 60, otherCancellation: 50 }), 'above_policy', 'medical').abovePolicy, true, 'refund lain dijumlah')
+  assert.equal(evaluateRefundApproval(f({ amount: 101 }), 'above_policy', 'medical').needsForceMajeure, false)
+  assert.equal(evaluateRefundApproval(f({ amount: 101 }), 'above_policy', 'medical').needsSuperadmin, true)
+  assert.equal(evaluateRefundApproval(f({ amount: 101 }), 'above_half', 'medical').needsSuperadmin, false, '101 ≤ 50% dari 1000')
+  assert.equal(evaluateRefundApproval(f({ amount: 501, policyCap: 600 }), 'above_half', null).needsSuperadmin, true)
+  assert.equal(evaluateRefundApproval(f({ amount: 501, policyCap: 600 }), 'above_policy', null).needsSuperadmin, false)
+  assert.equal(evaluateRefundApproval(f({ amount: 101 }), 'either', 'other').needsSuperadmin, true)
+  assert.equal(evaluateRefundApproval(f({ amount: 101, policyCap: null }), 'either', null).abovePolicy, false, 'tanpa batas kebijakan')
+})
+function walk(dir: string, out: string[] = []): string[] {
+  for (const f of readdirSync(join(root, dir))) {
+    const p = join(dir, f)
+    if (statSync(join(root, p)).isDirectory()) { if (f !== 'node_modules') walk(p, out) } else if (/\.(ts|tsx)$/.test(f)) out.push(p)
+  }
+  return out
+}
+const mgr = { isSuperadmin: false }, sup = { isSuperadmin: true }
+const near = (d: number) => addDays(todayInApp(), d)
+await t('FORCE-MAJEURE pembatalan: 30–60 hari = batas 50%; di atas tanpa FM ditolak dan pembatalan DI-ROLLBACK; dengan FM tersimpan; manager tak bisa menyetujui (mode bawaan), superadmin bisa', async () => {
+  assert.equal((await getRefundSettings()).approvalMode, 'above_policy', 'bawaan')
+  const id = await mk({ paid: 500_000, dep: near(45) })
+  assert.deepEqual(await cancelByAdmin(id, { reason: 'fm', decision: 'refund', refundAmount: 300_000, ...by, canMoney: true }), { kind: 'needs_force_majeure', policyCap: 250_000 })
+  assert.equal(await status(id), 'active'); assert.equal(await prisma.refund.count({ where: { bookingId: id } }), 0)
+  assert.equal((await cancelByAdmin(id, { reason: 'fm', decision: 'retain', forceMajeure: 'medical', note: 'x', ...by, canMoney: true })).kind, 'force_majeure_not_applicable')
+  const r = await cancelByAdmin(id, { reason: 'fm', decision: 'refund', refundAmount: 300_000, forceMajeure: 'medical', ...by, canMoney: true })
+  assert.equal(r.kind, 'done')
+  const rf = await prisma.refund.findFirstOrThrow({ where: { bookingId: id } })
+  assert.equal(rf.forceMajeureCategory, 'medical')
+  assert.deepEqual(await updateRefundAmount(rf.id, { amount: 300_000, reason: 'cabut fm', forceMajeure: null }), { kind: 'needs_force_majeure', policyCap: 250_000 }, 'mencabut FM di atas kebijakan ditolak')
+  assert.equal((await updateRefundAmount(rf.id, { amount: 320_000, reason: 'fm tetap' })).kind, 'done', 'undefined = FM tetap')
+  assert.deepEqual(await approveRefund(rf.id, staff.id, mgr), { kind: 'needs_superadmin' })
+  assert.equal((await approveRefund(rf.id, staff.id, sup)).kind, 'done')
+})
+await t('FORCE-MAJEURE tunda + uang terlambat: < 30 hari = batas 0 → keputusan refund wajib FM; uang yang masuk SESUDAH batal boleh dikembalikan tanpa FM', async () => {
+  const d = await mk({ paid: 300_000, dep: near(10) })
+  assert.equal((await cancelByAdmin(d, { reason: 'tunda', decision: 'defer', ...by, canMoney: true })).kind, 'done')
+  assert.deepEqual(await decideDeferred(d, { decision: 'refund', refundAmount: 300_000, ...by }), { kind: 'needs_force_majeure', policyCap: 0 })
+  assert.equal((await decideDeferred(d, { decision: 'refund', refundAmount: 300_000, forceMajeure: 'visa_rejected', ...by })).kind, 'done')
+  const late = await mk({ paid: 400_000, dep: near(10) })
+  assert.equal((await cancelByAdmin(late, { reason: 'tahan', decision: 'retain', note: 'hangus', ...by, canMoney: true })).kind, 'done')
+  await prisma.payment.create({ data: { bookingId: late, amount: 100_000, method: 'bank_transfer', status: 'confirmed', confirmedAt: new Date(Date.now() + 1000), destinationCashAccountId: cash } })
+  const p = await proposeRefund(late, { amount: 100_000, reason: 'uang terlambat', ...by })
+  assert.equal(p.kind, 'done', JSON.stringify(p))
+  assert.equal((await approveRefund(p.kind === 'done' ? p.refundId : '', staff.id, mgr)).kind, 'done', 'sesuai batas (uang terlambat) → cukup manager')
+})
+await t('FORCE-MAJEURE hanya pembatalan: kelebihan bayar + FM ditolak layanan dan CHECK DB', async () => {
+  const id = await mk({ paid: 1_200_000 })
+  assert.deepEqual(await proposeRefund(id, { amount: 90_000, reason: 'lebih', forceMajeure: 'other', ...by }), { kind: 'force_majeure_not_applicable' })
+  const ok = await proposeRefund(id, { amount: 90_000, reason: 'lebih', ...by })
+  assert.equal(ok.kind, 'done')
+  await assert.rejects(prisma.refund.update({ where: { id: ok.kind === 'done' ? ok.refundId : '' }, data: { forceMajeureCategory: 'other' } }), /refunds_force_majeure_cancellation/)
+})
+await t('KEBIJAKAN REFUND: simpan basi → stale; ubah mode tercatat di settings_audit; mode dibaca ULANG saat menyetujui (> 50% tagihan)', async () => {
+  const s0 = await getRefundSettings()
+  assert.deepEqual(await saveRefundSettings({ approvalMode: 'above_half', expectedUpdatedAt: '2000-01-01T00:00:00.000Z' }, staff.id), { kind: 'stale' })
+  const id = await mk({ paid: 800_000 }) // > 60 hari: batas 100%; tagihan 1.110.000
+  await cancelByAdmin(id, { reason: 'separuh', decision: 'refund', refundAmount: 600_000, ...by, canMoney: true })
+  const rf = await prisma.refund.findFirstOrThrow({ where: { bookingId: id } })
+  const s1 = await saveRefundSettings({ approvalMode: 'above_half', expectedUpdatedAt: s0.updatedAt }, staff.id)
+  assert.equal(s1.kind, 'done')
+  try {
+    const audit = await prisma.settingsAudit.findFirstOrThrow({ where: { entity: 'refund_settings', staffId: staff.id }, orderBy: { at: 'desc' } })
+    assert.deepEqual(audit.summary, { approvalMode: ['above_policy', 'above_half'] })
+    assert.deepEqual(await approveRefund(rf.id, staff.id, mgr), { kind: 'needs_superadmin' }, '600.000 > 50% dari 1.110.000')
+  } finally {
+    const cur = await getRefundSettings()
+    assert.equal((await saveRefundSettings({ approvalMode: 'above_policy', expectedUpdatedAt: cur.updatedAt }, staff.id)).kind, 'done')
+  }
+  assert.equal((await approveRefund(rf.id, staff.id, mgr)).kind, 'done', 'kembali ke bawaan: sesuai kebijakan → manager')
+})
+await t('PENJAGA force-majeure: refund_settings hanya ditulis lib/refunds/settings.ts; route Kebijakan Refund superadmin; aturan persetujuan hanya lib/refunds/approval.ts', () => {
+  const files = [...walk('app'), ...walk('lib')]
+  assert.deepEqual(files.filter(f => /refundSettings\.(create|update|upsert|delete)/.test(read(f))), ['lib/refunds/settings.ts'])
+  assert.deepEqual(files.filter(f => /computeRefundAmount\(/.test(read(f))).sort(), ['lib/booking/adminCancel.ts', 'lib/refunds/approval.ts', 'lib/utils/cancellationPolicy.ts'])
+  const route = read('app/api/v1/admin/finance/refund-settings/route.ts')
+  assert.equal((route.match(/await requireSuperAdmin\(\)/g) ?? []).length, 2)
+  assert.match(read('app/api/v1/admin/refunds/[id]/route.ts'), /approveRefund\(id\.data, session\.userId, \{ isSuperadmin: session\.role === 'superadmin' \}\)/)
+  assert.match(read('lib/refunds/service.ts'), /getRefundSettings\(tx\)/)
 })
 await t('PENJAGA §10.13: tindakan refund hanya di halaman detail — panel booking tanpa aksi/akun kas; route lama per booking dihapus; daftar menaut ke detail + Buat Refund', () => {
   const panel = read('app/[locale]/admin/(protected)/bookings/[id]/RefundsPanel.tsx')
@@ -183,13 +270,6 @@ await t('CHECK DB: refund paid tanpa akun/tanggal, jumlah ≤ 0, keputusan tak s
   await assert.rejects(prisma.bookingCancellation.create({ data: { bookingId: id, cancelledAt: new Date(), reason: 'x', paidIdr: 5, decision: 'none' } }), /booking_cancellations_decision_check/)
 })
 
-function walk(dir: string, out: string[] = []): string[] {
-  for (const f of readdirSync(join(root, dir))) {
-    const p = join(dir, f)
-    if (statSync(join(root, p)).isDirectory()) { if (f !== 'node_modules') walk(p, out) } else if (/\.(ts|tsx)$/.test(f)) out.push(p)
-  }
-  return out
-}
 await t('PENJAGA: hanya lib/refunds/service.ts membuat/mengubah refund (selain pembersihan hapus-akun); cancelBooking tak menyentuh refund; pelanggan ditolak bila ada uang; route admin memakai peran kebijakan', () => {
   const files = [...walk('app'), ...walk('lib')]
   assert.deepEqual(files.filter(f => /refund\.(create|createMany|update|upsert|delete|deleteMany)\(/.test(read(f))), ['lib/refunds/service.ts'])

@@ -23,9 +23,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       case 'pending_payment': return NextResponse.json(err('Ada bukti transfer menunggu verifikasi — proses dulu pembayarannya'), { status: 409 })
       case 'forbidden_money': return NextResponse.json(err('Pesanan ini sudah menerima pembayaran — pembatalan hanya oleh manager/superadmin'), { status: 403 })
       case 'decision_required': return NextResponse.json({ ...err('Pilih keputusan atas uang yang sudah masuk'), meta: { paid: r.paid, suggested: r.suggested } }, { status: 422 })
-      case 'amount_required': return NextResponse.json(err('Saran kebijakan refund Rp 0 — isi jumlah refund atau pilih tahan uang'), { status: 422 })
+      case 'amount_required': return NextResponse.json(err('Saran kebijakan refund Rp 0 — isi jumlah refund (di atas kebijakan wajib force-majeure) atau pilih tahan uang'), { status: 422 })
       case 'note_required': return NextResponse.json(err('Catatan wajib diisi bila uang ditahan'), { status: 422 })
       case 'over_limit': return NextResponse.json(err(`Jumlah refund harus lebih dari 0 dan paling banyak ${formatRupiah(r.max)}`), { status: 422 })
+      case 'needs_force_majeure': return NextResponse.json(err(`Melebihi kebijakan pembatalan (paling banyak ${formatRupiah(r.policyCap)} tanpa force-majeure) — pilih kategori force-majeure`), { status: 422 })
+      case 'force_majeure_not_applicable': return NextResponse.json(err('Force-majeure hanya bersama keputusan refund'), { status: 422 })
       case 'done':
         void notify({ userId: r.userId, bookingId: id.data, event: { type: 'booking_cancelled', code: r.code, money: r.paid > 0 } })
         return NextResponse.json(ok({ decision: r.decision, refundId: r.refundId }))

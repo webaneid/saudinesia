@@ -184,7 +184,7 @@ Centang lama yang basi sudah ditandai di tempatnya ("Rapikan 2026-11-19": tertut
 - [x] Auto-cancel notification + quota release (cron) — `startAutoCancelJob()`
 - [x] WA notification on payment confirmed / rejected — wired ke `POST /api/v1/admin/payments/[id]/confirm`
 - [x] Refund request form + `RefundStatus` tracking — lihat `docs/arsitektur-umroh.md` §7 Gap #3: bahkan `prisma.refund.create()` belum pernah dipanggil di mana pun, jadi ini butuh fondasi data dulu sebelum UI — **Rapikan 2026-11-19:** tertutup — Keuangan → Refund (Fase 7b-2a, SEC-244)
-- [ ] Force-majeure flag + super admin approval for overrides
+- [x] Force-majeure flag + super admin approval for overrides — **2026-11-20 (`docs/rencana-force-majeure.md`):** refund pembatalan di atas kebijakan wajib berkategori force-majeure (4 kategori); kapan wajib superadmin = setelan Keuangan → Kebijakan Refund (di atas kebijakan / > 50% tagihan / salah satunya); dijaga `scripts/test-refunds.ts`
 - [x] **Booking engine universal** (`docs/arsitektur-booking.md`) — adapter registry kuota + satu fungsi cancel + `items[]` generik + `totalAmount` server-computed + checkout pendek + invoice PDF. **Seluruh 8 step SELESAI & TERVERIFIKASI (2026-07-24/25)**, menutup Gap #1 (parsial — API/skema, UI Haji sengaja dikeluarkan), #2-#4 `arsitektur-umroh.md` §7. Dokumen sekarang SOURCE OF TRUTH as-built, bukan lagi rencana — lihat entri Booking Engine Step 1-8 di atas.
 
 ---

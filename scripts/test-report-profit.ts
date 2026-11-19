@@ -170,11 +170,13 @@ await t('tanggal pesan per booking menurut zona aplikasi (31 Mar 18:00 UTC = 1 A
   const rows = (await getBookingProfitRows({ from: '2090-04-01', to: '2090-04-30', scope: 'recognized' }, 1, 50)).rows
   assert.equal(rows.find(r => r.bookingCode === `${tag}-B2`)!.createdDate, '2090-04-01')
 })
-await t('MENU KEUANGAN (12d): satu grup untuk semua admin — Buku Kas, Arus Kas, Transfer, Refund, PPN, Laporan Untung, Selisih HPP; tak lagi di Operasional', () => {
+await t('MENU KEUANGAN (12d): satu grup untuk semua admin — Buku Kas, Arus Kas, Transfer, Refund, PPN, Laporan Untung, Selisih HPP (+ Kebijakan Refund superadmin); tak lagi di Operasional', () => {
   const want = ['/admin/finance/cash-book', '/admin/finance/cash-flow', '/admin/finance/transfers', '/admin/finance/refunds', '/admin/finance/tax', '/admin/reports', '/admin/reports/variance']
   for (const role of [{ isManager: false, isSuperAdmin: false }, { isManager: true, isSuperAdmin: true }]) {
     const groups = getAdminNavigation(role)
-    assert.deepEqual(groups.find(g => g.label === 'Keuangan')?.items.map(i => i.path), want)
+    // Kebijakan Refund (docs/rencana-force-majeure.md) hanya untuk superadmin, sesudah Refund.
+    const expected = role.isSuperAdmin ? [...want.slice(0, 4), '/admin/finance/refund-settings', ...want.slice(4)] : want
+    assert.deepEqual(groups.find(g => g.label === 'Keuangan')?.items.map(i => i.path), expected)
     assert.ok(!groups.find(g => g.label === 'Operasional')!.items.some(i => want.includes(i.path)))
   }
   const all = getAdminNavigation({ isManager: true, isSuperAdmin: true }).flatMap(g => g.items.map(i => i.path))

@@ -6,6 +6,8 @@ import { Undo2 } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { AutocompleteSelect } from '@/components/shared/AutocompleteSelect'
+import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { FORCE_MAJEURE_OPTIONS, forceMajeureOf } from '@/lib/refunds/labels'
 import { formatRupiah } from '@/lib/utils'
 import type { RefundCandidate } from '@/lib/refunds/candidates'
 import { EMPTY_RECIPIENT, RecipientFields, recipientPayload, type RecipientValue } from '../RecipientFields'
@@ -28,6 +30,7 @@ function NewRefundForm() {
   const [amount, setAmount] = useState('')
   const [reason, setReason] = useState('')
   const [recipient, setRecipient] = useState<RecipientValue>(EMPTY_RECIPIENT)
+  const [forceMajeure, setForceMajeure] = useState('')
   const [localError, setLocalError] = useState<string | null>(null)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -39,7 +42,9 @@ function NewRefundForm() {
       return res.ok && json?.data ? json.data : []
     } catch { return [] } finally { setLoading(false) }
   }
-  function choose(c: RefundCandidate | null) { clearError(); setPicked(c); setAmount(c ? String(Math.floor(c.max)) : '') }
+  function choose(c: RefundCandidate | null) { clearError(); setPicked(c); setAmount(c ? String(Math.floor(c.max)) : ''); setForceMajeure('') }
+  // Force-majeure hanya untuk refund PEMBATALAN (booking batal/hangus) — docs/rencana-force-majeure.md.
+  const cancelled = picked?.status === 'cancelled' || picked?.status === 'expired'
 
   useEffect(() => {
     let live = true
@@ -64,7 +69,7 @@ function NewRefundForm() {
     const r = recipientPayload(recipient)
     if (r === 'partial') { setLocalError('Lengkapi ketiga kolom rekening tujuan, atau kosongkan semuanya.'); return }
     setLocalError(null)
-    return submit({ bookingId: picked?.id, amount: amountNum, reason: reason.trim(), ...(r ? { recipient: r } : {}) })
+    return submit({ bookingId: picked?.id, amount: amountNum, reason: reason.trim(), ...(r ? { recipient: r } : {}), ...(cancelled ? { forceMajeure: forceMajeureOf(forceMajeure) } : {}) })
   }
 
   return (
@@ -102,6 +107,14 @@ function NewRefundForm() {
             <input className="admin-inp" maxLength={500} value={reason} onChange={e => { clearError(); setReason(e.target.value) }} />
           </label>
         </div>
+
+        {cancelled && (
+          <div className="space-y-1">
+            <span className="block text-xs text-admin-muted">Force-majeure</span>
+            <ChoiceSelect ariaLabel="Force-majeure" placeholder="Bukan force-majeure" value={forceMajeure} onChange={v => { clearError(); setForceMajeure(v) }} options={FORCE_MAJEURE_OPTIONS} />
+            <span className="block text-[11px] text-admin-muted">Refund di atas kebijakan pembatalan wajib ditandai force-majeure dan dapat memerlukan persetujuan superadmin (Kebijakan Refund).</span>
+          </div>
+        )}
 
         <div className="space-y-2">
           <p className="m-0 text-xs font-semibold text-admin-ink">Rekening tujuan pelanggan <span className="font-normal text-admin-muted">(boleh diisi nanti — wajib sebelum dibayar, kecuali tunai)</span></p>

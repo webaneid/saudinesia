@@ -1,3 +1,4 @@
+import type { ForceMajeureCategory } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { cancelBooking } from '@/lib/booking/cancel'
 import { expireAwaitingPayments } from '@/lib/payments/awaiting'
@@ -13,7 +14,7 @@ import { createRefundTx, lockBooking, refundableOf } from '@/lib/refunds/service
 // Uang masuk → hanya peran refund (`canManageRefund`, diperiksa pemanggil dan diteruskan sebagai `canMoney`). Bukti transfer yang masih menunggu verifikasi menolak pembatalan.
 
 export type CancelDecision = 'refund' | 'retain' | 'defer'
-export type AdminCancelInput = { reason: string; decision?: CancelDecision | null; refundAmount?: number | null; note?: string | null; byUserId: string; canMoney: boolean }
+export type AdminCancelInput = { reason: string; decision?: CancelDecision | null; refundAmount?: number | null; forceMajeure?: ForceMajeureCategory | null; note?: string | null; byUserId: string; canMoney: boolean }
 export type AdminCancelResult =
   | { kind: 'not_found' }
   | { kind: 'conflict' }            // bukan booking aktif
@@ -23,6 +24,8 @@ export type AdminCancelResult =
   | { kind: 'note_required' }
   | { kind: 'amount_required' } // saran kebijakan 0 → jumlah refund wajib diisi
   | { kind: 'over_limit'; max: number }
+  | { kind: 'needs_force_majeure'; policyCap: number } // jumlah di atas kebijakan tanpa kategori force-majeure (docs/rencana-force-majeure.md)
+  | { kind: 'force_majeure_not_applicable' } // force-majeure hanya bersama keputusan refund
   | { kind: 'done'; userId: string; code: string; decision: 'none' | CancelDecision; paid: number; refundId: string | null }
 
 /** Saran jumlah refund: kebijakan pembatalan atas tanggal berangkat; tanpa tanggal = seluruh terbayar. */
@@ -47,16 +50,11 @@ export async function cancelByAdmin(bookingId: string, input: AdminCancelInput):
     if (decision === null) return { kind: 'decision_required' as const, paid, suggested: suggestedRefund(paid, booking.departureDate) }
     if (decision === 'retain' && !input.note?.trim()) return { kind: 'note_required' as const }
     if (decision === 'refund' && input.refundAmount == null && suggestedRefund(paid, booking.departureDate) <= 0) return { kind: 'amount_required' as const }
+    if (decision !== 'refund' && input.forceMajeure) return { kind: 'force_majeure_not_applicable' as const }
 
     await cancelBooking(tx, booking, 'cancelled')
     await expireAwaitingPayments(tx, bookingId) // Fase 9: VA/QR yang masih hidup tak lagi dipakai (uang yang terlanjur masuk tetap dicatat, K9-4)
-    let refundId: string | null = null
-    if (decision === 'refund') {
-      const amount = input.refundAmount ?? suggestedRefund(paid, booking.departureDate)
-      const made = await createRefundTx(tx, { bookingId, amount, reason: input.reason, byUserId: input.byUserId })
-      if (made.kind !== 'done') { if (made.kind === 'over_limit') throw new CancelAbort({ kind: 'over_limit', max: made.max }); throw new Error('refund gagal') }
-      refundId = made.refundId
-    }
+    // Baris pembatalan DULU: batas kebijakan refund dibaca darinya (lib/refunds/approval.ts). Refund ditolak → seluruh transaksi di-rollback.
     const now = new Date()
     await tx.bookingCancellation.create({
       data: {
@@ -65,6 +63,17 @@ export async function cancelByAdmin(bookingId: string, input: AdminCancelInput):
         decisionNote: input.note?.trim() || null,
       },
     })
+    let refundId: string | null = null
+    if (decision === 'refund') {
+      const amount = input.refundAmount ?? suggestedRefund(paid, booking.departureDate, now) // hari batal yang sama dengan batas kebijakan
+      const made = await createRefundTx(tx, { bookingId, amount, reason: input.reason, byUserId: input.byUserId, forceMajeure: input.forceMajeure ?? null })
+      if (made.kind !== 'done') {
+        if (made.kind === 'over_limit') throw new CancelAbort({ kind: 'over_limit', max: made.max })
+        if (made.kind === 'needs_force_majeure') throw new CancelAbort({ kind: 'needs_force_majeure', policyCap: made.policyCap })
+        throw new Error('refund gagal')
+      }
+      refundId = made.refundId
+    }
     return { kind: 'done' as const, userId: booking.userId, code: booking.bookingCode, decision, paid, refundId }
   }).catch((e: unknown) => { if (e instanceof CancelAbort) return e.result; throw e })
 }
@@ -72,10 +81,10 @@ export async function cancelByAdmin(bookingId: string, input: AdminCancelInput):
 // Melempar untuk me-rollback pembatalan (kuota sudah dilepas) bila usulan refund ditolak batasnya.
 class CancelAbort extends Error { constructor(readonly result: AdminCancelResult) { super('cancel-abort') } }
 
-export type DecideResult = { kind: 'not_found' } | { kind: 'conflict' } | { kind: 'note_required' } | { kind: 'over_limit'; max: number } | { kind: 'done'; refundId: string | null }
+export type DecideResult = { kind: 'not_found' } | { kind: 'conflict' } | { kind: 'note_required' } | { kind: 'over_limit'; max: number } | { kind: 'needs_force_majeure'; policyCap: number } | { kind: 'force_majeure_not_applicable' } | { kind: 'done'; refundId: string | null }
 
 /** Keputusan atas pembatalan yang ditunda (`defer`) → refund atau tahan. */
-export async function decideDeferred(bookingId: string, input: { decision: 'refund' | 'retain'; refundAmount?: number | null; note?: string | null; byUserId: string }): Promise<DecideResult> {
+export async function decideDeferred(bookingId: string, input: { decision: 'refund' | 'retain'; refundAmount?: number | null; forceMajeure?: ForceMajeureCategory | null; note?: string | null; byUserId: string }): Promise<DecideResult> {
   return prisma.$transaction(async (tx): Promise<DecideResult> => {
     const c = await tx.bookingCancellation.findUnique({ where: { bookingId }, select: { id: true } })
     if (!c) return { kind: 'not_found' as const }
@@ -83,11 +92,13 @@ export async function decideDeferred(bookingId: string, input: { decision: 'refu
     const fresh = await tx.bookingCancellation.findUniqueOrThrow({ where: { bookingId }, select: { id: true, decision: true, reason: true, cancelledAt: true, booking: { select: { departureDate: true } } } })
     if (fresh.decision !== 'defer') return { kind: 'conflict' as const }
     if (input.decision === 'retain' && !input.note?.trim()) return { kind: 'note_required' as const }
+    if (input.decision !== 'refund' && input.forceMajeure) return { kind: 'force_majeure_not_applicable' as const }
     let refundId: string | null = null
     if (input.decision === 'refund') {
       const { paid } = await refundableOf(tx, bookingId)
-      const made = await createRefundTx(tx, { bookingId, amount: input.refundAmount ?? suggestedRefund(paid, fresh.booking.departureDate, fresh.cancelledAt), reason: fresh.reason, byUserId: input.byUserId })
+      const made = await createRefundTx(tx, { bookingId, amount: input.refundAmount ?? suggestedRefund(paid, fresh.booking.departureDate, fresh.cancelledAt), reason: fresh.reason, byUserId: input.byUserId, forceMajeure: input.forceMajeure ?? null })
       if (made.kind === 'over_limit') return { kind: 'over_limit' as const, max: made.max }
+      if (made.kind === 'needs_force_majeure') return { kind: 'needs_force_majeure' as const, policyCap: made.policyCap }
       if (made.kind !== 'done') return { kind: 'conflict' as const }
       refundId = made.refundId
     }

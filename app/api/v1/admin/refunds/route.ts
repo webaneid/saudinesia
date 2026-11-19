@@ -6,7 +6,7 @@ import { requireRefundManage } from '@/lib/pricing/policy'
 import { proposeRefund } from '@/lib/refunds/service'
 import { refundFailureResponse } from '@/lib/refunds/http'
 
-// Buat refund dari halaman Keuangan → Refund (§10.13): kelebihan bayar pada booking hidup, atau sisa uang pada booking batal. Batas dinilai di dalam kunci booking.
+// Buat refund dari halaman Keuangan → Refund (§10.13; force-majeure dinilai layanan — docs/rencana-force-majeure.md): kelebihan bayar pada booking hidup, atau sisa uang pada booking batal. Batas dinilai di dalam kunci booking.
 export async function POST(req: Request) {
   try {
     const session = await requireRefundManage()
