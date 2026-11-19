@@ -1,11 +1,9 @@
 'use client'
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { Pencil, Plus, Save, Tag, Trash2, Wallet } from 'lucide-react'
+import { AlertTriangle, Pencil, Plus, Save, Trash2, Wallet } from 'lucide-react'
 import { VendorCurrencyField } from './VendorCurrencyField'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
-import { RecommendationNote } from './RecommendationNote'
-import { CostComponentPriceEditor } from './CostComponentPriceEditor'
 import { MarginNote } from './MarginNote'
 import { Badge } from '@/components/admin/ui/Badge'
 import { marginNote } from '@/lib/pricing/marginNote'
@@ -16,7 +14,7 @@ type CostRow = { id: string; costComponent: string; vendorId: string; vendorName
 type Preview = { hppRupiah: number; sellPrice: number }
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR'] as const
-const EMPTY_FORM = { costComponent: '', vendorId: '', currency: 'IDR', cost: '' }
+const EMPTY_FORM = { costComponent: '', vendorId: '', currency: 'IDR', cost: '', sell: '', note: '' }
 
 function rupiah(n: number) {
   return `Rp ${Math.round(n).toLocaleString('id-ID')}`
@@ -48,7 +46,8 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
   const [preview, setPreview] = useState<Preview | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [forbidden, setForbidden] = useState(false)
-  const [pricingId, setPricingId] = useState<string | null>(null)
+  const [wasManual, setWasManual] = useState(false)
+  const [formOpenedAt, setFormOpenedAt] = useState(0)
   const [marginPercent, setMarginPercent] = useState(0)
 
   const loadCosts = useCallback(async () => {
@@ -74,17 +73,23 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
       setPreview(j?.data ? { hppRupiah: j.data.hppRupiah, sellPrice: j.data.sellPrice } : null)
     }, 500)
     return () => clearTimeout(timer)
-  }, [form.cost, form.currency, apiBase])
+  }, [form.cost, form.currency, apiBase, formOpenedAt]) // formOpenedAt: buka ulang dengan biaya sama tetap memuat pratinjau
 
   function openForm(c?: CostRow) {
     if (c) {
       setEditingId(c.id)
-      setForm({ costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, cost: String(c.cost) })
+      const manual = c.price?.mode === 'manual'
+      setForm({
+        costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, cost: String(c.cost),
+        sell: manual ? String(c.price!.sellIdr) : '', note: manual ? c.price!.manualNote ?? '' : '',
+      })
+      setWasManual(manual)
     } else {
       setEditingId(null)
       setForm(EMPTY_FORM)
+      setWasManual(false)
     }
-    setPreview(null); setError(null)
+    setPreview(null); setError(null); setFormOpenedAt(n => n + 1)
     setShowForm(true)
   }
 
@@ -99,14 +104,35 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
     const r = await fetch(editingId ? `${apiBase}/${editingId}` : apiBase, {
       method: editingId ? 'PUT' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
     })
+    const j: { data?: { id?: string }; error?: string } | null = await r.json().catch(() => null)
     if (!r.ok) {
-      const j: { error?: string } | null = await r.json().catch(() => null)
       setError(j?.error ?? 'Komponen biaya gagal disimpan.')
       setSaving(false)
       return
     }
+    // Harga jual komponen (§22): diisi = harga manual; dikosongkan = ikut rekomendasi. Lewat route harga yang sama dengan PriceCard.
+    const costId = editingId ?? j?.data?.id
+    const sell = Number(form.sell)
+    let priceError: string | null = null
+    if (costId && (form.sell.trim() !== '' || wasManual)) {
+      const manual = form.sell.trim() !== ''
+      const pr = await fetch('/api/v1/admin/pricing/points', {
+        method: manual ? 'PUT' : 'DELETE', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ownerType: 'cost_component', ownerId: costId, variantKey: '', ...(manual ? { sellIdr: sell, note: form.note.trim() || null } : {}) }),
+      })
+      if (!pr.ok) {
+        const pj: { error?: string } | null = await pr.json().catch(() => null)
+        priceError = `Komponen tersimpan, tetapi harga jual gagal disimpan: ${pj?.error ?? 'coba lagi.'}`
+      }
+    }
     await afterChange()
-    setSaving(false); setShowForm(false)
+    setSaving(false)
+    if (priceError) {
+      setError(priceError)
+      if (costId) { setEditingId(costId); setWasManual(false) }
+      return
+    }
+    setShowForm(false)
   }
 
   async function remove(costId: string) {
@@ -134,6 +160,9 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
   const sellOf = (c: CostRow) => c.price?.sellIdr ?? c.sellPrice
   const recOf = (c: CostRow) => c.price?.autoSellIdr ?? c.sellPrice
   const total = costs.reduce((sum, c) => sum + (sellOf(c) ?? 0), 0)
+  const typedSell = form.sell.trim() === '' ? 0 : Number(form.sell)
+  const belowCost = preview != null && typedSell > 0 && typedSell < preview.hppRupiah
+  const formNote = typedSell > 0 && !belowCost ? marginNote({ sell: typedSell, recommended: preview?.sellPrice ?? null, ref: 'margin', marginPercent }) : null
 
   return (
     <div className="admin-form-panel space-y-4">
@@ -162,7 +191,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
             onCurrencyChange={currency => setForm(f => ({ ...f, currency }))}
           />
 
-          <div className="grid md:grid-cols-3 gap-3 items-end">
+          <div className="grid sm:grid-cols-2 gap-3 items-end">
             <div>
               <p className="text-xs text-admin-muted mb-1">Biaya ({form.currency})</p>
               <input className="admin-inp" type="number" placeholder="0"
@@ -176,8 +205,28 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
               <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi</p>
               <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? rupiah(preview.sellPrice) : '—'}</p>
             </div>
+            <div>
+              <p className="text-xs text-admin-muted mb-1">Harga Jual (Rupiah)</p>
+              <input className="admin-inp" type="number" min={0} aria-label="Harga jual komponen"
+                placeholder={preview ? `Ikut rekomendasi (${rupiah(preview.sellPrice)})` : 'Ikut rekomendasi'}
+                value={form.sell} onChange={e => setForm(f => ({ ...f, sell: e.target.value }))} />
+            </div>
           </div>
-          <RecommendationNote />
+          {typedSell > 0 && (
+            <div className="space-y-2">
+              {belowCost && preview && (
+                <p className="m-0 flex items-start gap-1.5 text-xs font-medium text-admin-warning">
+                  <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> Di bawah modal ({rupiah(preview.hppRupiah)}) — rugi {rupiah(preview.hppRupiah - typedSell)} per satuan. Peringatan internal; tetap bisa disimpan.
+                </p>
+              )}
+              {formNote && <MarginNote note={formNote} />}
+              <input className="admin-inp" maxLength={500} aria-label="Catatan harga jual" placeholder="Catatan harga jual (opsional), mis. nego vendor, promo musim"
+                value={form.note} onChange={e => setForm(f => ({ ...f, note: e.target.value }))} />
+            </div>
+          )}
+          <p className="m-0 text-[11px] text-admin-muted">
+            Kosongkan Harga Jual untuk mengikuti rekomendasi (modal + margin bawaan {marginPercent}%). Diisi = harga manual; selisihnya terhadap margin hanya ditandai, tetap bisa disimpan.
+          </p>
 
           <div className="flex gap-2">
             <button onClick={save} disabled={saving || !form.costComponent || !form.vendorId || !form.cost}
@@ -208,10 +257,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
                     {manual && rec != null && <p className="text-[11px] text-admin-muted">rekomendasi {rupiah(rec)}</p>}
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <button onClick={() => setPricingId(pricingId === c.id ? null : c.id)} aria-label={`Atur harga jual ${c.costComponent}`} title="Atur harga jual" className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
-                      <Tag className="h-3.5 w-3.5" />
-                    </button>
-                    <button onClick={() => openForm(c)} aria-label={`Ubah ${c.costComponent}`} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
+                    <button onClick={() => openForm(c)} aria-label={`Ubah ${c.costComponent} dan harga jualnya`} title="Ubah komponen & harga jual" className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-ink hover:bg-admin-spot transition-colors">
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button onClick={() => remove(c.id)} aria-label={`Hapus ${c.costComponent}`} className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors">
@@ -220,15 +266,8 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
                   </div>
                 </div>
               </div>
-              {manual && c.price?.manualNote && pricingId !== c.id && <p className="text-[11px] text-admin-muted">Catatan: “{c.price.manualNote}”</p>}
-              {saved && pricingId !== c.id && <MarginNote note={saved} />}
-              {pricingId === c.id && (
-                <CostComponentPriceEditor
-                  costId={c.id} name={c.costComponent} hppIdr={c.hppRupiah} recommendedIdr={rec} sellIdr={sell} manual={manual}
-                  note={c.price?.manualNote ?? null} marginPercent={marginPercent}
-                  onSaved={async () => { setPricingId(null); await afterChange() }} onCancel={() => setPricingId(null)}
-                />
-              )}
+              {manual && c.price?.manualNote && <p className="text-[11px] text-admin-muted">Catatan: “{c.price.manualNote}”</p>}
+              {saved && <MarginNote note={saved} />}
             </div>
           )
         })}

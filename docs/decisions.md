@@ -3756,3 +3756,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Alternatives considered:** PriceCard terpisah per komponen di bawah panel (ditolak: menjauhkan harga dari barisnya, layar memanjang); popup (ditolak: pola sebaris sudah dipakai PriceCard dan draf booking).
 
 **Security check:** security-review 7 berkas — 0 temuan; `bun audit` tetap 6 (tak ada yang baru).
+
+## 2026-11-19 — Harga jual komponen dipindah ke form Komponen Biaya (koreksi §22 C2)
+**Decision:** Harga jual per komponen diisi di form tambah/ubah komponen (kolom "Harga Jual (Rupiah)": kosong = rekomendasi, diisi = manual + catatan), bukan editor sebaris terpisah ber-ikon `Tag`; `CostComponentPriceEditor` dihapus. Penyimpanan tetap lewat route `admin/pricing/points` (tak ada route/kolom baru).
+**Rationale:** Pemilik mencoba di Haji dan tak menemukan cara mengubah harga jual — ia mencarinya di form tempat biaya diinput. Satu tempat untuk biaya dan harga jual komponen.
+**Alternatives considered:** Mempertahankan dua jalur (form + ikon baris) — ditolak, dua cara untuk hal yang sama membingungkan.
+
+**Security check:** security-review 1 berkas (`CostComponentsPanel.tsx`, klien; memanggil route yang sudah ada dan sudah diuji penolakannya di `test-cost-component-prices`) — 0 temuan; tak ada dependensi baru.
