@@ -3770,3 +3770,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Alternatives considered:** Halaman keranjang terpisah per rombongan — ditolak, satu booking = satu invoice; menyimpan jumlah orang per entri berrombongan — ditolak, dua sumber kebenaran.
 
 **Security check:** security-review berkas berubah (validator checkout, cartStore, CartView/GroupsPanel, pesan i18n) — 0 temuan; harga tetap dihitung server, larik berbatas `.max()`, nama rombongan lewat `bookingGroupSchema` (≤ 60, tanpa karakter kontrol, dikosongkan saat hapus akun). `bun audit` 6 (baseline, tak ada yang baru). Uji penuh menangkap satu masalah sebelum PR: impor nilai `bookingGroupSchema` ke skema checkout menarik kode server ke bundel klien → aturan nama dipindah ke `lib/validators/groupLabel.ts`.
+
+## 2026-11-19 — Pengingat keberangkatan H-7 / H-1
+**Decision:** Cron harian 08:00 (zona aplikasi) mengirim `departure_reminder_7d`/`_1d` ke booking `active` berkursi terkonfirmasi yang berangkat 7 / 1 hari lagi (tanggal acuan `Booking.departureDate`). Isi hanya pengingat + tanggal + tautan booking. WhatsApp diaktifkan untuk kejadian ini (nomor terverifikasi + setuju), email selalu — lingkup WA ADR-0001 bertambah satu kejadian atas keputusan pemilik.
+**Rationale:** Template WA sudah lama ada tanpa pemicu; keputusan pemilik K1–K4 (`docs/arsitektur-notifikasi.md` §13). Booking belum bayar sudah mendapat pengingat bayar dan akan hangus, jadi tak diingatkan berangkat.
+**Alternatives considered:** H-3 + H-1, H-1 saja; semua booking aktif; email saja; menyebut sisa tagihan/status data jamaah — ditolak pemilik (isi tanggal saja).
+
+**Security check:** security-review berkas berubah (kejadian notifikasi, template WA/email, pemilih cron, uji) — 0 temuan: tanpa route/masukan baru, pesan tanpa data pribadi jamaah (hanya kode booking + tanggal + nama akun pemesan di email seperti kejadian lain), WA hanya ke nomor terverifikasi lewat jalur `notify` yang ada. `bun audit` 6 (baseline).

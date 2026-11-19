@@ -1,11 +1,11 @@
 import cron from 'node-cron'
 import { notify } from '@/lib/notifications/notify'
 import { formatDeadline } from '@/lib/notifications/events'
-import { dueReminders, expireOverdueBookings } from '@/lib/booking/expire'
-import { getAppTimezone } from '@/lib/time'
+import { departureReminders, dueReminders, expireOverdueBookings } from '@/lib/booking/expire'
+import { DATE_LONG, formatCalendarDate, getAppTimezone } from '@/lib/time'
 
 // Siklus hidup booking v2 (docs/arsitektur-booking-engine-v2.md §10.1). Jadwal mengikuti zona waktu APLIKASI (Pengaturan Invoice), bukan zona proses.
-// Dua pekerjaan harian: hanguskan booking tanpa uang masuk menjelang berangkat, dan ingatkan batas bayar (H-1 dan hari-H). Pengingat TIDAK membatalkan apa pun.
+// Dua pekerjaan harian: hanguskan booking tanpa uang masuk menjelang berangkat, dan ingatkan batas bayar (H-1 dan hari-H) + keberangkatan (H-7 dan H-1). Pengingat TIDAK membatalkan apa pun.
 
 export async function runExpireJob(now: Date = new Date()): Promise<void> {
   const { expired } = await expireOverdueBookings(now)
@@ -26,6 +26,15 @@ export async function runReminderJob(now: Date = new Date()): Promise<void> {
     const outcomes = await notify({ userId: r.userId, bookingId: r.id, event: { type, code: r.code, deadline: formatDeadline(r.deadline), balance: r.balance, partial: r.partial }, dedupe: true })
     console.log(`[cron] ${type} ${r.code}: ${outcomes.map(o => `${o.channel}=${o.status}`).join(' ') || 'tidak ada kanal'}`)
   }
+  // Pengingat keberangkatan H-7/H-1 (docs/arsitektur-notifikasi.md §13) — kursi terkonfirmasi saja, tanggal saja di pesan. Satu kegagalan tak menghentikan sisanya.
+  for (const r of await departureReminders(now)) {
+    try {
+      const outcomes = await notify({ userId: r.userId, bookingId: r.id, event: { type: r.type, code: r.code, date: formatCalendarDate(r.departureDate, DATE_LONG) }, dedupe: true })
+      console.log(`[cron] ${r.type} ${r.code}: ${outcomes.map(o => `${o.channel}=${o.status}`).join(' ') || 'tidak ada kanal'}`)
+    } catch (err) {
+      console.error(`[cron] Gagal mengirim ${r.type} ${r.code}:`, err instanceof Error ? err.name : err)
+    }
+  }
 }
 
 export function startBookingLifecycleJobs(): void {
@@ -36,5 +45,5 @@ export function startBookingLifecycleJobs(): void {
   cron.schedule('*/10 * * * *', () => {
     import('@/lib/payments/gateway').then(m => m.reconcileGatewayPayments()).catch(err => console.error('[cron] rekonsiliasi gateway:', err instanceof Error ? err.name : err))
   }, { timezone })
-  console.log(`[cron] Booking lifecycle jobs scheduled (hangus 00:20, pengingat 08:00 — ${timezone})`)
+  console.log(`[cron] Booking lifecycle jobs scheduled (hangus 00:20, pengingat bayar + keberangkatan 08:00 — ${timezone})`)
 }

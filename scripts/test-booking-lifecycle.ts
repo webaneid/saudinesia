@@ -11,10 +11,10 @@ import type { BookingStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { BOOKING_STATUS } from '@/lib/constants/booking'
 import { BOOKING_TONE } from '@/lib/admin/statusTone'
-import { addDays, dbDateOf, todayInApp } from '@/lib/time'
+import { DATE_LONG, addDays, dbDateOf, formatCalendarDate, todayInApp } from '@/lib/time'
 import { STATUS_FILTERS, displayStatus, displayStatusOf, isOverdue, isPilgrimCancellable, paymentDeadlineFor, paymentState, statusSelect, statusWhere, type DisplayStatus } from '@/lib/booking/lifecycle'
 import { recomputeBookingDates } from '@/lib/booking/dates'
-import { dueReminders, expireOverdueBookings } from '@/lib/booking/expire'
+import { departureReminders, dueReminders, expireOverdueBookings } from '@/lib/booking/expire'
 import { cancelBooking } from '@/lib/booking/cancel'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -276,6 +276,23 @@ await t('PENGINGAT: H-0 / H-1 menurut hari kalender WIB (tepat 00.00 hari beriku
   const byId = new Map(all.map(r => [r.id, r]))
   assert.deepEqual([byId.get(dp)?.balance, byId.get(dp)?.partial], [700_000, true])
   assert.deepEqual([byId.get(d0)?.balance, byId.get(d0)?.partial], [1_000_000, false])
+})
+
+await t('PENGINGAT KEBERANGKATAN: H-7 / H-1 menurut hari kalender zona aplikasi (00.30 WIB = sudah hari berikutnya); hanya kursi terkonfirmasi & active; tanggal kosong/lain, belum bayar, batal, draf, selesai tak diingatkan (§13 notifikasi)', async () => {
+  const now = new Date('2026-10-30T17:30:00Z') // 31 Okt 00.30 WIB (masih 30 Okt di UTC)
+  const h7 = await mk({ dep: '2026-11-07', confirmed: true })
+  const h1 = await mk({ dep: '2026-11-01', confirmed: true })
+  await mk({ dep: '2026-11-02', confirmed: true }) // H-2
+  await mk({ dep: '2026-10-31', confirmed: true }) // hari ini
+  await mk({ dep: '2026-11-08', confirmed: true }) // H-8
+  await mk({ dep: '2026-11-01' }) // belum bayar (kursi belum terkonfirmasi)
+  await mk({ dep: '2026-11-01', confirmed: true, status: 'cancelled' })
+  await mk({ dep: '2026-11-01', confirmed: true, status: 'completed' })
+  await mk({ dep: '2026-11-07', status: 'draft' })
+  await mk({ dep: null, ret: null, confirmed: true })
+  const got = (await departureReminders(now)).filter(r => ids.includes(r.id)).map(r => [r.id, r.type] as const).sort((a, b) => a[0].localeCompare(b[0]))
+  assert.deepEqual(got, ([[h7, 'departure_reminder_7d'], [h1, 'departure_reminder_1d']] as const).slice().sort((a, b) => a[0].localeCompare(b[0])))
+  assert.equal(formatCalendarDate((await departureReminders(now)).find(r => r.id === h1)!.departureDate, DATE_LONG), '1 November 2026', 'tanggal kalender tak bergeser zona')
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────
