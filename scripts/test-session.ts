@@ -5,9 +5,9 @@
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
-import { SignJWT } from 'jose'
 import { prisma } from '@/lib/db'
-import { issueSessionToken, resolveSessionToken } from '@/lib/auth/session'
+import { SignJWT, decodeJwt } from 'jose'
+import { issueSessionToken, resolveSessionToken, revokeOnLogout, STAFF_SESSION_SECONDS } from '@/lib/auth/session'
 import { resetPassword } from '@/lib/auth/accounts'
 import { issueToken } from '@/lib/auth/tokens'
 import { resolveGoogleLogin } from '@/lib/auth/googleAccounts'
@@ -48,6 +48,31 @@ await t('kontrol positif: token baru untuk akun sah → sesi; peran dari DB', as
   await prisma.user.update({ where: { id: u.id }, data: { role: 'superadmin', isPlatformProvider: true, sessionVersion: { increment: 1 } } })
   assert.equal(await resolveSessionToken(tok), null)
   assert.deepEqual(await resolveSessionToken(await issueSessionToken(u.id)), { userId: u.id, role: 'superadmin', isPlatformProvider: true })
+})
+
+await t('SEC-306: umur token staf 12 jam, jamaah 7 hari', async () => {
+  const life = async (role: 'admin' | 'pilgrim') => { const p = decodeJwt(await issueSessionToken((await mk({ role })).id)); return (p.exp ?? 0) - (p.iat ?? 0) }
+  assert.equal(STAFF_SESSION_SECONDS, 12 * 3600)
+  assert.equal(await life('admin'), 12 * 3600)
+  assert.equal(await life('pilgrim'), 7 * 24 * 3600)
+})
+
+await t('SEC-306: logout staf mencabut SEMUA token staf itu (salinan curian ikut mati); logout jamaah tidak menyentuh perangkat lain', async () => {
+  const staff = await mk({ role: 'manager' })
+  const stolen = await issueSessionToken(staff.id)
+  const current = await issueSessionToken(staff.id)
+  assert.equal(await revokeOnLogout(await resolveSessionToken(current)), true)
+  assert.equal(await resolveSessionToken(stolen), null)
+  assert.equal(await resolveSessionToken(current), null)
+  assert.ok(await resolveSessionToken(await issueSessionToken(staff.id)), 'login ulang tetap bisa')
+
+  const pilgrim = await mk()
+  const laptop = await issueSessionToken(pilgrim.id)
+  const phone = await issueSessionToken(pilgrim.id)
+  assert.equal(await revokeOnLogout(await resolveSessionToken(phone)), false)
+  assert.ok(await resolveSessionToken(laptop))
+  assert.equal(await revokeOnLogout(null), false)
+  assert.match(readFileSync('app/api/v1/auth/logout/route.ts', 'utf8'), /await endSession\(\)/)
 })
 
 await t('tanpa token / sampah / ditandatangani rahasia lain → null', async () => {
