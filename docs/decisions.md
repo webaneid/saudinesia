@@ -3812,3 +3812,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 
 **Security check:** security-review berkas berubah (migrasi + trigger, `lib/audit/staff.ts`, route staf/login/ZIP, halaman superadmin) — 0 temuan baru: route tetap berjaga peran di awal, filter staf daftar putih, tak ada nama/email di ringkasan, IP hanya untuk staf. Uji penuh menangkap tiga hal sebelum PR (pemindai `sessionVersion` membaca ringkasan jejak, akun Platform Provider uji yang menyalakan bagi hasil, akun uji tertinggal) — semuanya diperbaiki di uji/struktur, bukan dengan melonggarkan penjaga. Menutup SEC-304. `bun audit` 6 (baseline).
 
+## 2026-11-20 — Deskripsi Situs Wisata tampil buka-tutup di katalog Paket Ziarah
+**Decision:** Deskripsi Situs Wisata (teks kaya) tampil di kartu katalog Paket Ziarah sebagai `<details>` per situs; situs tanpa deskripsi tetap satu baris.
+**Rationale:** Keputusan pemilik (`docs/arsitektur-ziarah.md` §13): kartu tetap ringkas, tanpa halaman/route baru dan tanpa JavaScript klien.
+**Alternatives considered:** halaman publik per situs (lebih kaya/SEO, tapi butuh metadata, sitemap, i18n); ringkasan selalu terlihat (kartu memanjang).
+
+**Security check:** security-review berkas berubah (halaman publik server, CSS) — 0 temuan: isi lewat `RichTextView` (daftar putih node, tanpa HTML mentah), tak ada route/masukan baru. `bun audit` 6 (baseline).
+

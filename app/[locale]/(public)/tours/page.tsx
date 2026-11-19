@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ArrowRight, Landmark, MapPin, Route as RouteIcon, Tag } from 'lucide-react'
+import { ArrowRight, ChevronDown, Landmark, MapPin, Route as RouteIcon, Tag } from 'lucide-react'
 import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
 import { checkoutPath } from '@/lib/checkout/kinds'
@@ -10,6 +10,7 @@ import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { catalogMetadata } from '@/lib/public-content/metadata'
 import { safeExternalUrl } from '@/lib/public-content/links'
 import { formatRupiah } from '@/lib/utils'
+import { hasContent } from '@/lib/rich-text/doc'
 import { ProductImage } from '@/components/shared/ProductImage'
 import { RichTextView } from '@/components/shared/rich-text/RichTextView'
 import { PageHero, type HeroFact } from '@/components/shared/public/PageHero'
@@ -95,8 +96,8 @@ export default async function ToursPage({ params }: Props) {
                         {p.sites.map(({ tourismSite: s }) => {
                           const photo = sitePhotos.get(s.id)
                           const map = safeExternalUrl(s.gmapsUrl)
-                          return (
-                            <li key={s.id} className="flex items-center gap-2.5 text-sm">
+                          const row = (
+                            <>
                               {photo ? (
                                 // eslint-disable-next-line @next/next/no-img-element -- URL presigned MinIO (bucket private), sudah dikecilkan saat unggah
                                 <img src={photo} alt={s.name} loading="lazy" decoding="async" className="h-9 w-9 shrink-0 rounded-lg object-cover" />
@@ -114,7 +115,21 @@ export default async function ToursPage({ params }: Props) {
                                   {t('card.map')}
                                 </a>
                               )}
+                            </>
+                          )
+                          // Deskripsi situs (teks kaya, diatur admin) = buka-tutup per situs — <details> bawaan: tanpa JS, bisa dengan papan ketik.
+                          return hasContent(s.description) ? (
+                            <li key={s.id}>
+                              <details className="group">
+                                <summary className="site-summary">
+                                  {row}
+                                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180" aria-hidden />
+                                </summary>
+                                <RichTextView value={s.description} className="mt-2 rounded-lg bg-brand-light/40 p-3 text-sm text-muted-foreground" />
+                              </details>
                             </li>
+                          ) : (
+                            <li key={s.id} className="flex items-center gap-2.5 text-sm">{row}</li>
                           )
                         })}
                       </ul>
