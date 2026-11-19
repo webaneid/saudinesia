@@ -205,8 +205,11 @@ await t('BUKU KAS (7b-2b): catat → satu entri KELUAR biaya_vendor (akun piliha
   assert.equal((await entries(id)).length, 1, 'ubah catatan tak menyentuh buku kas')
   await updateCostActual(b.id, id, { amount: 350_000, byUserId: staff.id })
   es = await entries(id)
-  assert.deepEqual(es.map(e => [e.refType, e.direction, e.component, Number(e.amountIdr)]), [['cost_actual', 'out', 'biaya_vendor', 300_000], ['reversal', 'in', 'koreksi', 300_000], ['cost_actual', 'out', 'biaya_vendor', 350_000]])
-  assert.equal(es[2]!.refId, `${id}:2`)
+  // Pembalik dan versi baru ditulis di transaksi yang sama → createdAt bisa identik dan urutan cadangan (id UUID) acak; bandingkan sebagai
+  // himpunan, bukan urutan (sebelumnya gagal acak ±1 dari 6 kali, CI #174).
+  const sorted = (rows: unknown[][]) => rows.map(r => JSON.stringify(r)).sort()
+  assert.deepEqual(sorted(es.map(e => [e.refType, e.direction, e.component, Number(e.amountIdr)])), sorted([['cost_actual', 'out', 'biaya_vendor', 300_000], ['reversal', 'in', 'koreksi', 300_000], ['cost_actual', 'out', 'biaya_vendor', 350_000]]))
+  assert.equal(es.find(e => e.refType === 'cost_actual' && Number(e.amountIdr) === 350_000)!.refId, `${id}:2`)
   assert.equal((await prisma.costActual.findUniqueOrThrow({ where: { id } })).cashRefVersion, 2)
   await voidCostActual(b.id, id, { reason: 'salah vendor', byUserId: staff.id })
   es = await entries(id)
