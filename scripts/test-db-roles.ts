@@ -3,11 +3,10 @@
 // TRUNCATE, `COPY … TO PROGRAM`, atau `session_replication_role`; tetapi kunci yang dipakai aplikasi (LOCK TABLE kode booking, advisory) jalan.
 // Hanya pada database sekali pakai dan koneksi superuser (CI: postgres); peran uji bernama acak dan dihapus di akhir.
 import assert from 'node:assert/strict'
-import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { PrismaClient } from '@prisma/client'
-import { APP_ROLE, appRoleSql } from '../prisma/appRole'
+import { APP_ROLE, appRoleSql, appRoleStatements } from '../prisma/appRole'
 
 let failed = 0
 async function t(name: string, fn: () => void | Promise<void>) {
@@ -45,10 +44,9 @@ if (!superuser) {
 } else {
   const role = `saudinesia_app_t${randomBytes(4).toString('hex')}`
   const password = randomBytes(24).toString('hex')
-  const apply = () => {
-    const p = spawnSync('bunx', ['prisma', 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'], { input: appRoleSql(role, password), encoding: 'utf8', env: { ...process.env, DATABASE_URL: dbUrl } })
-    if (p.status !== 0) throw new Error(`prisma db execute gagal: ${(p.stderr ?? '').slice(0, 300)}`)
-  }
+  // Pernyataan yang sama dengan skrip image migrate (appRoleSql = gabungannya), dijalankan lewat koneksi pemilik: `bunx prisma db execute
+  // --stdin` di runner CI Linux melapor sukses tanpa membuat peran, sedangkan jalur image migrate dibuktikan job docker CI.
+  const apply = () => owner.$transaction(appRoleStatements(role, password).map((q) => owner.$executeRawUnsafe(q)))
   const u = new URL(dbUrl); u.username = role; u.password = password
   const app = new PrismaClient({ datasourceUrl: u.toString() })
   const refused = async (sql: string) => {
@@ -58,7 +56,15 @@ if (!superuser) {
     assert.match(String((err as Error).message), /permission denied|must be owner|must be superuser|not allowed|only superuser|privilege/i, sql)
   }
   try {
-    await t('peran diterapkan lewat prisma db execute, dua kali (idempoten)', () => { apply(); apply() })
+    await t('peran diterapkan dua kali (idempoten); skrip image migrate = gabungan pernyataan yang sama', async () => {
+      await apply(); await apply()
+      assert.equal(appRoleSql(role, password), `\n${appRoleStatements(role, password).join(';\n')};\n`)
+    })
+    await t('peran tersimpan: LOGIN, sandi ber-hash SCRAM', async () => {
+      const r = await owner.$queryRawUnsafe<{ login: boolean; kind: string | null; enc: string }[]>(
+        `SELECT rolcanlogin AS login, left(rolpassword, 13) AS kind, current_setting('password_encryption') AS enc FROM pg_authid WHERE rolname = '${role}'`)
+      assert.deepEqual(r, [{ login: true, kind: 'SCRAM-SHA-256', enc: 'scram-sha-256' }])
+    })
     await t('peran aplikasi: bukan superuser, tak bisa membuat db/peran, bukan pemilik tabel', async () => {
       const [r] = await app.$queryRaw<{ u: string; s: boolean; db: boolean; cr: boolean; owned: bigint }[]>`
         SELECT current_user AS u, r.rolsuper AS s, r.rolcreatedb AS db, r.rolcreaterole AS cr,
