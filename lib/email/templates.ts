@@ -158,7 +158,7 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
       }
     case 'departure_reminder_7d':
     case 'departure_reminder_1d': {
-      const days = departureDays(e.type)
+      const days = e.days ?? departureDays(e.type)
       const when = days === 1 ? 'besok' : `${days} hari lagi`
       return {
         subject: `Keberangkatan booking ${e.code} ${when}`,

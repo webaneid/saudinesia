@@ -3783,3 +3783,11 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Alternatives considered:** Status terkini saja tanpa riwayat; alasan tak ditampilkan; riwayat menyimpan alasan (ditolak — teks bebas di tabel append-only menyulitkan hapus akun).
 
 **Security check:** security-review berkas berubah (route admin, layanan + SQL berkunci, migrasi + trigger, halaman jamaah, komponen) — 0 temuan baru; route tetap `requireAdmin` + Zod `.strict()`, SQL ber-parameter, jamaah hanya booking miliknya, riwayat tanpa PII (`VisaStatusEvent.actorId` didaftarkan di pemindai hapus akun). Menutup race pre-existing (Low): dua ubah status serentak kini satu lolos. `bun audit` 6 (baseline).
+
+## 2026-11-19 — Kirim ulang notifikasi dari log, tanpa WhatsApp teks bebas
+**Decision:** Admin bisa mengirim ulang notifikasi invoice, pengingat bayar, pembayaran diterima, dan pengingat berangkat dari Log Notifikasi; pesan DISUSUN ULANG dari data booking terkini (`lib/notifications/resend.ts`) dan dikirim lewat `notify()` (email + WhatsApp, aturan kanal tetap). Kirim WhatsApp teks bebas dari admin tidak dibuat.
+**Rationale:** Keputusan pemilik N1–N4 (`docs/arsitektur-notifikasi.md` §14). Log tidak menyimpan isi kejadian, dan menyimpan isi (tagihan, tautan invoice) di log menambah data sensitif; data terkini juga lebih benar (sisa tagihan, sisa hari). Teks bebas ke WhatsApp memperbesar risiko blokir nomor gateway (ADR-0001).
+**Alternatives considered:** Menyimpan payload kejadian di log lalu mengulang persis (ditolak — data basi + tautan kredensial di log); kirim ulang hanya kanal baris log (pemilik memilih kedua kanal); WA teks bebas dengan batas harian (ditunda).
+
+**Security check:** security-review route baru (admin `requireBookingManage`, id uuid, batas laju per booking sebelum kirim, galat lewat `authFailureResponse`, respons tanpa PII), modul penyusun (isi hanya dari DB, tanpa teks bebas), komponen klien (tanpa impor server) — 0 temuan. `bun audit` tetap baseline 6. Bug Low pre-existing (waktu log di zona proses) diperbaiki dengan `formatInstant`.
+
