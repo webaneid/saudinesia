@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { groupLabelSchema } from '@/lib/validators/groupLabel'
 import { prisma } from '@/lib/db'
 import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { addDays, daysBetween, todayInApp } from '@/lib/time'
@@ -238,7 +239,7 @@ export const draftPilgrimSchema = z.object({
 
 /** Rombongan (§10.8, K11d-4): nama bebas pemesan (teks polos ≤ 60, tanpa karakter kontrol — sama dengan CHECK DB) + rencana berangkat visa bila tanpa tiket. */
 export const bookingGroupSchema = z.object({
-  label: z.string().trim().min(1).max(60, 'Nama rombongan maksimal 60 karakter').regex(/^[^\p{Cc}]*$/u, 'Nama rombongan tidak boleh memuat karakter kontrol').optional(),
+  label: groupLabelSchema.optional(),
   plannedTravelDate: z.string().date().optional(),
 }).strict()
 export type BookingGroupInput = z.infer<typeof bookingGroupSchema>
