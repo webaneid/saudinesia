@@ -3758,7 +3758,7 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Security check:** security-review 7 berkas — 0 temuan; `bun audit` tetap 6 (tak ada yang baru).
 
 ## 2026-11-19 — Harga jual komponen dipindah ke form Komponen Biaya (koreksi §22 C2)
-**Decision:** Harga jual per komponen diisi di form tambah/ubah komponen (kolom "Harga Jual (Rupiah)": kosong = rekomendasi, diisi = manual + catatan), bukan editor sebaris terpisah ber-ikon `Tag`; `CostComponentPriceEditor` dihapus. Penyimpanan tetap lewat route `admin/pricing/points` (tak ada route/kolom baru).
+**Decision:** Harga jual per komponen diketik langsung di kotak "Harga Jual Rekomendasi" form tambah/ubah komponen (angka awal = rekomendasi; diubah = manual + catatan; pemilik meminta kotak ITU yang bisa diedit, bukan kolom tambahan), bukan editor sebaris terpisah ber-ikon `Tag`; `CostComponentPriceEditor` dihapus. Penyimpanan tetap lewat route `admin/pricing/points` (tak ada route/kolom baru).
 **Rationale:** Pemilik mencoba di Haji dan tak menemukan cara mengubah harga jual — ia mencarinya di form tempat biaya diinput. Satu tempat untuk biaya dan harga jual komponen.
 **Alternatives considered:** Mempertahankan dua jalur (form + ikon baris) — ditolak, dua cara untuk hal yang sama membingungkan.
 
