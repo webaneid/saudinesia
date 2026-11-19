@@ -3805,3 +3805,10 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 
 **Security check:** security-review berkas berubah (compose, Dockerfile, `.env.production.example`, `buat-env-production.sh`, workflow CI, `prisma/appRole.ts`, `prisma/apply-app-role.ts`, uji) — 0 temuan baru: sandi divalidasi alfanumerik sebelum ditempel ke `ALTER ROLE` dan dikirim lewat stdin, nama peran konstan, tak ada port/rahasia baru di image. Menutup SEC-303. `bun audit` 6 (baseline).
 
+## 2026-11-19 — Jejak keamanan staf append-only (audit go-live G3)
+**Decision:** Buat/ubah akun staf, buka kunci login, lepas WhatsApp, login staf (berhasil dan gagal), dan unduhan ZIP dokumen jamaah dicatat di `staff_audit_events` (append-only, tanpa FK, ringkasan tanpa data pribadi, IP utuh) HANYA lewat `lib/audit/staff.ts`, di transaksi yang sama dengan perubahan; login berhasil dan ZIP fail-closed. Superadmin membacanya di Sistem → Jejak Staf; kejadian akun bayangan Platform Provider tak terlihat oleh klien.
+**Rationale:** SEC-304 (OWASP A09) — sebelumnya hanya `console.info` (hilang saat log diputar) atau tak tercatat sama sekali. Keputusan pemilik: login staf saja, IP utuh, halaman sekarang.
+**Alternatives considered:** memperluas `settings_audit` (bentuknya untuk setelan: `entity`/`entityId`, tanpa IP/booking); mencatat login jamaah (volume besar + IP pelanggan); IP disamarkan atau tanpa IP; data saja tanpa halaman.
+
+**Security check:** security-review berkas berubah (migrasi + trigger, `lib/audit/staff.ts`, route staf/login/ZIP, halaman superadmin) — 0 temuan baru: route tetap berjaga peran di awal, filter staf daftar putih, tak ada nama/email di ringkasan, IP hanya untuk staf. Uji penuh menangkap tiga hal sebelum PR (pemindai `sessionVersion` membaca ringkasan jejak, akun Platform Provider uji yang menyalakan bagi hasil, akun uji tertinggal) — semuanya diperbaiki di uji/struktur, bukan dengan melonggarkan penjaga. Menutup SEC-304. `bun audit` 6 (baseline).
+

@@ -7,14 +7,17 @@ import { err } from '@/lib/validators'
 import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { groupView } from '@/lib/booking/groups'
+import { auditIp, recordStaffEvent } from '@/lib/audit/staff'
+import { logError } from '@/lib/log'
 
 export const dynamic = 'force-dynamic'
 
 type Params = { params: Promise<{ id: string }> }
 
 export async function GET(req: NextRequest, { params }: Params) {
+  let actorId: string
   try {
-    await requireAdmin()
+    actorId = (await requireAdmin()).userId
   } catch (e) { return authFailureResponse(e, 'v1/admin/bookings/[id]/documents/zip/GET') }
 
   const { id: bookingId } = await params
@@ -76,11 +79,13 @@ export async function GET(req: NextRequest, { params }: Params) {
     return { doc, path }
   })
   const zip = new JSZip()
+  let added = 0
 
   await Promise.all(
     entries.map(async ({ doc, path }) => {
       try {
         zip.file(path, await getObjectBuffer(doc.objectKey))
+        added++
       } catch {
         // Skip files that can't be fetched (log silently, don't break ZIP)
       }
@@ -89,11 +94,20 @@ export async function GET(req: NextRequest, { params }: Params) {
 
   const zipBuffer = await zip.generateAsync({ type: 'arraybuffer', compression: 'DEFLATE' })
 
+  // Jejak staf (SEC-304) SEBELUM berkas diserahkan: jejak gagal ditulis = tidak terunduh. Hanya jumlah, tanpa nama jamaah.
+  try {
+    await recordStaffEvent(prisma, { action: 'documents_zip', actorId, bookingId, ip: auditIp(req), summary: { files: added, pilgrims: new Set(entries.map(e => e.doc.pilgrimId)).size } })
+  } catch (e) {
+    logError('admin/bookings/documents/zip staff-audit', e)
+    return NextResponse.json(err('Internal server error'), { status: 500 })
+  }
+
   return new NextResponse(zipBuffer as BodyInit, {
     headers: {
       'Content-Type':        'application/zip',
       'Content-Disposition': `attachment; filename="docs-${booking.bookingCode}.zip"`,
       'Content-Length':      String(zipBuffer.byteLength),
+      'Cache-Control':       'no-store', // dokumen jamaah: jangan disimpan cache perantara/peramban (cek manual audit go-live)
     },
   })
 }
