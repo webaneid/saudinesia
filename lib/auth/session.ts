@@ -7,7 +7,10 @@ import { SESSION_SAME_SITE, cookieSecure } from '@/lib/auth/cookieFlags'
 import { requireJwtSecret } from '@/lib/auth/secret'
 
 const COOKIE_NAME = 'snd-session'
-const COOKIE_MAX_AGE = 60 * 60 * 24 * 7 // 7 days
+// Umur sesi: jamaah 7 hari; staf 12 jam (satu hari kerja) — token staf yang tersalin cepat kedaluwarsa (SEC-306).
+const PILGRIM_SESSION_SECONDS = 60 * 60 * 24 * 7
+export const STAFF_SESSION_SECONDS = 60 * 60 * 12
+const sessionSeconds = (role: UserRole) => (ADMIN_ROLES.includes(role) ? STAFF_SESSION_SECONDS : PILGRIM_SESSION_SECONDS)
 
 function getSecret(): Uint8Array {
   return new TextEncoder().encode(requireJwtSecret())
@@ -36,6 +39,10 @@ export { ADMIN_ROLES, MANAGER_ROLES, SUPERADMIN_ROLES }
  * dicabut mendapat token ber-versi baru yang lolos pencabutan (race login-vs-reset, S18-B).
  */
 export async function issueSessionToken(userId: string, expectedVersion?: number): Promise<string> {
+  return (await issue(userId, expectedVersion)).token
+}
+
+async function issue(userId: string, expectedVersion?: number): Promise<{ token: string; maxAge: number }> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: { role: true, sessionVersion: true, isActive: true, emailVerifiedAt: true },
@@ -43,21 +50,23 @@ export async function issueSessionToken(userId: string, expectedVersion?: number
   if (!user || !user.isActive || !user.emailVerifiedAt) throw new Error('Unauthorized')
   if (expectedVersion !== undefined && user.sessionVersion !== expectedVersion) throw new Error('Unauthorized')
 
-  return new SignJWT({ userId, role: user.role, ver: user.sessionVersion })
+  const maxAge = sessionSeconds(user.role)
+  const token = await new SignJWT({ userId, role: user.role, ver: user.sessionVersion })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
-    .setExpirationTime('7d')
+    .setExpirationTime(`${maxAge}s`)
     .sign(getSecret())
+  return { token, maxAge }
 }
 
 export async function createSession(userId: string, expectedVersion?: number): Promise<void> {
-  const token = await issueSessionToken(userId, expectedVersion)
+  const { token, maxAge } = await issue(userId, expectedVersion)
   const jar = await cookies()
   jar.set(COOKIE_NAME, token, {
     httpOnly: true,
     secure: cookieSecure(),
     sameSite: SESSION_SAME_SITE, // Lax — lihat lib/auth/cookieFlags.ts (Strict merusak login Google & tautan dari email)
-    maxAge: COOKIE_MAX_AGE,
+    maxAge,
     path: '/',
   })
 }
@@ -98,6 +107,22 @@ export async function getSession(): Promise<SessionPayload | null> {
 export async function clearSession(): Promise<void> {
   const jar = await cookies()
   jar.delete(COOKIE_NAME)
+}
+
+/**
+ * Keluar (route logout). Staf: `sessionVersion` dinaikkan — SEMUA token staf itu (termasuk salinan yang dicuri) langsung tak berlaku,
+ * di semua perangkat (SEC-306). Jamaah: hanya cookie perangkat ini yang dihapus (keluar di HP tidak memaksa keluar di laptop).
+ */
+export async function endSession(): Promise<void> {
+  await revokeOnLogout(await getSession())
+  await clearSession()
+}
+
+/** Bagian DB dari `endSession` (terpisah supaya teruji tanpa konteks request). Mengembalikan true bila sesi dicabut. */
+export async function revokeOnLogout(session: SessionPayload | null): Promise<boolean> {
+  if (!session || !ADMIN_ROLES.includes(session.role)) return false
+  await prisma.user.update({ where: { id: session.userId }, data: { sessionVersion: { increment: 1 } }, select: { id: true } })
+  return true
 }
 
 export async function requireSession(): Promise<SessionPayload> {

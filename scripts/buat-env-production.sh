@@ -38,6 +38,8 @@ PW_REDIS="$(acak 24)"
     -e "s#^DATABASE_URL=.*#DATABASE_URL=postgresql://saudinesia_app:$PW_APP@postgres:5432/saudinesia#" \
     -e "s#^REDIS_PASSWORD=\$#REDIS_PASSWORD=$PW_REDIS#" \
     -e "s#^REDIS_URL=.*#REDIS_URL=redis://:$PW_REDIS@redis:6379#" \
+    -e "s#^MINIO_ROOT_USER=\$#MINIO_ROOT_USER=root$(acak 6)#" \
+    -e "s#^MINIO_ROOT_PASSWORD=\$#MINIO_ROOT_PASSWORD=$(acak 24)#" \
     -e "s#^MINIO_ACCESS_KEY=\$#MINIO_ACCESS_KEY=saudinesia$(acak 4)#" \
     -e "s#^MINIO_SECRET_KEY=\$#MINIO_SECRET_KEY=$(acak 24)#" \
     -e "s#^JWT_SECRET=\$#JWT_SECRET=$(acak 32)#" \

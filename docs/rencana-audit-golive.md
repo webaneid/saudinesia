@@ -57,7 +57,7 @@ Perlu dicek manual (VPS/produksi): branch protection, SSH key-only + firewall, b
 - **G1 — SELESAI 2026-11-19** — PII di log: `lib/log` + klien Prisma + penggantian pemanggil + penjaga + aturan CLAUDE.md (menutup SEC-228).
 - **G2 — SELESAI 2026-11-19** — peran database terpisah (G-1): `migrator` pemilik skema, `app` DML saja; compose + `.env.production.example` + `docs/deployment.md` + uji bahwa peran app tak bisa mematikan trigger.
 - **G3 — SELESAI 2026-11-19 (§6 rencana, §7 hasil)** — jejak staf + ZIP (G-2): tabel jejak append-only, ditulis di transaksi yang sama oleh `lib/auth/adminUsers.ts`, login staf, dan unduhan ZIP.
-- G-1 = SEC-303, G-2 = SEC-304; G-3/G-4/G-5 = SEC-305..307 di Register Temuan Security, menyusul sesudah go-live.
+- G-1 = SEC-303, G-2 = SEC-304; G-3/G-4/G-5 = SEC-305..307 di Register Temuan Security — SELESAI 2026-11-20 (lihat register).
 
 ## 4. Hasil G1 (2026-11-19)
 

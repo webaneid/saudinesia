@@ -31,8 +31,8 @@ await t('pemindai menemukan route (bukan lulus karena direktori kosong)', () => 
 })
 
 // Pemeriksaan auth yang dikenali. Route publik sengaja tidak memakainya, tetapi route publik tidak boleh menjawab `ok(null)`.
-const AUTH_CALL = /\b(require(Session|Admin|Manager|SuperAdmin)|getSession|resolveSession|clearSession)\b/
-// Satu-satunya route yang sah menjawab ok(null) tanpa pemeriksaan "siapa kamu": logout (memanggil clearSession, sudah ikut AUTH_CALL).
+const AUTH_CALL = /\b(require(Session|Admin|Manager|SuperAdmin)|getSession|resolveSession|clearSession|endSession)\b/
+// Satu-satunya route yang sah menjawab ok(null) tanpa pemeriksaan "siapa kamu": logout (endSession → clearSession, ikut AUTH_CALL).
 const STUB_ALLOWLIST = new Set<string>([])
 
 await t('SEC-07: tidak ada route stub yang menjawab ok(null) tanpa pemeriksaan auth', () => {
@@ -173,7 +173,7 @@ await t('SEC-14: reset-limits hanya superadmin, tanpa body, dan kunci login mema
 
 await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa POSTGRES_PASSWORD, Redis berpassword, generator env menyamakan sandi', () => {
   const compose = read('docker-compose.prod.yml')
-  const services = (compose.slice(compose.indexOf('\nservices:'), compose.indexOf('\nnetworks:')).match(/^  [a-z]+:\s*$/gm) ?? []).length
+  const services = (compose.slice(compose.indexOf('\nservices:'), compose.indexOf('\nnetworks:')).match(/^  [a-z][a-z-]*:\s*$/gm) ?? []).length
   assert.ok(services >= 6, `hanya ${services} service terbaca — penjaga ini tak bermakna`)
   assert.equal((compose.match(/<<: \*hardening/g) ?? []).length, services, 'setiap service harus memakai *hardening (no-new-privileges)')
   assert.match(compose, /x-hardening: &hardening\n  security_opt:\n    - no-new-privileges:true/)

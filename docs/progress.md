@@ -615,7 +615,7 @@ Rencana: `docs/arsitektur-i18n-frontend.md` (fase I1–I6; keputusan pemilik K1�
 - [x] Role check inside every admin/superadmin Route Handler (beyond middleware) — **Rapikan 2026-11-19:** tertutup — dijaga `scripts/test-routes.ts` + `requireAdminPage` (`test-session.ts`)
 - [x] No PII in application logs (audit all console.log calls) — **2026-11-19 (`docs/rencana-audit-golive.md` G1, SEC-228):** satu pintu `lib/log` (`logError`/`errorSummary`/`redactPii`), klien Prisma tak lagi mencetak argumen query, ±210 pemanggilan diganti; dijaga `scripts/test-log-pii.ts`
 - [~] UU PDP compliance notice — registrasi **selesai** (lihat section Retrofit Gaps #2, consent checkbox + `/privacy`), notice di layar upload dokumen **masih pending**
-- [~] Penetration-test checklist (OWASP Top 10) — **2026-11-19:** audit A01–A10 selesai (`docs/rencana-audit-golive.md` §2: 0 Critical/High baru); G2 peran DB terpisah SELESAI (SEC-303, web = `saudinesia_app` DML saja); G3 jejak staf/ZIP SELESAI (SEC-304, Sistem → Jejak Staf); Low SEC-305..307 menyusul; cek manual VPS (firewall, SSH, backup + uji restore, alert)
+- [~] Penetration-test checklist (OWASP Top 10) — **2026-11-19:** audit A01–A10 selesai (`docs/rencana-audit-golive.md` §2: 0 Critical/High baru); G2 peran DB terpisah SELESAI (SEC-303, web = `saudinesia_app` DML saja); G3 jejak staf/ZIP SELESAI (SEC-304, Sistem → Jejak Staf); Low SEC-305..307 SELESAI 2026-11-20 (user MinIO aplikasi, logout staf mencabut sesi + sesi staf 12 jam, cek kewajaran kurs); cek manual VPS (firewall, SSH, backup + uji restore, alert)
 
 ---
 

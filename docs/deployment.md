@@ -119,7 +119,13 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 
 2. GitHub **Variables** (bukan Secrets) untuk build-arg `NEXT_PUBLIC_*` (nama bisnis, WA, alamat, rekening, URL aplikasi,
    `NEXT_PUBLIC_MINIO_PUBLIC_URL` = `https://<FILES_DOMAIN>/saudinesia-docs`). Image bersifat spesifik-environment.
-3. Jalankan workflow **MinIO Image** (Actions → Run workflow) sekali.
+3. Jalankan workflow **MinIO Image** (Actions → Run workflow) sekali — dan lagi setiap `infra/minio` berubah (otomatis saat merge ke `main`);
+   tag image = `<MINIO_VERSION>-r<IMAGE_REV>` (`infra/minio/Dockerfile`, harus sama dengan `docker-compose.prod.yml`).
+   **MinIO dua kredensial (SEC-305):** `MINIO_ROOT_USER/PASSWORD` = root (hanya kontainer `minio` dan `minio-setup`); `MINIO_ACCESS_KEY/SECRET_KEY`
+   = user APLIKASI yang dipakai web, dibuat/diperbarui `minio-setup` tiap deploy dengan policy hanya bucket `saudinesia-docs`. Server yang
+   sudah berjalan sebelum SEC-305 (root = `MINIO_ACCESS_KEY`): salin nilai lama `MINIO_ACCESS_KEY/SECRET_KEY` ke `MINIO_ROOT_USER/PASSWORD`,
+   isi `MINIO_ACCESS_KEY/SECRET_KEY` baru (`openssl rand -hex 4` / `-hex 24`), perbarui remote rclone `backup-minio.sh` ke kunci aplikasi, lalu deploy.
+   `minio-setup` menolak jalan bila kunci aplikasi = root.
 4. DNS: A record `APP_DOMAIN` dan `FILES_DOMAIN` ke IP VPS **sebelum** Caddy dinyalakan.
 5. Server: Docker + Compose, folder `/opt/app` berisi `docker-compose.prod.yml`, `Caddyfile`, `.env.production.example`,
    `scripts/buat-env-production.sh`; jalankan skrip env (mengisi `APP_URL` otomatis); isi manual `WA_GATEWAY_*`, `RESEND_*`.

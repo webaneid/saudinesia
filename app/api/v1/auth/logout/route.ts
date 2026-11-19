@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { clearSession } from '@/lib/auth/session'
+import { endSession } from '@/lib/auth/session'
 import { ok } from '@/lib/validators'
 import { safeLocale } from '@/lib/utils/locale'
 
@@ -7,7 +7,8 @@ import { safeLocale } from '@/lib/utils/locale'
 // halaman JSON mentah — kini dialihkan 303 ke halaman masuk dalam bahasa yang dikirim (audit front-end 2026-11-11). Locale lewat daftar putih
 // (`safeLocale`), tujuan selalu path relatif tetap — tak ada pengalihan ke alamat luar.
 export async function POST(req: Request) {
-  await clearSession()
+  // Staf: sesi di semua perangkat dicabut (SEC-306); jamaah: cookie perangkat ini saja.
+  await endSession()
   const type = req.headers.get('content-type') ?? ''
   if (type.startsWith('application/x-www-form-urlencoded')) {
     // Teks biasa, bukan formData(): route ini bukan unggahan (batas 1 MB Caddy berlaku; scripts/test-body-limit.ts).
