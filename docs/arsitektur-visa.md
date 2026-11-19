@@ -94,3 +94,26 @@ Visa plus → "Dipesan bersama: … Hubungi admin" (checkout pendek hanya memuat
 `scripts/test-visa-rows.ts` (baris Visa ↔ slot jamaah), `test-booking-engine-core.ts` (aturan 7 jenis, penemu sumber penilai), `test-visa-v3-migration.ts`,
 `test-booking-members.ts` (+ migrasi), `test-document-requirements.ts`, `test-document-completeness.ts`, `test-pilgrim-requirements.ts`, `test-pilgrim-review.ts`
 (Syarikah mensyaratkan terverifikasi), `test-admin-delete.ts` (rujukan FK visa), `test-price-engine.ts`/`test-booking-snapshot.ts` (tier).
+
+## 9. Linimasa status visa per jamaah (SELESAI & TERVERIFIKASI 2026-11-19 — V1 langkah + tanggal, V2 alasan penolakan tampil ke jamaah, V3 kolom tabel + halaman per jamaah)
+
+**Recheck kode (2026-11-19):**
+- Status visa = satu kolom `VisaApplication.status` (enum 6 nilai) + `submittedAt`/`issuedAt`; transisi di `lib/validators/visaStatus.ts`. TIDAK ada riwayat: siapa/kapan mengubah tiap langkah tak tercatat.
+- Satu-satunya penulis: `PUT api/v1/admin/visa/[pilgrimId]/status` (tombol `VisaActions` di detail booking admin). Status lama dibaca DI LUAR transaksi lalu dinilai — dua klik serentak bisa sama-sama lolos (pre-existing, Low).
+- Jamaah TIDAK pernah melihat status visanya: halaman booking dan halaman per jamaah hanya menampilkan nama produk visa. Perubahan status hanya sampai lewat email `visa_status_change`.
+- `notes`/`rejectionReason` dikosongkan saat hapus akun (`lib/account/deletion.ts`).
+
+**Rencana:**
+1. Tabel append-only `visa_status_events` (`visaApplicationId`, `fromStatus?`, `toStatus`, `at` timestamptz, `byUserId?`) — trigger DB menolak UPDATE/DELETE; tanpa teks bebas. Backfill dari `submittedAt`/`issuedAt` yang ada (status lain tanpa waktu → tidak ditebak).
+2. Penulis tunggal `lib/visa/status.ts` (`changeVisaStatus`): kunci baris `visa_applications` `FOR UPDATE`, nilai transisi di DALAM kunci (menutup race), tulis status + event dalam satu transaksi; route jadi tipis. Dijaga uji penemu sumber.
+3. Tampilan: linimasa 6 langkah (Menunggu dokumen → Dokumen lengkap → Dikirim ke Syarikah → Diproses → Terbit / Ditolak) dengan tanggal tiap langkah yang tercatat — sisi jamaah sesuai V1/V3, sisi admin di panel jamaah booking (+ nama petugas).
+4. Uji: transisi sah/tak sah di dalam kunci, event append-only, backfill migrasi, jamaah hanya melihat booking miliknya, i18n id/en.
+
+**Keputusan pemilik (2026-11-19):** V1 = langkah + tanggal; V2 = alasan penolakan ditampilkan ke jamaah (catatan internal `notes` tidak); V3 = lencana di kolom "Visa" tabel jamaah + linimasa lengkap di halaman per jamaah.
+
+**As-built (2026-11-19):**
+- Migrasi `20261208090000_visa_status_events`: tabel `visa_status_events` (`fromStatus?`, `toStatus`, `actorId?` SET NULL, `createdAt` timestamptz), CHECK `fromStatus <> toStatus`, trigger append-only (hanya `actorId` boleh jadi NULL; DELETE hanya sebagai cascade sesudah pengajuan induk terhapus — revisi yang membuang visa ikut membuang riwayatnya). Isi ulang: `submittedAt` → `submitted_to_syarikah`, `issuedAt` → `issued` (`fromStatus` NULL, waktu `AT TIME ZONE 'UTC'`).
+- Penulis tunggal `lib/visa/status.ts` `changeVisaStatus`: kunci booking (FOR SHARE) → jamaah booking (FOR SHARE) → pengajuan (FOR UPDATE), transisi + syarat terverifikasi dinilai di dalam kunci (menutup race dua klik — pre-existing Low), status + riwayat satu transaksi, `retryConflict`. Alasan penolakan wajib (≥ 3, ≤ 1000) saat menolak (`visaStatusChangeSchema`), dikosongkan saat diproses ulang. Route `PUT admin/visa/[pilgrimId]/status` tipis.
+- Baca: `visaEventsOf(ids, { withActor })` (`lib/visa/events.ts`; nama petugas hanya untuk staf); murni `visaTimeline` (`lib/visa/timeline.ts`: 4 langkah proses + Terbit/Ditolak, putaran terakhir sesudah kembali dari Ditolak).
+- UI: `components/shared/visa/VisaTimeline` (satu komponen jamaah + admin, teks `shared.visa.*` id/en); kolom "Visa" di `PilgrimSlotsTable` (muncul bila ada jamaah bervisa); halaman per jamaah `bookings/[id]/jamaah/[pilgrimId]`; panel "Status visa" di detail booking admin + `VisaActions` (isian alasan saat menolak, `router.refresh()`).
+- Uji: `scripts/test-visa-status.ts` (murni, skema, layanan termasuk serentak, append-only/cascade/CHECK, isi ulang migrasi, penjaga penulis tunggal); `test-pilgrim-review` diarahkan ke penulis baru; `test-deletion` mendaftarkan `VisaStatusEvent.actorId`. Browser server audit: admin Dokumen Lengkap → Syarikah ditolak (belum terverifikasi) → jamaah terverifikasi sampai Ditolak dengan alasan; jamaah melihat linimasa id/en tanpa nama petugas + alasan. Galat yang ditemukan uji browser: argumen `formatInstant` tertukar (zona vs bahasa) — diperbaiki.

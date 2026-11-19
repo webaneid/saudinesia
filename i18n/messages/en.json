@@ -1023,6 +1023,20 @@
       "full_board": "Full board",
       "half_board": "Half board",
       "room_only": "Room only (no breakfast)"
+    },
+    "visa": {
+      "title": "Visa status",
+      "current": "Current",
+      "reasonTitle": "Reason for rejection",
+      "column": "Visa",
+      "status": {
+        "pending_documents": "Awaiting documents",
+        "documents_complete": "Documents complete",
+        "submitted_to_syarikah": "Sent to Syarikah",
+        "in_review": "In process",
+        "issued": "Visa issued",
+        "rejected": "Rejected"
+      }
     }
   },
   "checkout": {

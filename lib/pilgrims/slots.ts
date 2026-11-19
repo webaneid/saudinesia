@@ -1,4 +1,4 @@
-import type { PilgrimReviewStatus, Prisma } from '@prisma/client'
+import type { PilgrimReviewStatus, Prisma, VisaStatus } from '@prisma/client'
 import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
 import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
 import { completeness, isEmptyValue } from '@/lib/manifest/values'
@@ -16,7 +16,7 @@ type PilgrimInput = {
   savedPilgrimId: string | null
   fieldValues: Prisma.JsonValue
   reviewStatus: PilgrimReviewStatus
-  visaApplication: { visaProductId: string | null; plannedTravelDate: Date | null } | null
+  visaApplication: { visaProductId: string | null; plannedTravelDate: Date | null; status?: VisaStatus } | null
 }
 
 export type { PilgrimSlot, SlotDocument } from './slotTypes'
@@ -54,6 +54,7 @@ export async function bookingPilgrimSlots(bookingId: string, departureDate: Date
       docs: { done: docsDone, required: required.length },
       ready: data.complete && docsDone === required.length,
       reviewStatus: p.reviewStatus,
+      visa: p.visaApplication?.status ?? null,
       rows: fieldRows(fields, values, locale),
       documents: items.map(x => ({ key: x.key, label: x.label, required: x.required, state: x.state, reusable: x.reusable })),
     }

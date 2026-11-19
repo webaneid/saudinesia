@@ -15,6 +15,8 @@ import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { payableBanks } from '@/lib/invoice/banks'
 import type { BankSnapshot } from '@/lib/invoice/issue'
 import type { TaxLine } from '@/lib/invoice/tax'
+import { VisaTimeline } from '@/components/shared/visa/VisaTimeline'
+import { visaEventsOf } from '@/lib/visa/events'
 import { VisaActions } from './VisaActions'
 import { MuthowifAssignPanel } from './MuthowifAssignPanel'
 import { PilgrimReviewPanel } from './PilgrimReviewPanel'
@@ -80,6 +82,8 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
   const selectedId = booking.pilgrims.some(p => p.id === periksa) ? periksa : booking.pilgrims.find(p => p.reviewStatus === 'submitted')?.id
   const selected = booking.pilgrims.find(p => p.id === selectedId)
   const selectedSlot = slots.find(x => x.id === selectedId)
+  // Linimasa visa jamaah yang diperiksa (docs/arsitektur-visa.md §9) — staf melihat nama petugas.
+  const visaEvents = selected?.visaApplication ? (await visaEventsOf([selected.visaApplication.id], { withActor: true })).get(selected.visaApplication.id) ?? [] : []
   const manageHref = (pid: string) => `/${locale}/admin/bookings/${id}/pilgrims/${pid}`
   const nextEmpty = slots.find(x => !x.filled)
   // Visa per jamaah diringkas: produk + harga satuan sama → satu baris "3 jamaah × Rp … = Rp …" (lib/booking/orderSummary.ts), harga = jual beku berlaku.
@@ -432,7 +436,11 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
                 requirements={(check?.items ?? []).map(i => ({ documentTypeId: i.documentTypeId, label: i.label, required: i.required, reusable: i.reusable }))}
               />
               {selected.visaApplication && (
-                <VisaActions pilgrimId={selected.id} visaAppId={selected.visaApplication.id} currentStatus={selected.visaApplication.status} />
+                <div className="space-y-3 rounded-xl border border-admin-line p-4">
+                  <p className="m-0 text-[12px] font-semibold uppercase tracking-wide text-admin-muted">Status visa</p>
+                  <VisaTimeline status={selected.visaApplication.status} events={visaEvents} rejectionReason={selected.visaApplication.rejectionReason} locale={locale} />
+                  <VisaActions key={`${selected.id}:${selected.visaApplication.status}`} pilgrimId={selected.id} currentStatus={selected.visaApplication.status} />
+                </div>
               )}
             </div>
           </div>
