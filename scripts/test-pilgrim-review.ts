@@ -278,8 +278,10 @@ await t('SUMBER: penulis tunggal status/riwayat/tautan; route memakai layanan; j
   assert.deepEqual(hits, ['lib/account/deletion.ts', 'lib/account/erasureSweep.ts', 'lib/pilgrims/review.ts'])
   assert.ok(readFileSync('app/api/v1/bookings/[id]/pilgrims/[pilgrimId]/submit/route.ts', 'utf8').includes('onboardingRefusal'))
   assert.ok(readFileSync('lib/documents/service.ts', 'utf8').match(/reopenForChangedDocument/g)!.length >= 3)
-  assert.ok(readFileSync('app/api/v1/admin/visa/[pilgrimId]/status/route.ts', 'utf8').includes(`reviewStatus !== 'verified'`))
-  assert.ok(readFileSync('app/api/v1/admin/visa/[pilgrimId]/status/route.ts', 'utf8').includes('FOR SHARE'), 'status pemeriksaan dibaca di dalam kunci (SEC-202)')
+  // Sejak linimasa visa (docs/arsitektur-visa.md §9) syarat Syarikah dinilai penulis tunggal lib/visa/status.ts, dipanggil route.
+  assert.ok(readFileSync('app/api/v1/admin/visa/[pilgrimId]/status/route.ts', 'utf8').includes('changeVisaStatus('))
+  assert.ok(readFileSync('lib/visa/status.ts', 'utf8').includes(`reviewStatus !== 'verified'`))
+  assert.ok(/"booking_pilgrims"[^`]*FOR SHARE/.test(readFileSync('lib/visa/status.ts', 'utf8')), 'status pemeriksaan dibaca di dalam kunci (SEC-202)')
   assert.ok(readFileSync('lib/booking/revise.ts', 'utf8').includes('reopenForChangedRequirements('), 'visa paket lewat revisi membuka ulang (SEC-201)')
 })
 

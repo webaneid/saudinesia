@@ -11,6 +11,7 @@ import { Modal } from '@/components/shared/Modal'
 import { DataTable, type Column } from '@/components/shared/data-table/DataTable'
 import { ActionLink, KindButton, RowActions } from '@/components/shared/data-table/RowActions'
 import { REVIEW_TONE, isReviewLocked } from '@/lib/pilgrims/reviewState'
+import { VISA_TONE_PUBLIC } from '@/lib/visa/timeline'
 import type { PilgrimSlot } from '@/lib/pilgrims/slotTypes'
 import { useApiError } from '@/components/shared/useApiError'
 
@@ -47,6 +48,7 @@ export function PilgrimSlotsTable({ total, slots, addHref, deleteEndpoint }: Pro
   const router = useRouter()
   const t = useTranslations('shared.pilgrims.slots')
   const tr = useTranslations('shared.review')
+  const tv = useTranslations('shared.visa')
   const errorText = useApiError()
   const [viewing, setViewing] = useState<SlotRow | null>(null)
   const [deleting, setDeleting] = useState<SlotRow | null>(null)
@@ -92,6 +94,7 @@ export function PilgrimSlotsTable({ total, slots, addHref, deleteEndpoint }: Pro
         : <Badge variant={s.docs.done === s.docs.required ? 'success' : 'warning'}>{s.docs.done}/{s.docs.required}</Badge>,
     },
     { key: 'status', header: t('status'), cell: s => <Badge variant={REVIEW_TONE[s.reviewStatus]}>{tr(s.reviewStatus)}</Badge> },
+    ...(slots.some(s => s.visa) ? [{ key: 'visa', header: tv('column'), cell: (s: SlotRow) => s.visa ? <Badge variant={VISA_TONE_PUBLIC[s.visa]}>{tv(`status.${s.visa}`)}</Badge> : <span className="text-muted-foreground">-</span> }] : []),
     {
       key: 'actions', header: '', actions: true, cell: s => {
         const locked = isReviewLocked(s.reviewStatus)

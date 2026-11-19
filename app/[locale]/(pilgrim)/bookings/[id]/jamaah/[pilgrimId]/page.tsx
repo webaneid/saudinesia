@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
-import { ArrowLeft, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ArrowLeft, ChevronLeft, ChevronRight, Stamp } from 'lucide-react'
+import { VisaTimeline } from '@/components/shared/visa/VisaTimeline'
+import { visaEventsOf } from '@/lib/visa/events'
 import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { safeLocale } from '@/lib/utils/locale'
@@ -37,7 +39,7 @@ export default async function BookingPilgrimPage({ params }: Props) {
     where: { id, userId: session.userId, status: { not: 'draft' } }, // draf = urusan admin, tak tampil ke jamaah
     select: {
       id: true, bookingCode: true, status: true, departureDate: true,
-      pilgrims: { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { visaProductId: true, plannedTravelDate: true, visaProduct: { select: { name: true } } } } } },
+      pilgrims: { orderBy: { id: 'asc' }, select: { ...BOOKING_PILGRIM_SAFE_SELECT, visaApplication: { select: { id: true, status: true, rejectionReason: true, visaProductId: true, plannedTravelDate: true, visaProduct: { select: { name: true } } } } } },
     },
   })
   if (!booking) notFound()
@@ -49,6 +51,9 @@ export default async function BookingPilgrimPage({ params }: Props) {
   const t = await getTranslations({ locale: lang, namespace: 'pilgrimArea.pilgrim' })
   const tr = await getTranslations({ locale: lang, namespace: 'shared.review' })
   const { slots, checklists, fieldsByPilgrim } = await bookingPilgrimSlots(booking.id, booking.departureDate, booking.pilgrims, lang)
+  // Linimasa visa (docs/arsitektur-visa.md §9): tanpa nama petugas di sisi jamaah.
+  const visaEvents = p.visaApplication ? (await visaEventsOf([p.visaApplication.id])).get(p.visaApplication.id) ?? [] : []
+  const tv = await getTranslations({ locale: lang, namespace: 'shared.visa' })
   const slot = slots[index]!
   const check = checklists.get(p.id)
   const fields = fieldsByPilgrim.get(p.id) ?? []
@@ -92,6 +97,13 @@ export default async function BookingPilgrimPage({ params }: Props) {
           <Badge variant={REVIEW_TONE[p.reviewStatus]}>{tr(p.reviewStatus)}</Badge>
         </div>
       </div>
+
+      {p.visaApplication && (
+        <div className="rounded-xl border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 font-semibold"><Stamp className="h-4 w-4 text-primary" aria-hidden /> {tv('title')}</h2>
+          <VisaTimeline status={p.visaApplication.status} events={visaEvents} rejectionReason={p.visaApplication.rejectionReason} locale={lang} />
+        </div>
+      )}
 
       <div className="rounded-xl border bg-card p-5">
         <PilgrimTripPanel

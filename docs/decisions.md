@@ -3777,3 +3777,9 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Alternatives considered:** H-3 + H-1, H-1 saja; semua booking aktif; email saja; menyebut sisa tagihan/status data jamaah — ditolak pemilik (isi tanggal saja).
 
 **Security check:** security-review berkas berubah (kejadian notifikasi, template WA/email, pemilih cron, uji) — 0 temuan: tanpa route/masukan baru, pesan tanpa data pribadi jamaah (hanya kode booking + tanggal + nama akun pemesan di email seperti kejadian lain), WA hanya ke nomor terverifikasi lewat jalur `notify` yang ada. `bun audit` 6 (baseline).
+## 2026-11-19 — Linimasa status visa per jamaah
+**Decision:** Riwayat status visa disimpan append-only di `visa_status_events` (tanpa teks bebas), ditulis hanya oleh `changeVisaStatus` (`lib/visa/status.ts`) yang menilai transisi di dalam kunci baris. Jamaah melihat linimasa langkah + tanggal di halaman per jamaah dan lencana di kolom "Visa" tabel; alasan penolakan (wajib saat menolak, ditulis untuk pelanggan) ikut tampil; nama petugas hanya untuk staf.
+**Rationale:** Keputusan pemilik V1–V3 (`docs/arsitektur-visa.md` §9). Sebelumnya jamaah tak pernah melihat status visanya dan riwayat tak tercatat; tombol admin bahkan tak bisa menulis alasan penolakan.
+**Alternatives considered:** Status terkini saja tanpa riwayat; alasan tak ditampilkan; riwayat menyimpan alasan (ditolak — teks bebas di tabel append-only menyulitkan hapus akun).
+
+**Security check:** security-review berkas berubah (route admin, layanan + SQL berkunci, migrasi + trigger, halaman jamaah, komponen) — 0 temuan baru; route tetap `requireAdmin` + Zod `.strict()`, SQL ber-parameter, jamaah hanya booking miliknya, riwayat tanpa PII (`VisaStatusEvent.actorId` didaftarkan di pemindai hapus akun). Menutup race pre-existing (Low): dua ubah status serentak kini satu lolos. `bun audit` 6 (baseline).

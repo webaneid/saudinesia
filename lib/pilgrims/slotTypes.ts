@@ -1,4 +1,4 @@
-import type { PilgrimReviewStatus } from '@prisma/client'
+import type { PilgrimReviewStatus, VisaStatus } from '@prisma/client'
 import type { FieldRow } from '@/lib/manifest/display'
 
 // Bentuk slot jamaah (lib/pilgrims/slots.ts) — tipe murni supaya komponen klien tidak menarik rantai impor server (lib/pii, SEC-170).
@@ -17,6 +17,8 @@ export type PilgrimSlot = {
   /** Data wajib lengkap DAN dokumen wajib siap — siap diajukan/diperiksa. */
   ready: boolean
   reviewStatus: PilgrimReviewStatus
+  /** Status visa jamaah ini (null = tanpa visa) — kolom "Visa" tabel (docs/arsitektur-visa.md §9). */
+  visa: VisaStatus | null
   rows: FieldRow[]
   documents: SlotDocument[]
   /** Booking berrombongan: nama rombongan jamaah (diisi halaman dari label hidup, lib/booking/groups.ts `groupView`). */

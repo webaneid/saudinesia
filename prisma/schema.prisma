@@ -39,33 +39,34 @@ model User {
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
-  address                   Address?                 @relation(fields: [addressId], references: [id])
-  bookings                  Booking[]
-  confirmedPayments         Payment[]                @relation("ConfirmedBy")
-  confirmedBookings         Booking[]                @relation("BookingConfirmedBy")
-  completedBookings         Booking[]                @relation("BookingCompletedBy")
-  bookingCompletionEvents   BookingCompletionEvent[] @relation("BookingCompletionBy")
-  revenueSharePayoutsCreated RevenueSharePayout[]   @relation("RevenueSharePayoutCreatedBy")
-  revenueSharePayoutsVoided  RevenueSharePayout[]   @relation("RevenueSharePayoutVoidedBy")
-  approvedRefunds           Refund[]                 @relation("ApprovedBy")
-  notifications             NotificationLog[]
-  authTokens                AuthToken[]
-  consentLogs               ConsentLog[]
-  deletionRequests          AccountDeletionRequest[] @relation("DeletionRequestUser")
-  processedDeletionRequests AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
+  address                    Address?                 @relation(fields: [addressId], references: [id])
+  bookings                   Booking[]
+  confirmedPayments          Payment[]                @relation("ConfirmedBy")
+  confirmedBookings          Booking[]                @relation("BookingConfirmedBy")
+  completedBookings          Booking[]                @relation("BookingCompletedBy")
+  bookingCompletionEvents    BookingCompletionEvent[] @relation("BookingCompletionBy")
+  revenueSharePayoutsCreated RevenueSharePayout[]     @relation("RevenueSharePayoutCreatedBy")
+  revenueSharePayoutsVoided  RevenueSharePayout[]     @relation("RevenueSharePayoutVoidedBy")
+  approvedRefunds            Refund[]                 @relation("ApprovedBy")
+  notifications              NotificationLog[]
+  authTokens                 AuthToken[]
+  consentLogs                ConsentLog[]
+  deletionRequests           AccountDeletionRequest[] @relation("DeletionRequestUser")
+  processedDeletionRequests  AccountDeletionRequest[] @relation("DeletionRequestProcessedBy")
   // Data jamaah tersimpan (docs/arsitektur-jamaah.md §5, ADR-0005)
-  savedPilgrims             SavedPilgrim[]           @relation("SavedPilgrimOwner")
-  selfPilgrim               SavedPilgrim?            @relation("SavedPilgrimSelf")
-  createdSavedPilgrims      SavedPilgrim[]           @relation("SavedPilgrimCreatedBy")
-  uploadedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocUploadedBy")
-  reviewedPilgrimDocuments  PilgrimDocument[]        @relation("PilgrimDocReviewedBy")
-  verifiedBookingPilgrims   BookingPilgrim[]         @relation("BookingPilgrimVerifiedBy")
-  pilgrimReviewEvents       PilgrimReviewEvent[]     @relation("PilgrimReviewActor")
-  confirmedPilgrimMatches   SavedPilgrim[]           @relation("SavedPilgrimMatchConfirmedBy")
-  createdIdentityAliases    PilgrimIdentityAlias[]
-  identityErasures          PilgrimIdentityErasure[]
-  bookingPilgrims           BookingPilgrim[]         @relation("BookingPilgrimUser")
-  revenueShareSettings      RevenueShareSetting[]    @relation("RevenueShareSettingAuthor")
+  savedPilgrims              SavedPilgrim[]           @relation("SavedPilgrimOwner")
+  selfPilgrim                SavedPilgrim?            @relation("SavedPilgrimSelf")
+  createdSavedPilgrims       SavedPilgrim[]           @relation("SavedPilgrimCreatedBy")
+  uploadedPilgrimDocuments   PilgrimDocument[]        @relation("PilgrimDocUploadedBy")
+  reviewedPilgrimDocuments   PilgrimDocument[]        @relation("PilgrimDocReviewedBy")
+  verifiedBookingPilgrims    BookingPilgrim[]         @relation("BookingPilgrimVerifiedBy")
+  pilgrimReviewEvents        PilgrimReviewEvent[]     @relation("PilgrimReviewActor")
+  visaStatusEvents           VisaStatusEvent[]        @relation("VisaStatusActor")
+  confirmedPilgrimMatches    SavedPilgrim[]           @relation("SavedPilgrimMatchConfirmedBy")
+  createdIdentityAliases     PilgrimIdentityAlias[]
+  identityErasures           PilgrimIdentityErasure[]
+  bookingPilgrims            BookingPilgrim[]         @relation("BookingPilgrimUser")
+  revenueShareSettings       RevenueShareSetting[]    @relation("RevenueShareSettingAuthor")
 
   @@map("users")
 }
@@ -823,29 +824,29 @@ model BookingCodeLock {
 }
 
 model Booking {
-  id              String        @id @default(uuid())
-  bookingCode     String        @unique
-  userId          String
-  status          BookingStatus @default(active)
+  id                    String        @id @default(uuid())
+  bookingCode           String        @unique
+  userId                String
+  status                BookingStatus @default(active)
   // Tanggal acuan TURUNAN dari item (paling awal / paling akhir) — dihitung ulang oleh recomputeBookingDates(); NULL = belum ada item bertanggal (mis. draf).
-  departureDate   DateTime?     @db.Date
-  returnDate      DateTime?     @db.Date
-  season          String
-  totalAmount     Decimal       @db.Decimal(14, 2)
-  notes           String?
-  paymentDeadline DateTime?
+  departureDate         DateTime?     @db.Date
+  returnDate            DateTime?     @db.Date
+  season                String
+  totalAmount           Decimal       @db.Decimal(14, 2)
+  notes                 String?
+  paymentDeadline       DateTime?
   // Konfirmasi booking (kuota dijamin, visa mulai diproses) — terpisah dari status siklus hidup dan dari uang.
-  confirmedAt     DateTime?     @db.Timestamptz(3)
+  confirmedAt           DateTime?     @db.Timestamptz(3)
   // Isi draf (status `draft`, docs/arsitektur-booking-engine-v2.md §10.3): masukan pesan berbentuk skema jalur pesan, TANPA item/kuota/snapshot. Dikosongkan saat terbit.
-  draft           Json?
-  confirmedById   String?
+  draft                 Json?
+  confirmedById         String?
   // Fase 13d (docs/arsitektur-bagi-hasil.md §5d): penanda "Tandai selesai" saat ini — ditulis HANYA lib/booking/completion.ts. Riwayat di booking_completion_events.
-  completedAt     DateTime?     @db.Timestamptz(3)
-  completedById   String?
+  completedAt           DateTime?     @db.Timestamptz(3)
+  completedById         String?
   // Potensi bagi hasil yang DIBEKUKAN saat Tandai selesai berlaku (dibaca bookingSharePotential selama `completed`; tidak bergantung urutan event — SEC audit 13d).
-  completedPotentialIdr Decimal? @db.Decimal(14, 2)
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  completedPotentialIdr Decimal?      @db.Decimal(14, 2)
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
 
   user        User  @relation(fields: [userId], references: [id])
   confirmedBy User? @relation("BookingConfirmedBy", fields: [confirmedById], references: [id], onDelete: SetNull)
@@ -1289,10 +1290,29 @@ model VisaApplication {
   // Rencana tanggal berangkat jamaah (D1): bawaan = tiket pergi paling awal di booking yang sama, dapat diedit di form data jamaah.
   plannedTravelDate    DateTime? @db.Date
 
-  pilgrim     BookingPilgrim @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
-  visaProduct VisaProduct?   @relation(fields: [visaProductId], references: [id])
+  pilgrim      BookingPilgrim    @relation(fields: [bookingPilgrimId], references: [id], onDelete: Cascade)
+  visaProduct  VisaProduct?      @relation(fields: [visaProductId], references: [id])
+  statusEvents VisaStatusEvent[]
 
   @@map("visa_applications")
+}
+
+// Riwayat status visa per jamaah (docs/arsitektur-visa.md §9) — APPEND-ONLY (trigger DB), ditulis HANYA lib/visa/status.ts. Tanpa teks bebas:
+// alasan penolakan tetap di `visa_applications.rejectionReason` (dikosongkan saat hapus akun).
+model VisaStatusEvent {
+  id                String      @id @default(uuid())
+  visaApplicationId String
+  fromStatus        VisaStatus? // null = riwayat isi ulang (backfill) yang asalnya tak tercatat
+  toStatus          VisaStatus
+  actorId           String?
+  createdAt         DateTime    @default(now()) @db.Timestamptz(3)
+
+  visaApplication VisaApplication @relation(fields: [visaApplicationId], references: [id], onDelete: Cascade)
+  actor           User?           @relation("VisaStatusActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([visaApplicationId, createdAt])
+  @@index([actorId])
+  @@map("visa_status_events")
 }
 
 enum VisaStatus {
@@ -2318,14 +2338,14 @@ model CashAccount {
   qrisAccountId String?         @unique // kind = qris (Fase 8)
   createdAt     DateTime        @default(now()) @db.Timestamptz(3)
 
-  bankAccount  BankAccount?   @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
-  qrisAccount  QrisAccount?   @relation(fields: [qrisAccountId], references: [id], onDelete: Restrict)
-  entries      CashEntry[]
-  payments     Payment[]
-  refunds      Refund[]
-  costActuals  CostActual[]
-  transfersOut CashTransfer[] @relation("CashTransferFrom")
-  transfersIn  CashTransfer[] @relation("CashTransferTo")
+  bankAccount         BankAccount?         @relation(fields: [bankAccountId], references: [id], onDelete: Restrict)
+  qrisAccount         QrisAccount?         @relation(fields: [qrisAccountId], references: [id], onDelete: Restrict)
+  entries             CashEntry[]
+  payments            Payment[]
+  refunds             Refund[]
+  costActuals         CostActual[]
+  transfersOut        CashTransfer[]       @relation("CashTransferFrom")
+  transfersIn         CashTransfer[]       @relation("CashTransferTo")
   revenueSharePayouts RevenueSharePayout[]
 
   @@map("cash_accounts")

@@ -1023,6 +1023,20 @@
       "full_board": "Full Board",
       "half_board": "Half Board",
       "room_only": "Tanpa Sarapan (Room Only)"
+    },
+    "visa": {
+      "title": "Status visa",
+      "current": "Saat ini",
+      "reasonTitle": "Alasan penolakan",
+      "column": "Visa",
+      "status": {
+        "pending_documents": "Menunggu Dokumen",
+        "documents_complete": "Dokumen Lengkap",
+        "submitted_to_syarikah": "Dikirim Syarikah",
+        "in_review": "Sedang Diproses",
+        "issued": "Visa Terbit",
+        "rejected": "Ditolak"
+      }
     }
   },
   "checkout": {
