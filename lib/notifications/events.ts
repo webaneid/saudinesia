@@ -17,7 +17,7 @@ export type NotificationEvent =
   | { type: 'payment_rejected'; code: string }
   | { type: 'booking_expired'; code: string }
   /** Pengingat keberangkatan H-7 / H-1 (docs/arsitektur-notifikasi.md §13): `date` = tanggal berangkat terformat (tanggal kalender). Isi sengaja hanya tanggal (K4). */
-  | { type: DepartureReminderType; code: string; date: string }
+  | { type: DepartureReminderType; code: string; date: string; /** Sisa hari sebenarnya — diisi kirim ulang (§14) bila tak sama dengan jarak tipe; kosong = jarak tipe. */ days?: number }
   /** Dibatalkan staf (Fase 7b-2a). `money` = sudah ada uang masuk: pesan hanya menyebut tim akan menghubungi soal dana — tanpa jumlah/keputusan internal. */
   | { type: 'booking_cancelled'; code: string; money: boolean }
   | { type: 'visa_status_change'; code: string; status: string }
@@ -50,7 +50,7 @@ export function waMessage(e: NotificationEvent): string | null {
       return waTemplates.paymentRejected(e.code)
     case 'departure_reminder_7d':
     case 'departure_reminder_1d':
-      return waTemplates.departureReminder(e.code, departureDays(e.type), e.date)
+      return waTemplates.departureReminder(e.code, e.days ?? departureDays(e.type), e.date)
     case 'booking_expired':
     case 'booking_cancelled':
     case 'visa_status_change':

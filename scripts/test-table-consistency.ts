@@ -50,7 +50,6 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
 const READ_ONLY_TABLES: Record<string, string> = {
   'app/[locale]/(public)/flight/page.tsx': 'katalog publik baca-saja (tak ada aksi per baris)',
   'app/[locale]/(public)/hotels/[id]/page.tsx': 'rate sheet publik baca-saja',
-  'app/[locale]/admin/(protected)/notifications/page.tsx': 'log pengiriman baca-saja',
   'app/[locale]/admin/(protected)/finance/tax/page.tsx': 'laporan PPN baca-saja (invoice dan buku kas tak ditindak dari sini; nomor invoice menaut ke booking)',
   'app/[locale]/admin/(protected)/system/platform-provider/PlatformProviderEditor.tsx': 'riwayat versi bagi hasil append-only — tak ada aksi per versi (versi baru = simpan setelan)',
   'app/[locale]/admin/(protected)/finance/cash-flow/page.tsx': 'laporan arus kas baca-saja (agregat dari buku kas append-only; tak ada baris yang bisa ditindak)',

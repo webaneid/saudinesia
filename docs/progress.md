@@ -430,7 +430,7 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 - [x] `GET /api/v1/admin/bookings` — list bookings with status filter
 - [x] `GET /api/v1/admin/quotas` — quota overview
 - [x] ZIP download dokumen (butuh MinIO) — **Rapikan 2026-11-19:** tertutup — `admin/bookings/[id]/documents/zip`
-- [ ] Manual WhatsApp send — **Rapikan 2026-11-19:** masih terbuka — belum ada kirim manual WhatsApp dari admin
+- [x] ~~Manual WhatsApp send~~ — **2026-11-19 (`docs/arsitektur-notifikasi.md` §14, N3):** tidak dibuat — pemilik memilih tanpa teks bebas WhatsApp (risiko blokir nomor gateway, ADR-0001); diganti kirim ulang dari log
 
 ---
 
@@ -581,7 +581,7 @@ User minta refactor total setelah baca audit as-built — 4 keputusan struktural
 - [x] ~~Email templates (Resend) for booking confirmed, visa update, auto-cancel~~ — **Rapikan 2026-11-19:** tidak berlaku lagi: template email ada per kejadian di `lib/notifications/events.ts`; batal otomatis 24 jam tidak ada lagi (Fase 3)
 - [x] Notification log entries written for every send attempt — **Rapikan 2026-11-19:** tertutup — `lib/notifications/notify.ts` menulis `notification_logs`
 - [x] Delivery failure logged with error field (never throws) — **Rapikan 2026-11-19:** tertutup — kegagalan dicatat, `notify()` tak pernah melempar
-- [ ] Admin: notification log page with manual re-send — **Rapikan 2026-11-19:** halaman log berpaginasi sudah ada; kirim ulang manual belum
+- [x] Admin: notification log page with manual re-send — **2026-11-19 (`docs/arsitektur-notifikasi.md` §14):** ikon Kirim ulang di Log Notifikasi untuk invoice/pengingat bayar/pembayaran diterima/pengingat berangkat — disusun ulang dari data booking terkini (`lib/notifications/resend.ts`), email + WhatsApp lewat `notify()`, semua admin, batas 5/jam per booking; waktu log kini zona aplikasi (dijaga `scripts/test-notification-resend.ts`)
 
 ---
 
