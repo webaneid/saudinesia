@@ -46,7 +46,8 @@ if (!superuser) {
   const role = `saudinesia_app_t${randomBytes(4).toString('hex')}`
   const password = randomBytes(24).toString('hex')
   const apply = () => {
-    const p = spawnSync('bunx', ['prisma', 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'], { input: appRoleSql(role, password), encoding: 'utf8', env: { ...process.env, DATABASE_URL: dbUrl } })
+    // stdin dipipa eksplisit seperti prisma/apply-app-role.ts — tanpa itu Bun di runner Linux menjalankan skrip KOSONG (status 0, peran tak dibuat).
+    const p = spawnSync('bunx', ['prisma', 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'], { input: appRoleSql(role, password), stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf8', env: { ...process.env, DATABASE_URL: dbUrl } })
     if (p.status !== 0) throw new Error(`prisma db execute gagal: ${(p.stderr ?? '').slice(0, 300)}`)
   }
   const u = new URL(dbUrl); u.username = role; u.password = password
