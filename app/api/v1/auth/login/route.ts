@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { compare } from 'bcryptjs'
 import { prisma } from '@/lib/db'
 import { createSession } from '@/lib/auth/session'
+import { auditIp, isStaffRole, recordStaffEvent } from '@/lib/audit/staff'
 import { loginSchema } from '@/lib/validators/auth'
 import { ok } from '@/lib/validators'
 import { accountKey, clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
@@ -60,8 +61,17 @@ export async function POST(request: Request) {
       return invalid()
     }
 
+    // Jejak staf (SEC-304, keputusan pemilik: login STAF saja). Gagal = best-effort (galat dicatat, respons tetap sama); berhasil = fail-closed di bawah.
+    const staff = isStaffRole(user.role)
+    const fullIp = auditIp(request)
+    const staffFailed = async (reason: 'password' | 'inactive' | 'unverified') => {
+      if (!staff) return
+      try { await recordStaffEvent(prisma, { action: 'login_failed', actorId: user.id, targetUserId: user.id, ip: fullIp, summary: { reason } }) }
+      catch (e) { logError('auth/login staff-audit', e) }
+    }
+
     const match = await compare(password, user.passwordHash)
-    if (!match) return invalid()
+    if (!match) { await staffFailed('password'); return invalid() }
 
     // Password terbukti benar: hitungan reservasi dihapus SEKARANG (juga bila status akun di bawah menolak) — pengguna sah tidak membawa
     // hitungan gagal ke sesi berikutnya, dan akun nonaktif/belum terverifikasi yang berpassword benar tidak terkunci oleh percobaannya sendiri.
@@ -70,14 +80,18 @@ export async function POST(request: Request) {
     // Status akun baru diungkap SETELAH password terbukti benar — sebelum itu membedakan "akun nonaktif" dari "salah password"
     // membocorkan keberadaan akun (enumerasi email).
     if (!user.isActive) {
+      await staffFailed('inactive')
       return apiErrorJson('accountDisabled', 403)
     }
     if (!user.emailVerifiedAt) {
       // Akun lama (sebelum verifikasi email): reset password membuktikan kepemilikan email dan mengaktifkannya.
+      await staffFailed('unverified')
       return apiErrorJson('emailUnverified', 403)
     }
 
     // Versi yang dilihat saat password diperiksa dibawa ke penerbitan: reset password yang commit di celah bcrypt membuat ini ditolak (S18-B).
+    // Login staf berhasil tercatat SEBELUM sesi terbit: jejak gagal ditulis = tidak masuk (500).
+    if (staff) await recordStaffEvent(prisma, { action: 'login_success', actorId: user.id, targetUserId: user.id, ip: fullIp, summary: { role: user.role } })
     try {
       await createSession(user.id, user.sessionVersion)
     } catch (e) {

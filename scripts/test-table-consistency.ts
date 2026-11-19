@@ -57,6 +57,7 @@ const READ_ONLY_TABLES: Record<string, string> = {
   'app/[locale]/admin/(protected)/finance/transfers/[id]/page.tsx': 'entri buku kas baca-saja (append-only; pembatalan di kotak Tindakan)',
   'app/[locale]/admin/(protected)/system/platform-provider/payouts/[id]/page.tsx': 'entri buku kas baca-saja (append-only; pembatalan di kotak Tindakan)',
   'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': 'arus uang buku kas baca-saja (entri append-only; tindakan refund di kotak Tindakan)',
+  'app/[locale]/admin/(protected)/system/staff-audit/page.tsx': 'jejak keamanan staf append-only (SEC-304) — tak ada baris yang bisa diubah/dihapus; kode booking menaut ke booking',
   'components/admin/data-table/CatalogList.tsx': 'pembungkus generik: kolom & aksi ditentukan halaman pemakai (CatalogActions)',
 }
 

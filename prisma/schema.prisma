@@ -2291,6 +2291,26 @@ model SettingsAudit {
   @@map("settings_audit")
 }
 
+// Jejak keamanan staf (docs/rencana-audit-golive.md §6, SEC-304): buat/ubah akun staf, buka kunci login, lepas WhatsApp, login staf, unduhan ZIP
+// dokumen jamaah. APPEND-ONLY (trigger: UPDATE/DELETE ditolak), ditulis HANYA lib/audit/staff.ts. Tanpa FK: jejak tak boleh ikut hilang/berubah
+// karena baris lain. `summary` tanpa data pribadi (peran/status, kode alasan, jumlah); `ip` = alamat klien (keputusan pemilik: utuh, staf saja).
+model StaffAuditEvent {
+  id           String   @id @default(uuid())
+  at           DateTime @default(now()) @db.Timestamptz(3)
+  actorId      String?  // staf pelaku; login = akun itu sendiri; null = skrip
+  targetUserId String?
+  bookingId    String?
+  action       String   @db.VarChar(32)
+  ip           String?  @db.VarChar(64)
+  summary      Json     @default("{}")
+
+  @@index([at])
+  @@index([actorId, at])
+  @@index([targetUserId, at])
+  @@index([action, at])
+  @@map("staff_audit_events")
+}
+
 // ── Buku kas (docs/arsitektur-booking-engine-v2.md §3.5, §10.10 Fase 7b-1) ─────────────────────────────────────────────
 // Akun kas = tempat uang berada (rekening bank, kas tunai; QRIS/gateway menyusul Fase 8–10). Dibuat HANYA lib/cash/accounts.ts, saat pertama dipakai
 // (rekening yang belum pernah menerima uang tetap dapat dihapus). Entri kas APPEND-ONLY (trigger DB menolak UPDATE/DELETE; koreksi = entri pembalik),

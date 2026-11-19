@@ -131,7 +131,7 @@ await t('PENJAGA: setiap route Sistem → Pengguna yang membaca satu/daftar akun
 
 await t('route meneruskan sesi sebagai aktor dan memetakan self/last_superadmin ke 422', async () => {
   const src = readFileSync(new URL('../app/api/v1/admin/system/users/[id]/route.ts', import.meta.url), 'utf8')
-  assert.match(src, /updateUserByAdmin\(id, parsed\.data, session\)/)
+  assert.match(src, /updateUserByAdmin\(id, parsed\.data, session, \{ ip: auditIp\(req\) \}\)/)
   assert.match(src, /status: 422/)
 })
 
