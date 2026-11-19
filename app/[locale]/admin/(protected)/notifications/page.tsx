@@ -8,13 +8,17 @@ import { FilterBar } from '@/components/admin/data-table/FilterBar'
 import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { RowActions } from '@/components/shared/data-table/RowActions'
+import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
+import { canResendLog } from '@/lib/notifications/resend'
+import { ResendAction } from './ResendAction'
 
 type Props = {
   params: Promise<{ locale: string }>
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }
 
-type LogRow = Prisma.NotificationLogGetPayload<{ include: { user: { select: { fullName: true; phone: true } } } }>
+type LogRow = Prisma.NotificationLogGetPayload<{ include: { user: { select: { fullName: true; phone: true } }; booking: { select: { bookingCode: true } } } }>
 
 // 'sent' = diterima penyedia (bukan jaminan sampai); 'skipped' = kanal belum dikonfigurasi/dimatikan; 'failed' = ditolak/galat.
 const STATUS_TONE: Record<string, BadgeTone> = { sent: 'ok', skipped: 'warning', failed: 'danger' }
@@ -25,12 +29,14 @@ const STATUSES = ['sent', 'skipped', 'failed'] as const
 const pick = <T extends string>(allowed: readonly T[], v: string | string[] | undefined): T | undefined => (typeof v === 'string' && (allowed as readonly string[]).includes(v) ? (v as T) : undefined)
 
 const columns: Column<LogRow>[] = [
-  { key: 'time', header: 'Waktu', cell: l => <span className="text-[12px] text-admin-muted">{new Date(l.sentAt).toLocaleString('id-ID')}</span> },
+  { key: 'time', header: 'Waktu', cell: l => <span className="text-[12px] text-admin-muted">{formatInstant(l.sentAt, DATETIME_MEDIUM)}</span> },
   { key: 'user', header: 'User', mobile: 'title', cell: l => <span className="text-[13px]">{l.user.fullName ?? l.recipient}</span> },
   { key: 'channel', header: 'Kanal', cell: l => <Badge tone={l.channel === 'whatsapp' ? 'ok' : 'accent'}>{l.channel}</Badge> },
   { key: 'type', header: 'Tipe', cell: l => <span className="text-[12px] text-admin-muted">{l.type.replace(/_/g, ' ')}</span> },
   { key: 'status', header: 'Status', cell: l => <Badge tone={STATUS_TONE[l.status] ?? 'neutral'}>{STATUS_LABEL[l.status] ?? l.status}</Badge> },
   { key: 'detail', header: 'Keterangan', cell: l => <span className="text-[12px] text-admin-muted">{l.error ?? '—'}</span> },
+  // Kirim ulang (§14) hanya untuk jenis yang bisa disusun ulang dari data booking terkini.
+  { key: 'actions', header: 'Aksi', actions: true, cell: l => (canResendLog(l) ? <RowActions><ResendAction logId={l.id} code={l.booking?.bookingCode ?? null} /></RowActions> : null) },
 ]
 
 export default async function AdminNotifications({ params, searchParams }: Props) {
@@ -50,7 +56,7 @@ export default async function AdminNotifications({ params, searchParams }: Props
       where,
       orderBy: [{ sentAt: 'desc' }, { id: 'desc' }], // id = tie-breaker: sentAt bisa kembar, halaman harus stabil
       ...range,
-      include: { user: { select: { fullName: true, phone: true } } },
+      include: { user: { select: { fullName: true, phone: true } }, booking: { select: { bookingCode: true } } },
     }),
   )
 
