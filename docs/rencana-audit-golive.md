@@ -56,7 +56,7 @@ Perlu dicek manual (VPS/produksi): branch protection, SSH key-only + firewall, b
 
 - **G1 — SELESAI 2026-11-19** — PII di log: `lib/log` + klien Prisma + penggantian pemanggil + penjaga + aturan CLAUDE.md (menutup SEC-228).
 - **G2 — SELESAI 2026-11-19** — peran database terpisah (G-1): `migrator` pemilik skema, `app` DML saja; compose + `.env.production.example` + `docs/deployment.md` + uji bahwa peran app tak bisa mematikan trigger.
-- **G3** — jejak staf + ZIP (G-2): tabel jejak append-only, ditulis di transaksi yang sama oleh `lib/auth/adminUsers.ts`, login staf, dan unduhan ZIP.
+- **G3 — SELESAI 2026-11-19 (§6 rencana, §7 hasil)** — jejak staf + ZIP (G-2): tabel jejak append-only, ditulis di transaksi yang sama oleh `lib/auth/adminUsers.ts`, login staf, dan unduhan ZIP.
 - G-1 = SEC-303, G-2 = SEC-304; G-3/G-4/G-5 = SEC-305..307 di Register Temuan Security, menyusul sesudah go-live.
 
 ## 4. Hasil G1 (2026-11-19)
@@ -75,4 +75,28 @@ Perlu dicek manual (VPS/produksi): branch protection, SSH key-only + firewall, b
 - Penjaga `scripts/test-db-roles.ts` (DB sekali pakai + koneksi superuser; peran uji acak, dihapus di akhir): SQL menolak sandi/nama tak sah; penerapan idempoten lewat jalur produksi; peran bukan superuser/pemilik; setiap tabel DML saja; mematikan trigger di SETIAP tabel bertrigger, `DROP`/`ALTER`/`TRUNCATE`/`CREATE TABLE`/`COPY … TO PROGRAM`/`session_replication_role`/`ALTER ROLE … SUPERUSER` ditolak; `LOCK TABLE` kode booking + advisory jalan; default privileges untuk tabel baru. Juga mengunci isi compose/Dockerfile/`.env.production.example`.
 - CI (`docker` smoke): web memakai `saudinesia_app` dan punya koneksi aktif sebagai peran itu, peran bukan superuser/pemilik, kredensial pemilik tak terbaca di web, `ALTER TABLE cash_entries DISABLE TRIGGER ALL` sebagai `saudinesia_app` ditolak — di atas seluruh smoke yang sudah ada (checkout, invoice PDF, login) yang kini berjalan dengan peran DML saja.
 - Uji nyata lokal: server dev dengan peran DML saja pada DB audit — checkout visa (kode booking + nomor invoice + snapshot), atur total booking (snapshot penyesuaian + pajak ulang), batal oleh staf, halaman admin utama: semua berhasil, tanpa galat izin; seluruh koneksi aplikasi tercatat sebagai peran DML.
+
+## 6. Rencana G3 — jejak staf (SEC-304)
+
+Keputusan pemilik (2026-11-19): login yang dicatat = **staf saja** (admin/manager/superadmin; jamaah tidak); **IP utuh** disimpan; **halaman Sistem → Jejak Staf** dibuat sekarang.
+
+Recheck: jejak append-only yang ada hanya `settings_audit` (setelan) dan jejak buka NIK/paspor (gudang identitas). Buat/ubah staf (`POST admin/system/users`, `updateUserByAdmin`), buka kunci login (`reset-limits`), lepas WhatsApp (`whatsapp` DELETE) hanya `console.info` (hilang saat log diputar) atau tidak tercatat sama sekali; login staf dan unduhan ZIP dokumen jamaah (`admin/bookings/[id]/documents/zip`) tak tercatat.
+
+1. Tabel `staff_audit_events` (append-only lewat trigger, `at` timestamptz): `actorId` (staf pelaku; login = akun itu sendiri; null = skrip), `targetUserId`, `bookingId`, `action` (CHECK: `staff_create`, `staff_update`, `staff_reset_limits`, `staff_whatsapp_release`, `login_success`, `login_failed`, `documents_zip`), `ip`, `summary` JSON TANPA data pribadi (peran/status lama → baru, nama cukup "berubah", alasan gagal login sebagai kode, jumlah berkas ZIP).
+2. Satu penulis `lib/audit/staff.ts` (`recordStaffEvent(tx, …)`); pembaca `listStaffEvents` untuk halaman. Ditulis DI TRANSAKSI yang sama dengan perubahan akun; login berhasil dan ZIP fail-closed (jejak gagal ditulis = tidak masuk / tidak terunduh); login gagal best-effort (galat dicatat, respons tetap 401).
+3. Login gagal dicatat hanya bila email milik akun staf (sandi salah, nonaktif, belum verifikasi) — email tak dikenal tidak dicatat (tak ada pemilik, menghindari menyimpan masukan bebas).
+4. Halaman superadmin `system/staff-audit`: `DataTable` + `Pagination` + `FilterBar` (aksi, staf), waktu `formatInstant`. Akun bayangan Platform Provider tak terlihat oleh superadmin klien (`visibleStaffWhere`): kejadian yang pelaku ATAU targetnya akun provider disembunyikan.
+5. Hapus akun: staf tidak dihapus lewat jalur UU PDP (dinonaktifkan); kolom `actorId`/`targetUserId` didaftarkan di pemindai `scripts/test-deletion.ts` sebagai dipertahankan (jejak keamanan, kepentingan sah).
+6. Penjaga `scripts/test-staff-audit.ts`: setiap jalur menulis tepat satu baris; tanpa perubahan = tanpa baris; UPDATE/DELETE ditolak trigger; ringkasan tanpa email/nama; login jamaah tidak tercatat; penyaring provider; pemindai sumber — tak ada penulis `staffAuditEvent` lain.
+
+## 7. Hasil G3 (2026-11-19, menutup SEC-304)
+
+- Tabel `staff_audit_events` (migrasi `20261209090000_staff_audit_events`): tanpa FK, `at` timestamptz, CHECK daftar aksi + `summary` berupa objek, trigger menolak SEMUA UPDATE/DELETE (TRUNCATE ditutup oleh peran DML G2). Penulis tunggal `lib/audit/staff.ts` (`recordStaffEvent`), ringkasan bertipe sempit (skalar atau pasangan lama → baru).
+- Jalur berjejak: buat staf (satu transaksi dengan akun), `updateUserByAdmin` (di transaksi berkunci yang sama; hanya bila peran/status/nama benar-benar berubah, nama cukup "berubah"), buka kunci login, lepas WhatsApp (menggantikan `console.info`), login staf (gagal = best-effort dengan kode alasan `password`/`inactive`/`unverified`; berhasil = fail-closed sebelum sesi terbit), unduhan ZIP dokumen jamaah (fail-closed sebelum berkas diserahkan; jumlah berkas dan jamaah, tanpa nama). Login jamaah dan email tak dikenal tidak dicatat.
+- IP = `auditIp` (nilai pertama `X-Forwarded-For` utuh — BUKAN `clientIp` rate limit yang meringkas IPv6 ke /64; ditemukan saat uji browser).
+- Halaman superadmin Sistem → Jejak Staf (`system/staff-audit`): `DataTable` + `Pagination` + `FilterBar` (aksi, staf — daftar putih staf yang terlihat). Kejadian yang pelaku ATAU sasarannya akun bayangan Platform Provider disembunyikan dari superadmin klien.
+- Sambil lalu: respons ZIP kini `Cache-Control: no-store` (butir cek manual §2.1).
+- Hapus akun: `StaffAuditEvent.actorId`/`targetUserId` didaftarkan di `scripts/test-deletion.ts` sebagai dipertahankan (staf dinonaktifkan, bukan dihapus lewat jalur UU PDP).
+- Penjaga `scripts/test-staff-audit.ts` (DB sungguhan): satu baris per perubahan, tanpa perubahan/ditolak = tanpa baris, ringkasan tanpa nama/email, IP utuh, login staf berhasil/gagal/nonaktif, jamaah & email tak dikenal tak tercatat, UPDATE/DELETE/aksi liar ditolak DB, penyaring provider, pemindai sumber (penulis tunggal; route wajib berjejak; jejak sebelum `createSession` dan sebelum respons ZIP).
+- Uji browser (DB audit): login gagal + berhasil, buka kunci, ubah peran dua arah, unduh ZIP — semua tampil di halaman dengan filter aksi bekerja.
 

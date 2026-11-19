@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { updateUserByAdmin, visibleStaffWhere } from '@/lib/auth/adminUsers'
 import { requireSuperAdmin } from '@/lib/auth/session'
+import { auditIp } from '@/lib/audit/staff'
 import { ok, err } from '@/lib/validators'
 import { userAdminUpdateSchema } from '@/lib/validators/adminUpdates'
 import { prisma } from '@/lib/db'
@@ -29,7 +30,7 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
     const parsed = userAdminUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const result = await updateUserByAdmin(id, parsed.data, session)
+    const result = await updateUserByAdmin(id, parsed.data, session, { ip: auditIp(req) })
     if (!result.ok) {
       if (result.reason === 'not_found') return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
       const message = result.reason === 'self'

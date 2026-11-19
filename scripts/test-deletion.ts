@@ -673,6 +673,8 @@ await t('tiap kolom userId/*ById pada skema punya perlakuan eksplisit di penghap
     'PilgrimDocument.reviewedById': 'dipertahankan (staf yang menilai dokumen; dokumen akun yang dihapus ikut hilang)',
     'BookingPilgrim.verifiedById': 'dipertahankan (staf yang memverifikasi data jamaah; tak pernah dikirim ke jamaah)',
     'PilgrimReviewEvent.actorId': 'dipertahankan (pelaku transisi pemeriksaan; catatan `note` jamaah akun yang dihapus dikosongkan — pilgrimReviewEvent.updateMany)',
+    'StaffAuditEvent.actorId': 'dipertahankan (jejak keamanan staf, SEC-304; staf tak dihapus lewat jalur UU PDP — dinonaktifkan; baris tanpa PII selain IP staf)',
+    'StaffAuditEvent.targetUserId': 'dipertahankan (sasaran = akun staf; jejak keamanan append-only, tanpa nama/email)',
     'VisaStatusEvent.actorId': 'dipertahankan (petugas yang mengubah status visa; riwayat tanpa teks bebas, alasan penolakan di visa_applications dikosongkan; FK SET NULL bila akun petugas dihapus)',
     'SavedPilgrim.matchConfirmedById': 'dipertahankan (staf yang menandai kartu cocok manual, Fase 8); kartu akun yang dihapus ikut hilang',
     'PilgrimIdentityAlias.createdById': 'dipertahankan (staf yang menggabung identitas; alias hanya hash, ikut terhapus bersama identitasnya)',

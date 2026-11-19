@@ -2,13 +2,14 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { resetAccountLimits } from '@/lib/auth/rateLimit'
+import { auditIp, recordStaffEvent } from '@/lib/audit/staff'
 import { visibleStaffWhere } from '@/lib/auth/adminUsers'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { ok, err } from '@/lib/validators'
 
 // SEC-14: buka kunci pembatasan login + email auth satu akun (korban lockout-DoS yang meminta bantuan). Hanya superadmin.
 // Batas per-IP tidak disentuh. Tanpa body — satu-satunya masukan adalah id di path.
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const session = await requireSuperAdmin()
     const { id } = await params
@@ -16,8 +17,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     if (!user) return NextResponse.json(err('Pengguna tidak ditemukan'), { status: 404 })
 
     const cleared = await resetAccountLimits(user.email)
-    // Jejak audit tanpa PII: hanya id pelaku, id target, dan jumlah kunci.
-    console.info(`[admin/reset-limits] actor=${session.userId} target=${id} cleared=${cleared}`)
+    // Jejak staf (SEC-304) tanpa PII: pelaku, target, jumlah kunci.
+    await recordStaffEvent(prisma, { action: 'staff_reset_limits', actorId: session.userId, targetUserId: id, ip: auditIp(req), summary: { cleared } })
     return NextResponse.json(ok({ cleared }))
   } catch (e) {
     return authFailureResponse(e, 'admin/system/users/[id]/reset-limits/POST')

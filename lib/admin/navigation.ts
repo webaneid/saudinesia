@@ -3,6 +3,7 @@ import { Fingerprint,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
   Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent, BadgeCheck,
   type LucideIcon,
+  History,
 } from 'lucide-react'
 
 export type NavItem  = { path: string; icon: LucideIcon; label: string }
@@ -52,6 +53,7 @@ const SISTEM: NavItem[] = [
   { path: '/admin/system/users',             icon: Users,       label: 'Pengguna' },
   { path: '/admin/system/vendors',           icon: Handshake,   label: 'Vendor' },
   { path: '/admin/system/deletion-requests', icon: ShieldAlert, label: 'Hapus Akun' },
+  { path: '/admin/system/staff-audit',       icon: History,     label: 'Jejak Staf' },
   { path: '/admin/system/invoice-settings',  icon: Receipt,     label: 'Pengaturan Invoice' },
   { path: '/admin/system/site-content',      icon: PanelsTopLeft, label: 'Konten Situs' },
   { path: '/admin/system/platform-provider', icon: BadgeCheck,  label: 'Platform Provider' },
@@ -108,6 +110,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   system: 'Sistem',
   users: 'Pengguna',
   'deletion-requests': 'Hapus Akun',
+  'staff-audit': 'Jejak Staf',
   vendors: 'Vendor',
   categories: 'Kategori',
   new: 'Baru',
