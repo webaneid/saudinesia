@@ -7,6 +7,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { DateTimeField } from '@/components/shared/DateTimeField'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { formatRupiah } from '@/lib/utils'
+import { FORCE_MAJEURE_OPTIONS, forceMajeureOf } from '@/lib/refunds/labels'
 import { EMPTY_RECIPIENT, RecipientFields, recipientPayload, type RecipientValue } from '../RecipientFields'
 
 type Props = {
@@ -18,10 +19,15 @@ type Props = {
   /** Batas jumlah saat ini (dinilai ulang server di dalam kunci saat menyimpan). */
   max: number
   cashOptions: Array<{ value: string; label: string }>
+  /** Refund pembatalan: force-majeure boleh diubah (docs/rencana-force-majeure.md). */
+  cancellation: boolean
+  forceMajeure: string | null
+  /** Setelan mewajibkan superadmin dan penonton bukan superadmin → tombol Setujui dinonaktifkan (server tetap menilai ulang). */
+  approveBlocked: string | null
 }
 
 // Tindakan refund — SATU tempat (SEC-244, §10.13): Setujui · Ubah (pending) · Tolak · Bayar (uang keluar + buku kas). Aturan & batas di lib/refunds/service.ts.
-export function RefundActions({ refundId, status, amount, reason, recipient, max, cashOptions }: Props) {
+export function RefundActions({ refundId, status, amount, reason, recipient, max, cashOptions, cancellation, forceMajeure, approveBlocked }: Props) {
   const router = useRouter()
   const { ask, dialog } = useConfirm()
   const [mode, setMode] = useState<'none' | 'edit' | 'pay'>('none')
@@ -30,6 +36,7 @@ export function RefundActions({ refundId, status, amount, reason, recipient, max
   const [amt, setAmt] = useState(String(amount))
   const [why, setWhy] = useState(reason)
   const [rec, setRec] = useState<RecipientValue>(recipient ?? EMPTY_RECIPIENT)
+  const [fm, setFm] = useState(forceMajeure ?? '')
   const [account, setAccount] = useState('')
   const [paidAt, setPaidAt] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
@@ -58,7 +65,7 @@ export function RefundActions({ refundId, status, amount, reason, recipient, max
       {mode === 'none' && (
         <div className="flex flex-wrap gap-2">
           {status === 'pending' && (
-            <button type="button" className="admin-btn" disabled={busy}
+            <button type="button" className="admin-btn" disabled={busy || approveBlocked !== null} title={approveBlocked ?? undefined}
               onClick={async () => { if (await ask({ title: `Setujui refund ${formatRupiah(amount)}?`, body: 'Sesudah disetujui jumlahnya terkunci; langkah berikutnya mencatat pembayaran.', confirmLabel: 'Ya, setujui', tone: 'primary' })) await run({ action: 'approve' }) }}>
               <Check className="size-4" /> Setujui
             </button>
@@ -76,16 +83,22 @@ export function RefundActions({ refundId, status, amount, reason, recipient, max
         </div>
       )}
 
+      {mode === 'none' && status === 'pending' && approveBlocked && <p className="m-0 text-[12px] text-admin-muted">{approveBlocked}</p>}
+
       {mode === 'edit' && (
         <div className="admin-form-panel space-y-3">
           <label className="block"><span className="mb-1 block text-xs text-admin-muted">Jumlah (maks. {formatRupiah(max)})</span>
             <input className="admin-inp" inputMode="numeric" value={amt} onChange={e => setAmt(e.target.value.replace(/\D/g, '').slice(0, 12))} /></label>
           <label className="block"><span className="mb-1 block text-xs text-admin-muted">Alasan (internal)</span>
             <input className="admin-inp" maxLength={500} value={why} onChange={e => setWhy(e.target.value)} /></label>
+          {cancellation && (
+            <div className="space-y-1"><span className="block text-xs text-admin-muted">Force-majeure</span>
+              <ChoiceSelect ariaLabel="Force-majeure" placeholder="Bukan force-majeure" value={fm} onChange={setFm} options={FORCE_MAJEURE_OPTIONS} /></div>
+          )}
           <RecipientFields value={rec} onChange={setRec} stacked />
           <div className="flex gap-2">
             <button type="button" className="admin-btn-sm" disabled={busy || !/^\d+$/.test(amt) || why.trim().length < 3}
-              onClick={() => { const r = recipientOr(); if (r !== undefined) void run({ action: 'update', amount: Number(amt), reason: why.trim(), recipient: r }) }}>Simpan</button>
+              onClick={() => { const r = recipientOr(); if (r !== undefined) void run({ action: 'update', amount: Number(amt), reason: why.trim(), recipient: r, ...(cancellation ? { forceMajeure: forceMajeureOf(fm) } : {}) }) }}>Simpan</button>
             <button type="button" className="admin-btn-sm" onClick={() => setMode('none')}>Batal</button>
           </div>
         </div>

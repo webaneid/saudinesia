@@ -3,10 +3,10 @@ import { Fingerprint,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
   Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent, BadgeCheck,
   type LucideIcon,
-  History,
+  History, ShieldCheck,
 } from 'lucide-react'
 
-export type NavItem  = { path: string; icon: LucideIcon; label: string }
+export type NavItem  = { path: string; icon: LucideIcon; label: string; superadminOnly?: boolean }
 export type NavGroup = { label: string; items: NavItem[] }
 
 /** `path` relatif terhadap `/{locale}` — Sidebar yang menambahkan prefix locale. */
@@ -29,6 +29,7 @@ const KEUANGAN: NavItem[] = [
   { path: '/admin/finance/cash-flow', icon: ArrowLeftRight, label: 'Arus Kas' },
   { path: '/admin/finance/transfers', icon: Repeat,         label: 'Transfer' },
   { path: '/admin/finance/refunds',   icon: Undo2,          label: 'Refund' },
+  { path: '/admin/finance/refund-settings', icon: ShieldCheck, label: 'Kebijakan Refund', superadminOnly: true },
   { path: '/admin/finance/tax',       icon: BadgePercent,   label: 'Laporan PPN' },
   { path: '/admin/reports',           icon: LineChart,      label: 'Laporan Untung' },
   { path: '/admin/reports/variance',  icon: Scale,          label: 'Selisih HPP' },
@@ -64,7 +65,7 @@ const SISTEM: NavItem[] = [
 export function getAdminNavigation({ isManager, isSuperAdmin }: { isManager: boolean; isSuperAdmin: boolean }): NavGroup[] {
   return [
     { label: 'Operasional', items: OPERASIONAL },
-    { label: 'Keuangan', items: KEUANGAN },
+    { label: 'Keuangan', items: KEUANGAN.filter(i => !i.superadminOnly || isSuperAdmin) },
     ...(isManager ? [{ label: 'Produk', items: PRODUK }] : []),
     ...(isSuperAdmin ? [{ label: 'Sistem', items: SISTEM }] : []),
   ]
@@ -92,6 +93,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   transfers: 'Transfer Antar Akun',
   tax: 'Laporan PPN',
   refunds: 'Refund',
+  'refund-settings': 'Kebijakan Refund',
   notifications: 'Notifikasi',
   products: 'Produk',
   packages: 'Paket',

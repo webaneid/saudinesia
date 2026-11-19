@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { ArrowRight, Undo2 } from 'lucide-react'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { formatRupiah } from '@/lib/utils'
+import { FORCE_MAJEURE_OPTIONS, forceMajeureOf } from '@/lib/refunds/labels'
 
 export type RefundRow = {
   id: string; amount: number; reason: string; status: 'pending' | 'approved' | 'paid' | 'rejected'; source: 'cancellation' | 'overpayment'
@@ -51,6 +52,7 @@ export function RefundsPanel({ bookingId, canManage, cancellation, refunds, refu
   const [amount, setAmount] = useState('')
   const [text, setText] = useState('')
   const [decision, setDecision] = useState<'refund' | 'retain'>('refund')
+  const [fm, setFm] = useState('')
 
   if (!cancellation && refunds.length === 0 && (!canManage || refundableMax <= 0)) return null
 
@@ -81,9 +83,10 @@ export function RefundsPanel({ bookingId, canManage, cancellation, refunds, refu
         <div className="admin-form-panel">
           <ChoiceSelect options={[{ id: 'refund', label: 'Refund ke pelanggan' }, { id: 'retain', label: 'Tahan uang — catatan wajib' }]} value={decision} onChange={v => setDecision(v as 'refund' | 'retain')} ariaLabel="Keputusan" clearable={false} />
           {decision === 'refund' && <input type="number" min={1} className="admin-inp w-full" aria-label="Jumlah refund" value={amount} onChange={e => setAmount(e.target.value)} />}
+          {decision === 'refund' && <ChoiceSelect ariaLabel="Force-majeure" placeholder="Bukan force-majeure" value={fm} onChange={setFm} options={FORCE_MAJEURE_OPTIONS} />}
           <textarea className="admin-inp w-full" rows={2} maxLength={500} placeholder="Catatan" value={text} onChange={e => setText(e.target.value)} />
           <div className="flex gap-2">
-            <button type="button" className="admin-btn-sm" disabled={busy} onClick={() => run(`/api/v1/admin/bookings/${bookingId}/cancel/decision`, { decision, ...(decision === 'refund' ? { refundAmount: Number(amount) } : {}), ...(text.trim() ? { note: text.trim() } : {}) })}>Simpan keputusan</button>
+            <button type="button" className="admin-btn-sm" disabled={busy} onClick={() => run(`/api/v1/admin/bookings/${bookingId}/cancel/decision`, { decision, ...(decision === 'refund' ? { refundAmount: Number(amount), forceMajeure: forceMajeureOf(fm) } : {}), ...(text.trim() ? { note: text.trim() } : {}) })}>Simpan keputusan</button>
             <button type="button" className="admin-btn-sm" onClick={() => setForm(null)}>Tutup</button>
           </div>
         </div>

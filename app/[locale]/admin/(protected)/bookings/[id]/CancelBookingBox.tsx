@@ -6,6 +6,7 @@ import { Ban } from 'lucide-react'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { formatRupiah } from '@/lib/utils'
+import { FORCE_MAJEURE_OPTIONS, forceMajeureOf } from '@/lib/refunds/labels'
 
 type Decision = 'refund' | 'retain' | 'defer'
 const DECISIONS: Array<{ id: Decision; label: string }> = [
@@ -35,6 +36,7 @@ export function CancelBookingBox({ bookingId, paid, suggested, canMoney, pending
   const [decision, setDecision] = useState<Decision>(suggested > 0 ? 'refund' : 'retain')
   const [amount, setAmount] = useState(String(suggested > 0 ? suggested : paid))
   const [note, setNote] = useState('')
+  const [fm, setFm] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const money = Math.round(paid * 100) > 0
@@ -58,7 +60,7 @@ export function CancelBookingBox({ bookingId, paid, suggested, canMoney, pending
     if (reason.trim().length < 3) { setError('Isi alasan pembatalan (minimal 3 karakter)'); return }
     if (!(await ask({ title: 'Batalkan pesanan ini?', body: 'Kuota dilepas dan pelanggan menerima email pemberitahuan. Tindakan ini tidak dapat dibatalkan.', confirmLabel: 'Ya, batalkan' }))) return
     setBusy(true)
-    const body = { reason: reason.trim(), ...(money ? { decision, ...(decision === 'refund' ? { refundAmount: n } : {}) } : {}), ...(note.trim() ? { note: note.trim() } : {}) }
+    const body = { reason: reason.trim(), ...(money ? { decision, ...(decision === 'refund' ? { refundAmount: n, forceMajeure: forceMajeureOf(fm) } : {}) } : {}), ...(note.trim() ? { note: note.trim() } : {}) }
     const res = await fetch(`/api/v1/admin/bookings/${bookingId}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).catch(() => null)
     const json = res ? await res.json().catch(() => null) as { success?: boolean; error?: string } | null : null
     setBusy(false)
@@ -82,6 +84,8 @@ export function CancelBookingBox({ bookingId, paid, suggested, canMoney, pending
             <>
               <label className="block text-[12px] font-medium text-admin-muted" htmlFor="cancel-amount">Jumlah refund (Rp, maks. {formatRupiah(paid)})</label>
               <input id="cancel-amount" type="number" min={1} max={paid} className="admin-inp w-full" value={amount} onChange={e => setAmount(e.target.value)} />
+              <label className="block text-[12px] font-medium text-admin-muted">Force-majeure (wajib bila melebihi saran kebijakan)</label>
+              <ChoiceSelect ariaLabel="Force-majeure" placeholder="Bukan force-majeure" value={fm} onChange={setFm} options={FORCE_MAJEURE_OPTIONS} />
             </>
           )}
           <textarea className="admin-inp w-full" rows={2} maxLength={500} placeholder={decision === 'retain' ? 'Catatan (wajib)' : 'Catatan (opsional)'} value={note} onChange={e => setNote(e.target.value)} />

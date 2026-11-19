@@ -12,6 +12,9 @@ export function refundFailureResponse(r: RefundFailure): NextResponse {
     case 'needs_account': return NextResponse.json(err('Akun kas tidak aktif atau tidak ditemukan'), { status: 422 })
     case 'needs_recipient': return NextResponse.json(err('Isi rekening tujuan pelanggan (bank, nomor, nama pemilik) — wajib kecuali dibayar tunai'), { status: 422 })
     case 'invalid_date': return NextResponse.json(err('Tanggal bayar tidak boleh di masa depan atau sebelum refund disetujui'), { status: 422 })
+    case 'needs_force_majeure': return NextResponse.json(err(`Melebihi kebijakan pembatalan (paling banyak ${formatRupiah(r.policyCap)} tanpa force-majeure) — tandai force-majeure dan pilih kategorinya`), { status: 422 })
+    case 'force_majeure_not_applicable': return NextResponse.json(err('Force-majeure hanya untuk refund pembatalan'), { status: 422 })
+    case 'needs_superadmin': return NextResponse.json(err('Refund ini wajib disetujui superadmin (Kebijakan Refund)'), { status: 403 })
     case 'decision_pending': return NextResponse.json(err('Pembatalan ini ditahan/ditunda — putuskan dari kotak pembatalan di halaman booking'), { status: 409 })
   }
 }

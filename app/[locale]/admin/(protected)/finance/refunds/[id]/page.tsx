@@ -5,7 +5,9 @@ import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canManageRefund } from '@/lib/pricing/policy'
 import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { refundableOf } from '@/lib/refunds/service'
-import { REFUND_SOURCE_LABEL, REFUND_STATUS } from '@/lib/refunds/labels'
+import { APPROVAL_MODE_LABEL, FORCE_MAJEURE_LABEL, REFUND_SOURCE_LABEL, REFUND_STATUS } from '@/lib/refunds/labels'
+import { approvalFactsOf, evaluateRefundApproval } from '@/lib/refunds/approval'
+import { getRefundSettings } from '@/lib/refunds/settings'
 import { cashTargetOptions } from '@/lib/cash/accounts'
 import { CASH_COMPONENT_LABEL } from '@/lib/cash/labels'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
@@ -38,6 +40,14 @@ export default async function RefundDetail({ params }: Props) {
   const canManage = canManageRefund(session.role)
   const bill = billOf(r.booking)
   const { max } = await refundableOf(prisma, r.bookingId, r.id)
+  // Persetujuan (docs/rencana-force-majeure.md): dinilai sama dengan layanan; server menilai ULANG di dalam kunci saat menyetujui.
+  const open = r.status === 'pending' || r.status === 'approved'
+  const settings = await getRefundSettings()
+  const facts = open && r.source === 'cancellation' ? await approvalFactsOf(prisma, r.bookingId, Number(r.amount), r.source, r.id) : null
+  const verdict = facts ? evaluateRefundApproval(facts, settings.approvalMode, r.forceMajeureCategory) : null
+  const approveBlocked = r.status !== 'pending' || !verdict ? null
+    : verdict.needsForceMajeure ? 'Melebihi kebijakan pembatalan — ubah dan tandai force-majeure sebelum disetujui.'
+    : verdict.needsSuperadmin && session.role !== 'superadmin' ? `Wajib disetujui superadmin (${APPROVAL_MODE_LABEL[settings.approvalMode].label.toLowerCase()}).` : null
   const staffIds = [r.createdById, r.approvedById, r.rejectedById, r.paidById].filter((v): v is string => !!v)
   const staff = new Map((await prisma.user.findMany({ where: { id: { in: staffIds } }, select: { id: true, fullName: true } })).map(u => [u.id, u.fullName]))
   const who = (v: string | null) => (v ? staff.get(v) ?? 'staf' : 'sistem')
@@ -83,6 +93,14 @@ export default async function RefundDetail({ params }: Props) {
             <dl className="grid grid-cols-1 gap-x-4 gap-y-2 text-[13px] sm:grid-cols-2">
               <div><dt className="text-[11px] text-admin-muted">Jumlah refund</dt><dd className="m-0 font-semibold tabular-nums text-admin-ink">{formatRupiah(Number(r.amount))}</dd></div>
               <div><dt className="text-[11px] text-admin-muted">Sumber</dt><dd className="m-0 text-admin-ink">{REFUND_SOURCE_LABEL[r.source]}</dd></div>
+              {r.source === 'cancellation' && <div><dt className="text-[11px] text-admin-muted">Force-majeure</dt><dd className="m-0 text-admin-ink">{r.forceMajeureCategory ? FORCE_MAJEURE_LABEL[r.forceMajeureCategory] : 'Bukan force-majeure'}</dd></div>}
+              {facts && verdict && (
+                <div><dt className="text-[11px] text-admin-muted">Persetujuan</dt><dd className="m-0 text-admin-ink">
+                  {facts.policyCap === null ? 'Tanpa batas kebijakan' : `Batas kebijakan ${formatRupiah(facts.policyCap)}`}
+                  {verdict.abovePolicy && <span className="font-semibold text-admin-warning"> · di atas kebijakan</span>}
+                  {' · '}{verdict.needsSuperadmin ? <span className="font-semibold">wajib superadmin</span> : 'cukup manager'}
+                </dd></div>
+              )}
               <div className="sm:col-span-2"><dt className="text-[11px] text-admin-muted">Alasan (internal)</dt><dd className="m-0 break-words text-admin-ink">{r.reason}</dd></div>
               <div><dt className="text-[11px] text-admin-muted">Tagihan booking</dt><dd className="m-0 tabular-nums text-admin-ink">{formatRupiah(bill.grandTotal)}</dd></div>
               <div><dt className="text-[11px] text-admin-muted">Terbayar bersih (sesudah refund dibayar)</dt><dd className="m-0 tabular-nums text-admin-ink">{formatRupiah(bill.paid)}</dd></div>
@@ -124,6 +142,7 @@ export default async function RefundDetail({ params }: Props) {
         <ManageBox title="Tindakan" icon="actions" collapsible={false} aside={<Badge tone={status.tone}>{status.label}</Badge>}>
           {canManage
             ? <RefundActions refundId={r.id} status={r.status} amount={Number(r.amount)} reason={r.reason} recipient={recipient} max={max}
+                cancellation={r.source === 'cancellation'} forceMajeure={r.forceMajeureCategory} approveBlocked={approveBlocked}
                 cashOptions={r.status === 'approved' ? await cashTargetOptions() : []} />
             : <p className="m-0 text-[12px] text-admin-muted">Hanya manager/superadmin yang dapat menyetujui atau membayar refund.</p>}
         </ManageBox>

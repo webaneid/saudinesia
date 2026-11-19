@@ -1,13 +1,17 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, type ForceMajeureCategory } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { billOf, billRefunds } from '@/lib/invoice/bill'
 import { resolveCashTarget, type CashTarget } from '@/lib/cash/accounts'
 import { postEntries } from '@/lib/cash/ledger'
 import { syncRevenueShare } from '@/lib/revenue-share/entitlement'
+import { approvalFactsOf, evaluateRefundApproval } from '@/lib/refunds/approval'
+import { getRefundSettings } from '@/lib/refunds/settings'
 
 // Refund — SATU penulis tabel `refunds` (Fase 7b-2a, docs/arsitektur-booking-engine-v2.md §10.10). Siklus: pending → approved → paid | rejected.
 // Setiap operasi mengunci baris booking dulu lalu membaca ulang di dalam kunci; uang keluar (paid) memosting entri buku kas `refund` di transaksi yang sama.
 // Batas jumlah (dinilai di dalam kunci): booking BATAL → terbayar bersih − refund terbuka; booking hidup → hanya KELEBIHAN bayar (terbayar − tagihan) − refund terbuka.
+// Force-majeure (docs/rencana-force-majeure.md): refund PEMBATALAN di atas kebijakan wajib berkategori force-majeure (usul/ubah/setujui); persetujuan superadmin
+// menurut setelan `refund_settings` yang dibaca ulang saat menyetujui. Aturannya murni di lib/refunds/approval.ts.
 // Refund terbuka = pending/approved (yang `paid` sudah mengurangi terbayar lewat billOf). `reason`/`notes` = teks staf → dikosongkan lib/account/deletion.ts.
 
 type Tx = Prisma.TransactionClient
@@ -21,6 +25,9 @@ export type RefundFailure =
   | { kind: 'invalid_date' }
   | { kind: 'decision_pending' } // pembatalan ditahan/ditunda: putuskan lewat decideDeferred, bukan usulan biasa
   | { kind: 'needs_recipient' } // bayar non-tunai tanpa rekening tujuan pelanggan (SEC-244)
+  | { kind: 'needs_force_majeure'; policyCap: number } // refund pembatalan melebihi kebijakan tanpa tanda force-majeure
+  | { kind: 'force_majeure_not_applicable' } // force-majeure hanya untuk refund pembatalan
+  | { kind: 'needs_superadmin' } // setelan mewajibkan persetujuan superadmin
 export type RefundOk<T = unknown> = { kind: 'done' } & T
 
 /** Rekening TUJUAN pelanggan (§10.13). Data pribadi: dikosongkan lib/account/deletion.ts. */
@@ -51,14 +58,26 @@ export async function refundableOf(tx: Tx, bookingId: string, excludeRefundId?: 
 }
 
 /** Dipanggil DI DALAM transaksi yang sudah mengunci booking (pembatalan admin / keputusan tunda / usulan kelebihan bayar). */
-export async function createRefundTx(tx: Tx, input: { bookingId: string; amount: number; reason: string; byUserId: string; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
+export async function createRefundTx(tx: Tx, input: { bookingId: string; amount: number; reason: string; byUserId: string; recipient?: RefundRecipient | null; forceMajeure?: ForceMajeureCategory | null }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
   const { max, cancelled } = await refundableOf(tx, input.bookingId)
   if (cents(input.amount) <= 0 || cents(input.amount) > cents(max)) return { kind: 'over_limit', max }
+  const source = cancelled ? 'cancellation' as const : 'overpayment' as const
+  const forceMajeure = input.forceMajeure ?? null
+  const fm = await forceMajeureCheck(tx, input.bookingId, input.amount, source, forceMajeure)
+  if (fm) return fm
   const row = await tx.refund.create({
-    data: { bookingId: input.bookingId, amount: input.amount, reason: input.reason, source: cancelled ? 'cancellation' : 'overpayment', status: 'pending', createdById: input.byUserId, ...recipientData(input.recipient ?? null) },
+    data: { bookingId: input.bookingId, amount: input.amount, reason: input.reason, source, forceMajeureCategory: forceMajeure, status: 'pending', createdById: input.byUserId, ...recipientData(input.recipient ?? null) },
     select: { id: true },
   })
   return { kind: 'done', refundId: row.id }
+}
+
+/** Force-majeure pada kelebihan bayar ditolak; refund pembatalan di atas kebijakan tanpa force-majeure ditolak. Di dalam kunci booking. */
+async function forceMajeureCheck(tx: Tx, bookingId: string, amount: number, source: 'cancellation' | 'overpayment', forceMajeure: ForceMajeureCategory | null, excludeRefundId?: string): Promise<RefundFailure | null> {
+  if (source !== 'cancellation') return forceMajeure ? { kind: 'force_majeure_not_applicable' } : null
+  const facts = await approvalFactsOf(tx, bookingId, amount, source, excludeRefundId)
+  // Mode tak memengaruhi kewajiban force-majeure.
+  return evaluateRefundApproval(facts, 'above_policy', forceMajeure).needsForceMajeure ? { kind: 'needs_force_majeure', policyCap: facts.policyCap ?? 0 } : null
 }
 
 /**
@@ -72,7 +91,7 @@ async function lateMoneyOf(tx: Tx, bookingId: string, since: Date): Promise<numb
 }
 
 /** Usulan refund atas booking (kelebihan bayar pada booking hidup, atau sisa uang pada booking batal). */
-export async function proposeRefund(bookingId: string, input: { amount: number; reason: string; byUserId: string; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
+export async function proposeRefund(bookingId: string, input: { amount: number; reason: string; byUserId: string; recipient?: RefundRecipient | null; forceMajeure?: ForceMajeureCategory | null }): Promise<RefundFailure | RefundOk<{ refundId: string }>> {
   return prisma.$transaction(async (tx) => {
     const exists = await tx.booking.findUnique({ where: { id: bookingId }, select: { status: true } })
     if (!exists || exists.status === 'draft') return { kind: 'not_found' }
@@ -84,33 +103,42 @@ export async function proposeRefund(bookingId: string, input: { amount: number; 
   })
 }
 
-async function withRefund<T>(refundId: string, fn: (tx: Tx, r: { id: string; bookingId: string; status: string; amount: number }) => Promise<T>): Promise<T | { kind: 'not_found' }> {
+type LockedRefund = { id: string; bookingId: string; status: string; amount: number; source: 'cancellation' | 'overpayment'; forceMajeureCategory: ForceMajeureCategory | null }
+async function withRefund<T>(refundId: string, fn: (tx: Tx, r: LockedRefund) => Promise<T>): Promise<T | { kind: 'not_found' }> {
   return prisma.$transaction(async (tx) => {
     const head = await tx.refund.findUnique({ where: { id: refundId }, select: { bookingId: true } })
     if (!head) return { kind: 'not_found' as const }
     await lockBooking(tx, head.bookingId)
-    const r = await tx.refund.findUniqueOrThrow({ where: { id: refundId }, select: { id: true, bookingId: true, status: true, amount: true } })
+    const r = await tx.refund.findUniqueOrThrow({ where: { id: refundId }, select: { id: true, bookingId: true, status: true, amount: true, source: true, forceMajeureCategory: true } })
     return fn(tx, { ...r, amount: Number(r.amount) })
   })
 }
 
-/** Ubah usulan (hanya `pending`): jumlah, alasan, dan — bila dikirim — rekening tujuan (`null` = dikosongkan). */
-export async function updateRefundAmount(refundId: string, input: { amount: number; reason: string; recipient?: RefundRecipient | null }): Promise<RefundFailure | RefundOk> {
-  return withRefund(refundId, async (tx, r) => {
+/** Ubah usulan (hanya `pending`): jumlah, alasan, force-majeure, dan — bila dikirim — rekening tujuan (`null` = dikosongkan). `forceMajeure` undefined = tetap. */
+export async function updateRefundAmount(refundId: string, input: { amount: number; reason: string; recipient?: RefundRecipient | null; forceMajeure?: ForceMajeureCategory | null }): Promise<RefundFailure | RefundOk> {
+  return withRefund(refundId, async (tx, r): Promise<RefundFailure | RefundOk> => {
     if (r.status !== 'pending') return { kind: 'conflict' as const }
     const { max } = await refundableOf(tx, r.bookingId, r.id)
     if (cents(input.amount) <= 0 || cents(input.amount) > cents(max)) return { kind: 'over_limit' as const, max }
-    await tx.refund.update({ where: { id: r.id }, data: { amount: input.amount, reason: input.reason, ...(input.recipient !== undefined ? recipientData(input.recipient) : {}) } })
+    const forceMajeure = input.forceMajeure !== undefined ? input.forceMajeure : r.forceMajeureCategory
+    const fm = await forceMajeureCheck(tx, r.bookingId, input.amount, r.source, forceMajeure, r.id)
+    if (fm) return fm
+    await tx.refund.update({ where: { id: r.id }, data: { amount: input.amount, reason: input.reason, forceMajeureCategory: forceMajeure, ...(input.recipient !== undefined ? recipientData(input.recipient) : {}) } })
     return { kind: 'done' as const }
   })
 }
 
-export async function approveRefund(refundId: string, byUserId: string): Promise<RefundFailure | RefundOk> {
-  return withRefund(refundId, async (tx, r) => {
+/** `isSuperadmin` = peran penyetuju; setelan persetujuan dibaca ULANG di dalam kunci (perubahan setelan sesudah usulan berlaku). */
+export async function approveRefund(refundId: string, byUserId: string, opts: { isSuperadmin: boolean }): Promise<RefundFailure | RefundOk> {
+  return withRefund(refundId, async (tx, r): Promise<RefundFailure | RefundOk> => {
     if (r.status !== 'pending') return { kind: 'conflict' as const }
     // Batas dinilai ULANG (tagihan booking hidup bisa naik lewat revisi sesudah usulan → kelebihan bayar menyusut).
     const { max } = await refundableOf(tx, r.bookingId, r.id)
     if (cents(r.amount) > cents(max)) return { kind: 'over_limit' as const, max }
+    const facts = await approvalFactsOf(tx, r.bookingId, r.amount, r.source, r.id)
+    const verdict = evaluateRefundApproval(facts, (await getRefundSettings(tx)).approvalMode, r.forceMajeureCategory)
+    if (verdict.needsForceMajeure) return { kind: 'needs_force_majeure' as const, policyCap: facts.policyCap ?? 0 }
+    if (verdict.needsSuperadmin && !opts.isSuperadmin) return { kind: 'needs_superadmin' as const }
     await tx.refund.update({ where: { id: r.id }, data: { status: 'approved', approvedById: byUserId, approvedAt: new Date() } })
     return { kind: 'done' as const }
   })

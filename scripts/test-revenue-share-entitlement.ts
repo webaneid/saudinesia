@@ -162,7 +162,7 @@ await t('REFUND dibayar menurunkan hak: batal dengan refund 1.250.000 dari 2.600
   const refundId = c.kind === 'done' ? c.refundId : null
   assert.ok(refundId)
   assert.equal(await sum(a), 100_000, 'refund belum dibayar → hak belum berubah')
-  assert.equal((await approveRefund(refundId!, staff.id)).kind, 'done')
+  assert.equal((await approveRefund(refundId!, staff.id, { isSuperadmin: false })).kind, 'done')
   assert.equal((await payRefund(refundId!, { byUserId: staff.id, cashAccount: { kind: 'cash' }, paidAt: new Date(), notes: null })).kind, 'done')
   const last = (await entries(a)).at(-1)!
   assert.deepEqual([last.source, last.refId, Number(last.amountIdr), Number(last.entitledAfterIdr)], ['refund', refundId, -46_000, 54_000])

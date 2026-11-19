@@ -16,7 +16,7 @@ import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canManageRefund } from '@/lib/pricing/policy'
-import { REFUND_SOURCE_LABEL, REFUND_STATUS as STATUS } from '@/lib/refunds/labels'
+import { FORCE_MAJEURE_LABEL, REFUND_SOURCE_LABEL, REFUND_STATUS as STATUS } from '@/lib/refunds/labels'
 
 // Daftar refund (Fase 7b-2a §10.10; halaman khusus §10.13): baca untuk semua admin; Buat Refund + tindakan (setujui/bayar) di halaman detail, peran refund.
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
@@ -57,7 +57,7 @@ export default async function AdminRefunds({ params, searchParams }: Props) {
         </>
       ),
     },
-    { key: 'src', header: 'Sumber', hideBelowLg: true, cell: r => <span className="text-[12px] text-admin-muted">{REFUND_SOURCE_LABEL[r.source]}</span> },
+    { key: 'src', header: 'Sumber', hideBelowLg: true, cell: r => <span className="text-[12px] text-admin-muted">{REFUND_SOURCE_LABEL[r.source]}{r.forceMajeureCategory && <> <Badge tone="warning">Force-majeure · {FORCE_MAJEURE_LABEL[r.forceMajeureCategory]}</Badge></>}</span> },
     { key: 'at', header: 'Diusulkan', hideBelowLg: true, cell: r => <span className="text-[12px] tabular-nums text-admin-muted">{formatInstant(r.createdAt, DATETIME_MEDIUM)}</span> },
     { key: 'st', header: 'Status', cell: r => <Badge tone={STATUS[r.status].tone}>{STATUS[r.status].label}</Badge> },
     { key: 'amt', header: 'Jumlah', align: 'right', cell: r => <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(Number(r.amount))}</span> },

@@ -1592,30 +1592,31 @@ enum PaymentStatus {
 }
 
 model Refund {
-  id                     String       @id @default(uuid())
+  id                     String                @id @default(uuid())
   bookingId              String
-  amount                 Decimal      @db.Decimal(14, 2)
+  amount                 Decimal               @db.Decimal(14, 2)
   reason                 String
-  isForceMajeure         Boolean      @default(false)
-  status                 RefundStatus @default(pending)
+  // Force-majeure (docs/rencana-force-majeure.md): kategori = refund PEMBATALAN boleh melebihi kebijakan; null = bukan force-majeure.
+  forceMajeureCategory   ForceMajeureCategory?
+  status                 RefundStatus          @default(pending)
   approvedById           String?
   approvedAt             DateTime?
   paidAt                 DateTime?
   notes                  String?
-  createdAt              DateTime     @default(now())
+  createdAt              DateTime              @default(now())
   // Fase 7b-2a (docs/arsitektur-booking-engine-v2.md §10.10): siklus pending → approved → paid | rejected, ditulis HANYA lib/refunds/service.ts.
   // `reason`/`notes` = teks staf (bisa memuat nama) → dikosongkan lib/account/deletion.ts. Uang keluar = entri buku kas `refund` (refType 'refund').
-  source                 RefundSource @default(cancellation)
+  source                 RefundSource          @default(cancellation)
   createdById            String? // staf yang mengusulkan (null = baris lama)
-  rejectedAt             DateTime?    @db.Timestamptz(3)
+  rejectedAt             DateTime?             @db.Timestamptz(3)
   rejectedById           String?
   paidById               String?
   cashAccountId          String?
   // Rekening TUJUAN pelanggan (SEC-244, §10.13): semua-atau-tak-ada (CHECK); wajib saat bayar non-tunai (lib/refunds/service.ts). Data pribadi →
   // dikosongkan lib/account/deletion.ts.
-  recipientBank          String?      @db.VarChar(80)
-  recipientAccountNumber String?      @db.VarChar(40)
-  recipientAccountName   String?      @db.VarChar(120)
+  recipientBank          String?               @db.VarChar(80)
+  recipientAccountNumber String?               @db.VarChar(40)
+  recipientAccountName   String?               @db.VarChar(120)
 
   booking     Booking      @relation(fields: [bookingId], references: [id])
   approvedBy  User?        @relation("ApprovedBy", fields: [approvedById], references: [id])
@@ -1631,6 +1632,32 @@ enum RefundSource {
   overpayment
 
   @@map("refund_source")
+}
+
+enum ForceMajeureCategory {
+  visa_rejected
+  medical
+  saudi_policy
+  other
+
+  @@map("force_majeure_category")
+}
+
+enum RefundApprovalMode {
+  above_policy // di atas kebijakan pembatalan
+  above_half // di atas 50% tagihan booking
+  either // salah satunya
+
+  @@map("refund_approval_mode")
+}
+
+// Kebijakan refund (docs/rencana-force-majeure.md): SATU baris 'global' (CHECK), ditulis HANYA lib/refunds/settings.ts (+ jejak settings_audit).
+model RefundSettings {
+  id           String             @id @default("global") @db.VarChar(16)
+  approvalMode RefundApprovalMode @default(above_policy)
+  updatedAt    DateTime           @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("refund_settings")
 }
 
 enum RefundStatus {
@@ -2297,7 +2324,7 @@ model SettingsAudit {
 model StaffAuditEvent {
   id           String   @id @default(uuid())
   at           DateTime @default(now()) @db.Timestamptz(3)
-  actorId      String?  // staf pelaku; login = akun itu sendiri; null = skrip
+  actorId      String? // staf pelaku; login = akun itu sendiri; null = skrip
   targetUserId String?
   bookingId    String?
   action       String   @db.VarChar(32)
