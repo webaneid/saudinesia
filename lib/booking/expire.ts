@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { cancelBooking, type CancellableBooking } from '@/lib/booking/cancel'
+import { DEPARTURE_REMINDER_DAYS, type DepartureReminderType } from '@/lib/notifications/departure'
 import { addDays, dbDateOf, endOfDayExclusiveInApp, startOfDayInApp, todayInApp } from '@/lib/time'
 
 // Hangus & pengingat (docs/arsitektur-booking-engine-v2.md §10.1 poin 5). Jatuh tempo TIDAK mengikat (D4): ia hanya batas bayar yang ditampilkan ke jamaah; pembayaran terlambat
@@ -102,4 +103,25 @@ export async function dueReminders(now: Date = new Date()): Promise<DueReminder[
     if (!r.paymentDeadline || bill.balance <= 0) return []
     return [{ id: r.id, userId: r.userId, code: r.bookingCode, deadline: r.paymentDeadline, kind: (r.paymentDeadline.getTime() < dayEnd ? 'd0' : 'd1') as ReminderKind, balance: bill.balance, partial: bill.paid > 0 }]
   })
+}
+
+export type DepartureReminder = { id: string; userId: string; code: string; departureDate: Date; type: DepartureReminderType }
+
+/**
+ * Pengingat keberangkatan hari ini (docs/arsitektur-notifikasi.md §13): booking `active` dengan kursi TERKONFIRMASI (K2 — yang belum bayar sudah diingatkan bayar dan
+ * akan hangus) yang tanggal acuannya (`departureDate`, tanggal kalender turunan item paling awal) = hari ini (zona aplikasi) + 7 atau + 1 hari (K1).
+ * Dedupe per tipe di `notify`, jadi H-7 dan H-1 masing-masing sekali per kanal.
+ */
+export async function departureReminders(now: Date = new Date()): Promise<DepartureReminder[]> {
+  const today = todayInApp(now)
+  const out: DepartureReminder[] = []
+  for (const [type, days] of Object.entries(DEPARTURE_REMINDER_DAYS) as Array<[DepartureReminderType, number]>) {
+    const rows = await prisma.booking.findMany({
+      where: { status: 'active', confirmedAt: { not: null }, departureDate: dbDateOf(addDays(today, days)) },
+      select: { id: true, userId: true, bookingCode: true, departureDate: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    })
+    for (const r of rows) if (r.departureDate) out.push({ id: r.id, userId: r.userId, code: r.bookingCode, departureDate: r.departureDate, type })
+  }
+  return out
 }

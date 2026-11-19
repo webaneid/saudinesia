@@ -1,5 +1,5 @@
 // Template yang TIDAK dipakai saat ini (lingkup WhatsApp diperkecil — waMessage di lib/notifications/events.ts hanya memakai bookingSubmitted, paymentReminder,
-// paymentConfirmed, paymentRejected + dua balasan verifikasi): autoCancelled, visaStatusChange, departureReminder, refundApproved. Sengaja dipertahankan untuk
+// paymentConfirmed, paymentRejected, departureReminder + dua balasan verifikasi): autoCancelled, visaStatusChange, refundApproved. Sengaja dipertahankan untuk
 // dibuka kembali saat WhatsApp dipakai lagi (ADR-0001); hapus bila keputusan itu berubah.
 import { formatRupiah } from '@/lib/utils'
 export const waTemplates = {
@@ -39,8 +39,8 @@ export const waTemplates = {
   visaStatusChange: (code: string, status: string) =>
     `Update visa untuk booking *${code}*:\nStatus: *${status}*\n\nLihat detail di aplikasi Saudinesia.`,
 
-  departureReminder: (code: string, days: number) =>
-    `Persiapkan diri Anda! Keberangkatan booking *${code}* ${days === 1 ? 'besok' : `${days} hari lagi`}.\n\nSemoga perjalanan ibadah Anda lancar dan mabrur.`,
+  departureReminder: (code: string, days: number, date: string) =>
+    `Persiapkan diri Anda! Keberangkatan booking *${code}* ${days === 1 ? 'besok' : `${days} hari lagi`}, *${date}*.\n\nSemoga perjalanan ibadah Anda lancar dan mabrur.`,
 
   refundApproved: (code: string, amount: string) =>
     `Refund untuk booking *${code}* sebesar *${amount}* telah disetujui.\nProses transfer akan selesai dalam 3-5 hari kerja.`,

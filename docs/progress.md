@@ -7,7 +7,7 @@ See `docs/spec.md` for full feature descriptions. Append decisions to `docs/deci
 
 Centang lama yang basi sudah ditandai di tempatnya ("Rapikan 2026-11-19": tertutup, atau dicoret bila tidak berlaku lagi). Yang benar-benar masih terbuka:
 
-- **Kode:** pengingat keberangkatan (template ada, belum dijadwalkan); kirim ulang/kirim manual WhatsApp dari log notifikasi; deskripsi Situs Wisata di halaman publik; linimasa status visa per jamaah; force-majeure + persetujuan superadmin; taksonomi/kategori produk (F3, menunggu keputusan model); service worker; audit Core Web Vitals; audit PII di log; checklist OWASP.
+- **Kode:** kirim ulang/kirim manual WhatsApp dari log notifikasi; deskripsi Situs Wisata di halaman publik; linimasa status visa per jamaah; force-majeure + persetujuan superadmin; taksonomi/kategori produk (F3, menunggu keputusan model); service worker; audit Core Web Vitals; audit PII di log; checklist OWASP.
 - **Menunggu kunci dari pemilik:** Fase 10 Xendit; uji sandbox iPaymu sungguhan.
 - **Entri data pemilik (lewat UI):** harga Transport dan Paket Ziarah; rekening bank di Pengaturan Invoice.
 - **Sebelum go-live (M15):** VPS, Docker Compose, TLS, `migrate deploy` pertama, GOWA nyata, smoke test, backup; tiga sisa hardening SEC-10; SEC-123 (High dependency).
@@ -733,7 +733,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 
 **Produk & operasional (arah besar, perlu keputusan):**
 - [x] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya. — **Rapikan 2026-11-19:** tertutup — Fase 11a/11b/11c (semua jenis produk di `/checkout/[jenis]`)
-- [ ] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan. — **Rapikan 2026-11-19:** refund (7b-2a), laporan keuangan (Fase 12) selesai, Group Booking diganti 11d; tersisa pengingat keberangkatan (template `departureReminder` ada, belum dijadwalkan)
+- [x] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan. — **Rapikan 2026-11-19:** refund (7b-2a), laporan keuangan (Fase 12) selesai, Group Booking diganti 11d; pengingat keberangkatan H-7/H-1 selesai 2026-11-19 (`docs/arsitektur-notifikasi.md` §13)
 - [ ] M15 deployment: VPS, TLS, `migrate deploy`, uji GOWA nyata, smoke test; jadwalkan backup (`scripts/backup-*.sh`).
 
 ---

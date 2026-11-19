@@ -1,6 +1,7 @@
 import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { DATETIME_LONG, formatInstant } from '@/lib/time'
 import { appUrl } from '@/lib/email/templates'
+import { departureDays, type DepartureReminderType } from '@/lib/notifications/departure'
 
 // Semua kejadian notifikasi di SATU union (docs/arsitektur-notifikasi.md §3–4). Menambah kejadian = tambah satu varian di sini;
 // `waMessage` dan `emailContent` (lib/email/templates.ts) memakai `switch` yang lengkap, jadi kompiler memaksa kedua kanal diisi.
@@ -15,6 +16,8 @@ export type NotificationEvent =
   | { type: 'payment_confirmed'; code: string; balance?: number }
   | { type: 'payment_rejected'; code: string }
   | { type: 'booking_expired'; code: string }
+  /** Pengingat keberangkatan H-7 / H-1 (docs/arsitektur-notifikasi.md §13): `date` = tanggal berangkat terformat (tanggal kalender). Isi sengaja hanya tanggal (K4). */
+  | { type: DepartureReminderType; code: string; date: string }
   /** Dibatalkan staf (Fase 7b-2a). `money` = sudah ada uang masuk: pesan hanya menyebut tim akan menghubungi soal dana — tanpa jumlah/keputusan internal. */
   | { type: 'booking_cancelled'; code: string; money: boolean }
   | { type: 'visa_status_change'; code: string; status: string }
@@ -28,7 +31,8 @@ export type NotificationType = NotificationEvent['type']
 
 /**
  * Pesan WhatsApp untuk kejadian ini; `null` = TIDAK dikirim lewat WhatsApp. Lingkup sengaja kecil (keputusan produk 2026-10-21, ADR-0001 —
- * gateway pihak ketiga makin sering memblokir): hanya konfirmasi booking, pengingat pembayaran, dan pembayaran dikonfirmasi/ditolak.
+ * gateway pihak ketiga makin sering memblokir): hanya konfirmasi booking, pengingat pembayaran, pembayaran dikonfirmasi/ditolak, dan pengingat keberangkatan
+ * (ditambahkan pemilik 2026-11-19, §13 docs/arsitektur-notifikasi.md).
  * Status visa dan booking hangus hanya lewat email; ditinjau lagi nanti.
  */
 export function waMessage(e: NotificationEvent): string | null {
@@ -44,6 +48,9 @@ export function waMessage(e: NotificationEvent): string | null {
       return waTemplates.paymentConfirmed(e.code, e.balance)
     case 'payment_rejected':
       return waTemplates.paymentRejected(e.code)
+    case 'departure_reminder_7d':
+    case 'departure_reminder_1d':
+      return waTemplates.departureReminder(e.code, departureDays(e.type), e.date)
     case 'booking_expired':
     case 'booking_cancelled':
     case 'visa_status_change':

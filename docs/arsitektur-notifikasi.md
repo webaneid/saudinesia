@@ -65,7 +65,7 @@
 | `auto_cancelled` | cron tiap jam | **tidak** (email saja, §12) | ya | per booking |
 | `visa_status_change` | admin ubah status visa | **tidak** (email saja, §12) | ya | tidak |
 | `contact_changed` | pemilik mengubah telepon/WhatsApp yang sudah ada | tidak | ya (peringatan keamanan) | tidak |
-| `departure_reminder_7d` / `_1d` | **belum ada pemicu** — di luar scope fase ini (dicatat) | — | — | — |
+| `departure_reminder_7d` / `_1d` | cron 08:00 (`runReminderJob`), booking `active` berkursi terkonfirmasi, berangkat H-7 / H-1 (§13, 2026-11-19) | ya (nomor terverifikasi) | ya | per booking+kanal+tipe, hanya yang `sent` |
 | `refund_approved` | **belum ada pemicu** — di luar scope | — | — | — |
 | `welcome` | pendaftaran selesai (password/Google) | tidak | ya | per user |
 | `test` | admin "Kirim email uji" | tidak | ya | tidak |
@@ -157,3 +157,20 @@ Urutan saat produksi: (1) daftar domain di Resend → pasang DNS **SPF, DKIM, da
 - Penerima WA memakai `User.whatsapp` (bukan `phone`). Klien WA mengirim E.164 apa adanya.
 - Bukti: `scripts/test-notify.ts` (29 uji) + `scripts/test-whatsapp.ts`; lihat `docs/arsitektur-whatsapp-verifikasi.md` §2 dan §9.
 
+
+## 13. Pengingat keberangkatan (RENCANA DISETUJUI 2026-11-19 — K1 H-7 + H-1, K2 kursi terkonfirmasi, K3 WhatsApp bila nomor terverifikasi + setuju, email selalu, K4 tanggal saja)
+
+**Recheck kode (2026-11-19):**
+- Template WA `departureReminder(code, days)` ada di `lib/notifications/templates/whatsapp.ts` tetapi tak punya pemicu; tak ada varian kejadian di `NotificationEvent` (`lib/notifications/events.ts`) maupun email di `lib/email/templates.ts`. Matriks §4 mencatatnya "belum ada pemicu".
+- Cron harian `runReminderJob` (08:00 zona aplikasi, `lib/cron/bookingLifecycleJob.ts`) sudah mengirim pengingat bayar lewat `notify(..., dedupe: true)`; dedupe = (user, booking, tipe, kanal) yang `sent`, gagal dicoba lagi besok.
+- Tanggal acuan = `Booking.departureDate` (tanggal kalender, TURUNAN item paling awal — `lib/booking/dates.ts`). Booking visa saja tanpa item bertanggal → `departureDate` kosong → tidak diingatkan (rencana berangkat visa hanya rencana).
+
+**Rencana:**
+1. Kejadian baru `departure_reminder` `{ code, days, date, balance?, pendingData? }` di union; email (judul "Keberangkatan … lagi", tanggal, sisa tagihan bila ada, tautan booking); WhatsApp sesuai K3.
+2. `departureReminders(now)` di `lib/booking/expire.ts` (sebelah `dueReminders`): booking `active` sesuai K2, `departureDate` = hari ini + N untuk setiap N di K1 (aritmetika kalender `addDays`, zona aplikasi). Tipe log per jarak (`departure_reminder_7d`, `_1d`) supaya dedupe per jarak.
+3. Dijalankan di `runReminderJob` yang sama (08:00), tanpa jadwal cron baru.
+4. Uji: pemilihan (status, tanggal, batas tengah malam WIB di beberapa `TZ`), isi email/WA tanpa "undefined" dan tanpa data pribadi jamaah, dedupe.
+
+**Keputusan pemilik (2026-11-19):** K1 = H-7 dan H-1. K2 = hanya booking `active` dengan kursi terkonfirmasi (`confirmedAt` terisi). K3 = WhatsApp DIAKTIFKAN untuk kejadian ini (syarat biasa: nomor terverifikasi + persetujuan), selain itu email saja — email tetap selalu dikirim (jaring pengaman `notify`); lingkup WA ADR-0001 bertambah satu kejadian. K4 = isi hanya pengingat ramah + tanggal berangkat + tautan booking (tanpa sisa tagihan/status data). Kejadian: `departure_reminder_7d` / `departure_reminder_1d` `{ code, date }`.
+
+**As-built (2026-11-19):** kejadian `departure_reminder_7d`/`_1d` `{ code, date }` di `NotificationEvent`; jarak hari SATU tempat `lib/notifications/departure.ts` (`DEPARTURE_REMINDER_DAYS`, modul sendiri supaya `events.ts` ↔ `email/templates.ts` tak melingkar); WA `waTemplates.departureReminder(code, days, date)` (template lama diberi tanggal, kini terpakai); email "Keberangkatan … lagi" + kode + tanggal + tautan booking. Pemilih `departureReminders(now)` (`lib/booking/expire.ts`): `status = active`, `confirmedAt` terisi, `departureDate = dbDateOf(addDays(todayInApp(now), N))`. Dijalankan di `runReminderJob` (08:00 zona aplikasi) sesudah pengingat bayar; kegagalan satu booking tak menghentikan sisanya. Tanggal di pesan = `formatCalendarDate(…, DATE_LONG)` (tanggal kalender, tak bergeser zona). Uji: `test-booking-lifecycle` di 4 `TZ` (00.30 WIB = hari berikutnya; belum bayar/batal/selesai/draf/tanpa tanggal/H-2/H-8/hari ini tidak), `test-email` (isi utuh), `test-notify` (WA terkirim untuk kedua tipe, email sebagai jaring pengaman), jalan ujung-ke-ujung `runReminderJob` di DB uji (log `departure_reminder_7d` tercatat, `skipped` tanpa kunci Resend → dicoba lagi besok).

@@ -1,5 +1,6 @@
 import type { NotificationEvent } from '@/lib/notifications/events'
 import { formatRupiah } from '@/lib/utils'
+import { departureDays } from '@/lib/notifications/departure'
 
 // Template email: satu layout (tabel + CSS inline — kompatibel klien email) dan konten per kejadian.
 // SEMUA nilai dinamis (nama jamaah, kode booking, status) HARUS lewat `esc()`: nama yang diketik pengguna bisa berisi HTML.
@@ -155,6 +156,22 @@ function bodyFor(e: NotificationEvent, ctx: EmailContext): EmailBody {
         ],
         facts: [['Kode booking', e.code]],
       }
+    case 'departure_reminder_7d':
+    case 'departure_reminder_1d': {
+      const days = departureDays(e.type)
+      const when = days === 1 ? 'besok' : `${days} hari lagi`
+      return {
+        subject: `Keberangkatan booking ${e.code} ${when}`,
+        preheader: `Tanggal berangkat ${e.date}.`,
+        heading: `Keberangkatan ${when}`,
+        paragraphs: [
+          `Halo ${ctx.name}, keberangkatan booking Anda tinggal ${when}. Persiapkan diri dan perlengkapan perjalanan Anda.`,
+          'Semoga perjalanan ibadah Anda lancar dan mabrur.',
+        ],
+        facts: [['Kode booking', e.code], ['Tanggal berangkat', e.date]],
+        cta: bookingCta,
+      }
+    }
     case 'visa_status_change':
       return {
         subject: `Update visa booking ${e.code}: ${e.status}`,

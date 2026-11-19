@@ -185,6 +185,8 @@ const EVENTS: NotificationEvent[] = [
   { type: 'payment_confirmed', code: 'SND-0003', balance: 21_945_000 },
   { type: 'payment_rejected', code: 'SND-0003' },
   { type: 'booking_expired', code: 'SND-0004' },
+  { type: 'departure_reminder_7d', code: 'SND-0004', date: '7 November 2026' },
+  { type: 'departure_reminder_1d', code: 'SND-0004', date: '1 November 2026' },
   { type: 'booking_cancelled', code: 'SND-0004', money: true },
   { type: 'booking_cancelled', code: 'SND-0004', money: false },
   { type: 'visa_status_change', code: 'SND-0005', status: 'Visa Terbit' },
