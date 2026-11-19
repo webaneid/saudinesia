@@ -45,9 +45,11 @@ if (!superuser) {
 } else {
   const role = `saudinesia_app_t${randomBytes(4).toString('hex')}`
   const password = randomBytes(24).toString('hex')
+  let applyOut = ''
   const apply = () => {
     // stdin dipipa eksplisit seperti prisma/apply-app-role.ts — tanpa itu Bun di runner Linux menjalankan skrip KOSONG (status 0, peran tak dibuat).
     const p = spawnSync('bunx', ['prisma', 'db', 'execute', '--stdin', '--schema', 'prisma/schema.prisma'], { input: appRoleSql(role, password), stdio: ['pipe', 'pipe', 'pipe'], encoding: 'utf8', env: { ...process.env, DATABASE_URL: dbUrl } })
+    applyOut = `${p.stdout ?? ''}${p.stderr ?? ''}`.slice(-600)
     if (p.status !== 0) throw new Error(`prisma db execute gagal: ${(p.stderr ?? '').slice(0, 300)}`)
   }
   const u = new URL(dbUrl); u.username = role; u.password = password
@@ -64,7 +66,7 @@ if (!superuser) {
       const r = await owner.$queryRawUnsafe<{ login: boolean; kind: string | null; enc: string }[]>(
         `SELECT rolcanlogin AS login, left(rolpassword, 13) AS kind, current_setting('password_encryption') AS enc FROM pg_authid WHERE rolname = '${role}'`)
       const hba = await owner.$queryRawUnsafe<unknown[]>('SELECT type, database, user_name, address, auth_method FROM pg_hba_file_rules').catch((e: unknown) => String(e))
-      assert.deepEqual(r, [{ login: true, kind: 'SCRAM-SHA-256', enc: 'scram-sha-256' }], JSON.stringify({ r, hba }))
+      assert.deepEqual(r, [{ login: true, kind: 'SCRAM-SHA-256', enc: 'scram-sha-256' }], JSON.stringify({ r, hba, applyOut }))
     })
     await t('peran aplikasi: bukan superuser, tak bisa membuat db/peran, bukan pemilik tabel', async () => {
       const [r] = await app.$queryRaw<{ u: string; s: boolean; db: boolean; cr: boolean; owned: bigint }[]>`
