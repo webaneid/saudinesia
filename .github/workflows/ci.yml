@@ -239,7 +239,10 @@ jobs:
           # Redis berpassword (SEC-10): redis-cli membaca sandi dari REDISCLI_AUTH.
           RPW="$(grep '^REDIS_PASSWORD=' .env.production | cut -d= -f2-)"
           $C exec -T -e REDISCLI_AUTH="$RPW" redis redis-cli --scan --pattern 'rl:*' | tee /tmp/rl-keys.txt
-          grep -q 'rl:loginAcctIp:' /tmp/rl-keys.txt || { echo "kunci rate limit TIDAK ada di Redis — limiter jatuh ke memori"; exit 1; }
+          # Cukup SATU kunci login di Redis untuk membuktikan limiter image produksi memakai Redis. Jangan mensyaratkan kunci tertentu:
+          # perintah Redis yang melewati commandTimeout 300 ms (runner CI sibuk) membuat limiter sengaja jatuh ke memori 10 dtk, sehingga
+          # kunci lapis lain bisa hanya ada di memori (CI #174 gagal acak: hanya rl:loginIp yang tertulis; 429 tetap benar).
+          grep -qE '^rl:login(AcctIp|Ip|Acct):' /tmp/rl-keys.txt || { echo "kunci rate limit TIDAK ada di Redis — limiter jatuh ke memori"; exit 1; }
 
       # Hardening kontainer (SEC-10) dibuktikan pada kontainer yang BENAR-BENAR jalan, bukan hanya pada berkas compose.
       - name: Smoke - hardening kontainer (no-new-privileges, cap_drop, Redis berpassword, rahasia DB tak ada di web)
