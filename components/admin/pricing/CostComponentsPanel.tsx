@@ -47,6 +47,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
   const [error, setError] = useState<string | null>(null)
   const [forbidden, setForbidden] = useState(false)
   const [wasManual, setWasManual] = useState(false)
+  const [sellEdited, setSellEdited] = useState(false) // false = kotak Harga Jual Rekomendasi menampilkan rekomendasi (belum disentuh)
   const [formOpenedAt, setFormOpenedAt] = useState(0)
   const [marginPercent, setMarginPercent] = useState(0)
 
@@ -83,11 +84,11 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
         costComponent: c.costComponent, vendorId: c.vendorId, currency: c.currency, cost: String(c.cost),
         sell: manual ? String(c.price!.sellIdr) : '', note: manual ? c.price!.manualNote ?? '' : '',
       })
-      setWasManual(manual)
+      setWasManual(manual); setSellEdited(manual)
     } else {
       setEditingId(null)
       setForm(EMPTY_FORM)
-      setWasManual(false)
+      setWasManual(false); setSellEdited(false)
     }
     setPreview(null); setError(null); setFormOpenedAt(n => n + 1)
     setShowForm(true)
@@ -110,12 +111,13 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
       setSaving(false)
       return
     }
-    // Harga jual komponen (§22): diisi = harga manual; dikosongkan = ikut rekomendasi. Lewat route harga yang sama dengan PriceCard.
+    // Harga jual komponen (§22): kotak "Harga Jual Rekomendasi" diubah ke angka lain = harga manual; tak diubah / dikosongkan / sama dengan
+    // rekomendasi = ikut rekomendasi. Lewat route harga yang sama dengan PriceCard.
     const costId = editingId ?? j?.data?.id
     const sell = Number(form.sell)
+    const manual = manualSell
     let priceError: string | null = null
-    if (costId && (form.sell.trim() !== '' || wasManual)) {
-      const manual = form.sell.trim() !== ''
+    if (costId && (manual || wasManual)) {
       const pr = await fetch('/api/v1/admin/pricing/points', {
         method: manual ? 'PUT' : 'DELETE', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ownerType: 'cost_component', ownerId: costId, variantKey: '', ...(manual ? { sellIdr: sell, note: form.note.trim() || null } : {}) }),
@@ -160,7 +162,8 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
   const sellOf = (c: CostRow) => c.price?.sellIdr ?? c.sellPrice
   const recOf = (c: CostRow) => c.price?.autoSellIdr ?? c.sellPrice
   const total = costs.reduce((sum, c) => sum + (sellOf(c) ?? 0), 0)
-  const typedSell = form.sell.trim() === '' ? 0 : Number(form.sell)
+  const manualSell = sellEdited && form.sell.trim() !== '' && Number(form.sell) > 0 && Number(form.sell) !== preview?.sellPrice
+  const typedSell = manualSell ? Number(form.sell) : 0
   const belowCost = preview != null && typedSell > 0 && typedSell < preview.hppRupiah
   const formNote = typedSell > 0 && !belowCost ? marginNote({ sell: typedSell, recommended: preview?.sellPrice ?? null, ref: 'margin', marginPercent }) : null
 
@@ -191,7 +194,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
             onCurrencyChange={currency => setForm(f => ({ ...f, currency }))}
           />
 
-          <div className="grid sm:grid-cols-2 gap-3 items-end">
+          <div className="grid sm:grid-cols-3 gap-3 items-end">
             <div>
               <p className="text-xs text-admin-muted mb-1">Biaya ({form.currency})</p>
               <input className="admin-inp" type="number" placeholder="0"
@@ -202,16 +205,21 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
               <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? rupiah(preview.hppRupiah) : '—'}</p>
             </div>
             <div>
-              <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi</p>
-              <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? rupiah(preview.sellPrice) : '—'}</p>
-            </div>
-            <div>
-              <p className="text-xs text-admin-muted mb-1">Harga Jual (Rupiah)</p>
-              <input className="admin-inp" type="number" min={0} aria-label="Harga jual komponen"
-                placeholder={preview ? `Ikut rekomendasi (${rupiah(preview.sellPrice)})` : 'Ikut rekomendasi'}
-                value={form.sell} onChange={e => setForm(f => ({ ...f, sell: e.target.value }))} />
+              <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi <span className="font-normal">(bisa diubah)</span></p>
+              <input className="admin-inp font-semibold text-admin-ink" type="number" min={0} aria-label="Harga Jual Rekomendasi — bisa diubah"
+                placeholder={preview ? String(preview.sellPrice) : 'Isi biaya dulu'}
+                value={sellEdited ? form.sell : preview ? String(preview.sellPrice) : ''}
+                onChange={e => { setSellEdited(true); setForm(f => ({ ...f, sell: e.target.value })) }} />
             </div>
           </div>
+          {manualSell && preview && (
+            <p className="m-0 flex flex-wrap items-center gap-2 text-[11px] text-admin-muted">
+              Harga manual · rekomendasi {rupiah(preview.sellPrice)}
+              <button type="button" className="font-semibold text-admin-accent underline" onClick={() => { setSellEdited(false); setForm(f => ({ ...f, sell: '', note: '' })) }}>
+                Kembalikan ke rekomendasi
+              </button>
+            </p>
+          )}
           {typedSell > 0 && (
             <div className="space-y-2">
               {belowCost && preview && (
@@ -225,7 +233,7 @@ export function CostComponentsPanel({ apiBase, hint, namePlaceholder, onChanged 
             </div>
           )}
           <p className="m-0 text-[11px] text-admin-muted">
-            Kosongkan Harga Jual untuk mengikuti rekomendasi (modal + margin bawaan {marginPercent}%). Diisi = harga manual; selisihnya terhadap margin hanya ditandai, tetap bisa disimpan.
+            Angka awal = rekomendasi (modal + margin bawaan {marginPercent}%). Ubah angkanya untuk harga jual sendiri; selisihnya terhadap margin hanya ditandai, tetap bisa disimpan.
           </p>
 
           <div className="flex gap-2">
