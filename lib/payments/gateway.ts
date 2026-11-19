@@ -12,6 +12,7 @@ import { syncRevenueShare } from '@/lib/revenue-share/entitlement'
 import { appUrl } from '@/lib/email/templates'
 import { calendarDateOf, dateInApp, endOfDayExclusiveInApp, todayInApp } from '@/lib/time'
 import { notify } from '@/lib/notifications/notify'
+import { logError } from '@/lib/log'
 
 // Pembayaran online lewat iPaymu (Fase 9, docs/arsitektur-booking-engine-v2.md §10.12) — SATU-SATUNYA penulis pembayaran gateway.
 // Alur: buat (`awaiting`, nominal dinilai di dalam kunci booking) → pelanggan membayar VA/QR/… → webhook ATAU "Periksa status" → `syncGatewayPayment`
@@ -115,7 +116,7 @@ export async function createGatewayPayment(input: { bookingId: string; userId: s
     })
     return { kind: 'done', paymentId: created.id }
   } catch (e) {
-    console.error('[gateway/create]', e instanceof IpaymuError ? `${e.code}: ${e.message}` : e instanceof Error ? e.name : 'galat')
+    logError('gateway/create', e)
     await prisma.payment.updateMany({ where: { id: created.id, status: 'awaiting' }, data: { status: 'expired', gatewayCheckedAt: new Date() } })
     return { kind: 'gateway' }
   }
@@ -158,10 +159,10 @@ export async function syncGatewayPayment(paymentId: string, opts: { trxIdHint?: 
 
   let st: TrxStatus
   try { st = await checkTransaction(cfg, trxId) } catch (e) {
-    console.error('[gateway/sync]', e instanceof IpaymuError ? `${e.code}: ${e.message}` : 'galat')
+    logError('gateway/sync', e)
     return { kind: 'pending' }
   }
-  if (st.referenceId !== p.id) { console.error('[gateway/sync] ReferenceId tak cocok', p.id); return { kind: 'mismatch' } }
+  if (st.referenceId !== p.id) { logError('gateway/sync ReferenceId tak cocok', p.id); return { kind: 'mismatch' } }
   const now = new Date()
   if (st.state !== 'paid') {
     const done = st.state === 'expired' || st.state === 'failed' || (p.payExpiresAt !== null && p.payExpiresAt.getTime() < now.getTime() - 3_600_000)
@@ -170,7 +171,7 @@ export async function syncGatewayPayment(paymentId: string, opts: { trxIdHint?: 
   }
   const expected = cents(p.claimedAmountIdr ?? 0) + cents(p.serviceFeeIdr)
   if (cents(st.amount) !== expected) {
-    console.error('[gateway/sync] nominal tak cocok', p.id) // diselesaikan manual oleh staf (SEC-258)
+    logError('gateway/sync nominal tak cocok', p.id) // diselesaikan manual oleh staf (SEC-258)
     const stale = p.payExpiresAt !== null && p.payExpiresAt.getTime() < now.getTime()
     await prisma.payment.updateMany({ where: { id: p.id, status: { in: ['awaiting', 'expired'] } }, data: { ...(stale ? { status: 'expired' } : {}), gatewayCheckedAt: now } })
     return { kind: 'mismatch' }

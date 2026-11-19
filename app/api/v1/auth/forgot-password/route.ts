@@ -5,6 +5,7 @@ import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit
 import { forgotPasswordSchema } from '@/lib/validators/auth'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Reset password lewat tautan email (docs/arsitektur-auth.md §3.2). Respons SERAGAM untuk email terdaftar maupun tidak.
 export async function POST(request: Request) {
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     }
     return NextResponse.json(ok({ sent: true }))
   } catch (error) {
-    console.error('[auth/forgot-password]', error instanceof Error ? error.name : error)
+    logError('auth/forgot-password', error)
     return apiErrorJson('internal', 500)
   }
 }

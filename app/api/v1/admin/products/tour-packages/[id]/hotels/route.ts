@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { repriceOwner } from '@/lib/pricing/engine'
 import { z } from 'zod'
 import { sellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const createSchema = z.object({
   hotelRoomScheduleId: z.string().min(1),
@@ -37,7 +38,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/tour-packages/[id]/hotels/POST]', e)
+    logError('admin/products/tour-packages/[id /hotels/POST]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

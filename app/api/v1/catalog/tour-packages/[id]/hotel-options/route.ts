@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { ok, err } from '@/lib/validators'
 import { computeTourPackageBreakdown } from '@/lib/pricing/computeTourPackagePrice'
+import { logError } from '@/lib/log'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -13,7 +14,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const breakdown = await computeTourPackageBreakdown(id)
     return NextResponse.json(ok(breakdown.hotelOptions))
   } catch (error) {
-    console.error('[catalog/tour-packages/[id]/hotel-options]', error)
+    logError('catalog/tour-packages/[id /hotel-options]', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { deleteOrDeactivate } from '@/lib/admin/safeDelete'
 import { z } from 'zod'
+import { logError } from '@/lib/log'
 
 const updateSchema = z.object({
   origin:      z.string().trim().min(1).optional(),
@@ -25,7 +26,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/flight/routes/[id]/GET]', e instanceof Error ? e.name : e)
+    logError('admin/products/flight/routes/[id /GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -44,7 +45,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Rute penerbangan tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/flight/routes/[id]/PUT]', e)
+    logError('admin/products/flight/routes/[id /PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -72,7 +73,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Rute penerbangan tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/flight/routes/[id]/DELETE]', e)
+    logError('admin/products/flight/routes/[id /DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

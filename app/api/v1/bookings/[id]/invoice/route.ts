@@ -5,6 +5,7 @@ import { invoiceBookingInclude, buildInvoiceData } from '@/lib/pdf/invoiceData'
 import { generateInvoicePdf } from '@/lib/pdf/invoice'
 import { loadInvoiceLogo } from '@/lib/pdf/logo'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 type Params = { params: Promise<{ id: string }> }
 
@@ -42,7 +43,7 @@ export async function GET(_req: Request, { params }: Params) {
     })
   } catch (error) {
     // Invoice tidak boleh terbit bila Σ snapshot ≠ total (invarian I4) — dicatat, klien hanya menerima 500 generik.
-    console.error('[bookings/invoice]', error instanceof Error ? error.message : error)
+    logError('bookings/invoice', error)
     return apiErrorJson('internal', 500)
   }
 }

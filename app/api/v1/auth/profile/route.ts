@@ -6,6 +6,7 @@ import { profileSchema } from '@/lib/validators/auth'
 import { upsertAddress } from '@/lib/address/prepare'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Dipakai wizard booking (docs/arsitektur-komponen-kontak.md §5) untuk prefill Kontak
 // jamaah #1 (Pemesan) dari data akun — client component, tidak bisa panggil getSession() langsung.
@@ -21,7 +22,7 @@ export async function GET() {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)
     }
-    console.error('[auth/profile]', error instanceof Error ? error.name : error)
+    logError('auth/profile', error)
     return apiErrorJson('internal', 500)
   }
 }
@@ -59,7 +60,7 @@ export async function PUT(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)
     }
-    console.error('[auth/profile]', error instanceof Error ? error.name : error)
+    logError('auth/profile', error)
     return apiErrorJson('internal', 500)
   }
 }

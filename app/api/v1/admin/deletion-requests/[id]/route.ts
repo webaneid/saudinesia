@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { executeDeletion, rejectDeletion } from '@/lib/account/deletion'
 import { ok, err } from '@/lib/validators'
+import { logError } from '@/lib/log'
 
 // Memproses permintaan hapus akun UU PDP (docs/arsitektur-hapus-akun.md). `completed` MENGHAPUS/ANONIMKAN data secara permanen,
 // jadi superadmin harus mengetik ulang email pemilik akun; `rejected` hanya menutup permintaan. Hanya dari `pending`.
@@ -40,7 +41,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
     if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/deletion-requests/[id]/PATCH]', e instanceof Error ? e.name : e)
+    logError('admin/deletion-requests/[id /PATCH]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

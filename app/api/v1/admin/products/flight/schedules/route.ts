@@ -7,6 +7,7 @@ import { escapeLike } from '@/lib/utils/search'
 import { getFlightAirlineNames } from '@/lib/pricing/flightAirlines'
 import { z } from 'zod'
 import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 // price TIDAK ada di sini secara sengaja (docs/arsitektur-tiket-pesawat.md §9 poin 7, sama pelajaran
 // docs/arsitektur-harga.md §17) — jadwal baru dibuat dengan price:0, terisi otomatis setelah
@@ -42,7 +43,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/flight/schedules/GET]', e)
+    logError('admin/products/flight/schedules/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -63,7 +64,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/flight/schedules/POST]', e)
+    logError('admin/products/flight/schedules/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

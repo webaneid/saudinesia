@@ -1,5 +1,6 @@
 import cron from 'node-cron'
 import { prisma } from '@/lib/db'
+import { logError } from '@/lib/log'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -14,7 +15,7 @@ export function startAuthTokenCleanupJob(): void {
       const r = await prisma.authToken.deleteMany({ where: { OR: [{ expiresAt: { lt: cutoff } }, { usedAt: { lt: cutoff } }] } })
       if (r.count > 0) console.log(`[cron] auth_tokens dibersihkan: ${r.count}`)
     } catch (e) {
-      console.error('[cron] pembersihan auth_tokens gagal:', e instanceof Error ? e.name : e)
+      logError('cron pembersihan auth_tokens gagal', e)
     }
   })
 }

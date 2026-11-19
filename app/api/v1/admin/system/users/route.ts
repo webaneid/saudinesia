@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client'
 import { staffCreateSchema } from '@/lib/validators/adminUpdates'
 import { paginate, parseListParams } from '@/lib/admin/pagination'
 import { visibleStaffWhere } from '@/lib/auth/adminUsers'
+import { logError } from '@/lib/log'
 
 export async function GET(req: Request) {
   try {
@@ -27,7 +28,7 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(items, meta))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/system/users/GET]', e instanceof Error ? e.name : e)
+    logError('admin/system/users/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) return NextResponse.json(err('Forbidden'), { status: 403 })
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002') return NextResponse.json(err('Email sudah digunakan'), { status: 409 })
-    console.error('[admin/system/users/POST]', e instanceof Error ? e.name : e)
+    logError('admin/system/users/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

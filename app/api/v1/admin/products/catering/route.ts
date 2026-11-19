@@ -9,6 +9,7 @@ import { emptyToNull } from '@/lib/validators/richText'
 import { setManualSell } from '@/lib/pricing/engine'
 import { cateringSeasonPrices } from '@/lib/pricing/engine/read'
 import { CATERING_SEASONS, cateringVariantKey } from '@/lib/pricing/engine/owners/manualOnly'
+import { logError } from '@/lib/log'
 
 function authError(e: unknown): NextResponse | null {
   return e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')
@@ -26,7 +27,7 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(rows.map(r => ({ ...r, pricePerPersonRegular: prices.get(r.id)?.regular ?? 0, pricePerPersonRamadan: prices.get(r.id)?.ramadan ?? 0, pricePerPersonHajj: prices.get(r.id)?.hajj ?? 0 })), meta))
   } catch (e) {
     const a = authError(e); if (a) return a
-    console.error('[admin/products/catering/GET]', e instanceof Error ? e.name : e)
+    logError('admin/products/catering/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -47,7 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json(ok(c), { status: 201 })
   } catch (e) {
     const a = authError(e); if (a) return a
-    console.error('[admin/products/catering/POST]', e instanceof Error ? e.name : e)
+    logError('admin/products/catering/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

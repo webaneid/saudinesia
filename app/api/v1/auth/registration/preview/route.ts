@@ -4,6 +4,7 @@ import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit
 import { tokenOnlySchema } from '@/lib/validators/auth'
 import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Halaman tautan pendaftaran memanggil ini untuk menampilkan isian. Hanya membaca — TIDAK mengonsumsi token
 // (pemindai tautan email meng-GET halaman; konsumsi hanya lewat POST dari tombol).
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
     if (!preview) return apiErrorJson('linkInvalid', 404)
     return NextResponse.json(ok(preview))
   } catch (error) {
-    console.error('[auth/registration/preview]', error instanceof Error ? error.name : error)
+    logError('auth/registration/preview', error)
     return apiErrorJson('internal', 500)
   }
 }

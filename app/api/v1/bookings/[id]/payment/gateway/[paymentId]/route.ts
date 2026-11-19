@@ -4,6 +4,7 @@ import { consume, policy } from '@/lib/auth/rateLimit'
 import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
 import { cancelGatewayPayment } from '@/lib/payments/gateway'
+import { logError } from '@/lib/log'
 
 // Pelanggan membatalkan pembayaran online yang masih menunggu (K9-3: satu aktif per booking) supaya bisa membuat yang baru.
 export async function DELETE(_request: Request, { params }: { params: Promise<{ id: string; paymentId: string }> }) {
@@ -19,7 +20,7 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
     return NextResponse.json(ok({ cancelled: true }))
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[bookings/id/payment/gateway/id]', error instanceof Error ? error.name : 'galat')
+    logError('bookings/id/payment/gateway/id', error)
     return apiErrorJson('internal', 500)
   }
 }

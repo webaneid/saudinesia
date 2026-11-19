@@ -7,6 +7,7 @@ import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { ok, err } from '@/lib/validators'
 import { sendEmail } from '@/lib/email/resend'
 import { emailContent } from '@/lib/email/templates'
+import { logError } from '@/lib/log'
 
 const bodySchema = z.object({ to: z.string().trim().email('Format email tidak valid').max(254).optional() })
 
@@ -35,7 +36,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/system/integrations/test-email]', e instanceof Error ? e.message : e)
+    logError('admin/system/integrations/test-email', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

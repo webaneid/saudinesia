@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { previewDeletion } from '@/lib/account/deletion'
 import { ok, err } from '@/lib/validators'
+import { logError } from '@/lib/log'
 
 // Pratinjau SEBELUM menghapus: apa yang akan dihapus (jumlah), dan syarat yang menghalangi. Hanya membaca.
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -15,7 +16,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
     if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/deletion-requests/[id]/preview/GET]', e instanceof Error ? e.name : e)
+    logError('admin/deletion-requests/[id /preview/GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

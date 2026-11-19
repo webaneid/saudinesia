@@ -9,6 +9,7 @@ import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 import { createGatewayPayment } from '@/lib/payments/gateway'
 import { gatewayView, gatewayViewSelect } from '@/lib/payments/gatewayView'
 import { formatRupiah } from '@/lib/utils'
+import { logError } from '@/lib/log'
 
 // Bayar online lewat iPaymu (Fase 9, docs/arsitektur-booking-engine-v2.md §10.12 langkah 4): pemilik booking memilih kanal + nominal; biaya layanan dan
 // batas nominal dihitung server di dalam kunci booking (lib/payments/gateway.ts). Respons = nomor VA / QR / tautan bayar untuk ditampilkan di halaman kita.
@@ -49,7 +50,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json(ok(await gatewayView(row)), { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[bookings/id/payment/gateway]', error instanceof Error ? error.name : 'galat')
+    logError('bookings/id/payment/gateway', error)
     return apiErrorJson('internal', 500)
   }
 }

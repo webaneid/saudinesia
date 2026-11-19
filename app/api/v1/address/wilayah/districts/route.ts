@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/db'
 import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Publik, tanpa auth — rata-rata ~14 kecamatan per kab/kota (7.285/514). docs/arsitektur-alamat.md.
 export async function GET(req: Request) {
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
     })
     return NextResponse.json(ok(districts))
   } catch (e) {
-    console.error('[address/wilayah/districts/GET]', e)
+    logError('address/wilayah/districts/GET', e)
     return apiErrorJson('internal', 500)
   }
 }

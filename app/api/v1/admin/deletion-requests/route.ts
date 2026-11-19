@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { paginate, parseListParams } from '@/lib/admin/pagination'
+import { logError } from '@/lib/log'
 
 const STATUSES = ['pending', 'completed', 'rejected', 'withdrawn'] as const
 
@@ -32,7 +33,7 @@ export async function GET(req: Request) {
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return NextResponse.json(err('Unauthorized'), { status: 401 })
     if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/deletion-requests/GET]', e instanceof Error ? e.name : e)
+    logError('admin/deletion-requests/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

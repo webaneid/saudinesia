@@ -9,6 +9,7 @@ import { emptyToNull } from '@/lib/validators/richText'
 import { withAdminPrices } from '@/lib/pricing/engine/adminRead'
 import { canViewCost } from '@/lib/pricing/policy'
 import { RequirementRejected, writeDefaultRequirements, writeRequirements } from '@/lib/documents/requirements'
+import { logError } from '@/lib/log'
 
 export async function GET(req: Request) {
   try {
@@ -22,7 +23,7 @@ export async function GET(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/haji/GET]', e instanceof Error ? e.name : e)
+    logError('admin/products/haji/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/haji/POST]', e instanceof Error ? e.name : e)
+    logError('admin/products/haji/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

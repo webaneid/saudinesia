@@ -4,6 +4,7 @@ import { PRICE_OWNER_TYPES, priceOwner } from './owners'
 import { lockOwnerPoints } from './lock'
 import { toView } from './view'
 import type { PriceOwnerType, PriceView, PriceUnit, ResolvedVariant } from './types'
+import { logError } from '@/lib/log'
 
 // SATU-SATUNYA penulis tabel `price_points` (invarian I3, docs/arsitektur-harga-terpadu.md).
 // Dipanggil lewat `refreshAllPricingCaches` agar semua pemicu (biaya berubah, kurs, margin) satu pintu.
@@ -88,7 +89,7 @@ export async function repriceOwnerType(ownerType: PriceOwnerType, currencies?: s
   for (const id of ids) {
     try { await repriceOwner(ownerType, id) } catch (err) {
       failed = true
-      console.error(`[pricing] hitung ulang ${ownerType} ${id} gagal:`, err)
+      logError('pricing hitung ulang', err, { owner: ownerType, id })
     }
   }
   return failed
@@ -118,10 +119,10 @@ export async function repriceAll(currencies?: string[]): Promise<string[]> {
   for (const ownerType of PRICE_OWNER_TYPES) {
     try { if (await repriceOwnerType(ownerType, currencies)) failed.push(ownerType) } catch (err) {
       failed.push(ownerType)
-      console.error(`[pricing] hitung ulang ${ownerType} gagal:`, err)
+      logError('pricing hitung ulang', err, { owner: ownerType })
     }
   }
-  try { await sweepOrphanPricePoints() } catch (err) { console.error('[pricing] sapu titik harga yatim gagal:', err) }
+  try { await sweepOrphanPricePoints() } catch (err) { logError('pricing sapu titik harga yatim gagal', err) }
   return failed
 }
 

@@ -4,6 +4,7 @@ import { clientIp, tooManyRequests } from '@/lib/auth/rateLimit'
 import { loadPublicInvoice } from '@/lib/invoice/publicView'
 import { generateInvoicePdf } from '@/lib/pdf/invoice'
 import { loadInvoiceLogo } from '@/lib/pdf/logo'
+import { logError } from '@/lib/log'
 
 type Ctx = { params: Promise<{ token: string }> }
 
@@ -20,7 +21,7 @@ export async function GET(req: Request, { params }: Ctx) {
       headers: { 'Content-Type': 'application/pdf', 'Content-Disposition': `inline; filename="${r.data.invoiceNumber}.pdf"` },
     })
   } catch (e) {
-    console.error('[invoice/public/pdf]', e instanceof Error ? e.name : 'unknown') // tanpa token & tanpa data pribadi
+    logError('invoice/public/pdf', e) // tanpa token & tanpa data pribadi
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

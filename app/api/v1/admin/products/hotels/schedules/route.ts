@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 // List HotelRoomSchedule aktif, flattened — dipakai dropdown "Hotel (opsional)" di package
 // builder Paket Ziarah (docs/arsitektur-ziarah.md §10.4).
@@ -33,7 +34,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/hotels/schedules/GET]', e)
+    logError('admin/products/hotels/schedules/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

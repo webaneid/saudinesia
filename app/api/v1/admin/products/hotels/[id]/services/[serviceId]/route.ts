@@ -6,6 +6,7 @@ import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
 import { PriceInputError, setManualSell } from '@/lib/pricing/engine'
 import { sellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const updateSchema = z.object({
   serviceName: z.string().min(1).optional(),
@@ -37,7 +38,7 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Layanan hotel tidak ditemukan'), { status: 404 })
     if (e instanceof PriceInputError) return NextResponse.json(err(e.message), { status: 400 })
-    console.error('[admin/products/hotels/[id]/services/[serviceId]/PUT]', e)
+    logError('admin/products/hotels/[id /services/[serviceId]/PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -60,7 +61,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Layanan hotel tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/hotels/[id]/services/[serviceId]/DELETE]', e)
+    logError('admin/products/hotels/[id /services/[serviceId]/DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

@@ -6,6 +6,7 @@ import { completeRegistrationSchema } from '@/lib/validators/auth'
 import { notify } from '@/lib/notifications/notify'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Pemilik email memilih password → akun dibuat (email terverifikasi) → langsung masuk.
 export async function POST(request: Request) {
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
     void notify({ userId: result.user.id, event: { type: 'welcome', name: result.user.fullName }, dedupe: true })
     return NextResponse.json(ok({ role: result.user.role }))
   } catch (error) {
-    console.error('[auth/registration/complete]', error instanceof Error ? error.name : error)
+    logError('auth/registration/complete', error)
     return apiErrorJson('internal', 500)
   }
 }

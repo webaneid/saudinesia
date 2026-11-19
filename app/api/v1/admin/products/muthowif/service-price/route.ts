@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { sellPrice, withSellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 // Harga sekarang cache dari HPP (docs/arsitektur-muthowif.md §10) — tidak lagi diisi manual di
 // sini, cuma dibaca. Edit harga lewat .../service-price/cost.
@@ -21,7 +22,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/muthowif/service-price/GET]', e)
+    logError('admin/products/muthowif/service-price/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

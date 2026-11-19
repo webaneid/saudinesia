@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireSuperAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { siteSettingSchema } from '@/lib/validators/siteSettings'
+import { logError } from '@/lib/log'
 
 async function getOrCreateSiteSetting() {
   const existing = await prisma.siteSetting.findFirst()
@@ -19,7 +20,7 @@ export async function GET() {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/system/settings/site/GET]', e)
+    logError('admin/system/settings/site/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -40,7 +41,7 @@ export async function PUT(req: Request) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/system/settings/site/PUT]', e)
+    logError('admin/system/settings/site/PUT', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

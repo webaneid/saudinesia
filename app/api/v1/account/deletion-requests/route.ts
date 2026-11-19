@@ -5,6 +5,7 @@ import { consume, policy, tooManyRequests } from '@/lib/auth/rateLimit'
 import { MIN_WAIT_HOURS, submitDeletionRequest, withdrawDeletionRequest } from '@/lib/account/deletion'
 import { ok } from '@/lib/validators'
 import { apiErrorJson } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 // Pengajuan/penarikan permintaan hapus akun UU PDP oleh pemilik akun (docs/arsitektur-hapus-akun.md). Pemrosesan hanya oleh superadmin.
 
@@ -24,7 +25,7 @@ export async function GET() {
     return NextResponse.json(ok(request ? { ...request, minWaitHours: MIN_WAIT_HOURS } : null))
   } catch (e) {
     const u = unauthorized(e); if (u) return u
-    console.error('[account/deletion-requests/GET]', e instanceof Error ? e.name : e)
+    logError('account/deletion-requests/GET', e)
     return apiErrorJson('internal', 500)
   }
 }
@@ -46,7 +47,7 @@ export async function POST() {
     return NextResponse.json(ok({ ...created.request, minWaitHours: MIN_WAIT_HOURS }), { status: 201 })
   } catch (e) {
     const u = unauthorized(e); if (u) return u
-    console.error('[account/deletion-requests/POST]', e instanceof Error ? e.name : e)
+    logError('account/deletion-requests/POST', e)
     return apiErrorJson('internal', 500)
   }
 }
@@ -59,7 +60,7 @@ export async function DELETE() {
     return NextResponse.json(ok({ status: 'withdrawn' }))
   } catch (e) {
     const u = unauthorized(e); if (u) return u
-    console.error('[account/deletion-requests/DELETE]', e instanceof Error ? e.name : e)
+    logError('account/deletion-requests/DELETE', e)
     return apiErrorJson('internal', 500)
   }
 }

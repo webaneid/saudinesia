@@ -4,6 +4,7 @@ import { ok, err } from '@/lib/validators'
 import { getInvoiceSettings } from '@/lib/invoice/settings'
 import { ipaymuFromEnv, parseCallback, verifyCallbackSignature } from '@/lib/payments/ipaymu'
 import { syncAndNotify } from '@/lib/payments/gateway'
+import { logError, logWarn } from '@/lib/log'
 
 // Callback iPaymu (Fase 9, docs/arsitektur-booking-engine-v2.md §10.12 langkah 5). Endpoint publik: isi callback HANYA pemicu — status/nominal/biaya
 // dibaca ulang dari iPaymu (`/transaction`) oleh `syncGatewayPayment`, jadi callback palsu tak bisa mengonfirmasi apa pun. X-Signature diperiksa sebagai
@@ -44,12 +45,12 @@ export async function POST(request: Request) {
     const s = await getInvoiceSettings()
     const cfg = ipaymuFromEnv(s.gatewaySandbox)
     if (cfg && !verifyCallbackSignature(cfg.va, payload, request.headers.get('x-signature'))) {
-      console.warn('[webhooks/ipaymu] X-Signature tak cocok — tetap dipastikan lewat /transaction', ref) // reference_id = id pembayaran (bukan data pribadi)
+      logWarn('webhooks/ipaymu X-Signature tak cocok — tetap dipastikan lewat /transaction', ref) // reference_id = id pembayaran (bukan data pribadi)
     }
     await syncAndNotify(ref, { trxIdHint: trx })
     return NextResponse.json(ok({ received: true }))
   } catch (e) {
-    console.error('[webhooks/ipaymu]', e instanceof Error ? e.name : 'galat')
+    logError('webhooks/ipaymu', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

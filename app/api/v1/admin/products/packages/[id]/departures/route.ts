@@ -5,6 +5,7 @@ import { authFailureResponse, isAuthError } from '@/lib/admin/errors'
 import { departureCreateSchema } from '@/lib/validators/package'
 import { createDeparture, listDepartures } from '@/lib/packages/departures'
 import { departureFailureResponse, loadDepartureWarnings } from '@/lib/packages/http'
+import { logError } from '@/lib/log'
 
 // Keberangkatan Paket Umroh (K1, docs/arsitektur-paket-umroh.md §8) — daftar + peringatan editor, dan tambah. Penulis: lib/packages/departures.ts.
 type Ctx = { params: Promise<{ id: string }> }
@@ -19,7 +20,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (isAuthError(e)) return authFailureResponse(e, 'admin/packages/departures/GET')
     const known = departureFailureResponse(e)
     if (known) return known
-    console.error('[admin/packages/departures/GET]', e)
+    logError('admin/packages/departures/GET', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -35,7 +36,7 @@ export async function POST(req: Request, { params }: Ctx) {
     if (isAuthError(e)) return authFailureResponse(e, 'admin/packages/departures/POST')
     const known = departureFailureResponse(e)
     if (known) return known
-    console.error('[admin/packages/departures/POST]', e)
+    logError('admin/packages/departures/POST', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

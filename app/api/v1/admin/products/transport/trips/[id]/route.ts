@@ -6,6 +6,7 @@ import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
 import { sellPrices } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const updateSchema = z.object({
   name:        z.string().min(1).optional(),
@@ -38,7 +39,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/transport/trips/[id]/GET]', e)
+    logError('admin/products/transport/trips/[id /GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -56,7 +57,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Trip tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/transport/trips/[id]/PUT]', e)
+    logError('admin/products/transport/trips/[id /PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -71,7 +72,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (isRecordNotFound(e)) return NextResponse.json(err('Trip tidak ditemukan'), { status: 404 })
-    console.error('[admin/products/transport/trips/[id]/DELETE]', e)
+    logError('admin/products/transport/trips/[id /DELETE]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

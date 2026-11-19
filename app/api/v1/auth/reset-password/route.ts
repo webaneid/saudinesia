@@ -5,6 +5,7 @@ import { clientIp, consume, policy, tooManyRequests } from '@/lib/auth/rateLimit
 import { resetPasswordSchema } from '@/lib/validators/auth'
 import { ok } from '@/lib/validators'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 export async function POST(request: Request) {
   try {
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
     await createSession(result.user.id)
     return NextResponse.json(ok({ role: result.user.role }))
   } catch (error) {
-    console.error('[auth/reset-password]', error instanceof Error ? error.name : error)
+    logError('auth/reset-password', error)
     return apiErrorJson('internal', 500)
   }
 }

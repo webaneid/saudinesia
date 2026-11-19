@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { PriceInputError, setManualSell } from '@/lib/pricing/engine'
 import { withSellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const createSchema = z.object({
   serviceName: z.string().min(1),
@@ -31,7 +32,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
-    console.error('[admin/products/hotels/[id]/services/GET]', e)
+    logError('admin/products/hotels/[id /services/GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -52,7 +53,7 @@ export async function POST(req: Request, { params }: Ctx) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
     }
     if (e instanceof PriceInputError) return NextResponse.json(err(e.message), { status: 400 })
-    console.error('[admin/products/hotels/[id]/services/POST]', e)
+    logError('admin/products/hotels/[id /services/POST]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

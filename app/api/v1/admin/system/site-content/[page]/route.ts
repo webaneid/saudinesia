@@ -5,6 +5,7 @@ import { ok, err } from '@/lib/validators'
 import { pageContentInputSchema } from '@/lib/validators/publicContent'
 import { isPublicPageKey } from '@/lib/public-content/pages'
 import { getPageForAdmin, savePageContent } from '@/lib/public-content/service'
+import { logError } from '@/lib/log'
 
 // Isi satu halaman publik (docs/arsitektur-frontend-publik.md §6.5 C3, C6) — hanya superadmin. Halaman di luar registry → 404.
 type Ctx = { params: Promise<{ page: string }> }
@@ -14,7 +15,7 @@ export async function GET(_req: Request, ctx: Ctx) {
   const { page } = await ctx.params
   if (!isPublicPageKey(page)) return NextResponse.json(err('Halaman tidak ditemukan'), { status: 404 })
   try { return NextResponse.json(ok(await getPageForAdmin(page))) } catch (e) {
-    console.error('[admin/system/site-content/[page]/GET]', e instanceof Error ? e.name : e)
+    logError('admin/system/site-content/[page /GET]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
@@ -31,7 +32,7 @@ export async function PUT(req: Request, ctx: Ctx) {
     if (!result.ok) return NextResponse.json(err(result.message), { status: result.status })
     return NextResponse.json(ok({ updatedAt: result.updatedAt }))
   } catch (e) {
-    console.error('[admin/system/site-content/[page]/PUT]', e instanceof Error ? e.name : e)
+    logError('admin/system/site-content/[page /PUT]', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

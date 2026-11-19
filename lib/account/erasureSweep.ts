@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/db'
 import { deleteObjectsByPrefix } from '@/lib/storage/minio'
+import { logError } from '@/lib/log'
 
 // Penyapuan ulang akun yang SUDAH dianonimkan (SEC-57, docs/arsitektur-hapus-akun.md §6). executeDeletion mengosongkan data pada saat commit,
 // tetapi tulis TERLAMBAT bisa mendarat sesudahnya: unggahan dokumen yang sedang berjalan (FK hanya ke BookingPilgrim, jadi kunci baris
@@ -69,7 +70,7 @@ export async function sweepRecentErasures(days = 7, deps: SweepDeps = defaultDep
       total.accounts++; total.objects += r.objects; total.notificationLogs += r.notificationLogs
     } catch (e) {
       total.failed++
-      console.error('[erasure-sweep] satu akun gagal disapu:', e instanceof Error ? e.name : e) // tanpa id/PII
+      logError('erasure-sweep satu akun gagal disapu', e) // tanpa id/PII
     }
   }
   return total

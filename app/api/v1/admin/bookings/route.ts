@@ -3,6 +3,7 @@ import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { escapeLike } from '@/lib/utils/search'
+import { logError } from '@/lib/log'
 
 export async function GET(req: Request) {
   try {
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
     return NextResponse.json(ok(bookings, { total: bookings.length }))
   } catch (e) {
     if (e instanceof Error && e.message === 'Forbidden') return NextResponse.json(err('Forbidden'), { status: 403 })
-    console.error('[admin/bookings]', e)
+    logError('admin/bookings', e)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }

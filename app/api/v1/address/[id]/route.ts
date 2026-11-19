@@ -9,6 +9,7 @@ import { getCountryName } from '@/lib/constants/countries'
 import { canAccessAddress } from '@/lib/address/access'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
+import { logError } from '@/lib/log'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -27,7 +28,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     return NextResponse.json(ok({ ...address, countryName }))
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
-    console.error('[address/[id]/GET]', e)
+    logError('address/[id /GET]', e)
     return apiErrorJson('internal', 500)
   }
 }
@@ -50,7 +51,7 @@ export async function PUT(req: Request, { params }: Ctx) {
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
     if (isRecordNotFound(e)) return apiErrorJson('addressNotFound', 404)
-    console.error('[address/[id]/PUT]', e)
+    logError('address/[id /PUT]', e)
     return apiErrorJson('internal', 500)
   }
 }

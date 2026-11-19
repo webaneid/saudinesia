@@ -15,6 +15,7 @@ import { displayStatusOf, statusSelect } from '@/lib/booking/lifecycle'
 import { InvoiceError } from '@/lib/invoice/issue'
 import { sendInvoiceNotification } from '@/lib/invoice/notifyInvoice'
 import { billOf, billSelect } from '@/lib/invoice/bill'
+import { logError } from '@/lib/log'
 
 export async function GET() {
   try {
@@ -35,7 +36,7 @@ export async function GET() {
     if (error instanceof Error && error.message === 'Unauthorized') {
       return apiErrorJson('unauthorized', 401)
     }
-    console.error('[bookings/GET]', error instanceof Error ? error.name : error)
+    logError('bookings/GET', error)
     return apiErrorJson('internal', 500)
   }
 }
@@ -71,7 +72,7 @@ export async function POST(request: Request) {
     if (error instanceof Error && error.message === 'Unauthorized') return apiErrorJson('unauthorized', 401)
     // Invoice tak dapat diterbitkan (setelan nomor/jatuh tempo bermasalah) — urusan admin; jamaah menerima pesan umum, rinciannya di log server.
     if (error instanceof InvoiceError) {
-      console.error('[bookings/POST] invoice', error.message)
+      logError('bookings/POST invoice', error.message)
       return apiErrorJson('orderNotIssuable', 422)
     }
     if (error instanceof CheckoutAccountError) return apiErrorJson('accountCannotOrder', 409)
@@ -82,7 +83,7 @@ export async function POST(request: Request) {
       // Aturan visa (422 + daftar pelanggaran), item tak dapat dijual / tak ditemukan (422), kuota habis / bentrok (409) — satu pemeta dengan pratinjau.
       return bookingFailureJson(bookingFailure(error))
     } catch {
-      console.error('[bookings/POST]', error instanceof Error ? error.name : error)
+      logError('bookings/POST', error)
       return apiErrorJson('internal', 500)
     }
   }

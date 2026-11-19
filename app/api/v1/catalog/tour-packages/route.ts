@@ -4,6 +4,7 @@ import { getFeaturedCardUrls, getFeaturedCards } from '@/lib/media/urls'
 import { ok, err } from '@/lib/validators'
 import { z } from 'zod'
 import { withSellPrice } from '@/lib/pricing/engine/read'
+import { logError } from '@/lib/log'
 
 const querySchema = z.object({
   city: z.string().optional(),
@@ -55,7 +56,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(ok(data, { total: data.length }))
   } catch (error) {
-    console.error('[catalog/tour-packages]', error)
+    logError('catalog/tour-packages', error)
     return NextResponse.json(err('Internal server error'), { status: 500 })
   }
 }
