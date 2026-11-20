@@ -137,7 +137,9 @@ async function main() {
     })
 
     console.log(`OK: superadmin dibuat — ${user.email} (id ${user.id}).`)
-    console.log('Masuk lewat /<locale>/admin/login. Password tidak disimpan di mana pun selain hash di database.')
+    // Domain admin sendiri (docs/rencana-domain-admin.md): ADMIN_DOMAIN terisi = https://<ADMIN_DOMAIN>/login, kosong = /id/admin/login.
+    const adminDomain = (process.env.ADMIN_DOMAIN ?? '').trim()
+    console.log(`Masuk lewat ${adminDomain ? `https://${adminDomain}/login` : '/id/admin/login'}. Password tidak disimpan di mana pun selain hash di database.`)
   } finally {
     await prisma.$disconnect()
   }

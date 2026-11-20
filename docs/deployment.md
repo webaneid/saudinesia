@@ -84,7 +84,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 | Versi & changelog otomatis | semantic-release | belum; `package.json` `0.1.0` manual |
 | Staging (`develop`) | `deploy-staging.yml` | belum |
 | Role DB terpisah (pemilik vs aplikasi) | `scripts/pisah-role-db.sh` | **ada (2026-11-19, SEC-303)** — `saudinesia` pemilik (hanya kontainer migrate), `saudinesia_app` DML saja (web); dibuat otomatis oleh image migrate, lihat "Peran database" |
-| Backup terjadwal + uji restore | `backup-produksi.sh` ke Drive, dipantau | `backup-db.sh`/`backup-minio.sh` ada, **belum dijadwalkan** |
+| Backup terjadwal + uji restore | `backup-produksi.sh` ke Drive, dipantau | **ada (2026-11-21)** — `backup-produksi.sh` (pola smart-ai + lapisan rclone crypt), `setup-backup.sh`, `uji-restore.sh`; cron harian + healthchecks.io — lihat bagian "Backup" |
 | Update dependency | Dependabot | belum |
 
 ## 5. Keputusan
@@ -124,7 +124,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    **MinIO dua kredensial (SEC-305):** `MINIO_ROOT_USER/PASSWORD` = root (hanya kontainer `minio` dan `minio-setup`); `MINIO_ACCESS_KEY/SECRET_KEY`
    = user APLIKASI yang dipakai web, dibuat/diperbarui `minio-setup` tiap deploy dengan policy hanya bucket `saudinesia-docs`. Server yang
    sudah berjalan sebelum SEC-305 (root = `MINIO_ACCESS_KEY`): salin nilai lama `MINIO_ACCESS_KEY/SECRET_KEY` ke `MINIO_ROOT_USER/PASSWORD`,
-   isi `MINIO_ACCESS_KEY/SECRET_KEY` baru (`openssl rand -hex 4` / `-hex 24`), perbarui remote rclone `backup-minio.sh` ke kunci aplikasi, lalu deploy.
+   isi `MINIO_ACCESS_KEY/SECRET_KEY` baru (`openssl rand -hex 4` / `-hex 24`), lalu deploy (backup MinIO membaca `MINIO_ACCESS_KEY` aplikasi dari `.env.production` otomatis).
    `minio-setup` menolak jalan bila kunci aplikasi = root.
 4. DNS: A record `APP_DOMAIN`, `ADMIN_DOMAIN`, dan `FILES_DOMAIN` ke IP VPS **sebelum** Caddy dinyalakan (produksi: `app.`, `admin.`, `files.saudinesia.id`, DNS only).
 5. Server: Docker + Compose, folder `/opt/app` berisi `docker-compose.prod.yml`, `Caddyfile`, `.env.production.example`,
@@ -155,7 +155,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    `bash scripts/buat-env-production.sh app.saudinesia.id admin.saudinesia.id files.saudinesia.id /opt/app` di server lalu ulangi.
    **Rollback**: Run workflow dengan `image_tag` = tag sebelumnya (dicetak saat gagal; daftar di GHCR). Migrasi DB hanya maju — cadangan
    pra-deploy otomatis di `/opt/app/backups/pre-deploy-*.dump` (5 terbaru; pulihkan dengan `pg_restore`). semantic-release menyusul.
-8. Jadwalkan backup (`backup-db.sh`, `backup-minio.sh`) dan uji restore.
+8. Backup: ikuti bagian **"Backup"** di bawah (sekali: salin `rclone.conf` → `setup-backup.sh` → cron → `uji-restore.sh`).
 9. **Blocker keamanan yang masih terbuka** (`docs/lessons-learned.md`): SEC-05 (sisa 1 advisory *high* tanpa versi perbaikan — `braces`, hanya build/dev; keputusan `next-intl` 4 menunggu pemilik), ~~SEC-18 (sesi tak bisa dicabut)~~ — selesai 2026-10-22,
    ~~SEC-44 (hapus akun UU PDP)~~ — selesai 2026-10-22, **tetapi aturan retensi (`docs/arsitektur-hapus-akun.md` §2) perlu ditinjau penasihat hukum/pajak**, ~~serta SEC-26/27~~ — selesai 2026-10-22.
 10. **Uji dengan layanan asli sebelum membuka ke jamaah:** Resend (domain SPF/DKIM/DMARC + email masuk inbox), **Google** (redirect URI terdaftar, aplikasi *In production*, dan pastikan login **mendarat di dashboard**, bukan
@@ -163,8 +163,35 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 
 
 
+## Backup (2026-11-21)
+
+Pola sama dengan facport/smart-ai (`gdrive:backup-app/<project>`, rclone lewat image Docker `rclone/rclone:1.75.1`, remote `gdrive` dibuat di Mac lalu disalin, dead-man's switch healthchecks.io), ditambah **enkripsi rclone crypt** karena bucket berisi scan paspor/KTP jamaah: di Drive isi dan nama berkas tak terbaca tanpa dua kata sandi crypt.
+
+| Apa | Di mana |
+|---|---|
+| Dump Postgres (format custom, diverifikasi `pg_restore --list`) | lokal `/opt/app/backups/daily/` (7 terbaru) → Drive `db/` (30 hari) |
+| Dokumen MinIO (bucket `saudinesia-docs`, user aplikasi) | Drive `minio/current` (cermin) + `minio/history/<waktu>/` (versi lama/terhapus, 30 hari) |
+| Kata sandi crypt (tersamar) + `BACKUP_PING_URL` | `/opt/app/.env.backup` (600) — **terpisah** dari `.env.production`, karena berkas itu dimuat kontainer web |
+| Status terakhir | `/opt/app/backups/last-success`, log `/opt/app/backups/backup.log` |
+
+Yang TIDAK ikut backup: `.env.production`/`.env.backup` (kunci PII, JWT, kata sandi crypt) — wajib ada di password manager. Tanpa `PII_*` NIK/paspor di dump tak terbaca; tanpa kata sandi crypt backup tak bisa dibuka.
+
+**Penyiapan sekali** (pemilik):
+1. Mac: `ssh saudinesia 'mkdir -p ~/.config/rclone && chmod 700 ~/.config/rclone'` lalu `scp ~/.config/rclone/rclone.conf saudinesia:~/.config/rclone/rclone.conf` (remote `gdrive` yang sama dipakai facport/smart-ai).
+2. Server: `ssh -t saudinesia 'bash /opt/app/scripts/setup-backup.sh'` → membuat `.env.backup`, menguji tulis/baca Drive lewat enkripsi, mencetak dua kata sandi SEKALI → simpan di password manager.
+3. healthchecks.io (gratis): buat check harian (grace 2 jam) → isi `BACKUP_PING_URL=https://hc-ping.com/<uuid>` di `.env.backup`.
+4. `crontab -e` (user `webane`): `0 19 * * * /opt/app/scripts/backup-produksi.sh >> /opt/app/backups/backup.log 2>&1` (server ber-zona UTC: 19.00 UTC = 02.00 WIB, saat sepi). Jalankan sekali manual dulu.
+5. `bash /opt/app/scripts/uji-restore.sh` — pulihkan dump terbaru dari Drive ke DB sementara `saudinesia_uji_restore` (bandingkan migrasi/tabel, lalu dihapus) + `rclone cryptcheck` MinIO. Ulangi berkala (mis. sebulan sekali) dan setiap selesai mengubah skrip backup.
+
+**Pemulihan bencana** (server hilang; dikerjakan sadar, tidak diotomasi):
+1. Server baru sampai deploy pertama berhasil, tetapi `.env.production` dipulihkan dari password manager (terutama `PII_*`, `JWT_SECRET`, `MINIO_*`) — bukan dibuat ulang.
+2. Salin `rclone.conf`, buat `.env.backup` dengan dua kata sandi crypt (bentuk tersamar: `printf '%s\n' '<sandi>' | docker run --rm -i rclone/rclone:1.75.1 obscure -`).
+3. Unduh dump: `rclone copy crypt:db/<db-….dump>` (fungsi `rclone` di `uji-restore.sh` menunjukkan variabel env yang dibutuhkan).
+4. Hentikan web (`docker compose … stop web`), `pg_restore -U saudinesia -d saudinesia --clean --if-exists --no-owner` dari dalam kontainer postgres, jalankan deploy ulang (migrate membuat ulang peran `saudinesia_app`).
+5. Dokumen: `rclone copy crypt:minio/current minio:saudinesia-docs` (atau dari `minio/history/<waktu>` untuk titik waktu lebih lama).
+
 ## Catatan operasional: migrasi kontraksi harga (Fase 5, 2026-10-28)
-Migrasi `20261029090000_price_legacy_columns_drop` menghapus 17 kolom (tak bisa dibalik) dan bersifat fail-closed (berhenti bila ada harga lama tanpa titik harga). Saat dirilis ke produksi: (1) **ambil cadangan DB** (`scripts/backup-db.sh`) tepat sebelumnya; (2) **hentikan `web` lama sebelum `migrate`** — klien Prisma versi lama mem-`SELECT` kolom yang dihapus, jadi tiap query ke tabel itu 500 sampai web baru naik; (3) jalankan hanya lewat `prisma migrate deploy` (satu transaksi; jangan manual tanpa transaksi — migrasi menonaktifkan trigger beku `price_snapshots_no_update` sebentar); (4) pasca-deploy periksa `select tgenabled from pg_trigger where tgname = 'price_snapshots_no_update'` = `'O'`; (5) bila migrasi berhenti dengan pesan "Kontraksi harga dibatalkan", buat titik harga yang disebut (hitung ulang lewat skrip sekali jalan / image versi sebelumnya, atau atur harga manual) lalu ulangi — tak ada data yang berubah saat gagal. Uji dulu pra-cek terhadap salinan DB produksi.
+Migrasi `20261029090000_price_legacy_columns_drop` menghapus 17 kolom (tak bisa dibalik) dan bersifat fail-closed (berhenti bila ada harga lama tanpa titik harga). Saat dirilis ke produksi: (1) **ambil cadangan DB** tepat sebelumnya (`deploy-server.sh` membuat `backups/pre-deploy-*.dump` otomatis; tambahan: `scripts/backup-produksi.sh`); (2) **hentikan `web` lama sebelum `migrate`** — klien Prisma versi lama mem-`SELECT` kolom yang dihapus, jadi tiap query ke tabel itu 500 sampai web baru naik; (3) jalankan hanya lewat `prisma migrate deploy` (satu transaksi; jangan manual tanpa transaksi — migrasi menonaktifkan trigger beku `price_snapshots_no_update` sebentar); (4) pasca-deploy periksa `select tgenabled from pg_trigger where tgname = 'price_snapshots_no_update'` = `'O'`; (5) bila migrasi berhenti dengan pesan "Kontraksi harga dibatalkan", buat titik harga yang disebut (hitung ulang lewat skrip sekali jalan / image versi sebelumnya, atau atur harga manual) lalu ulangi — tak ada data yang berubah saat gagal. Uji dulu pra-cek terhadap salinan DB produksi.
 
 
 ## Catatan operasional: migrasi Fase 7 (`20261030090000_adjustments_cost_actuals`, 2026-10-28)
@@ -191,7 +218,7 @@ Migrasi `20261125090000_cash_book` memasang trigger `cash_entries_no_update` (UP
 
 ## Catatan operasional: peran database (SEC-303, 2026-11-19)
 
-- **Dua peran.** `saudinesia` (= `POSTGRES_USER`, pemilik skema + superuser bootstrap image Postgres) hanya dipakai kontainer `migrate` (`MIGRATE_DATABASE_URL`) dan `scripts/backup-db.sh`. `saudinesia_app` dipakai web (`DATABASE_URL`): bukan superuser, bukan pemilik, hanya SELECT/INSERT/UPDATE/DELETE — tak bisa mematikan trigger append-only (buku kas, snapshot harga, jejak), DDL, TRUNCATE, atau `COPY … TO PROGRAM`.
+- **Dua peran.** `saudinesia` (= `POSTGRES_USER`, pemilik skema + superuser bootstrap image Postgres) hanya dipakai kontainer `migrate` (`MIGRATE_DATABASE_URL`) dan `pg_dump` di dalam kontainer postgres (`deploy-server.sh`, `backup-produksi.sh`). `saudinesia_app` dipakai web (`DATABASE_URL`): bukan superuser, bukan pemilik, hanya SELECT/INSERT/UPDATE/DELETE — tak bisa mematikan trigger append-only (buku kas, snapshot harga, jejak), DDL, TRUNCATE, atau `COPY … TO PROGRAM`.
 - **Dibuat otomatis**: image `migrate` menjalankan `prisma migrate deploy` lalu `prisma/apply-app-role.ts` (idempoten, setiap deploy) dengan `APP_DB_PASSWORD`. Tak ada langkah manual di server baru — `scripts/buat-env-production.sh` mengisi `POSTGRES_PASSWORD`, `MIGRATE_DATABASE_URL`, `APP_DB_PASSWORD`, dan `DATABASE_URL` (`saudinesia_app`) dengan dua sandi acak berbeda.
 - **Server yang sudah berjalan dengan satu peran** (belum ada saat ditulis): tambahkan `APP_DB_PASSWORD` (`openssl rand -hex 24`) dan `MIGRATE_DATABASE_URL` (= `DATABASE_URL` lama) ke `.env.production`, ganti `DATABASE_URL` jadi `postgresql://saudinesia_app:<APP_DB_PASSWORD>@postgres:5432/saudinesia`, lalu deploy ulang (migrate membuat peran sebelum web naik).
 - **Ganti sandi peran aplikasi**: ubah `APP_DB_PASSWORD` dan sandi di `DATABASE_URL` bersamaan, deploy ulang (migrate menjalankan `ALTER ROLE … PASSWORD`).
