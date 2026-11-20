@@ -6,7 +6,7 @@
 
 # Dipin ke versi + digest (SEC-10): build berulang menghasilkan basis yang sama; Dependabot (ecosystem docker) mengusulkan pembaruan.
 # Versi Bun harus sama dengan `bun-version` di CI.
-FROM oven/bun:1.3.11-slim@sha256:478281fdd196871c7e51ba6a820b7803a8ae97042ec86cdbc2e1c6b6626442d9 AS base
+FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4 AS base
 WORKDIR /app
 # Zona proses UTC (docs/arsitektur-booking-engine-v2.md §5): logika waktu aplikasi memakai lib/time dan tak bergantung pada zona proses; ini menjaga getter lokal yang lolos tetap deterministik.
 ENV TZ=UTC
