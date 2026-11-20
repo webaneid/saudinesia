@@ -34,7 +34,3 @@ END $$`,
   ]
 }
 
-/** Skrip utuh untuk `prisma db execute --stdin` (image migrate, prisma/apply-app-role.ts). */
-export function appRoleSql(role: string, password: string): string {
-  return `\n${appRoleStatements(role, password).join(';\n')};\n`
-}
