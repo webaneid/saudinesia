@@ -226,8 +226,10 @@ jobs:
       - name: Smoke - invoice PDF di image produksi
         run: |
           C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
-          $C cp scripts/ci-invoice-smoke.ts web:/app/scripts/ci-invoice-smoke.ts
-          $C exec -T -e CI_SMOKE=1 web bun scripts/ci-invoice-smoke.ts
+          # Web read-only (SEC-10): skrip tak bisa disalin ke kontainer yang berjalan — dipasang (bind mount, baca saja) ke kontainer sekali jalan
+          # dari image yang sama, yang memanggil web sungguhan lewat jaringan internal.
+          $C run --rm --no-deps -T -v "$PWD/scripts/ci-invoice-smoke.ts:/app/scripts/ci-invoice-smoke.ts:ro" \
+            -e CI_SMOKE=1 -e BASE_URL=http://web:3000 web bun scripts/ci-invoice-smoke.ts
 
       # Rate limit login (SEC-04) di image produksi dengan Redis nyata: 5 gagal diizinkan, ke-6 harus 429, dan kuncinya
       # harus benar-benar ada di Redis (bukan fallback memori).
