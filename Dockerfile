@@ -4,7 +4,9 @@
 #   --target runner   → aplikasi Next.js (standalone). Ini target BAWAAN (stage terakhir).
 #   --target migrate  → sekali-jalan `prisma migrate deploy` + peran aplikasi DML-saja (CLI Prisma TIDAK ada di image runner).
 
-FROM oven/bun:1-slim AS base
+# Dipin ke versi + digest (SEC-10): build berulang menghasilkan basis yang sama; Dependabot (ecosystem docker) mengusulkan pembaruan.
+# Versi Bun harus sama dengan `bun-version` di CI.
+FROM oven/bun:1.3.11-slim@sha256:478281fdd196871c7e51ba6a820b7803a8ae97042ec86cdbc2e1c6b6626442d9 AS base
 WORKDIR /app
 # Zona proses UTC (docs/arsitektur-booking-engine-v2.md §5): logika waktu aplikasi memakai lib/time dan tak bergantung pada zona proses; ini menjaga getter lokal yang lolos tetap deterministik.
 ENV TZ=UTC

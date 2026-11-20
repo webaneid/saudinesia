@@ -19,7 +19,7 @@ jobs:
     # DB sekali pakai untuk memeriksa migrasi (bukan mock) — dibuang bersama runner.
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:16-alpine@sha256:1d5b02d3a9941fbd52437db4107f8c52d6297dac553ca1e5c299ebb3756b4857
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -29,7 +29,7 @@ jobs:
           --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
       # Redis sungguhan untuk menguji rate limiter (lib/auth/rateLimit.ts, skrip Lua atomik) — SEC-04.
       redis:
-        image: redis:7-alpine
+        image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
         ports: ["6379:6379"]
         options: >-
           --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
@@ -117,14 +117,14 @@ jobs:
           docker run --rm \
             -e APP_DOMAIN=ci.example.test -e FILES_DOMAIN=files.ci.example.test \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
-            caddy:2.11.4-alpine caddy validate --config /etc/caddy/Caddyfile
+            caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b caddy validate --config /etc/caddy/Caddyfile
 
       # Batas body sungguhan (SEC-211, scripts/test-body-limit.ts mengunci isinya): Caddyfile production di depan "web" palsu
       # yang membaca seluruh body. JSON > 1 MB ditolak, unggahan 2 MB lolos, unggahan > 8 MB ditolak, `..` tak meminjam 8 MB.
       - name: Uji batas body Caddy
         run: |
           docker network create bodylimit
-          docker run -d --name web --network bodylimit python:3.12-alpine python -c "
+          docker run -d --name web --network bodylimit python:3.12-alpine@sha256:c5ba3deef00c7758561a0f03c26f44f10589263d40e732b8748e0d1f38f6dd89 python -c "
           import http.server as h
           class H(h.BaseHTTPRequestHandler):
               def do_POST(s):
@@ -133,7 +133,7 @@ jobs:
           h.HTTPServer(('', 3000), H).serve_forever()"
           docker run -d --name edge --network bodylimit -p 8080:8080 \
             -e APP_DOMAIN=http://app.test:8080 -e FILES_DOMAIN=http://files.test:8081 \
-            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.4-alpine
+            -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
           head -c 2000000 /dev/zero > 2mb; head -c 9000000 /dev/zero > 9mb; head -c 500000 /dev/zero > small
           code() { curl -s -o /dev/null -w '%{http_code}' -H 'Host: app.test' -X POST --data-binary "@$2" "http://localhost:8080$1"; }
           # Tunggu sampai Caddy DAN upstream siap (200 lewat proxy) — 502 berarti upstream belum hidup, bukan hasil uji.
@@ -154,6 +154,13 @@ jobs:
         run: |
           docker build -t "ghcr.io/$IMG_REPO/web:$IMG_TAG" --target runner .
           docker build -t "ghcr.io/$IMG_REPO/migrate:$IMG_TAG" --target migrate .
+
+      # Image MinIO dibangun di sini dengan tag yang SAMA dengan compose (di server ditarik dari GHCR, dibangun workflow MinIO Image) —
+      # sekaligus membuktikan Dockerfile-nya (basis dipin digest, mc) bisa dibangun.
+      - name: Build image MinIO (tag sama dengan compose)
+        run: |
+          TAG="$(sed -n 's/^ARG MINIO_VERSION=//p' infra/minio/Dockerfile)-r$(sed -n 's/^ARG IMAGE_REV=//p' infra/minio/Dockerfile)"
+          docker build -t "ghcr.io/$IMG_REPO/minio:$TAG" infra/minio
 
       - name: Image web - tanpa rahasia/dokumentasi, dan bukan root
         run: |
@@ -219,8 +226,10 @@ jobs:
       - name: Smoke - invoice PDF di image produksi
         run: |
           C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
-          $C cp scripts/ci-invoice-smoke.ts web:/app/scripts/ci-invoice-smoke.ts
-          $C exec -T -e CI_SMOKE=1 web bun scripts/ci-invoice-smoke.ts
+          # Web read-only (SEC-10): skrip tak bisa disalin ke kontainer yang berjalan — dipasang (bind mount, baca saja) ke kontainer sekali jalan
+          # dari image yang sama, yang memanggil web sungguhan lewat jaringan internal.
+          $C run --rm --no-deps -T -v "$PWD/scripts/ci-invoice-smoke.ts:/app/scripts/ci-invoice-smoke.ts:ro" \
+            -e CI_SMOKE=1 -e BASE_URL=http://web:3000 web bun scripts/ci-invoice-smoke.ts
 
       # Rate limit login (SEC-04) di image produksi dengan Redis nyata: 5 gagal diizinkan, ke-6 harus 429, dan kuncinya
       # harus benar-benar ada di Redis (bukan fallback memori).
@@ -272,6 +281,45 @@ jobs:
       # Auth email + Google di image produksi (tanpa kredensial Resend/Google — itu justru kondisi yang harus aman): pendaftaran & lupa password
       # membalas seragam, tautan/token tak terbaca dari respons, rute OTP lama sudah tidak ada, Google mati dengan sopan, dan pengaman callback
       # (state/cookie) menolak. Pengaman yang hanya hidup di rute ini tidak tercakup uji skrip — ini penutupnya.
+      # SEC-10 (sisa) + SEC-305: MinIO & Caddy berjalan dengan hak minimal, user MinIO aplikasi hanya punya satu bucket, web read-only.
+      - name: Smoke - MinIO user aplikasi, Caddy hak minimal, web read-only
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          # Penyiapan sekali jalan (menyalakan minio lebih dulu lewat depends_on healthy); dua kali = idempoten.
+          $C run --rm minio-setup
+          $C run --rm minio-setup
+          ID="$($C ps -q minio)"; test -n "$ID" || { echo "minio tidak berjalan"; exit 1; }
+          docker inspect -f '{{.HostConfig.CapDrop}}' "$ID" | grep -q ALL || { echo "minio tanpa cap_drop ALL"; exit 1; }
+          docker inspect -f '{{.HostConfig.SecurityOpt}}' "$ID" | grep -q no-new-privileges || { echo "minio tanpa no-new-privileges"; exit 1; }
+          # User aplikasi: tulis/baca/hapus objek boleh; menjadikan publik, hapus bucket, akses admin DITOLAK.
+          $C run --rm --no-deps --entrypoint sh minio-setup -c '
+            set -e; export MC_CONFIG_DIR=/tmp/mc MC_HOST_app="http://$MINIO_ACCESS_KEY:$MINIO_SECRET_KEY@minio:9000"
+            echo halo > /tmp/f
+            mc --quiet cp /tmp/f "app/$MINIO_BUCKET/ci/f.txt"; mc --quiet cat "app/$MINIO_BUCKET/ci/f.txt" | grep -q halo; mc --quiet rm "app/$MINIO_BUCKET/ci/f.txt"
+            if mc --quiet anonymous set download "app/$MINIO_BUCKET"; then echo "user aplikasi bisa menjadikan bucket publik"; exit 1; fi
+            if mc --quiet rb --force "app/$MINIO_BUCKET"; then echo "user aplikasi bisa menghapus bucket"; exit 1; fi
+            if mc --quiet admin user list app; then echo "user aplikasi punya akses admin"; exit 1; fi
+            echo "user aplikasi MinIO terbatas: OK"'
+          # Web tak memegang root MinIO, dan klien MinIO aplikasi (kredensial web) menjangkau bucket.
+          for K in MINIO_ROOT_USER MINIO_ROOT_PASSWORD; do test -z "$($C exec -T web printenv $K)" || { echo "$K terbaca di kontainer web"; exit 1; }; done
+          $C exec -T web bun -e "const M = require('minio'); new M.Client({ endPoint: process.env.MINIO_ENDPOINT, port: Number(process.env.MINIO_PORT), useSSL: false, accessKey: process.env.MINIO_ACCESS_KEY, secretKey: process.env.MINIO_SECRET_KEY }).bucketExists(process.env.MINIO_BUCKET).then((ok) => process.exit(ok ? 0 : 1), (e) => { console.error(e.code); process.exit(1) })" || { echo "web tak bisa menjangkau bucket dengan kunci aplikasi"; exit 1; }
+          # Web read-only: kode tak bisa ditimpa; hanya /tmp dan cache Next (tmpfs) yang bisa ditulis.
+          WID="$($C ps -q web)"
+          test "$(docker inspect -f '{{.HostConfig.ReadonlyRootfs}}' "$WID")" = "true" || { echo "web bukan read-only"; exit 1; }
+          if $C exec -T web sh -c 'echo x > /app/server.js' 2>/dev/null; then echo "kode web bisa ditimpa"; exit 1; fi
+          $C exec -T web sh -c 'echo x > /tmp/ci && echo x > /app/.next/cache/ci' || { echo "tmpfs web tak bisa ditulis"; exit 1; }
+          # Caddy: cap_drop ALL + NET_BIND_SERVICE saja, tetap bisa bind 80/443 dan melayani (alihkan ke HTTPS).
+          $C up -d --no-deps caddy
+          CID="$($C ps -q caddy)"
+          docker inspect -f '{{.HostConfig.CapDrop}}' "$CID" | grep -q ALL || { echo "caddy tanpa cap_drop ALL"; exit 1; }
+          # Docker menuliskannya dengan awalan CAP_ (versi engine berbeda bisa tanpa awalan).
+          docker inspect -f '{{.HostConfig.CapAdd}}' "$CID" | grep -Eqx '\[(CAP_)?NET_BIND_SERVICE\]' || { echo "caddy cap_add bukan hanya NET_BIND_SERVICE: $(docker inspect -f '{{.HostConfig.CapAdd}}' "$CID")"; exit 1; }
+          for i in $(seq 1 30); do got=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: ci.example.test' http://localhost/ || true); [ "$got" = 308 ] && break; sleep 1; done
+          echo "caddy http -> $got"; test "$got" = 308
+          sleep 3
+          test "$(docker inspect -f '{{.State.Running}}' "$CID")" = "true" || { echo "caddy berhenti"; $C logs caddy | tail -30; exit 1; }
+          if $C logs caddy | grep -qi "permission denied"; then echo "caddy: permission denied"; $C logs caddy | tail -30; exit 1; fi
+
       - name: Smoke - auth email dan Google di image produksi
         run: |
           C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"

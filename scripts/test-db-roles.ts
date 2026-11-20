@@ -1,12 +1,12 @@
-// Penjaga peran database aplikasi (docs/rencana-audit-golive.md §5, SEC-303). Peran web (`appRoleSql`, diterapkan kontainer migrate lewat
-// `prisma db execute` — jalur yang SAMA dipakai di sini) hanya boleh DML: tak bisa mematikan trigger append-only/beku, membuat/menghapus tabel,
+// Penjaga peran database aplikasi (docs/rencana-audit-golive.md §5, SEC-303). Peran web (`appRoleStatements`, diterapkan kontainer migrate lewat
+// prisma/apply-app-role.ts — pernyataan yang SAMA dipakai di sini) hanya boleh DML: tak bisa mematikan trigger append-only/beku, membuat/menghapus tabel,
 // TRUNCATE, `COPY … TO PROGRAM`, atau `session_replication_role`; tetapi kunci yang dipakai aplikasi (LOCK TABLE kode booking, advisory) jalan.
 // Hanya pada database sekali pakai dan koneksi superuser (CI: postgres); peran uji bernama acak dan dihapus di akhir.
 import assert from 'node:assert/strict'
 import { randomBytes } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { PrismaClient } from '@prisma/client'
-import { APP_ROLE, appRoleSql, appRoleStatements } from '../prisma/appRole'
+import { APP_ROLE, appRoleStatements } from '../prisma/appRole'
 
 let failed = 0
 async function t(name: string, fn: () => void | Promise<void>) {
@@ -14,11 +14,11 @@ async function t(name: string, fn: () => void | Promise<void>) {
 }
 
 console.log('== bentuk SQL ==')
-await t('appRoleSql menolak sandi pendek/bersimbol dan nama peran tak sah', () => {
-  assert.throws(() => appRoleSql(APP_ROLE, 'pendek'))
-  assert.throws(() => appRoleSql(APP_ROLE, `${'a'.repeat(40)}'; DROP TABLE users; --`))
-  assert.throws(() => appRoleSql('x; DROP ROLE postgres', 'a'.repeat(40)))
-  const sql = appRoleSql(APP_ROLE, 'a'.repeat(48))
+await t('appRoleStatements menolak sandi pendek/bersimbol dan nama peran tak sah', () => {
+  assert.throws(() => appRoleStatements(APP_ROLE, 'pendek'))
+  assert.throws(() => appRoleStatements(APP_ROLE, `${'a'.repeat(40)}'; DROP TABLE users; --`))
+  assert.throws(() => appRoleStatements('x; DROP ROLE postgres', 'a'.repeat(40)))
+  const sql = appRoleStatements(APP_ROLE, 'a'.repeat(48)).join(';\n')
   assert.match(sql, /NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS/)
   assert.doesNotMatch(sql, /GRANT (ALL|.*TRUNCATE)/)
 })
@@ -30,6 +30,12 @@ await t('compose/Dockerfile: web memegang hanya URL peran aplikasi, migrate mene
   for (const k of ['POSTGRES_PASSWORD', 'MIGRATE_DATABASE_URL', 'APP_DB_PASSWORD']) assert.match(web, new RegExp(`${k}: ""`), `web harus mengosongkan ${k}`)
   assert.match(migrate, /DATABASE_URL: \$\{MIGRATE_DATABASE_URL:\?/)
   assert.match(readFileSync('Dockerfile', 'utf8'), /prisma migrate deploy && bun prisma\/apply-app-role\.ts/)
+  // `prisma db execute --stdin` melapor sukses tanpa menjalankan apa pun (2026-11-21, image migrate) — skrip memakai Bun.SQL dan memeriksa katalog.
+  const apply = readFileSync('prisma/apply-app-role.ts', 'utf8').split('\n').filter(l => !l.trimStart().startsWith('//')).join('\n')
+  assert.doesNotMatch(apply, /db['", ]+execute|spawnSync/)
+  assert.match(apply, /new Bun\.SQL\(url\)/)
+  assert.match(apply, /FROM pg_roles r WHERE r\.rolname = \$\{APP_ROLE\}/)
+  assert.match(apply, /if \(!role\) throw/)
   const env = readFileSync('.env.production.example', 'utf8')
   assert.match(env, /^DATABASE_URL=postgresql:\/\/saudinesia_app:/m)
   assert.match(env, /^MIGRATE_DATABASE_URL=postgresql:\/\/saudinesia:/m)
@@ -44,8 +50,8 @@ if (!superuser) {
 } else {
   const role = `saudinesia_app_t${randomBytes(4).toString('hex')}`
   const password = randomBytes(24).toString('hex')
-  // Pernyataan yang sama dengan skrip image migrate (appRoleSql = gabungannya), dijalankan lewat koneksi pemilik: `bunx prisma db execute
-  // --stdin` di runner CI Linux melapor sukses tanpa membuat peran, sedangkan jalur image migrate dibuktikan job docker CI.
+  // Pernyataan yang sama dengan skrip image migrate (prisma/apply-app-role.ts, Bun.SQL), dijalankan lewat koneksi pemilik;
+  // jalur image migrate sendiri dibuktikan job docker CI.
   const apply = () => owner.$transaction(appRoleStatements(role, password).map((q) => owner.$executeRawUnsafe(q)))
   const u = new URL(dbUrl); u.username = role; u.password = password
   const app = new PrismaClient({ datasourceUrl: u.toString() })
@@ -56,9 +62,8 @@ if (!superuser) {
     assert.match(String((err as Error).message), /permission denied|must be owner|must be superuser|not allowed|only superuser|privilege/i, sql)
   }
   try {
-    await t('peran diterapkan dua kali (idempoten); skrip image migrate = gabungan pernyataan yang sama', async () => {
+    await t('peran diterapkan dua kali (idempoten)', async () => {
       await apply(); await apply()
-      assert.equal(appRoleSql(role, password), `\n${appRoleStatements(role, password).join(';\n')};\n`)
     })
     await t('peran tersimpan: LOGIN, sandi ber-hash SCRAM', async () => {
       const r = await owner.$queryRawUnsafe<{ login: boolean; kind: string | null; enc: string }[]>(
