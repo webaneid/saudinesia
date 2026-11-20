@@ -2,7 +2,7 @@
 # dl.min.io: 410) dan repo-nya diarsipkan. Versi di-pin di ARG MINIO_VERSION; menaikkannya = ubah di sini lalu
 # jalankan workflow minio-image.yml (sekaligus perbarui tag di docker-compose.prod.yml).
 # Dibangun oleh .github/workflows/minio-image.yml → ghcr.io/<repo>/minio:<versi>.
-FROM golang:1.24-alpine@sha256:8bee1901f1e530bfb4a7850aa7a479d17ae3a18beb6e09064ed54cfd245b7191 AS build
+FROM golang:1.27-alpine@sha256:70bd7ddea8b6cbe5d6943cde279d6b67feb10cc924fb9100d1d8757c1575b280 AS build
 ARG MINIO_VERSION=RELEASE.2025-10-15T17-29-55Z
 # Klien `mc` untuk penyiapan sekali jalan (setup.sh, SEC-305): bucket privat + user aplikasi berpolicy satu bucket.
 ARG MC_VERSION=RELEASE.2025-08-13T08-35-41Z
