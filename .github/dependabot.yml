@@ -38,7 +38,17 @@ updates:
     commit-message:
       prefix: "ci"
 
+  # Image dipin tag + digest (SEC-10) — Dependabot memperbarui keduanya. Tiga lokasi: Dockerfile aplikasi, image MinIO, compose produksi.
+  # Image di .github/workflows/ci.yml (postgres/redis/caddy/python) diperbarui manual bersama compose.
   - package-ecosystem: "docker"
+    directories: ["/", "/infra/minio"]
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore"
+
+  - package-ecosystem: "docker-compose"
     directory: "/"
     schedule:
       interval: "weekly"

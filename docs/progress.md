@@ -10,7 +10,7 @@ Centang lama yang basi sudah ditandai di tempatnya ("Rapikan 2026-11-19": tertut
 - **Kode:** kirim ulang/kirim manual WhatsApp dari log notifikasi; force-majeure + persetujuan superadmin; taksonomi/kategori produk (F3, menunggu keputusan model); service worker; audit Core Web Vitals; audit PII di log; checklist OWASP.
 - **Menunggu kunci dari pemilik:** Fase 10 Xendit; uji sandbox iPaymu sungguhan.
 - **Entri data pemilik (lewat UI):** harga Transport dan Paket Ziarah; rekening bank di Pengaturan Invoice.
-- **Sebelum go-live (M15):** VPS, Docker Compose, TLS, `migrate deploy` pertama, GOWA nyata, smoke test, backup; tiga sisa hardening SEC-10; SEC-123 (High dependency).
+- **Sebelum go-live (M15):** VPS (dibeli 2026-11-21: KVM 2, Ubuntu 24.04), Docker Compose, TLS, `migrate deploy` pertama, GOWA nyata, smoke test, backup; ~~tiga sisa hardening SEC-10~~ (selesai 2026-11-21); workflow deploy; SEC-123 (High dependency).
 
 ---
 
@@ -725,7 +725,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 **Hardening infrastruktur & kebijakan (sebelum go-live):**
 - [x] SEC-10 (sebagian), SEC-11, SEC-14, SEC-43 — selesai 2026-10-25 (PR #25–#28). SEC-35 dikerjakan bersama persetujuan WhatsApp saat arah produk jelas. SEC-05: sisa 5 advisory sudah diterima dengan bukti (register).
 - [x] SEC-211 (Zod GHSA-mrhx-c7xc-m3w5, High) — selesai 2026-11-03: batas body Caddy (PR #104) + migrasi zod 3.25 → 4.6.7 dan pembatasan koleksi masukan (`docs/rencana-zod-4.md`, `scripts/test-zod-bounds.ts`)
-- [ ] **WAJIB SEBELUM DEPLOY ke server (server belum dibeli — diputuskan 2026-10-25 disimpan, dikerjakan sambil menyentuh modul terkait):** tiga sisa hardening SEC-10 —
+- [x] **SELESAI 2026-11-21 (VPS sudah dibeli):** tiga sisa hardening SEC-10 — dibuktikan job CI `docker` (lihat register SEC-10):
   1. `cap_drop: ALL` (+ `cap_add` minimal) untuk **minio** dan **caddy** di `docker-compose.prod.yml` (kini hanya `no-new-privileges`; CI tidak menjalankan keduanya, jadi uji di server/staging: Caddy butuh NET_BIND_SERVICE, cek MinIO).
   2. `read_only: true` rootfs untuk web (dan layanan lain yang memungkinkan) + `tmpfs` untuk yang ditulis (Next.js/Prisma cache, `/tmp`) — wajib diuji di artefak produksi (`bun server.js`) dan di job CI `docker`.
   3. Pin **digest** image Docker (`oven/bun:1-slim` di `Dockerfile`, `postgres:16-alpine`, `redis:7-alpine`, `caddy`, image MinIO) + aktifkan Dependabot ecosystem `docker` agar patch keamanan tetap masuk. Keputusan pemeliharaan: digest tanpa Dependabot = image membusuk.

@@ -46,6 +46,12 @@ services:
     <<: *hardening
     # Non-root (user `bun`) dan tak butuh capability apa pun — port 3000 bukan port istimewa.
     cap_drop: [ALL]
+    # Sistem file image read-only (SEC-10): proses yang dibobol tak bisa mengganti kode aplikasi atau menaruh berkas. Aplikasi tidak menulis
+    # berkas (unggahan → MinIO, log → stdout); hanya cache Next dan /tmp yang boleh ditulis, di memori (uid 1000 = user `bun` image oven/bun).
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+      - /app/.next/cache:uid=1000,gid=1000,mode=0700,size=64m
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -86,7 +92,7 @@ services:
     logging: *logging
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:16-alpine@sha256:1d5b02d3a9941fbd52437db4107f8c52d6297dac553ca1e5c299ebb3756b4857
     restart: unless-stopped
     environment:
       POSTGRES_DB: saudinesia
@@ -115,7 +121,7 @@ services:
   # Berpassword (SEC-10): jaringan internal bukan batas keamanan — kontainer lain yang terkompromi tak boleh bisa menguras/menghapus
   # hitungan rate limit. REDIS_PASSWORD yang sama harus ada di REDIS_URL (redis://:<password>@redis:6379) di .env.production.
   redis:
-    image: redis:7-alpine
+    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD belum diisi}"]
     volumes:
@@ -132,7 +138,7 @@ services:
   minio:
     # MinIO tidak lagi menerbitkan image publik → image buatan sendiri (infra/minio, workflow minio-image.yml).
     # Workflow itu WAJIB dijalankan sekali sebelum deploy pertama. Tag = <MINIO_VERSION>-r<IMAGE_REV> dari ARG di infra/minio/Dockerfile.
-    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/minio:RELEASE.2025-10-15T17-29-55Z-r2
+    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/minio:RELEASE.2025-10-15T17-29-55Z-r3
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -143,7 +149,9 @@ services:
       MINIO_SITE_REGION: ap-southeast-1
     volumes:
       - minio_data:/data
-    <<: *hardening # cap_drop ditunda: image MinIO tidak dibangun/diuji di CI stack (lihat docs/lessons-learned.md SEC-10)
+    <<: *hardening
+    # Image buatan sendiri berjalan non-root (user `minio`) di port > 1024 — tak butuh capability apa pun (SEC-10; dibuktikan job CI docker).
+    cap_drop: [ALL]
     healthcheck:
       test: ["CMD-SHELL", "wget -q --spider http://localhost:9000/minio/health/live || exit 1"] # alpine: wget busybox
       interval: 10s
@@ -158,7 +166,7 @@ services:
   # Penyiapan MinIO sekali jalan tiap deploy (infra/minio/setup.sh, SEC-305): bucket ada & privat, policy `saudinesia-app` (hanya bucket
   # itu), user aplikasi = MINIO_ACCESS_KEY/SECRET_KEY. Satu-satunya kontainer selain minio yang memegang root. Web menunggu ini selesai.
   minio-setup:
-    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/minio:RELEASE.2025-10-15T17-29-55Z-r2
+    image: ghcr.io/${GITHUB_REPO:?GITHUB_REPO belum diisi}/minio:RELEASE.2025-10-15T17-29-55Z-r3
     restart: "no"
     entrypoint: ["/usr/local/bin/minio-setup"]
     environment:
@@ -179,7 +187,7 @@ services:
     logging: *logging
 
   caddy:
-    image: caddy:2.11.4-alpine
+    image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
     restart: unless-stopped
     ports:
       - "80:80"
@@ -194,7 +202,10 @@ services:
       - caddy_data:/data     # sertifikat TLS — jangan dihapus (rate limit Let's Encrypt)
       - caddy_config:/config
     depends_on: [web, minio]
-    <<: *hardening # cap_drop ditunda: Caddy (bind 80/443) tidak dijalankan di CI stack — perlu uji di server/staging
+    <<: *hardening
+    # Image resmi berjalan sebagai root di dalam kontainer; satu-satunya hak yang perlu = bind port 80/443 (SEC-10; dibuktikan job CI docker).
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
     networks: [internal]
     mem_limit: 128m
     cpus: 0.25

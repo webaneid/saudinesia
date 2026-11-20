@@ -180,6 +180,18 @@ await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa
   assert.match(compose, /environment:\n      POSTGRES_PASSWORD: ""/, 'web harus mengosongkan POSTGRES_PASSWORD')
   assert.match(compose, /"--requirepass", "\$\{REDIS_PASSWORD:\?/, 'Redis wajib berpassword')
   assert.ok(!/^\s+ports:[\s\S]*?(5432|6379|9000|9001)/m.test(compose), 'tidak ada port data store yang diekspos')
+  // Sisa SEC-10 (2026-11-21): SEMUA service cap_drop ALL (cap_add hanya yang dicatat), web read-only, image pihak ketiga dipin digest.
+  assert.equal((compose.match(/^    cap_drop: \[ALL\]$/gm) ?? []).length, services, 'setiap service harus cap_drop: [ALL]')
+  assert.deepEqual((compose.match(/^    cap_add: .*$/gm) ?? []).map(l => l.trim()), [
+    'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [CHOWN, SETGID, SETUID]', 'cap_add: [NET_BIND_SERVICE]',
+  ], 'cap_add hanya postgres, redis (entrypoint) dan caddy (bind 80/443)')
+  const web = compose.slice(compose.indexOf('\n  web:'), compose.indexOf('\n  migrate:'))
+  assert.match(web, /\n    read_only: true\n/, 'web wajib read_only')
+  assert.match(web, /- \/app\/\.next\/cache:uid=1000,gid=1000/, 'cache Next di tmpfs milik user bun')
+  const images = [...compose.matchAll(/^    image: (\S+)$/gm)].map(m => m[1]!)
+  assert.deepEqual(images.filter(i => !i.startsWith('ghcr.io/') && !/@sha256:[0-9a-f]{64}$/.test(i)), [], 'image pihak ketiga wajib dipin digest')
+  for (const f of ['Dockerfile', 'infra/minio/Dockerfile'])
+    assert.deepEqual([...read(f).matchAll(/^FROM (\S+)/gm)].map(m => m[1]!).filter(i => i !== 'base' && !/@sha256:[0-9a-f]{64}$/.test(i)), [], `${f}: FROM wajib dipin digest`)
   const gen = read('scripts/buat-env-production.sh'), example = read('.env.production.example')
   assert.match(gen, /REDIS_PASSWORD=\$PW_REDIS/); assert.match(gen, /REDIS_URL=redis:\/\/:\$PW_REDIS@redis:6379/)
   assert.match(example, /^REDIS_PASSWORD=$/m); assert.match(example, /^REDIS_URL=redis:\/\/:CHANGE_ME@redis:6379/m)

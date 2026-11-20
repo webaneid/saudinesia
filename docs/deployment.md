@@ -97,7 +97,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 
 ## 6. Sebelum go-live (blocker, urut)
 
-0. **Sisa hardening kontainer (SEC-10) — kerjakan sebelum server dipakai** (disimpan 2026-10-25; server belum dibeli, boleh dikerjakan sambil menyentuh modul terkait):
+0. ~~**Sisa hardening kontainer (SEC-10)**~~ — **SELESAI 2026-11-21** (dibuktikan job CI `docker`: MinIO & Caddy berjalan dengan hak minimal, web read-only, semua image dipin digest; Dependabot `docker` + `docker-compose`). Riwayat butir:
    (a) `cap_drop: ALL` + `cap_add` minimal untuk `minio` dan `caddy` (uji di server/staging — CI tidak menjalankan keduanya);
    (b) `read_only` rootfs + `tmpfs` untuk web, dibuktikan di artefak produksi dan job CI `docker`;
    (c) pin digest image (`oven/bun`, `postgres`, `redis`, `caddy`, MinIO) bersama Dependabot ecosystem `docker`.
