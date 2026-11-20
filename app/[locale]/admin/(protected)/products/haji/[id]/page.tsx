@@ -17,6 +17,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import type { RequirementView } from '@/lib/documents/completeness'
+import { adminHref } from '@/lib/admin/href'
 
 type HajiDetail = {
   id: string; name: string; description: string | null; hajiType: string; year: number
@@ -35,7 +36,7 @@ const toForm = (h: HajiDetail): Form => ({
 
 export default function HajiEditPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/haji`
+  const list = adminHref(locale, `/admin/products/haji`)
   const e = useEditEntity<HajiDetail>(`/api/v1/admin/products/haji/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)

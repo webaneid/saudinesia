@@ -8,6 +8,7 @@ import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ContactPicker, EMPTY_CONTACT, type ContactValue } from '@/components/shared/ContactPicker'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { e164FromCountry } from '@/lib/utils/phone'
+import { adminHref } from '@/lib/admin/href'
 
 // Tambah Pelanggan (docs/arsitektur-pelanggan.md §6). Akun lahir BELUM DIAKTIFKAN (tanpa password; admin tak pernah memasukkan password pelanggan): pemilik email
 // membuat password lewat tautan undangan, lalu menyetujui kebijakan privasi sendiri di langkah "Lengkapi data".
@@ -15,7 +16,7 @@ export default function NewCustomerPage() {
   const { locale } = useParams() as { locale: string }
   const { saving, error, clearError, submit } = useCreateEntity(
     '/api/v1/admin/customers',
-    (id, data) => `/${locale}/admin/customers/${id}?invite=${String(data.invite ?? 'none')}`,
+    (id, data) => adminHref(locale, `/admin/customers/${id}?invite=${String(data.invite ?? 'none')}`),
     'Pelanggan gagal ditambahkan.',
   )
   const [fullName, setFullName] = useState('')
@@ -36,7 +37,7 @@ export default function NewCustomerPage() {
 
   return (
     <CreatePage
-      icon={UserPlus} title="Tambah Pelanggan" backHref={`/${locale}/admin/customers`} backLabel="Daftar Pelanggan"
+      icon={UserPlus} title="Tambah Pelanggan" backHref={adminHref(locale, `/admin/customers`)} backLabel="Daftar Pelanggan"
       description="Membuat akun pelanggan. Akun belum bisa dipakai masuk sampai pemilik email membuat password lewat tautan undangan."
       onSubmit={onSubmit} saving={saving} canSubmit={fullName.trim().length >= 2 && /\S+@\S+\.\S+/.test(email)} error={error} submitLabel="Tambah Pelanggan"
     >

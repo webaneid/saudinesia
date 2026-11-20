@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { safeLocale } from '@/lib/utils/locale'
+import { adminHref } from '@/lib/admin/href'
 import { isPublicPageKey } from '@/lib/public-content/pages'
 import { SiteContentEditor } from './SiteContentEditor'
 
@@ -9,7 +10,7 @@ import { SiteContentEditor } from './SiteContentEditor'
 export default async function SiteContentEditPage({ params }: { params: Promise<{ locale: string; page: string }> }) {
   const { locale, page } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   if (!isPublicPageKey(page)) notFound()
   return <SiteContentEditor page={page} locale={safeLocale(locale)} />
 }

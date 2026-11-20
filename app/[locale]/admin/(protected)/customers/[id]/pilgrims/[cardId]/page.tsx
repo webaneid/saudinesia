@@ -12,6 +12,7 @@ import { SavedPilgrimFields } from '@/components/shared/pilgrims/SavedPilgrimFie
 import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
 import { bodyFromForm, canSubmitPilgrim, formFromCard, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
 import type { SavedPilgrimView } from '@/lib/pilgrims/service'
+import { adminHref } from '@/lib/admin/href'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i // segmen URL dipakai membangun URL API — jangan biarkan '../' atau '?' lewat
 
@@ -19,7 +20,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i /
 export default function CustomerPilgrimEditPage() {
   const { locale, id, cardId } = useParams() as { locale: string; id: string; cardId: string }
   const valid = UUID.test(id) && UUID.test(cardId)
-  const customerHref = `/${locale}/admin/customers/${valid ? id : ''}`
+  const customerHref = adminHref(locale, `/admin/customers/${valid ? id : ''}`)
   const endpoint = valid ? `/api/v1/admin/customers/${id}/pilgrims/${cardId}` : '/api/v1/admin/customers/invalid/pilgrims/invalid' // route menjawab 404
   const e = useEditEntity<SavedPilgrimView>(endpoint, customerHref)
   const [form, setForm] = useState<SavedPilgrimFormValue | null>(null)

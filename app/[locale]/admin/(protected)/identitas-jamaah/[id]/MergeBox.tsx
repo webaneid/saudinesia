@@ -6,6 +6,7 @@ import { GitMerge, Search } from 'lucide-react'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { formatCalendarDate, DATE_LONG, type CalendarDate } from '@/lib/time'
 import { useIdentityAction } from './useIdentityAction'
+import { adminHref } from '@/lib/admin/href'
 
 type Found = { id: string; fullName: string; birthDate: CalendarDate | null; hasNik: boolean; cards: number; bookings: number }
 type Props = { locale: string; identityId: string; fullName: string }
@@ -35,7 +36,7 @@ export function MergeBox({ locale, identityId, fullName }: Props) {
     const kept = keep === 'this' ? fullName : other.fullName
     if (!(await ask({ title: 'Gabungkan dua identitas?', body: `Identitas yang dipakai: ${kept}. Kartu, riwayat booking, dan jejak identitas lain pindah ke sana; identitas lain dihapus. Tidak dapat dibatalkan.`, confirmLabel: 'Gabungkan', tone: 'danger' }))) return
     const r = await send(`/api/v1/admin/identities/${identityId}/merge`, 'POST', { otherId: other.id, keep }, 'Identitas digabung.', false)
-    if (r.ok) router.push(`/${locale}/admin/identitas-jamaah/${(r.data as { identityId: string }).identityId}`)
+    if (r.ok) router.push(adminHref(locale, `/admin/identitas-jamaah/${(r.data as { identityId: string }).identityId}`))
   }
 
   return (

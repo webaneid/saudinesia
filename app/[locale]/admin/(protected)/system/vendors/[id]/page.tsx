@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { safeLocale } from '@/lib/utils/locale'
+import { adminHref } from '@/lib/admin/href'
 import { getVendor, listCategories, toVendorDto } from '@/lib/vendors/service'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { VendorEditPanel } from '@/components/admin/vendor/VendorEditPanel'
@@ -13,7 +14,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 export default async function VendorDetailPage({ params }: Props) {
   const { locale, id } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   if (!UUID.test(id)) notFound()
 
   const [found, categories] = await Promise.all([getVendor(id), listCategories()])

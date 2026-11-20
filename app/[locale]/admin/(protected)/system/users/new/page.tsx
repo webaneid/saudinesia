@@ -6,18 +6,19 @@ import { Users } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewAdminUserPage() {
   const { locale } = useParams() as { locale: string }
   // Pengguna dikelola dari daftar (ubah peran/nonaktifkan) — setelah dibuat kembali ke daftar.
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/system/users', () => `/${locale}/admin/system/users`, 'Akun gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/system/users', () => adminHref(locale, `/admin/system/users`), 'Akun gagal dibuat.')
   const [form, setForm] = useState({ fullName: '', email: '', password: '', role: 'admin' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={Users} title="Akun Admin Baru" backHref={`/${locale}/admin/system/users`} backLabel="Daftar Pengguna"
+      icon={Users} title="Akun Admin Baru" backHref={adminHref(locale, `/admin/system/users`)} backLabel="Daftar Pengguna"
       description="Membuat akun staf langsung (tanpa registrasi). Peran dapat diubah dari daftar pengguna."
       onSubmit={() => submit(form)} saving={saving} canSubmit={form.fullName.trim().length >= 2 && !!form.email.trim() && !!form.password} error={error} submitLabel="Buat Akun"
     >

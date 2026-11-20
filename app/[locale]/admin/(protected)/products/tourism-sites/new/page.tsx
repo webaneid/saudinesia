@@ -7,17 +7,18 @@ import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewTourismSitePage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/tourism-sites', id => `/${locale}/admin/products/tourism-sites/${id}`, 'Situs wisata gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/tourism-sites', id => adminHref(locale, `/admin/products/tourism-sites/${id}`), 'Situs wisata gagal dibuat.')
   const [form, setForm] = useState({ name: '', city: 'makkah', description: '', gmapsUrl: '' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={MapPin} title="Situs Wisata Baru" backHref={`/${locale}/admin/products/tourism-sites`} backLabel="Daftar Situs Wisata"
+      icon={MapPin} title="Situs Wisata Baru" backHref={adminHref(locale, `/admin/products/tourism-sites`)} backLabel="Daftar Situs Wisata"
       description="Master data tempat wisata — dipakai berulang di berbagai Paket Ziarah."
       onSubmit={() => submit(form)} saving={saving} canSubmit={!!form.name.trim()} error={error} submitLabel="Simpan & Lanjut"
     >

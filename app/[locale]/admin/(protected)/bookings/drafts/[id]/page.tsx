@@ -17,6 +17,7 @@ import { ItemRows, rowForMissing, rowFromItem, rowToItem, type ItemRow } from '.
 import { applyVisaRows, stripRow, syncVisaCounts, visaRowTotal, visaRowsFromSlots, type VisaSlot } from './visaRows'
 import { grouping, groupsInput, removeGroup, resizeGroup, startGroups, type GroupDraft } from './groupRows'
 import { GroupsBox } from './GroupsBox'
+import { adminHref } from '@/lib/admin/href'
 
 // Editor draf booking admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): draf tersimpan di database (dapat dilanjutkan). Produk = editor BARIS inline (§10.4, arahan
 // pemilik 2026-11-01); subtotal baris, total, pajak, dan pelanggaran aturan dihitung SERVER otomatis sesaat setelah berhenti mengubah (pratinjau = simulasi terbit yang
@@ -165,7 +166,7 @@ export default function DraftEditorPage({ params }: Props) {
       const json = await res.json().catch(() => null)
       if (!res.ok) { setProblem({ message: json?.error ?? 'Booking gagal diterbitkan.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }); return }
       setSnapshot(draftJson)
-      router.push(`/${locale}/admin/bookings/${id}`)
+      router.push(adminHref(locale, `/admin/bookings/${id}`))
     } catch {
       setProblem({ message: 'Tidak dapat menghubungi server.', violations: [] })
     } finally { setPublishing(false) }
@@ -178,7 +179,7 @@ export default function DraftEditorPage({ params }: Props) {
       const json = await res.json().catch(() => null)
       if (!res.ok) { setProblem({ message: json?.error ?? 'Draf gagal dihapus.', violations: [] }); return }
       setSnapshot(draftJson)
-      router.push(`/${locale}/admin/bookings`)
+      router.push(adminHref(locale, `/admin/bookings`))
     } finally { setDeleting(false) }
   }
 
@@ -269,5 +270,5 @@ export default function DraftEditorPage({ params }: Props) {
     </>
   )
 
-  return <EditorShell backHref={`/${locale}/admin/bookings`} backLabel="Daftar Booking" title={<>Draf {loaded.bookingCode}</>} main={main} sidebar={sidebar} />
+  return <EditorShell backHref={adminHref(locale, `/admin/bookings`)} backLabel="Daftar Booking" title={<>Draf {loaded.bookingCode}</>} main={main} sidebar={sidebar} />
 }

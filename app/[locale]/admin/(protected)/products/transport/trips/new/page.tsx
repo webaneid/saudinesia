@@ -5,19 +5,20 @@ import { useParams } from 'next/navigation'
 import { Route } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { adminHref } from '@/lib/admin/href'
 
 const CATS = ['airport', 'intercity', 'city_tour', 'shuttle', 'other']
 
 export default function NewTripPage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/transport/trips', id => `/${locale}/admin/products/transport/trips/${id}`, 'Trip gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/transport/trips', id => adminHref(locale, `/admin/products/transport/trips/${id}`), 'Trip gagal dibuat.')
   const [form, setForm] = useState({ name: '', category: '', origin: '', destination: '' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={Route} title="Trip Baru" backHref={`/${locale}/admin/products/transport`} backLabel="Daftar Transport"
+      icon={Route} title="Trip Baru" backHref={adminHref(locale, `/admin/products/transport`)} backLabel="Daftar Transport"
       description="Setelah disimpan, Anda diarahkan ke halaman trip untuk mengatur harga per kendaraan."
       onSubmit={() => submit({ ...form, category: form.category || null })}
       saving={saving} canSubmit={!!form.name.trim() && !!form.origin.trim() && !!form.destination.trim()} error={error} submitLabel="Simpan & Atur Harga"

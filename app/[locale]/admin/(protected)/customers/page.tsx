@@ -13,6 +13,7 @@ import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { formatInstant } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 // Daftar Pelanggan (docs/arsitektur-pelanggan.md): akun pemesan (role pilgrim). Semua peran admin boleh MELIHAT; mengubah status akun tetap di Sistem → Pengguna (superadmin).
 
@@ -37,7 +38,7 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
   }
   const { items, meta } = await listCustomers(filters, list)
 
-  const base = `/${locale}/admin/customers`
+  const base = adminHref(locale, `/admin/customers`)
   const hrefFor = (over: Record<string, string | number | undefined>) =>
     buildListHref(base, { q: filters.q, active: filters.active, email: filters.email, bookings: filters.bookings, limit: sp.limit === undefined ? undefined : list.limit, ...over })
 
@@ -48,7 +49,7 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
         ? <span className="text-[13px] italic text-admin-muted">Akun dihapus</span>
         : (
           <>
-            <Link href={`/${locale}/admin/customers/${c.id}`} className="text-[13px] font-medium text-admin-accent hover:text-admin-accent-strong">{c.fullName || '-'}</Link>
+            <Link href={adminHref(locale, `/admin/customers/${c.id}`)} className="text-[13px] font-medium text-admin-accent hover:text-admin-accent-strong">{c.fullName || '-'}</Link>
             <div className="text-[11px] text-admin-muted">{c.email}</div>
           </>
         ),
@@ -76,7 +77,7 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
     },
     {
       key: 'actions', header: '', actions: true,
-      cell: c => c.deleted ? null : <RowActions><ActionLink kind="view" href={`/${locale}/admin/customers/${c.id}`} label={`Lihat pelanggan ${c.fullName}`} /></RowActions>,
+      cell: c => c.deleted ? null : <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/customers/${c.id}`)} label={`Lihat pelanggan ${c.fullName}`} /></RowActions>,
     },
   ]
 
@@ -87,7 +88,7 @@ export default async function AdminCustomers({ params, searchParams }: Props) {
     <div className="space-y-5">
       <PageHeader
         icon={UserCheck} title="Pelanggan" description="Akun yang mendaftar dan memesan. Cari berdasarkan nama, email, atau nomor HP/WhatsApp."
-        actions={<Link href={`/${locale}/admin/customers/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Pelanggan</Link>}
+        actions={<Link href={adminHref(locale, `/admin/customers/new`)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Pelanggan</Link>}
       />
 
       <FilterBar active={anyFilter} resetHref={buildListHref(base, { limit: navQuery.limit })}>

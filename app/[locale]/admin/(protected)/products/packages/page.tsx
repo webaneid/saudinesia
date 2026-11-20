@@ -9,12 +9,13 @@ import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
+import { adminHref } from '@/lib/admin/href'
 
 type Pkg = { id: string; name: string; price: number; profitIdr: number | null; marginPct: number | null; isFeatured: boolean; isActive: boolean }
 
 export default function PackagesPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/packages`
+  const base = adminHref(locale, `/admin/products/packages`)
   const columns = (reload: () => void): Column<Pkg>[] => [
     {
       key: 'name', header: 'Nama Paket', mobile: 'title',

@@ -11,6 +11,7 @@ import { CHECKOUT_MAX_PEOPLE } from '@/lib/validators/checkout'
 import { hasActiveBankAccount } from '@/lib/invoice/banks'
 import { safeLocale } from '@/lib/utils/locale'
 import { CartView } from './CartView'
+import { staffPanelHref } from '@/lib/auth/staffPanel'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -46,7 +47,7 @@ export default async function CartPage({ params }: Props) {
       </div>
       {session.role !== 'pilgrim' ? (
         <p className="checkout-panel text-sm text-muted-foreground">
-          {tp.rich('staffNote', { link: chunks => <Link href={`/${locale}/admin/bookings`} className="font-semibold text-brand hover:underline">{chunks}</Link> })}
+          {tp.rich('staffNote', { link: chunks => <Link href={staffPanelHref(locale, `/admin/bookings`)} className="font-semibold text-brand hover:underline">{chunks}</Link> })}
         </p>
       ) : (
         <CartView locale={locale} maxPeople={CHECKOUT_MAX_PEOPLE} available={available} orderBlocked={!canOrder} />

@@ -15,6 +15,7 @@ import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -63,7 +64,7 @@ export default async function AdminPayments({ params, searchParams }: Props) {
     }),
   )
 
-  const base = `/${locale}/admin/payments`
+  const base = adminHref(locale, `/admin/payments`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { q: q || undefined, proof, limit: limitParam, ...over })
 
@@ -72,7 +73,7 @@ export default async function AdminPayments({ params, searchParams }: Props) {
       key: 'code', header: 'Booking', mobile: 'title',
       cell: b => (
         <>
-          <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link>
+          <Link href={adminHref(locale, `/admin/bookings/${b.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link>
           <div className="text-[12px] text-admin-muted">{b.user.fullName}</div>
         </>
       ),
@@ -92,7 +93,7 @@ export default async function AdminPayments({ params, searchParams }: Props) {
     { key: 'total', header: 'Tagihan', hideBelowLg: true, align: 'right', cell: b => <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(billOf({ totalAmount: b.totalAmount, invoice: b.invoice }).grandTotal)}</span> },
     {
       key: 'actions', header: '', actions: true,
-      cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Verifikasi pembayaran ${b.bookingCode}`} /></RowActions>,
+      cell: b => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${b.id}`)} label={`Verifikasi pembayaran ${b.bookingCode}`} /></RowActions>,
     },
   ]
 

@@ -6,6 +6,7 @@ import { safeLocale } from '@/lib/utils/locale'
 import { afterAuthPath, safeNextPath, withNext } from '@/lib/auth/nextPath'
 import { authMetadata } from '../metadata'
 import { LengkapiDataForm } from './LengkapiDataForm'
+import { staffPanelHref } from '@/lib/auth/staffPanel'
 
 export const generateMetadata = ({ params }: { params: Promise<{ locale: string }> }) => authMetadata(params, 'contactData')
 
@@ -17,7 +18,7 @@ export default async function LengkapiDataPage({ params, searchParams }: { param
   const next = safeNextPath((await searchParams).next)
   const session = await getSession()
   if (!session) redirect(withNext(`/${locale}/login`, next))
-  if (session.role !== 'pilgrim') redirect(`/${locale}/admin`)
+  if (session.role !== 'pilgrim') redirect(staffPanelHref(locale, `/admin`))
 
   const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { fullName: true } })
   const state = await getOnboardingState(session.userId)

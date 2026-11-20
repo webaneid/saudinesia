@@ -8,6 +8,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
+import { adminHref } from '@/lib/admin/href'
 
 type TourPackage = {
   id: string; name: string; price: string | number; profitIdr: number | null; marginPct: number | null; isActive: boolean
@@ -30,7 +31,7 @@ function transportLabel(p: TourPackage) {
 
 export default function TourPackagesPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/tour-packages`
+  const base = adminHref(locale, `/admin/products/tour-packages`)
   const columns = (reload: () => void): Column<TourPackage>[] => [
     { key: 'name', header: 'Nama Paket', mobile: 'title', cell: p => <Link href={`${base}/${p.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{p.name}</Link> },
     { key: 'transport', header: 'Kendaraan', cell: p => <span className="text-[12px] text-admin-muted">{transportLabel(p)}</span> },

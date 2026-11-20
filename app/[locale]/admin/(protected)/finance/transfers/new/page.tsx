@@ -9,6 +9,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { DateTimeField } from '@/components/shared/DateTimeField'
 import { formatRupiah } from '@/lib/utils'
 import type { TransferAccountOption } from '@/lib/cash/transfers'
+import { adminHref } from '@/lib/admin/href'
 
 // Catat transfer antar akun (§10.14 Fase 12b; manager + superadmin — API menolak peran lain). Pilihan akun + saldo dari GET …/transfers/options. Aturan akun (ada, bukan QRIS, berbeda) dan waktu dinilai server; saldo hanya PERINGATAN — buku kas belum memuat
 // saldo sebelum sistem dipakai, jadi transfer melebihi saldo tercatat tidak ditolak.
@@ -23,7 +24,7 @@ export default function NewTransferPage() {
       .catch(() => { if (live) setLoadError('Tidak dapat menghubungi server.') })
     return () => { live = false }
   }, [])
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/finance/transfers', id => `/${locale}/admin/finance/transfers/${id}`, 'Transfer gagal dicatat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/finance/transfers', id => adminHref(locale, `/admin/finance/transfers/${id}`), 'Transfer gagal dicatat.')
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
   const [amount, setAmount] = useState('')
@@ -41,7 +42,7 @@ export default function NewTransferPage() {
 
   return (
     <CreatePage
-      icon={ArrowLeftRight} title="Catat Transfer" backHref={`/${locale}/admin/finance/transfers`} backLabel="Transfer Antar Akun"
+      icon={ArrowLeftRight} title="Catat Transfer" backHref={adminHref(locale, `/admin/finance/transfers`)} backLabel="Transfer Antar Akun"
       description="Memindahkan saldo antar akun kas milik perusahaan. Akun asal mencatat uang keluar (+ biaya transfer), akun tujuan uang masuk."
       onSubmit={() => submit({ from, to, amount: amountNum, fee: feeNum, transferredAt: at, note: note.trim() || null })}
       saving={saving} canSubmit={valid} error={loadError ?? error} submitLabel="Catat transfer"

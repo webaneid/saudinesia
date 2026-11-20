@@ -1,20 +1,26 @@
 #!/usr/bin/env bash
-# Jalankan DI SERVER BARU, sekali:  bash scripts/buat-env-production.sh <APP_DOMAIN> <FILES_DOMAIN> [DIR]
-#   mis. bash scripts/buat-env-production.sh saudinesia.com berkas.saudinesia.com /opt/app
+# Jalankan DI SERVER BARU, sekali:  bash scripts/buat-env-production.sh <APP_DOMAIN> <ADMIN_DOMAIN> <FILES_DOMAIN> [DIR]
+#   mis. bash scripts/buat-env-production.sh app.saudinesia.id admin.saudinesia.id files.saudinesia.id /opt/app
 # Membuat DIR/.env.production dari .env.production.example dengan rahasia acak (password Postgres pemilik + peran aplikasi, kunci MinIO,
 # JWT_SECRET). Rahasia TIDAK ditampilkan. Nilai yang harus diisi manual (WhatsApp, Resend) dibiarkan kosong dan
 # dilaporkan di akhir. Tidak pernah menimpa .env.production yang sudah ada.
 # Pola mengikuti smart-ai (scripts/buat-env-production.sh).
 set -euo pipefail
 
-APP_DOMAIN="${1:?pemakaian: $0 <APP_DOMAIN> <FILES_DOMAIN> [DIR]}"
-FILES_DOMAIN="${2:?pemakaian: $0 <APP_DOMAIN> <FILES_DOMAIN> [DIR]}"
-DIR="${3:-/opt/app}"
+PAKAI="pemakaian: $0 <APP_DOMAIN> <ADMIN_DOMAIN> <FILES_DOMAIN> [DIR]"
+APP_DOMAIN="${1:?$PAKAI}"
+ADMIN_DOMAIN="${2:?$PAKAI}"
+FILES_DOMAIN="${3:?$PAKAI}"
+DIR="${4:-/opt/app}"
 
 # Hanya karakter domain yang sah — nilai ini masuk ke sed & ke file env.
 domain_ok() { [[ "$1" =~ ^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$ ]]; }
 domain_ok "$APP_DOMAIN"   || { echo "APP_DOMAIN tidak valid: $APP_DOMAIN"; exit 1; }
+domain_ok "$ADMIN_DOMAIN" || { echo "ADMIN_DOMAIN tidak valid: $ADMIN_DOMAIN"; exit 1; }
 domain_ok "$FILES_DOMAIN" || { echo "FILES_DOMAIN tidak valid: $FILES_DOMAIN"; exit 1; }
+# Tiga host harus berbeda: host admin = host app akan membuat semua pengunjung dianggap admin-host (middleware) dan sertifikat bentrok.
+[ "$APP_DOMAIN" != "$ADMIN_DOMAIN" ] && [ "$APP_DOMAIN" != "$FILES_DOMAIN" ] && [ "$ADMIN_DOMAIN" != "$FILES_DOMAIN" ] \
+  || { echo "APP_DOMAIN, ADMIN_DOMAIN, FILES_DOMAIN harus berbeda"; exit 1; }
 
 cd "$DIR"
 [ -f .env.production.example ] || { echo "GAGAL: $DIR/.env.production.example tidak ada"; exit 1; }
@@ -29,6 +35,7 @@ PW_REDIS="$(acak 24)"
 ( umask 077
   sed \
     -e "s#^APP_DOMAIN=\$#APP_DOMAIN=$APP_DOMAIN#" \
+    -e "s#^ADMIN_DOMAIN=\$#ADMIN_DOMAIN=$ADMIN_DOMAIN#" \
     -e "s#^FILES_DOMAIN=\$#FILES_DOMAIN=$FILES_DOMAIN#" \
     -e "s#^APP_URL=\$#APP_URL=https://$APP_DOMAIN#" \
     -e "s#^MINIO_PUBLIC_URL=\$#MINIO_PUBLIC_URL=https://$FILES_DOMAIN#" \

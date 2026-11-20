@@ -8,13 +8,15 @@ import { formatInstant } from '@/lib/time'
 import { listPagesForAdmin } from '@/lib/public-content/service'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
+import { adminHref, publicHref } from '@/lib/admin/href'
+import { appUrl } from '@/lib/email/templates'
 
 // Sistem → Konten Situs (docs/arsitektur-frontend-publik.md §6.5 C6) — hanya superadmin. Daftar halaman tetap dari registry kode (C7), bukan data yang tumbuh.
 export default async function SiteContentPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
   const loc = safeLocale(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${loc}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(loc, `/admin`))
   const pages = await listPagesForAdmin()
   return (
     <div className="space-y-5">
@@ -41,10 +43,10 @@ export default async function SiteContentPage({ params }: { params: Promise<{ lo
               <p className="m-0 text-xs text-admin-warning">Belum ada produk aktif — halaman ini dan menunya disembunyikan dari situs sampai produk pertama diaktifkan.</p>
             )}
             <div className="mt-auto flex flex-wrap gap-2">
-              <Link href={`/${loc}/admin/system/site-content/${p.page}`} className="admin-btn-sm inline-flex items-center gap-1.5">
+              <Link href={adminHref(loc, `/admin/system/site-content/${p.page}`)} className="admin-btn-sm inline-flex items-center gap-1.5">
                 <Pencil className="size-3.5" aria-hidden /> Edit konten
               </Link>
-              <a href={`/${loc}${p.path ? `/${p.path}` : ''}`} target="_blank" rel="noopener" className="admin-btn-ghost text-xs">
+              <a href={publicHref(`/${loc}${p.path ? `/${p.path}` : ''}`, appUrl())} target="_blank" rel="noopener" className="admin-btn-ghost text-xs">
                 <ExternalLink className="size-3.5" aria-hidden /> Lihat halaman
               </a>
             </div>

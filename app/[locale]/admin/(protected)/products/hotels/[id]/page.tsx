@@ -19,6 +19,7 @@ import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { PeriodForm, type RoomType } from './PeriodForm'
 import { PeriodRow, type Period } from './PeriodRow'
+import { adminHref } from '@/lib/admin/href'
 
 type AddressRecord = {
   type: 'domestic' | 'international'; fullAddress: string; postalCode: string | null
@@ -63,7 +64,7 @@ export default function HotelDetailPage() {
   // Dilacak: info hotel (form + alamat). Periode/layanan/tipe kamar tersimpan langsung per aksi, bukan lewat tombol Simpan.
   const { dirty, markClean, patchClean } = useDirtyForm(hotel ? { form, address } : null)
   useUnsavedGuard(dirty)
-  const del = useDeleteEntity(`/api/v1/admin/products/hotels/${id}`, `/${locale}/admin/products/hotels`)
+  const del = useDeleteEntity(`/api/v1/admin/products/hotels/${id}`, adminHref(locale, `/admin/products/hotels`))
   async function handleDelete() {
     if (await del.run() === 'deactivated') { setForm(f => ({ ...f, isActive: false })); patchClean(prev => ({ ...prev, form: { ...prev.form, isActive: false } })) }
   }
@@ -201,7 +202,7 @@ export default function HotelDetailPage() {
     <>
     {dialog}
     <EditorShell
-      backHref={`/${locale}/admin/products/hotels`}
+      backHref={adminHref(locale, `/admin/products/hotels`)}
       backLabel="Daftar Hotel"
       banner={
         (error || del.error || del.notice) ? (

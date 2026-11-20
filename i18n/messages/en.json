@@ -1775,6 +1775,8 @@
     "accountExists": "An account with this email already exists. Please sign in.",
     "invalidCredentials": "Incorrect email or password.",
     "accountDisabled": "This account has been deactivated. Contact us for help.",
+    "staffUseAdminDomain": "Staff accounts sign in at the admin panel address, not here.",
+    "adminDomainStaffOnly": "This page is for staff only. Pilgrims sign in on the main site.",
     "emailUnverified": "Your email isn’t verified yet. Use “Forgot password” to activate your account.",
     "linkInvalid": "This link is invalid or has expired.",
     "linkInvalidRegister": "This link is invalid or has expired. Sign up again to get a new link.",

@@ -15,6 +15,7 @@ import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { escapeLike } from '@/lib/utils/search'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -70,7 +71,7 @@ export default async function AdminVisa({ params, searchParams }: Props) {
     return typeof name === 'string' && name ? name : 'Jamaah'
   }
 
-  const base = `/${locale}/admin/visa`
+  const base = adminHref(locale, `/admin/visa`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) =>
     buildListHref(base, { q: q || undefined, status, limit: limitParam, ...over })
@@ -80,7 +81,7 @@ export default async function AdminVisa({ params, searchParams }: Props) {
     {
       key: 'booking', header: 'Booking',
       cell: a => (
-        <Link href={`/${locale}/admin/bookings/${a.pilgrim.booking.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">
+        <Link href={adminHref(locale, `/admin/bookings/${a.pilgrim.booking.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">
           {a.pilgrim.booking.bookingCode}
         </Link>
       ),
@@ -93,7 +94,7 @@ export default async function AdminVisa({ params, searchParams }: Props) {
     },
     {
       key: 'actions', header: '', actions: true,
-      cell: a => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${a.pilgrim.booking.id}`} label={`Kelola visa booking ${a.pilgrim.booking.bookingCode}`} /></RowActions>,
+      cell: a => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${a.pilgrim.booking.id}`)} label={`Kelola visa booking ${a.pilgrim.booking.bookingCode}`} /></RowActions>,
     },
   ]
 

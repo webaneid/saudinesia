@@ -43,6 +43,7 @@ import { itemSellTotals, visaTierTexts } from '@/lib/pricing/engine/snapshot'
 import { collapseRows, formulaOf } from '@/lib/booking/orderSummary'
 import { formatRupiah } from '@/lib/utils'
 import { groupView } from '@/lib/booking/groups'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = { params: Promise<{ locale: string; id: string }>; searchParams: Promise<{ periksa?: string }> }
 
@@ -73,7 +74,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
     },
   })
   if (!booking) notFound()
-  if (booking.status === 'draft') redirect(`/${locale}/admin/bookings/drafts/${id}`) // draf diedit di editor draf (§10.3)
+  if (booking.status === 'draft') redirect(adminHref(locale, `/admin/bookings/drafts/${id}`)) // draf diedit di editor draf (§10.3)
 
   // Tabel jamaah (pemilik 2026-11-10): satu pemuat bersama halaman jamaah (lib/pilgrims/slots.ts). Halaman ini MEMERIKSA satu jamaah sekaligus
   // (`?periksa=<id>`; bawaan = jamaah pertama yang menunggu pemeriksaan); mengubah data/dokumen di halaman Kelola jamaah.
@@ -84,7 +85,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
   const selectedSlot = slots.find(x => x.id === selectedId)
   // Linimasa visa jamaah yang diperiksa (docs/arsitektur-visa.md §9) — staf melihat nama petugas.
   const visaEvents = selected?.visaApplication ? (await visaEventsOf([selected.visaApplication.id], { withActor: true })).get(selected.visaApplication.id) ?? [] : []
-  const manageHref = (pid: string) => `/${locale}/admin/bookings/${id}/pilgrims/${pid}`
+  const manageHref = (pid: string) => adminHref(locale, `/admin/bookings/${id}/pilgrims/${pid}`)
   const nextEmpty = slots.find(x => !x.filled)
   // Visa per jamaah diringkas: produk + harga satuan sama → satu baris "3 jamaah × Rp … = Rp …" (lib/booking/orderSummary.ts), harga = jual beku berlaku.
   const [sells, tiers] = await Promise.all([itemSellTotals(prisma, booking.id), visaTierTexts(prisma, booking.id)])
@@ -138,7 +139,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href={`/${locale}/admin/bookings`}
+        <Link href={adminHref(locale, `/admin/bookings`)}
           className="h-9 w-9 rounded-xl border border-admin-line grid place-items-center text-admin-muted hover:text-admin-ink hover:bg-white hover:shadow-admin transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </Link>
@@ -153,7 +154,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
           <FileDown className="h-3.5 w-3.5" /> Unduh Invoice
         </a>
         {booking.status === 'active' && booking.invoice && (
-          <Link href={`/${locale}/admin/bookings/${booking.id}/edit`}
+          <Link href={adminHref(locale, `/admin/bookings/${booking.id}/edit`)}
             className="inline-flex items-center gap-1.5 rounded-lg border border-admin-line px-3 py-1.5 text-[12px] font-medium text-admin-ink/80 hover:text-admin-ink hover:bg-white hover:shadow-admin transition-colors">
             <Pencil className="h-3.5 w-3.5" /> Edit booking
           </Link>
@@ -381,7 +382,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
         const completedText = booking.completedAt ? `Selesai ${formatInstant(booking.completedAt, DATETIME_FULL)}${byName ? ` oleh ${byName}` : ''}` : null
         return <CompletionBox bookingId={id} completed={booking.status === 'completed'} completedText={completedText} blockers={facts ? completionBlockers(facts).map(b => COMPLETION_BLOCKER_LABEL[b]) : []} canReopen={canReopenBooking(session.role)} showShareNote={SUPERADMIN_ROLES.includes(session.role)} />
       })()}
-      <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} refundsHref={`/${locale}/admin/finance/refunds`} />
+      <RefundsPanel bookingId={id} canManage={canMoney} cancellation={cancellationView} refunds={refundRows} refundableMax={refundable.max} refundsHref={adminHref(locale, `/admin/finance/refunds`)} />
       {booking.status === 'active' && canCancelBooking(session.role) && (
         <CancelBookingBox bookingId={id} paid={refundable.paid} suggested={suggestedRefund(refundable.paid, booking.departureDate)} canMoney={canMoney} pendingProof={!!pendingPayment} />
       )}
@@ -396,7 +397,7 @@ export default async function AdminBookingDetail({ params, searchParams }: Props
         <div className="p-5">
           <PilgrimSlotsTable
             total={slots.length}
-            slots={slots.map(x => ({ ...x, ...(gv && { group: gv.name(pilgrimGroup.get(x.id)) }), editHref: manageHref(x.id), viewHref: `/${locale}/admin/bookings/${id}?periksa=${x.id}#periksa` }))}
+            slots={slots.map(x => ({ ...x, ...(gv && { group: gv.name(pilgrimGroup.get(x.id)) }), editHref: manageHref(x.id), viewHref: adminHref(locale, `/admin/bookings/${id}?periksa=${x.id}#periksa`) }))}
             addHref={booking.status === 'active' && nextEmpty ? manageHref(nextEmpty.id) : null}
             deleteEndpoint={booking.status === 'active' ? `/api/v1/admin/bookings/${id}/pilgrims/{id}` : null}
           />

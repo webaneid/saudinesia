@@ -6,6 +6,7 @@ import { ExternalLink, FileText, ImageIcon, Info, Trash2, Wallet } from 'lucide-
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
+import { usePublicHref } from '@/components/admin/shell/AdminPublicOrigin'
 import { FormField } from '@/components/admin/ui/FormField'
 import { Switch } from '@/components/admin/ui/Switch'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
@@ -26,6 +27,7 @@ type Props = {
 }
 
 export function ProductInfoTab({ productId, form, onChange, price, locale, productName, onShowPrice, onDelete }: Props) {
+  const toPublic = usePublicHref()
   return (
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
       <div className="min-w-0 space-y-4 lg:col-span-2">
@@ -81,7 +83,7 @@ export function ProductInfoTab({ productId, form, onChange, price, locale, produ
             </label>
           </div>
           <a
-            href={`/${locale}/visa`} target="_blank" rel="noopener noreferrer"
+            href={toPublic(`/${locale}/visa`)} target="_blank" rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-admin-accent-strong hover:underline"
           >
             Lihat katalog publik <ExternalLink className="size-3.5" />

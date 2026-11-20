@@ -8,13 +8,14 @@ import { listCategories } from '@/lib/vendors/service'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Button } from '@/components/admin/ui/Button'
 import { CategoryManager } from '@/components/admin/vendor/CategoryManager'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = { params: Promise<{ locale: string }> }
 
 export default async function VendorCategoriesPage({ params }: Props) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
 
   const categories = await listCategories()
   return (
@@ -22,7 +23,7 @@ export default async function VendorCategoriesPage({ params }: Props) {
       <PageHeader
         title="Kategori Vendor"
         description="Kategori yang tersedia saat mengisi vendor. Kategori yang sudah dipakai vendor dinonaktifkan, tidak dihapus."
-        actions={<Link href={`/${locale}/admin/system/vendors`}><Button variant="outline"><ArrowLeft className="size-4" /> Daftar vendor</Button></Link>}
+        actions={<Link href={adminHref(locale, `/admin/system/vendors`)}><Button variant="outline"><ArrowLeft className="size-4" /> Daftar vendor</Button></Link>}
       />
       <CategoryManager categories={categories} />
     </div>

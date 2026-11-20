@@ -7,12 +7,13 @@ import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { Badge } from '@/components/admin/ui/Badge'
 import { Switch } from '@/components/admin/ui/Switch'
+import { adminHref } from '@/lib/admin/href'
 
 type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
 
 export default function EditFlightRoutePage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/flight`
+  const list = adminHref(locale, `/admin/products/flight`)
   const e = useEditEntity<FlightRoute>(`/api/v1/admin/products/flight/routes/${id}`, list)
   const [form, setForm] = useState<{ origin: string; destination: string; isActive: boolean } | null>(null)
 

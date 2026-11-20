@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useIdentityAction } from './useIdentityAction'
+import { adminHref } from '@/lib/admin/href'
 
 // Hapus identitas atas permintaan subjek data (§4.4): hanya bila tak pernah dipakai booking — server menolak dengan pesan bila pernah.
 export function EraseIdentity({ locale, identityId, usedByBookings }: { locale: string; identityId: string; usedByBookings: boolean }) {
@@ -17,7 +18,7 @@ export function EraseIdentity({ locale, identityId, usedByBookings }: { locale: 
           : 'NIK tersegel, data kanonik, alias, dan jejak identitas ini dihapus. Kartu milik akun pelanggan tetap ada (dilepas dari identitas).'}
         onDelete={async () => {
           const r = await send(`/api/v1/admin/identities/${identityId}`, 'DELETE', undefined, '', false)
-          if (r.ok) router.push(`/${locale}/admin/identitas-jamaah`)
+          if (r.ok) router.push(adminHref(locale, `/admin/identitas-jamaah`))
         }}
       />
       {notice?.error && <p role="alert" className="m-0 text-[12px] text-admin-danger">{notice.text}</p>}

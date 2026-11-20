@@ -9,12 +9,13 @@ import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
+import { adminHref } from '@/lib/admin/href'
 
 type HajiProduct = { id: string; name: string; hajiType: string; year: number; price: number; profitIdr: number | null; marginPct: number | null; totalQuota: number; bookedQuota: number; isActive: boolean }
 
 export default function HajiPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/haji`
+  const base = adminHref(locale, `/admin/products/haji`)
   const columns = (reload: () => void): Column<HajiProduct>[] => [
     { key: 'name', header: 'Nama', mobile: 'title', cell: h => <Link href={`${base}/${h.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{h.name}</Link> },
     { key: 'type', header: 'Jenis', cell: h => <Badge tone="warning" className="capitalize">{h.hajiType}</Badge> },

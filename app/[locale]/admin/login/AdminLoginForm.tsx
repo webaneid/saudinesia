@@ -6,10 +6,11 @@ import { AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { Button } from '@/components/admin/ui/Button'
 import { FormField } from '@/components/admin/ui/FormField'
+import { adminHref, publicHref } from '@/lib/admin/href'
 
-interface AdminLoginFormProps { locale: string }
+interface AdminLoginFormProps { locale: string; publicOrigin: string }
 
-export function AdminLoginForm({ locale }: AdminLoginFormProps) {
+export function AdminLoginForm({ locale, publicOrigin }: AdminLoginFormProps) {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -38,7 +39,7 @@ export function AdminLoginForm({ locale }: AdminLoginFormProps) {
       }
 
       // All admin roles → unified /admin dashboard
-      router.push(`/${locale}/admin`)
+      router.push(adminHref(locale, `/admin`))
     } catch {
       setError('Terjadi kesalahan. Periksa koneksi internet.')
     } finally {
@@ -59,7 +60,7 @@ export function AdminLoginForm({ locale }: AdminLoginFormProps) {
       <FormField
         label="Password" htmlFor="password" required
         labelAside={
-          <a href={`/${locale}/forgot-password`} className="text-xs font-semibold text-admin-accent-strong hover:underline">
+          <a href={publicHref(`/${locale}/forgot-password`, publicOrigin)} className="text-xs font-semibold text-admin-accent-strong hover:underline">
             Lupa password?
           </a>
         }

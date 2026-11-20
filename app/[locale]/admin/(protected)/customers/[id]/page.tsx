@@ -17,6 +17,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { Card } from '@/components/admin/ui/Card'
 import { formatCalendarDate, formatInstant } from '@/lib/time'
 import { listSavedPilgrims, type SavedPilgrimView } from '@/lib/pilgrims/service'
+import { adminHref } from '@/lib/admin/href'
 
 // Detail Pelanggan (docs/arsitektur-pelanggan.md §3) — hanya lihat. Akun non-pilgrim (staf) → 404.
 
@@ -50,18 +51,18 @@ export default async function AdminCustomerDetail({ params, searchParams }: Prop
   const c = await getCustomer(id, list)
   if (!c) notFound()
   const pilgrims = c.deleted ? null : await listSavedPilgrims({ userId: session.userId, role: session.role }, c.id, { ...pilgrimList, archived: sp.jarchived === '1' })
-  const listHref = `/${locale}/admin/customers`
+  const listHref = adminHref(locale, `/admin/customers`)
 
   const bookingColumns: Column<(typeof c.bookings)[number]>[] = [
-    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
+    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={adminHref(locale, `/admin/bookings/${b.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
     { key: 'ordered', header: 'Dipesan', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{dt(b.createdAt)}</span> },
     { key: 'departure', header: 'Berangkat', cell: b => <span className="text-[12px] text-admin-muted">{b.departureDate ? day(b.departureDate) : '-'}</span> },
     { key: 'total', header: 'Total', align: 'right', cell: b => <span className="text-[12px] font-medium tabular-nums">{formatRupiah(b.totalAmount)}</span> },
     { key: 'status', header: 'Status', cell: b => <Badge tone={BOOKING_TONE[b.status] ?? 'neutral'}>{BOOKING_STATUS[b.status].label}</Badge> },
-    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${b.id}`)} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
   ]
 
-  const detailHref = `/${locale}/admin/customers/${c.id}`
+  const detailHref = adminHref(locale, `/admin/customers/${c.id}`)
   const pilgrimsArchived = sp.jarchived === '1'
   const pilgrimHref = (q: { jpage?: number; jarchived?: string }) => buildListHref(detailHref, {
     page: list.page, limit: list.limit === CUSTOMER_BOOKINGS_PAGE_SIZE ? undefined : list.limit,
@@ -155,7 +156,7 @@ export default async function AdminCustomerDetail({ params, searchParams }: Prop
         <h2 className="m-0 text-sm font-bold text-admin-ink">Pesanan</h2>
         <DataTable
           columns={bookingColumns} rows={c.bookings} getRowId={b => b.id} empty="Belum pernah memesan."
-          footer={c.bookingsMeta.total > 0 ? <Pagination {...c.bookingsMeta} hrefFor={page => buildListHref(`/${locale}/admin/customers/${c.id}`, { page, limit: list.limit === CUSTOMER_BOOKINGS_PAGE_SIZE ? undefined : list.limit })} /> : undefined}
+          footer={c.bookingsMeta.total > 0 ? <Pagination {...c.bookingsMeta} hrefFor={page => buildListHref(adminHref(locale, `/admin/customers/${c.id}`), { page, limit: list.limit === CUSTOMER_BOOKINGS_PAGE_SIZE ? undefined : list.limit })} /> : undefined}
         />
       </div>
     </div>

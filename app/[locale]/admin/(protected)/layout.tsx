@@ -1,10 +1,13 @@
 import { redirect } from 'next/navigation'
 import { safeLocale } from '@/lib/utils/locale'
+import { adminHref } from '@/lib/admin/href'
 import { getSession, ADMIN_ROLES, MANAGER_ROLES } from '@/lib/auth/session'
 import { prisma } from '@/lib/db'
 import { Sidebar } from '@/components/admin/shell/Sidebar'
 import { Topbar } from '@/components/admin/shell/Topbar'
 import { AdminRoleProvider } from '@/components/admin/shell/AdminRole'
+import { AdminPublicOriginProvider } from '@/components/admin/shell/AdminPublicOrigin'
+import { appUrl } from '@/lib/email/templates'
 
 type Props = { children: React.ReactNode; params: Promise<{ locale: string }> }
 
@@ -13,7 +16,7 @@ export default async function AdminLayout({ children, params }: Props) {
   const session = await getSession()
 
   if (!session || !ADMIN_ROLES.includes(session.role)) {
-    redirect(`/${safeLocale(locale)}/admin/login`)
+    redirect(adminHref(safeLocale(locale), '/admin/login'))
   }
 
   const role         = session.role
@@ -30,6 +33,7 @@ export default async function AdminLayout({ children, params }: Props) {
   const roleLabel = isSuperAdmin ? 'Super Admin' : isManager ? 'Manager' : 'Admin'
 
   return (
+    <AdminPublicOriginProvider origin={appUrl()}>
     <div className="admin-canvas flex min-h-screen font-jakarta text-admin-ink">
       <Sidebar locale={locale} isManager={isManager} isSuperAdmin={isSuperAdmin} />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
@@ -48,5 +52,6 @@ export default async function AdminLayout({ children, params }: Props) {
         </main>
       </div>
     </div>
+    </AdminPublicOriginProvider>
   )
 }

@@ -20,6 +20,7 @@ import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
 import { Badge } from '@/components/admin/ui/Badge'
+import { adminHref } from '@/lib/admin/href'
 
 // Buku kas (docs/arsitektur-booking-engine-v2.md §10.10 Fase 7b-1): baca saja. Data dari GET /api/v1/admin/finance/cash-book; filter di URL (daftar putih di server).
 
@@ -79,15 +80,15 @@ export default function CashBookPage() {
     { key: 'd', header: 'Waktu', mobile: 'title', cell: r => <span className="tabular-nums">{formatInstant(r.entryDate, DATETIME_MEDIUM)}</span> },
     { key: 'k', header: 'Komponen', cell: r => <Badge tone={r.direction === 'in' ? 'accent' : 'warning'}>{CASH_DIRECTION_LABEL[r.direction]} · {CASH_COMPONENT_LABEL[r.component]}</Badge> },
     { key: 'a', header: 'Akun', hideBelowLg: true, cell: r => <span className="text-admin-ink">{r.account}</span> },
-    { key: 'b', header: 'Booking', cell: r => r.bookingId ? <Link href={`/${locale}/admin/bookings/${r.bookingId}`} className="hover:underline">{r.bookingCode ?? 'Booking terhapus'}</Link> : <span className="text-admin-muted">—</span> },
+    { key: 'b', header: 'Booking', cell: r => r.bookingId ? <Link href={adminHref(locale, `/admin/bookings/${r.bookingId}`)} className="hover:underline">{r.bookingCode ?? 'Booking terhapus'}</Link> : <span className="text-admin-muted">—</span> },
     { key: 'n', header: 'Jumlah', align: 'right', cell: r => <span className={cn('font-semibold tabular-nums', r.direction === 'in' ? 'text-admin-ok' : 'text-admin-danger')}>{r.direction === 'in' ? '+' : '−'}{formatRupiah(r.amountIdr)}</span> },
-    { key: 'actions', header: '', actions: true, cell: r => r.bookingId && r.bookingCode ? <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.bookingId}`} label={`Lihat booking ${r.bookingCode}`} /></RowActions> : null },
+    { key: 'actions', header: '', actions: true, cell: r => r.bookingId && r.bookingCode ? <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${r.bookingId}`)} label={`Lihat booking ${r.bookingCode}`} /></RowActions> : null },
   ]
 
   return (
     <div className="space-y-5">
       <PageHeader icon={BookOpenCheck} title="Buku Kas" description="Uang masuk dan keluar per akun kas. Dicatat otomatis saat pembayaran diverifikasi; tidak dapat diubah — koreksi tercatat sebagai entri pembalik."
-        actions={<><Link href={`/${locale}/admin/finance/cash-flow?${new URLSearchParams({ from, to, ...(picked.account ? { account: picked.account } : {}) })}`} className="admin-btn-sm">Arus Kas</Link><a href={`/api/v1/admin/finance/cash-book/export?${query({})}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>} />
+        actions={<><Link href={adminHref(locale, `/admin/finance/cash-flow?${new URLSearchParams({ from, to, ...(picked.account ? { account: picked.account } : {}) })}`)} className="admin-btn-sm">Arus Kas</Link><a href={`/api/v1/admin/finance/cash-book/export?${query({})}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>} />
       <FilterBar active={from !== def.from || to !== def.to || FILTERS.some(k => picked[k])} resetHref={pathname}>
         <PeriodFilter from={from} to={to} onChange={r => go({ from: r.from, to: r.to })} />
         <FilterSelect label="Akun" allLabel="Semua akun" value={picked.account} options={(data?.accounts ?? []).map(a => ({ value: a.id, label: a.name }))} onChange={v => go({ account: v })} />

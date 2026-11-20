@@ -15,6 +15,7 @@ import {
   STAFF_AUDIT_ACTIONS, STAFF_AUDIT_LABEL, countStaffEvents, listStaffEvents, staffFilterOptions,
   type StaffAuditAction, type StaffAuditRow, type StaffAuditSummary,
 } from '@/lib/audit/staff'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -26,7 +27,7 @@ const TONE: Record<StaffAuditAction, BadgeTone> = {
   login_success: 'ok', login_failed: 'danger', documents_zip: 'neutral',
 }
 const ROLE_LABEL: Record<string, string> = { pilgrim: 'jamaah', agent: 'agen', admin: 'admin', manager: 'manager', superadmin: 'superadmin' }
-const REASON_LABEL: Record<string, string> = { password: 'sandi salah', inactive: 'akun nonaktif', unverified: 'email belum terverifikasi' }
+const REASON_LABEL: Record<string, string> = { wrong_host: 'domain salah (bukan panel admin)', password: 'sandi salah', inactive: 'akun nonaktif', unverified: 'email belum terverifikasi' }
 const FIELD_LABEL: Record<string, string> = { role: 'peran', isActive: 'aktif', fullName: 'nama', cleared: 'kunci dibuka', released: 'dilepas', files: 'berkas', pilgrims: 'jamaah', reason: 'alasan' }
 
 const fmt = (k: string, v: unknown): string => {
@@ -43,7 +44,7 @@ const person = (p: StaffAuditRow['actor']) => (p ? <span className="text-[13px]"
 export default async function StaffAuditPage({ params, searchParams }: Props) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   const sp = await searchParams
   const list = parseListParams(sp)
 
@@ -66,14 +67,14 @@ export default async function StaffAuditPage({ params, searchParams }: Props) {
     {
       key: 'target', header: 'Sasaran',
       cell: r => r.booking
-        ? <Link href={`/${locale}/admin/bookings/${r.booking.id}`} className="text-[13px] text-admin-accent hover:underline">{r.booking.bookingCode}</Link>
+        ? <Link href={adminHref(locale, `/admin/bookings/${r.booking.id}`)} className="text-[13px] text-admin-accent hover:underline">{r.booking.bookingCode}</Link>
         : r.target && r.target.id !== r.actor?.id ? person(r.target) : <span className="text-admin-muted">—</span>,
     },
     { key: 'detail', header: 'Rincian', cell: r => <span className="text-[12px] text-admin-muted">{summaryText(r.summary)}</span> },
     { key: 'ip', header: 'IP', cell: r => <span className="font-mono text-[12px] text-admin-muted">{r.ip ?? '—'}</span> },
   ]
 
-  const base = `/${locale}/admin/system/staff-audit`
+  const base = adminHref(locale, `/admin/system/staff-audit`)
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const hrefFor = (page: number) => buildListHref(base, { action, staff: staffId, page, limit: limitParam })
 

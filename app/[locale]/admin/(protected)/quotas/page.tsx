@@ -9,6 +9,7 @@ import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { addDays, calendarDateOf, dbDateOf, formatCalendarDate, todayInApp } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -37,7 +38,7 @@ const hotelColumns = (locale: string): Column<HotelQuotaRow>[] => [
   },
   {
     key: 'actions', header: '', actions: true,
-    cell: q => <RowActions><ActionLink kind="view" href={`/${locale}/admin/products/hotels/${q.period.hotel.id}`} label={`Lihat hotel ${q.period.hotel.name}`} /></RowActions>,
+    cell: q => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/products/hotels/${q.period.hotel.id}`)} label={`Lihat hotel ${q.period.hotel.name}`} /></RowActions>,
   },
 ]
 
@@ -97,7 +98,7 @@ export default async function AdminQuotas({ params, searchParams }: Props) {
     },
   ]
 
-  const base = `/${locale}/admin/quotas`
+  const base = adminHref(locale, `/admin/quotas`)
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const hrefFor = (page: number) => buildListHref(base, { hotel: hotelId, page, limit: limitParam })
 

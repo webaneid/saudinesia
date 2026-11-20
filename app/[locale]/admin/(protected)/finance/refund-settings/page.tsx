@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { safeLocale } from '@/lib/utils/locale'
+import { adminHref } from '@/lib/admin/href'
 import { getRefundSettings } from '@/lib/refunds/settings'
 import { RefundSettingsEditor } from './RefundSettingsEditor'
 
@@ -9,6 +10,6 @@ import { RefundSettingsEditor } from './RefundSettingsEditor'
 export default async function RefundSettingsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   return <RefundSettingsEditor initial={await getRefundSettings()} />
 }

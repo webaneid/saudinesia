@@ -52,7 +52,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 | Komponen | Berkas | Keterangan |
 |---|---|---|
 | Compose production | `docker-compose.prod.yml` | web, migrate (sekali jalan), postgres, redis, minio, caddy. Image dari GHCR. Tanpa port terbuka kecuali Caddy 80/443. **web = 1 replika** (cron node-cron di dalam proses). `docker-compose.yml` lama = bentuk dev, jangan dipakai di production |
-| Reverse proxy | `Caddyfile` | TLS otomatis; domain dari env (`APP_DOMAIN`, `FILES_DOMAIN`), tidak ada domain di repo. Host file hanya GET/HEAD dan `frame-ancestors` (preview PDF memakai iframe — `X-Frame-Options: DENY` akan memblokirnya) |
+| Reverse proxy | `Caddyfile` | TLS otomatis; domain dari env (`APP_DOMAIN`, `ADMIN_DOMAIN`, `FILES_DOMAIN`), tidak ada domain di repo. Host admin terpisah (`docs/rencana-domain-admin.md`): `{$ADMIN_DOMAIN}` melayani panel admin (noindex), host app menolak `/…/admin` dan `/api/v1/admin` (404), host admin menolak daftar/Google/webhook (404) — lapis kedua di belakang `middleware.ts`. Host file hanya GET/HEAD dan `frame-ancestors` (preview PDF memakai iframe — `X-Frame-Options: DENY` akan memblokirnya) |
 | Image aplikasi | `Dockerfile` | 2 target: `runner` (standalone Next.js, non-root) dan `migrate` (CLI Prisma). `NEXT_PUBLIC_*` masuk sebagai build-arg |
 | `.dockerignore` | `.dockerignore` | Sebelumnya tidak ada → `COPY . .` menyalin `.env.local` ke layer build |
 | Env production | `.env.production.example`, `scripts/buat-env-production.sh` | Skrip membuat `.env.production` dengan rahasia acak di server (termasuk `REDIS_PASSWORD` + `REDIS_URL` yang disamakan — Redis berpassword, SEC-10); tidak menimpa, izin 600, tidak menampilkan rahasia. **`.env.production` yang sudah ada sebelum 2026-10-25 harus ditambah `REDIS_PASSWORD=<acak>` dan `REDIS_URL=redis://:<sandi sama>@redis:6379`** — tanpa itu `docker compose up` menolak jalan (`REDIS_PASSWORD belum diisi`) |
@@ -126,9 +126,11 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    sudah berjalan sebelum SEC-305 (root = `MINIO_ACCESS_KEY`): salin nilai lama `MINIO_ACCESS_KEY/SECRET_KEY` ke `MINIO_ROOT_USER/PASSWORD`,
    isi `MINIO_ACCESS_KEY/SECRET_KEY` baru (`openssl rand -hex 4` / `-hex 24`), perbarui remote rclone `backup-minio.sh` ke kunci aplikasi, lalu deploy.
    `minio-setup` menolak jalan bila kunci aplikasi = root.
-4. DNS: A record `APP_DOMAIN` dan `FILES_DOMAIN` ke IP VPS **sebelum** Caddy dinyalakan.
+4. DNS: A record `APP_DOMAIN`, `ADMIN_DOMAIN`, dan `FILES_DOMAIN` ke IP VPS **sebelum** Caddy dinyalakan (produksi: `app.`, `admin.`, `files.saudinesia.id`, DNS only).
 5. Server: Docker + Compose, folder `/opt/app` berisi `docker-compose.prod.yml`, `Caddyfile`, `.env.production.example`,
-   `scripts/buat-env-production.sh`; jalankan skrip env (mengisi `APP_URL` otomatis); isi manual `WA_GATEWAY_*`, `RESEND_*`.
+   `scripts/buat-env-production.sh`; jalankan skrip env `bash scripts/buat-env-production.sh app.saudinesia.id admin.saudinesia.id files.saudinesia.id /opt/app`
+   (mengisi `APP_URL` otomatis); isi manual `WA_GATEWAY_*`, `RESEND_*` (`RESEND_FROM=Saudinesia <no-reply@saudinesia.id>`, keputusan pemilik 2026-11-21).
+   Panel admin: `https://admin.saudinesia.id/login` (staf hanya bisa masuk di sana; jamaah hanya di host app).
    **Email (Resend)**: verifikasi domain pengirim di Resend (SPF + DKIM + DMARC) dulu, lalu isi `RESEND_API_KEY`/`RESEND_FROM`,
    `docker compose up -d web`, login superadmin → Pengaturan → Integrasi & Notifikasi → **Kirim uji**. Detail: `docs/arsitektur-notifikasi.md` §7.
    Sebelum diisi, email dicatat `dilewati` di Log Notifikasi (aplikasi tetap normal).

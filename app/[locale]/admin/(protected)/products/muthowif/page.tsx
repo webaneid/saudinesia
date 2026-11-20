@@ -12,6 +12,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
+import { adminHref } from '@/lib/admin/href'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -78,7 +79,7 @@ export default function MuthowifPage() {
     setTimeout(() => setPriceSaved(false), 2000)
   }
 
-  const base = `/${locale}/admin/products/muthowif`
+  const base = adminHref(locale, `/admin/products/muthowif`)
   const columns = (reload: () => void): Column<Muthowif>[] => [
     { key: 'name', header: 'Nama', mobile: 'title', cell: m => <Link href={`${base}/${m.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{m.name}</Link> },
     { key: 'rating', header: 'Rating', cell: m => <span className="text-[12px] text-admin-gold-strong">★ {m.rating}</span> },
@@ -89,7 +90,7 @@ export default function MuthowifPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title="Muthowif" actions={<Link href={`/${locale}/admin/products/muthowif/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</Link>} />
+      <PageHeader title="Muthowif" actions={<Link href={adminHref(locale, `/admin/products/muthowif/new`)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah</Link>} />
 
       {/* HPP layanan — satu harga flat, bukan per-orang (docs/arsitektur-muthowif.md §9/§10) */}
       <div className="admin-form-panel space-y-4">

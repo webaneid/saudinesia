@@ -17,6 +17,7 @@ import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canRecordPayout } from '@/lib/revenue-share/policy'
 import { listPayouts, providerBalance, type PayoutRow } from '@/lib/revenue-share/payouts'
+import { adminHref } from '@/lib/admin/href'
 
 // Pencairan bagi hasil Platform Provider (Fase 13e-1, docs/arsitektur-bagi-hasil.md §5e): superadmin melihat; mencatat hanya superadmin klien
 // (bukan akun Platform Provider — pembayar yang mencatat). Saldo = Σ hak − Σ pencairan berlaku.
@@ -26,13 +27,13 @@ const STATUS = { active: 'Berlaku', void: 'Dibatalkan' } as const
 export default async function RevenueSharePayouts({ params, searchParams }: Props) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   const sp = await searchParams
   const list = parseListParams(sp)
   const status = sp.status === 'active' || sp.status === 'void' ? sp.status : undefined
   const [{ items, meta }, balance] = await Promise.all([listPayouts({ status }, list), providerBalance()])
 
-  const base = `/${locale}/admin/system/platform-provider/payouts`
+  const base = adminHref(locale, `/admin/system/platform-provider/payouts`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { status, limit: limitParam, ...over })
 

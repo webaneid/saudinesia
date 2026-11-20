@@ -16,6 +16,7 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge, type BadgeTone } from '@/components/admin/ui/Badge'
 import { variantLabel } from '@/components/admin/pricing/PriceCard'
 import { cn } from '@/lib/utils'
+import { adminHref } from '@/lib/admin/href'
 
 // Kesehatan Margin (docs/arsitektur-harga-terpadu.md §16): titik harga yang rugi, margin tipis, modal belum lengkap, atau belum berharga — dengan tautan ke editornya.
 // Data dari GET /api/v1/admin/pricing/health (peran lewat lib/pricing/policy.ts). Filter di URL supaya bisa di-bookmark.
@@ -75,7 +76,7 @@ export default function MarginHealthPage() {
       key: 'name', header: 'Produk', mobile: 'title',
       cell: r => (
         <div className="min-w-0">
-          {r.href ? <Link href={`/${locale}${r.href}`} className="font-semibold text-admin-ink hover:underline">{r.label}</Link> : <span className="font-semibold text-admin-ink">{r.label}</span>}
+          {r.href ? <Link href={adminHref(locale, r.href)} className="font-semibold text-admin-ink hover:underline">{r.label}</Link> : <span className="font-semibold text-admin-ink">{r.label}</span>}
           {variantLabel(r.variantKey) && <p className="m-0 text-[11px] text-admin-muted">{variantLabel(r.variantKey)}</p>}
         </div>
       ),
@@ -90,7 +91,7 @@ export default function MarginHealthPage() {
     },
     { key: 'mode', header: 'Mode', hideBelowLg: true, cell: r => <Badge tone={r.mode === 'manual' ? 'warning' : 'accent'}>{r.mode === 'manual' ? 'Manual' : 'Otomatis'}</Badge> },
     { key: 'issues', header: 'Masalah', cell: r => r.issues.length === 0 ? <span className="text-[11px] text-admin-muted">Sehat</span> : <div className="flex flex-wrap gap-1">{r.issues.map(i => <Badge key={i} tone={ISSUE[i].tone}>{ISSUE[i].label}</Badge>)}</div> },
-    { key: 'actions', header: '', actions: true, cell: r => r.href ? <RowActions><ActionLink kind="edit" href={`/${locale}${r.href}`} label={`Atur harga ${r.label}`} /></RowActions> : null },
+    { key: 'actions', header: '', actions: true, cell: r => r.href ? <RowActions><ActionLink kind="edit" href={adminHref(locale, r.href)} label={`Atur harga ${r.label}`} /></RowActions> : null },
   ]
 
   return (
@@ -101,7 +102,7 @@ export default function MarginHealthPage() {
         description={`Harga yang rugi, margin tipis${warn > 0 ? ` (di bawah ${warn}%)` : ' (ambang belum diatur di Pengaturan)'}, modal belum lengkap, atau belum berharga. Tidak memblokir apa pun — hanya menampakkan.`}
       />
 
-      <FilterBar active={filter !== 'issues' || Boolean(type)} resetHref={`/${locale}/admin/margin`}>
+      <FilterBar active={filter !== 'issues' || Boolean(type)} resetHref={adminHref(locale, `/admin/margin`)}>
         <FilterSelect
           label="Tampilkan" allLabel={`Perlu perhatian${counts ? ` · ${FILTERS[0]!.count(counts)}` : ''}`} value={filter === 'issues' ? '' : filter}
           options={FILTERS.filter(f => f.value !== 'issues').map(f => ({ value: f.value, label: `${f.label}${counts ? ` · ${f.count(counts)}` : ''}` }))}

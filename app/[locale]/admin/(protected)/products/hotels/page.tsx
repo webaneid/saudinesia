@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
+import { adminHref } from '@/lib/admin/href'
 
 type Hotel = {
   id: string; name: string; city: string; stars: number | null
@@ -16,7 +17,7 @@ type Hotel = {
 
 export default function HotelsPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/hotels`
+  const base = adminHref(locale, `/admin/products/hotels`)
   const columns = (reload: () => void): Column<Hotel>[] => [
     {
       key: 'name', header: 'Nama', mobile: 'title',

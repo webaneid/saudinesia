@@ -5,13 +5,14 @@ import { useParams } from 'next/navigation'
 import { Landmark } from 'lucide-react'
 import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
+import { adminHref } from '@/lib/admin/href'
 
 type Account = { id: string; bankName: string; accountNumber: string; accountHolder: string; isActive: boolean; payoutCount: number; canEdit: boolean }
 
 // Ubah rekening Platform Provider (Fase 13e-1). Superadmin klien hanya melihat; simpan/hapus hanya akun Platform Provider (dijaga API).
 export default function EditProviderAccountPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/system/platform-provider/accounts`
+  const list = adminHref(locale, `/admin/system/platform-provider/accounts`)
   const e = useEditEntity<Account>(`/api/v1/admin/system/platform-provider/accounts/${id}`, list)
   const [form, setForm] = useState<{ bankName: string; accountNumber: string; accountHolder: string; isActive: boolean } | null>(null)
   useEffect(() => { if (e.item) setForm({ bankName: e.item.bankName, accountNumber: e.item.accountNumber, accountHolder: e.item.accountHolder, isActive: e.item.isActive }) }, [e.item])

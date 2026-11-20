@@ -10,6 +10,7 @@ import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { Badge } from '@/components/admin/ui/Badge'
 import { DATE_SHORT_MONTH, formatCalendarDate } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
 type FlightSchedule = {
@@ -24,7 +25,7 @@ function formatDate(d: string) {
 
 export default function FlightPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/flight`
+  const base = adminHref(locale, `/admin/products/flight`)
   // Jumlah rute aktif (tanpa memedulikan filter tabel) — jadwal baru butuh minimal satu rute aktif.
   const [activeRoutes, setActiveRoutes] = useState<number | null>(null)
   const [routesTick, setRoutesTick] = useState(0)
@@ -56,7 +57,7 @@ export default function FlightPage() {
       <div className="admin-form-panel space-y-3">
         <div className="flex items-center justify-between">
           <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><MapPin className="h-4 w-4" /> Rute</p>
-          <Link href={`/${locale}/admin/products/flight/routes/new`} className="admin-btn-sm flex items-center gap-1.5">
+          <Link href={adminHref(locale, `/admin/products/flight/routes/new`)} className="admin-btn-sm flex items-center gap-1.5">
             <Plus className="h-3.5 w-3.5" /> Tambah Rute
           </Link>
         </div>
@@ -71,7 +72,7 @@ export default function FlightPage() {
           {activeRoutes === 0 ? (
             <span className="admin-btn-sm flex cursor-not-allowed items-center gap-1.5 opacity-50"><Plus className="h-3.5 w-3.5" /> Tambah Jadwal</span>
           ) : (
-            <Link href={`/${locale}/admin/products/flight/new`} className="admin-btn-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Tambah Jadwal</Link>
+            <Link href={adminHref(locale, `/admin/products/flight/new`)} className="admin-btn-sm flex items-center gap-1.5"><Plus className="h-3.5 w-3.5" /> Tambah Jadwal</Link>
           )}
         </div>
 

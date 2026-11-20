@@ -9,17 +9,18 @@ import { HAJI_TYPES } from '@/lib/constants/haji'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { yearInApp } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewHajiPage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/haji', id => `/${locale}/admin/products/haji/${id}`, 'Produk haji gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/haji', id => adminHref(locale, `/admin/products/haji/${id}`), 'Produk haji gagal dibuat.')
   const [form, setForm] = useState({ name: '', hajiType: 'furoda', year: yearInApp() + 1, departureDate: '', returnDate: '', durationDays: 40, totalQuota: 50, description: '', includes: '' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={Star} title="Produk Haji Baru" backHref={`/${locale}/admin/products/haji`} backLabel="Daftar Produk Haji"
+      icon={Star} title="Produk Haji Baru" backHref={adminHref(locale, `/admin/products/haji`)} backLabel="Daftar Produk Haji"
       description="Harga dihitung otomatis dari Komponen Biaya (HPP + kurs + margin) — diisi di halaman produk setelah dibuat. Selama belum berharga, produk tidak dapat dipesan. Persyaratan dokumen bawaan (Paspor, KTP, KK, Sertifikat Vaksin) diisi otomatis dan bisa diubah di halaman produk."
       onSubmit={() => submit({
         ...form, year: +form.year, durationDays: +form.durationDays, totalQuota: +form.totalQuota,

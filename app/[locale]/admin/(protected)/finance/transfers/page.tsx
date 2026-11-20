@@ -13,6 +13,7 @@ import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canTransferCash } from '@/lib/pricing/policy'
 import { listTransfers, type TransferRow } from '@/lib/cash/transfers'
+import { adminHref } from '@/lib/admin/href'
 
 // Transfer antar akun kas (docs/arsitektur-booking-engine-v2.md §10.14 Fase 12b): daftar untuk semua admin; catat & batalkan oleh manager + superadmin (K12-1).
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
@@ -27,7 +28,7 @@ export default async function CashTransfers({ params, searchParams }: Props) {
   const status = sp.status === 'active' || sp.status === 'void' ? sp.status : undefined
   const { items, meta } = await listTransfers({ status }, list)
 
-  const base = `/${locale}/admin/finance/transfers`
+  const base = adminHref(locale, `/admin/finance/transfers`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { status, limit: limitParam, ...over })
 

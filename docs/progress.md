@@ -730,6 +730,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
   2. `read_only: true` rootfs untuk web (dan layanan lain yang memungkinkan) + `tmpfs` untuk yang ditulis (Next.js/Prisma cache, `/tmp`) — wajib diuji di artefak produksi (`bun server.js`) dan di job CI `docker`.
   3. Pin **digest** image Docker (`oven/bun:1-slim` di `Dockerfile`, `postgres:16-alpine`, `redis:7-alpine`, `caddy`, image MinIO) + aktifkan Dependabot ecosystem `docker` agar patch keamanan tetap masuk. Keputusan pemeliharaan: digest tanpa Dependabot = image membusuk.
   Daftar ini juga ada di `docs/deployment.md` §6 (butir 0) dan register SEC-10.
+- [x] **Panel admin di domain sendiri** (`admin.saudinesia.id/bookings`; publik `app.`, berkas `files.`) — selesai 2026-11-21 (`docs/rencana-domain-admin.md`, K1–K4): satu helper `adminHref`, middleware per host, staf/jamaah login per host, Caddy blok ketiga, generator env 3 domain, penjaga `scripts/test-admin-domain.ts`, diuji di artefak produksi (dua mode). Sisa sebelum deploy pertama: `deploy.yml` (build-arg `NEXT_PUBLIC_APP_URL=https://app.saudinesia.id`).
 
 **Produk & operasional (arah besar, perlu keputusan):**
 - [x] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya. — **Rapikan 2026-11-19:** tertutup — Fase 11a/11b/11c (semua jenis produk di `/checkout/[jenis]`)

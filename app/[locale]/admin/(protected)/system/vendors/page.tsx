@@ -18,6 +18,7 @@ import { ApiAction } from '@/components/admin/data-table/ApiAction'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -36,7 +37,7 @@ const needsReview = (v: VendorRow) =>
 export default async function VendorsPage({ params, searchParams }: Props) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
 
   const sp = await searchParams
   const list = parseListParams(sp)
@@ -53,7 +54,7 @@ export default async function VendorsPage({ params, searchParams }: Props) {
     range => listVendors({ ...filters, ...range }),
   )
 
-  const base = `/${locale}/admin/system/vendors`
+  const base = adminHref(locale, `/admin/system/vendors`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) =>
     buildListHref(base, { q, category, country, status, limit: limitParam, ...over })

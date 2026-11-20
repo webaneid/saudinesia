@@ -7,12 +7,13 @@ import { Plane } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 type FlightRoute = { id: string; origin: string; destination: string; isActive: boolean }
 
 export default function NewFlightSchedulePage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/flight/schedules', id => `/${locale}/admin/products/flight/${id}`, 'Jadwal gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/flight/schedules', id => adminHref(locale, `/admin/products/flight/${id}`), 'Jadwal gagal dibuat.')
   const [routes, setRoutes] = useState<FlightRoute[] | null>(null)
   const [form, setForm] = useState({ routeId: '', departureFrom: '', departureTo: '', totalSeats: '0' })
 
@@ -24,13 +25,13 @@ export default function NewFlightSchedulePage() {
 
   return (
     <CreatePage
-      icon={Plane} title="Jadwal Penerbangan Baru" backHref={`/${locale}/admin/products/flight`} backLabel="Daftar Tiket Pesawat"
+      icon={Plane} title="Jadwal Penerbangan Baru" backHref={adminHref(locale, `/admin/products/flight`)} backLabel="Daftar Tiket Pesawat"
       description="Harga dan maskapai diatur di halaman jadwal setelah dibuat — harga terhitung otomatis begitu komponen HPP diisi."
       onSubmit={() => submit({ ...form, totalSeats: +form.totalSeats })}
       saving={saving} canSubmit={!!form.routeId && !!form.departureFrom && !!form.departureTo} error={error} submitLabel="Simpan & Lanjut"
     >
       {routes !== null && routes.length === 0 ? (
-        <p className="m-0 text-sm text-admin-warning">Belum ada rute aktif. <Link href={`/${locale}/admin/products/flight`} className="font-semibold underline">Tambah rute dulu</Link> di daftar Tiket Pesawat.</p>
+        <p className="m-0 text-sm text-admin-warning">Belum ada rute aktif. <Link href={adminHref(locale, `/admin/products/flight`)} className="font-semibold underline">Tambah rute dulu</Link> di daftar Tiket Pesawat.</p>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">
           <div className="md:col-span-2">

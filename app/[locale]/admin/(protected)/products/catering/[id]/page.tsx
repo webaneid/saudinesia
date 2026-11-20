@@ -10,12 +10,13 @@ import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 type Catering = { id: string; name: string; boardType: string; menuStyle: string; description: string | null; isActive: boolean }
 
 export default function EditCateringPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/catering`
+  const list = adminHref(locale, `/admin/products/catering`)
   const e = useEditEntity<Catering>(`/api/v1/admin/products/catering/${id}`, list)
   type Form = { name: string; boardType: string; menuStyle: string; description: string; isActive: boolean }
   const [form, setForm] = useState<Form | null>(null)
