@@ -17,7 +17,7 @@ Eksekusi SOP / Milestone SOP yang sudah ada).
 
 | # | Komponen | Status Saat Ini | Risiko Kalau Dibiarkan | Effort Estimasi | Prioritas |
 |---|----------|------------------|--------------------------|-------------------|-------------|
-| 1 | Backup otomatis (Postgres + MinIO) | **DITUTUP dari sisi kode (2026-09-15)** — `scripts/backup-db.sh`/`restore-db.sh` (Postgres) DAN `scripts/backup-minio.sh`/`restore-minio.sh` (dokumen jamaah, pola sama persis) sudah ada. **Belum dijadwalkan** di kedua sisi (perlu setup rclone remote `miniolocal`+`gdrive`, `~/.pgpass`, dan crontab manual di VPS — lihat komentar di tiap script; lihat `docs/decisions.md` 2026-09-15) | Rendah sisi kode, tapi tetap **Tinggi** operasional sampai crontab benar-benar dijadwalkan di VPS produksi | Kecil (jadwalkan 2 cron yang sudah ada) | **Tinggi** (tinggal setup VPS, bukan lagi coding) |
+| 1 | Backup otomatis (Postgres + MinIO) | **DIGANTI 2026-11-21** — `scripts/backup-produksi.sh` (Postgres via `pg_dump` di kontainer + MinIO via rclone, ke `gdrive:backup-app/saudinesia` TERENKRIPSI rclone crypt, healthchecks.io), `setup-backup.sh`, `uji-restore.sh`; skrip lama (`backup-db/minio`, `restore-db/minio`, asumsi pgpass host) dihapus. Lihat `docs/deployment.md` "Backup"; tinggal penyiapan + cron di server | Rendah sisi kode, tapi tetap **Tinggi** operasional sampai crontab benar-benar dijadwalkan di VPS produksi | Kecil (satu cron + setup-backup.sh) | **Tinggi** (tinggal setup VPS, bukan lagi coding) |
 | 2 | Kepatuhan UU PDP (data pribadi jamaah) | **DITUTUP dari sisi kode (2026-09-15)** — halaman `/privacy` (draft, ditandai jelas perlu review legal), `ConsentLog` dicatat saat registrasi, `AccountDeletionRequest` (antrean, diproses manual). Link mati `CampaignDashboard.tsx:159` diperbaiki. **Masih pending**: review legal atas teks kebijakan privasi, dan notice UU PDP di layar upload dokumen (beda dari notice di registrasi — lihat `docs/progress.md` M14). Lihat `docs/decisions.md` 2026-09-15 | Rendah sisi kode, tapi **Tinggi** sampai teks kebijakan direview legal | Selesai (kode); review legal tetap perlu manusia | Selesai (kode) |
 | 3 | Observability / error tracking | Tidak ada — tidak ada Sentry atau APM apa pun di `package.json`; error hanya `console.error` (165 titik tersebar di `lib/` + `app/api/`), hilang begitu container restart | **Sedang** — kegagalan produksi (termasuk kegagalan pembayaran/notifikasi WA) baru diketahui dari laporan user, tidak ada alert proaktif | Kecil (integrasi 1 SDK error-tracking, tidak perlu ubah logic) | **Tinggi** (quick win) |
 | 4 | SEO — sitemap & robots | **DITUTUP (2026-09-15)** — `app/sitemap.ts` (native Next.js, 2 locale × 9 halaman katalog + hotel/muthowif aktif dinamis) + `app/robots.ts` (disallow `/admin`, `/api`). Lihat `docs/decisions.md` 2026-09-15 | ~~Sedang~~ | ~~Kecil~~ | Selesai |
@@ -56,7 +56,7 @@ sebelumnya cuma menghasilkan laporan gap ini. Sudah ditutup di sesi ini:
   BUKAN salinan template — termasuk temuan baru: `CLAUDE.md` § Tech Stack tidak
   menyebutkan bahwa login sebenarnya **email+password** (bcrypt), OTP WhatsApp
   cuma untuk verifikasi akun saat registrasi. Sudah dikoreksi di `CLAUDE.md`.
-- `scripts/backup-db.sh`/`restore-db.sh` — lihat gap #1 di atas.
+- `scripts/backup-produksi.sh`/`uji-restore.sh` — lihat gap #1 di atas.
 - `docs/WORKFLOW-MODES.md` — panduan pemakaian Claude Code (mode/subagent/hemat token),
   bagian daftar plugin marketplace template DIHAPUS (belum diverifikasi terpasang di sini).
 

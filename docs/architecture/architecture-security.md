@@ -43,9 +43,10 @@
   race condition (`CLAUDE.md` § Prisma, `lib/quota/`) — pola ini sudah ada
   dan wajib dipertahankan untuk modul quota baru.
 - Backup: **belum ada sebelum retrofit ini** — lihat `docs/RETROFIT-GAPS.md`
-  #1. Sekarang sudah ada `scripts/backup-db.sh`/`restore-db.sh` (diadaptasi
-  dari template, generik lewat env var) — **masih perlu dijadwalkan manual**
-  lewat crontab VPS, belum otomatis jalan.
+  #1. Sejak 2026-11-21: `scripts/backup-produksi.sh` (Postgres + MinIO →
+  Google Drive, TERENKRIPSI rclone crypt; kata sandi di `/opt/app/.env.backup`,
+  terpisah dari `.env.production` yang dimuat web; rahasia ke kontainer rclone
+  lewat `-e NAMA` tanpa nilai) + `uji-restore.sh` — `docs/deployment.md` "Backup".
 
 ## 4. Authentication & Authorization
 - **Login**: email + password, hash `bcryptjs` (`app/api/v1/auth/login/route.ts`).

@@ -731,12 +731,13 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
   3. Pin **digest** image Docker (`oven/bun:1-slim` di `Dockerfile`, `postgres:16-alpine`, `redis:7-alpine`, `caddy`, image MinIO) + aktifkan Dependabot ecosystem `docker` agar patch keamanan tetap masuk. Keputusan pemeliharaan: digest tanpa Dependabot = image membusuk.
   Daftar ini juga ada di `docs/deployment.md` §6 (butir 0) dan register SEC-10.
 - [x] **Panel admin di domain sendiri** (`admin.saudinesia.id/bookings`; publik `app.`, berkas `files.`) — selesai 2026-11-21 (`docs/rencana-domain-admin.md`, K1–K4): satu helper `adminHref`, middleware per host, staf/jamaah login per host, Caddy blok ketiga, generator env 3 domain, penjaga `scripts/test-admin-domain.ts`, diuji di artefak produksi (dua mode). Sisa sebelum deploy pertama: `deploy.yml` (build-arg `NEXT_PUBLIC_APP_URL=https://app.saudinesia.id`).
-- [x] **Workflow deploy** (`.github/workflows/deploy.yml` manual + `scripts/deploy-server.sh`: tag `sha-…`, cadangan DB pra-deploy, health dalam & luar, rollback via `image_tag`) — selesai 2026-11-21, dijaga `scripts/test-deploy-workflow.ts`. Sisa: isi Environment `production` di GitHub (secrets + variables), deploy pertama bersama pemilik, backup terjadwal.
+- [x] **Workflow deploy** (`.github/workflows/deploy.yml` manual + `scripts/deploy-server.sh`: tag `sha-…`, cadangan DB pra-deploy, health dalam & luar, rollback via `image_tag`) — selesai 2026-11-21, dijaga `scripts/test-deploy-workflow.ts`. Environment `production` terisi dan **deploy pertama SUKSES 2026-11-21** (image `sha-5d0f7e5c22fd`; PR #196 menaikkan memori `minio-setup` 128m → 256m karena OOM); superadmin dibuat, login `admin.saudinesia.id` OK, email uji Resend masuk.
+- [~] **Backup produksi** — kode selesai 2026-11-21 (`scripts/backup-produksi.sh`, `setup-backup.sh`, `uji-restore.sh`; pola smart-ai/facport `gdrive:backup-app/saudinesia` + rclone crypt; dijaga `scripts/test-backup-produksi.ts`; skrip lama `backup-db/minio`, `restore-db/minio` dihapus). Sisa: penyiapan di server bersama pemilik (salin `rclone.conf`, `setup-backup.sh`, healthchecks.io, cron), lalu uji restore nyata.
 
 **Produk & operasional (arah besar, perlu keputusan):**
 - [x] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya. — **Rapikan 2026-11-19:** tertutup — Fase 11a/11b/11c (semua jenis produk di `/checkout/[jenis]`)
 - [x] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan. — **Rapikan 2026-11-19:** refund (7b-2a), laporan keuangan (Fase 12) selesai, Group Booking diganti 11d; pengingat keberangkatan H-7/H-1 selesai 2026-11-19 (`docs/arsitektur-notifikasi.md` §13)
-- [ ] M15 deployment: VPS, TLS, `migrate deploy`, uji GOWA nyata, smoke test; jadwalkan backup (`scripts/backup-*.sh`).
+- [~] M15 deployment: ~~VPS, TLS, `migrate deploy`~~ (selesai 2026-11-21, deploy pertama sukses); uji GOWA nyata, smoke test; backup terjadwal + uji restore (`docs/deployment.md` "Backup").
 
 ---
 
