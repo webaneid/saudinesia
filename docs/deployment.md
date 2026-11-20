@@ -80,7 +80,7 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
 
 | Komponen | smart-ai | Saudinesia |
 |---|---|---|
-| Workflow build+push image & deploy | `deploy.yml` (scp compose → SSH → `pull && up -d` → health check; rollback manual ke tag mana pun) | **belum ditulis** — kontrak sudah ada: image `ghcr.io/<repo>/web` & `/migrate`, `.env.deploy`, health endpoint |
+| Workflow build+push image & deploy | `deploy.yml` (scp compose → SSH → `pull && up -d` → health check; rollback manual ke tag mana pun) | **ada (2026-11-21)** — `deploy.yml` MANUAL (tag image `sha-<12 hex>`; rollback = `image_tag`), logika server di `scripts/deploy-server.sh` (tarik dulu → cadangan DB pra-deploy → up → reload Caddy → health), kunci host SSH dipin, token server hanya baca paket; dijaga `scripts/test-deploy-workflow.ts` |
 | Versi & changelog otomatis | semantic-release | belum; `package.json` `0.1.0` manual |
 | Staging (`develop`) | `deploy-staging.yml` | belum |
 | Role DB terpisah (pemilik vs aplikasi) | `scripts/pisah-role-db.sh` | **ada (2026-11-19, SEC-303)** — `saudinesia` pemilik (hanya kontainer migrate), `saudinesia_app` DML saja (web); dibuat otomatis oleh image migrate, lihat "Peran database" |
@@ -144,9 +144,17 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    Credentials → OAuth client ID → *Web application* → Authorized redirect URI **persis** `https://<APP_DOMAIN>/api/v1/auth/google/callback`
    (+ `http://localhost:6260/...` untuk dev) → isi `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` di `.env.production`, `docker compose up -d web`.
    Admin → Pengaturan → Integrasi menampilkan redirect URI yang harus didaftarkan dan apakah Google sudah terkonfigurasi. Tanpa kredensial tombol Google tidak tampil.
-6. Rahasia Actions untuk deploy: `SERVER_HOST`, `SERVER_USER`, `SERVER_SSH_KEY` — diisi langsung di GitHub, **jangan**
-   ditempel di chat.
-7. Tulis `deploy.yml` (build+push 2 image, scp, SSH, health check, rollback). Baru setelah itu semantic-release.
+6. GitHub → Settings → Environments → buat **`production`** (opsional: *Required reviewers* = pemilik). Di environment itu:
+   - **Secrets**: `SERVER_HOST` (IP VPS), `SERVER_USER` (`webane`), `SERVER_SSH_KEY` (kunci privat KHUSUS deploy, bukan kunci pribadi pemilik;
+     kunci publiknya di `~/.ssh/authorized_keys` server), `SERVER_SSH_FINGERPRINT` (sidik jari kunci host server, `ssh-keygen -lf
+     /etc/ssh/ssh_host_ed25519_key.pub` di server → bagian `SHA256:…`). Diisi langsung di GitHub, **jangan** ditempel di chat.
+   - **Variables**: `APP_DOMAIN`, `ADMIN_DOMAIN`, `NEXT_PUBLIC_APP_URL` (`https://app.saudinesia.id`), `NEXT_PUBLIC_MINIO_PUBLIC_URL`
+     (`https://files.saudinesia.id/saudinesia-docs`), `NEXT_PUBLIC_BUSINESS_*`, `NEXT_PUBLIC_BANK_*` (lihat butir 2).
+7. ~~Tulis `deploy.yml`~~ — **SELESAI 2026-11-21.** Pakai: Actions → **Deploy** → Run workflow (`ref` = `main`, `image_tag` kosong).
+   Deploy pertama gagal dengan pesan jelas bila `/opt/app/.env.production` belum ada — berkas compose/skrip sudah tersalin, jalankan
+   `bash scripts/buat-env-production.sh app.saudinesia.id admin.saudinesia.id files.saudinesia.id /opt/app` di server lalu ulangi.
+   **Rollback**: Run workflow dengan `image_tag` = tag sebelumnya (dicetak saat gagal; daftar di GHCR). Migrasi DB hanya maju — cadangan
+   pra-deploy otomatis di `/opt/app/backups/pre-deploy-*.dump` (5 terbaru; pulihkan dengan `pg_restore`). semantic-release menyusul.
 8. Jadwalkan backup (`backup-db.sh`, `backup-minio.sh`) dan uji restore.
 9. **Blocker keamanan yang masih terbuka** (`docs/lessons-learned.md`): SEC-05 (sisa 1 advisory *high* tanpa versi perbaikan — `braces`, hanya build/dev; keputusan `next-intl` 4 menunggu pemilik), ~~SEC-18 (sesi tak bisa dicabut)~~ — selesai 2026-10-22,
    ~~SEC-44 (hapus akun UU PDP)~~ — selesai 2026-10-22, **tetapi aturan retensi (`docs/arsitektur-hapus-akun.md` §2) perlu ditinjau penasihat hukum/pajak**, ~~serta SEC-26/27~~ — selesai 2026-10-22.

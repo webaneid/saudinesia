@@ -1,0 +1,170 @@
+name: Deploy
+
+# Deploy produksi (docs/deployment.md §7) — MANUAL: Actions → Deploy → Run workflow. Pola smart-ai (.github/workflows/deploy.yml),
+# disesuaikan: belum ada semantic-release, jadi image diberi tag `sha-<12 hex>` dari commit yang dibangun.
+#   - Deploy biasa : ref = main (atau tag/SHA), image_tag kosong → build + push web & migrate, lalu deploy.
+#   - Rollback     : image_tag = tag image yang SUDAH ada (mis. sha-1a2b3c4d5e6f) → tanpa build, compose/Caddyfile dari `ref`.
+#                    PERINGATAN: migrasi DB hanya maju. Rollback ke image yang lebih tua dari migrasi terakhir bisa gagal —
+#                    pulihkan dari cadangan pra-deploy (/opt/app/backups/pre-deploy-*.sql.gz) bila perlu.
+# Server tidak pernah meng-clone repo: compose, Caddyfile, dan skrip operasional ikut versi yang dideploy (scp).
+#
+# Rahasia (Settings → Secrets, environment `production`): SERVER_HOST, SERVER_USER, SERVER_SSH_KEY, SERVER_SSH_FINGERPRINT
+# (sidik jari SHA256 kunci host — tanpa itu koneksi ditolak, mencegah server palsu). Variables: APP_DOMAIN, ADMIN_DOMAIN + build-arg
+# NEXT_PUBLIC_* (lihat langkah "Periksa variabel build"). Dijaga scripts/test-deploy-workflow.ts.
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch/tag/SHA yang dibangun (atau sumber compose/Caddyfile saat rollback)"
+        type: string
+        default: main
+      image_tag:
+        description: "Rollback: tag image yang sudah ada (sha-…). Kosong = build baru"
+        type: string
+        default: ""
+
+# Bawaan minimum; hanya job build yang boleh menulis image. Token job deploy (yang dikirim ke server untuk menarik image)
+# hanya bisa MEMBACA paket — server yang dibobol tak bisa menimpa image di GHCR.
+permissions:
+  contents: read
+
+# Satu deploy pada satu waktu; deploy yang sedang jalan tidak dibatalkan di tengah migrasi.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+      build: ${{ steps.tag.outputs.build }}
+      repo: ${{ steps.tag.outputs.repo }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      # Masukan TAK PERNAH diinterpolasi langsung ke skrip — lewat env, lalu divalidasi bentuknya.
+      - name: Tentukan tag image
+        id: tag
+        env:
+          IMAGE_TAG_IN: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$IMAGE_TAG_IN" ]; then
+            [[ "$IMAGE_TAG_IN" =~ ^sha-[0-9a-f]{12}$ ]] || { echo "image_tag harus berbentuk sha-<12 hex>"; exit 1; }
+            TAG="$IMAGE_TAG_IN"; BUILD=false
+          else
+            TAG="sha-$(git rev-parse HEAD | cut -c1-12)"; BUILD=true
+          fi
+          { echo "tag=$TAG"; echo "build=$BUILD"; echo "repo=${GITHUB_REPOSITORY,,}"; } >> "$GITHUB_OUTPUT"
+          echo "Image: $TAG (build: $BUILD)"
+
+  build:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: write
+    env:
+      TAG: ${{ needs.prepare.outputs.tag }}
+      REPO: ${{ needs.prepare.outputs.repo }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+      # NEXT_PUBLIC_* di-INLINE saat build: kosong = situs memakai alamat salah (siteOrigin jatuh ke bawaan) — tolak sebelum membangun.
+      - name: Periksa variabel build
+        env:
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
+          NEXT_PUBLIC_MINIO_PUBLIC_URL: ${{ vars.NEXT_PUBLIC_MINIO_PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          [[ "$NEXT_PUBLIC_APP_URL" =~ ^https://[a-z0-9.-]+$ ]] || { echo "Variable NEXT_PUBLIC_APP_URL harus https://<APP_DOMAIN> tanpa garis miring akhir"; exit 1; }
+          [[ "$NEXT_PUBLIC_MINIO_PUBLIC_URL" =~ ^https://[a-z0-9.-]+/saudinesia-docs$ ]] || { echo "Variable NEXT_PUBLIC_MINIO_PUBLIC_URL harus https://<FILES_DOMAIN>/saudinesia-docs"; exit 1; }
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build & push web
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: runner
+          push: true
+          tags: ghcr.io/${{ env.REPO }}/web:${{ env.TAG }}
+          build-args: |
+            NEXT_PUBLIC_APP_URL=${{ vars.NEXT_PUBLIC_APP_URL }}
+            NEXT_PUBLIC_MINIO_PUBLIC_URL=${{ vars.NEXT_PUBLIC_MINIO_PUBLIC_URL }}
+            NEXT_PUBLIC_BUSINESS_NAME=${{ vars.NEXT_PUBLIC_BUSINESS_NAME }}
+            NEXT_PUBLIC_BUSINESS_WA=${{ vars.NEXT_PUBLIC_BUSINESS_WA }}
+            NEXT_PUBLIC_BUSINESS_ADDRESS=${{ vars.NEXT_PUBLIC_BUSINESS_ADDRESS }}
+            NEXT_PUBLIC_BANK_1_NAME=${{ vars.NEXT_PUBLIC_BANK_1_NAME }}
+            NEXT_PUBLIC_BANK_1_NUMBER=${{ vars.NEXT_PUBLIC_BANK_1_NUMBER }}
+            NEXT_PUBLIC_BANK_2_NAME=${{ vars.NEXT_PUBLIC_BANK_2_NAME }}
+            NEXT_PUBLIC_BANK_2_NUMBER=${{ vars.NEXT_PUBLIC_BANK_2_NUMBER }}
+      - name: Build & push migrate
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          target: migrate
+          push: true
+          tags: ghcr.io/${{ env.REPO }}/migrate:${{ env.TAG }}
+
+  deploy:
+    needs: [prepare, build]
+    # Build dilewati (rollback) = tetap deploy; build gagal = berhenti.
+    if: always() && needs.prepare.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Salin compose, Caddyfile, dan skrip operasional
+        uses: appleboy/scp-action@ff85246acaad7bdce478db94a363cd2bf7c90345 # v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
+          source: docker-compose.prod.yml,Caddyfile,.env.production.example,scripts/buat-env-production.sh,scripts/deploy-server.sh,scripts/backup-db.sh,scripts/backup-minio.sh
+          target: /opt/app
+
+      # Repo private: server login GHCR dengan token job ini (berlaku selama job) — dikirim lewat env, bukan ditulis di skrip.
+      # Seluruh logika di scripts/deploy-server.sh (bisa juga dijalankan manual di server).
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        env:
+          GHCR_USER: ${{ github.actor }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEPLOY_REPO: ${{ needs.prepare.outputs.repo }}
+          DEPLOY_TAG: ${{ needs.prepare.outputs.tag }}
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
+          envs: GHCR_USER,GHCR_TOKEN,DEPLOY_REPO,DEPLOY_TAG
+          command_timeout: 20m
+          script: bash /opt/app/scripts/deploy-server.sh
+
+      # Dari luar (lewat Caddy + TLS), bukan hanya dari dalam kontainer. Sertifikat pertama bisa butuh beberapa detik.
+      - name: Periksa dari internet
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          ADMIN_DOMAIN: ${{ vars.ADMIN_DOMAIN }}
+        run: |
+          set -euo pipefail
+          [[ "$APP_DOMAIN" =~ ^[a-z0-9.-]+$ && "$ADMIN_DOMAIN" =~ ^[a-z0-9.-]+$ ]] || { echo "Variables APP_DOMAIN/ADMIN_DOMAIN belum diisi"; exit 1; }
+          check() { for i in $(seq 1 20); do got=$(curl -s -o /dev/null -w '%{http_code}' "$1" || true); [ "$got" = "$2" ] && { echo "$1 -> $got"; return 0; }; sleep 6; done; echo "$1 -> $got (harap $2)"; return 1; }
+          check "https://$APP_DOMAIN/api/v1/health" 200
+          check "https://$ADMIN_DOMAIN/login" 200
+          check "https://$APP_DOMAIN/id/admin" 404
