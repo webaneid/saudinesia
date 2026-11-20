@@ -5,17 +5,18 @@ import { useParams } from 'next/navigation'
 import { KeyRound } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewVisaPage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/visa', id => `/${locale}/admin/products/visa/${id}`, 'Produk visa gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/visa', id => adminHref(locale, `/admin/products/visa/${id}`), 'Produk visa gagal dibuat.')
   const [form, setForm] = useState({ name: '', country: 'Saudi Arabia', visaType: '', processDays: 14, description: '' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={KeyRound} title="Produk Visa Baru" backHref={`/${locale}/admin/products/visa`} backLabel="Daftar Produk Visa"
+      icon={KeyRound} title="Produk Visa Baru" backHref={adminHref(locale, `/admin/products/visa`)} backLabel="Daftar Produk Visa"
       description="Harga dan persyaratan dokumen diatur di halaman produk setelah dibuat — harga terhitung otomatis begitu komponen HPP diisi."
       onSubmit={() => submit({ ...form, processDays: +form.processDays })} saving={saving} canSubmit={!!form.name.trim() && !!form.visaType.trim()} error={error} submitLabel="Simpan & Lanjut"
     >

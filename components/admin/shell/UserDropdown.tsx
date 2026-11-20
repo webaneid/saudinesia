@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { ChevronDown, LogOut } from 'lucide-react'
 import { Badge } from '@/components/admin/ui/Badge'
+import { adminHref } from '@/lib/admin/href'
 
 type UserDropdownProps = { locale: string; userName: string; email: string; roleLabel: string }
 
@@ -26,7 +27,7 @@ export function UserDropdown({ locale, userName, email, roleLabel }: UserDropdow
     try {
       await fetch('/api/v1/auth/logout', { method: 'POST' })
     } finally {
-      router.replace(`/${locale}/admin/login`)
+      router.replace(adminHref(locale, `/admin/login`))
       router.refresh()
     }
   }

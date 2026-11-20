@@ -17,6 +17,7 @@ import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
 import { Badge } from '@/components/admin/ui/Badge'
+import { adminHref } from '@/lib/admin/href'
 
 // Selisih HPP vs Aktual (docs/arsitektur-harga-terpadu.md §20, 7D): di mana modal rencana (HPP awal) meleset dari uang yang benar-benar keluar ke vendor. Selisih hanya dari baris yang
 // dinyatakan LUNAS; yang belum lunas tampil terpisah. Data dari GET /api/v1/admin/reports/cost-variance (peran lewat lib/pricing/policy.ts). Filter di URL.
@@ -85,7 +86,7 @@ export default function VariancePage() {
     { key: 'b', header: 'Baris', mobile: 'title', cell: r => (
       <div className="min-w-0">
         <p className="m-0 font-semibold text-admin-ink">{r.description}</p>
-        <p className="m-0 text-[11px] text-admin-muted"><Link href={`/${locale}/admin/bookings/${r.bookingId}`} className="hover:underline">{r.bookingCode}</Link> · {ITEM_LABEL[r.itemType] ?? r.itemType}</p>
+        <p className="m-0 text-[11px] text-admin-muted"><Link href={adminHref(locale, `/admin/bookings/${r.bookingId}`)} className="hover:underline">{r.bookingCode}</Link> · {ITEM_LABEL[r.itemType] ?? r.itemType}</p>
       </div>
     ) },
     { key: 'st', header: 'Status', hideBelowLg: true, cell: r => <Badge tone={r.settled ? 'accent' : 'warning'}>{r.settled ? 'Lunas' : 'Belum lunas'}</Badge> },
@@ -93,7 +94,7 @@ export default function VariancePage() {
     { key: 'act', header: 'Aktual', align: 'right', cell: r => <span className="tabular-nums">{formatRupiah(r.actualIdr)}</span> },
     { key: 'var', header: 'Selisih', align: 'right', cell: r => r.settled ? <Var v={r.varianceIdr} /> : <span className="text-admin-muted">—</span> },
     { key: 'note', header: 'Catatan', hideBelowLg: true, cell: r => <span className="text-[11px] text-admin-muted">{r.notes ?? ''}</span> },
-    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.bookingId}`} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${r.bookingId}`)} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
   ]
 
   return (
@@ -102,7 +103,7 @@ export default function VariancePage() {
         icon={Scale}
         title="Selisih HPP vs Aktual"
         description="Di mana modal rencana meleset dari uang yang benar-benar keluar ke vendor. Selisih hanya dari baris yang dinyatakan lunas."
-        actions={<Link href={`/${locale}/admin/reports`} className="admin-btn-sm">Laporan Untung</Link>}
+        actions={<Link href={adminHref(locale, `/admin/reports`)} className="admin-btn-sm">Laporan Untung</Link>}
       />
       <FilterBar active={from !== def.from || to !== def.to || only} resetHref={pathname}>
         <PeriodFilter from={from} to={to} onChange={r => go({ from: r.from, to: r.to, page: '1' })} />

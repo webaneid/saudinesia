@@ -8,13 +8,14 @@ import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { adminHref } from '@/lib/admin/href'
 
 type Muthowif = { id: string; name: string; bio: string | null; languages: string[]; dailyCapacity: number; isActive: boolean }
 type Form = { name: string; bio: string; languages: string; dailyCapacity: string; isActive: boolean }
 
 export default function MuthowifEditPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/muthowif`
+  const list = adminHref(locale, `/admin/products/muthowif`)
   const e = useEditEntity<Muthowif>(`/api/v1/admin/products/muthowif/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)

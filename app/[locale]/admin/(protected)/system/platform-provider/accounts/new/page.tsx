@@ -5,11 +5,12 @@ import { useParams } from 'next/navigation'
 import { Landmark } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { adminHref } from '@/lib/admin/href'
 
 // Tambah rekening Platform Provider (Fase 13e-1) — hanya akun Platform Provider (API menolak peran lain).
 export default function NewProviderAccountPage() {
   const { locale } = useParams() as { locale: string }
-  const list = `/${locale}/admin/system/platform-provider/accounts`
+  const list = adminHref(locale, `/admin/system/platform-provider/accounts`)
   const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/system/platform-provider/accounts', id => `${list}/${id}`, 'Rekening gagal disimpan.')
   const [form, setForm] = useState({ bankName: '', accountNumber: '', accountHolder: '' })
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }

@@ -104,7 +104,7 @@ jobs:
 
       - name: Buat .env.production dengan skrip produksi (sekaligus menguji skripnya)
         run: |
-          bash scripts/buat-env-production.sh ci.example.test files.ci.example.test .
+          bash scripts/buat-env-production.sh ci.example.test admin.ci.example.test files.ci.example.test .
           test -s .env.production
           # Sama seperti langkah deploy di server
           printf 'GITHUB_REPO=%s\nIMAGE_TAG=%s\n' "$IMG_REPO" "$IMG_TAG" > .env.deploy
@@ -115,7 +115,7 @@ jobs:
       - name: Validasi Caddyfile
         run: |
           docker run --rm \
-            -e APP_DOMAIN=ci.example.test -e FILES_DOMAIN=files.ci.example.test \
+            -e APP_DOMAIN=ci.example.test -e ADMIN_DOMAIN=admin.ci.example.test -e FILES_DOMAIN=files.ci.example.test \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" \
             caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b caddy validate --config /etc/caddy/Caddyfile
 
@@ -132,23 +132,41 @@ jobs:
               do_PATCH = do_POST
           h.HTTPServer(('', 3000), H).serve_forever()"
           docker run -d --name edge --network bodylimit -p 8080:8080 \
-            -e APP_DOMAIN=http://app.test:8080 -e FILES_DOMAIN=http://files.test:8081 \
+            -e APP_DOMAIN=http://app.test:8080 -e ADMIN_DOMAIN=http://admin.test:8080 -e FILES_DOMAIN=http://files.test:8081 \
             -v "$PWD/Caddyfile:/etc/caddy/Caddyfile:ro" caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
           head -c 2000000 /dev/zero > 2mb; head -c 9000000 /dev/zero > 9mb; head -c 500000 /dev/zero > small
-          code() { curl -s -o /dev/null -w '%{http_code}' -H 'Host: app.test' -X POST --data-binary "@$2" "http://localhost:8080$1"; }
+          H=app.test
+          code() { curl -s -o /dev/null -w '%{http_code}' -H "Host: $H" -X POST --data-binary "@$2" "http://localhost:8080$1"; }
           # Tunggu sampai Caddy DAN upstream siap (200 lewat proxy) — 502 berarti upstream belum hidup, bukan hasil uji.
           for i in $(seq 1 60); do test "$(code /api/v1/bookings small)" = 200 && break; sleep 1; done
           expect() { got=$(code "$2" "$3"); echo "$1 $2 ($3) -> $got"; test "$got" = "$1"; }
           expect 200 /api/v1/bookings small
           expect 413 /api/v1/bookings 2mb
-          expect 413 /api/v1/admin/bookings/x/revise 2mb
           expect 200 /api/v1/bookings/cm9x/payment/bukti 2mb
           expect 200 /api/v1/account/pilgrims/cm9x/documents 2mb
-          expect 200 /api/v1/admin/media/hotel/cm9x 2mb
           expect 413 /api/v1/bookings/cm9x/payment/bukti 9mb
           expect 413 /api/v1/account/pilgrims/..%2F..%2Fbookings/documents 2mb
-          got=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: app.test' -X PATCH --data-binary @2mb http://localhost:8080/api/v1/admin/media/hotel/cm9x)
+          # Pemisahan host (docs/rencana-domain-admin.md): admin & API admin tidak ada di host app (404, juga huruf besar/garis ganda)...
+          expect 404 /api/v1/admin/bookings small
+          expect 404 /API/v1//admin/bookings small
+          expect 404 /admin small
+          expect 404 /id/admin/bookings small
+          expect 404 /EN//Admin small
+          expect 200 /api/v1/administrasi small
+          # ...alur jamaah/webhook tidak ada di host admin; batas body sama di host admin.
+          H=admin.test
+          expect 404 /api/v1/auth/register small
+          expect 404 /api/v1/auth/google/start small
+          expect 404 /api/v1/webhooks/ipaymu small
+          expect 200 /api/v1/admin/bookings small
+          expect 200 /api/v1/auth/login small
+          expect 413 /api/v1/admin/bookings/x/revise 2mb
+          expect 200 /api/v1/admin/media/hotel/cm9x 2mb
+          expect 200 /api/v1/admin/customers/cm9x/pilgrims/cm9y/documents 2mb
+          got=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.test' -X PATCH --data-binary @2mb http://localhost:8080/api/v1/admin/media/hotel/cm9x)
           echo "PATCH media 2mb -> $got"; test "$got" = 413
+          got=$(curl -s -D - -o /dev/null -H 'Host: admin.test' -X POST --data-binary @small http://localhost:8080/api/v1/admin/bookings | tr -d '\r' | grep -i '^x-robots-tag:')
+          echo "$got"; echo "$got" | grep -qi 'noindex'
 
       - name: Build image web (target runner) dan migrate
         run: |
@@ -212,7 +230,25 @@ jobs:
           if printf '%s\n' "$PW" | $C exec -T web bun scripts/create-superadmin.ts --email lain@example.test --name Lain --password-stdin; then
             echo "skrip seharusnya menolak superadmin kedua"; exit 1
           fi
-          $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
+          $C exec -T -e PW="$PW" web bun -e "fetch('http://localhost:3000/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json', Host: 'admin.ci.example.test' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) }).then(async (r) => { const j = await r.json(); console.log(r.status, JSON.stringify(j)); process.exit(r.status === 200 && j.data?.role === 'superadmin' ? 0 : 1) })"
+          # Domain admin terpisah di artefak PRODUKSI (middleware Edge membaca ADMIN_DOMAIN saat jalan, bukan saat build): staf ditolak di host app
+          # (K2), halaman admin 404 di host app (K3), host admin me-rewrite alamat ramah / mengalihkan jalur lama (K4).
+          $C exec -T -e PW="$PW" web bun -e "
+            const go = (host, path, init = {}) => fetch('http://localhost:3000' + path, { redirect: 'manual', ...init, headers: { Host: host, ...(init.headers || {}) } })
+            const A = 'admin.ci.example.test', P = 'ci.example.test'
+            const login = await go(P, '/api/v1/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: 'ci-admin@example.test', password: process.env.PW }) })
+            const checks = [
+              ['login staf di host app', login.status, 403],
+              ['/id/admin di host app', (await go(P, '/id/admin')).status, 404],
+              ['/api/v1/admin di host app', (await go(P, '/api/v1/admin/bookings')).status, 404],
+              ['/bookings di host admin tanpa sesi', (await go(A, '/bookings')).headers.get('location')?.replace(/^https?:[/][/][^/]+/, ''), '/login'],
+              ['/login di host admin', (await go(A, '/login')).status, 200],
+              ['jalur lama di host admin', (await go(A, '/id/admin/bookings')).status, 308],
+              ['/id di host admin', (await go(A, '/id')).status, 404],
+            ]
+            let bad = 0
+            for (const [n, got, want] of checks) { console.log(n, '->', got); if (got !== want) bad++ }
+            process.exit(bad ? 1 : 0)"
           # Penanda Platform Provider (docs/arsitektur-bagi-hasil.md §3) juga hanya lewat skrip DI DALAM image: tetapkan, ulang = tak berubah,
           # akun bukan superadmin ditolak.
           $C exec -T web bun scripts/set-platform-provider.ts ci-admin@example.test
@@ -229,7 +265,7 @@ jobs:
           # Web read-only (SEC-10): skrip tak bisa disalin ke kontainer yang berjalan — dipasang (bind mount, baca saja) ke kontainer sekali jalan
           # dari image yang sama, yang memanggil web sungguhan lewat jaringan internal.
           $C run --rm --no-deps -T -v "$PWD/scripts/ci-invoice-smoke.ts:/app/scripts/ci-invoice-smoke.ts:ro" \
-            -e CI_SMOKE=1 -e BASE_URL=http://web:3000 web bun scripts/ci-invoice-smoke.ts
+            -e CI_SMOKE=1 -e BASE_URL=http://web:3000 -e SMOKE_HOST=admin.ci.example.test web bun scripts/ci-invoice-smoke.ts
 
       # Rate limit login (SEC-04) di image produksi dengan Redis nyata: 5 gagal diizinkan, ke-6 harus 429, dan kuncinya
       # harus benar-benar ada di Redis (bukan fallback memori).

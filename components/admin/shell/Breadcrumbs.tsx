@@ -4,14 +4,15 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronRight } from 'lucide-react'
 import { LABEL_SEGMEN, SEGMEN_TANPA_HALAMAN } from '@/lib/admin/navigation'
+import { adminHref, adminLogicalPath } from '@/lib/admin/href'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 export function Breadcrumbs({ locale }: { locale: string }) {
-  // Segmen pertama = locale; jejak dimulai dari "admin".
-  const segments = usePathname().split('/').filter(Boolean).slice(1)
+  // Jejak dimulai dari "admin" (jalur logis — sama di mode jalur `/id/admin/...` dan mode domain `admin.…/...`).
+  const segments = adminLogicalPath(usePathname()).split('/').filter(Boolean)
   const crumbs = segments.map((s, i) => ({
-    href: `/${locale}/${segments.slice(0, i + 1).join('/')}`,
+    href: adminHref(locale, `/${segments.slice(0, i + 1).join('/')}`),
     // ID (UUID) tidak ditampilkan mentah.
     label: LABEL_SEGMEN[s] ?? (UUID.test(s) ? 'Detail' : s.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())),
     linkable: !SEGMEN_TANPA_HALAMAN.has(s),

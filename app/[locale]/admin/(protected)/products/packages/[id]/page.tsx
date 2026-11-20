@@ -19,6 +19,7 @@ import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/adm
 import type { RequirementView } from '@/lib/documents/completeness'
 import { DeparturesBox } from './DeparturesBox'
 import { TripPlanBox, type TripPlanForm } from './TripPlanBox'
+import { adminHref } from '@/lib/admin/href'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -137,7 +138,7 @@ export default function PackageBuilderPage({ params }: Props) {
   const [saved, setSaved] = useState(false)
   const dirty = JSON.stringify(form) !== JSON.stringify(baseline)
   useUnsavedGuard(dirty)
-  const del = useDeleteEntity(`/api/v1/admin/products/packages/${id}`, `/${locale}/admin/products/packages`)
+  const del = useDeleteEntity(`/api/v1/admin/products/packages/${id}`, adminHref(locale, `/admin/products/packages`))
   async function handleDelete() {
     if (await del.run() === 'deactivated') { setForm(f => ({ ...f, isActive: false })); setBaseline(b => ({ ...b, isActive: false })) }
   }
@@ -412,7 +413,7 @@ export default function PackageBuilderPage({ params }: Props) {
 
   return (
     <EditorShell
-      backHref={`/${locale}/admin/products/packages`}
+      backHref={adminHref(locale, `/admin/products/packages`)}
       backLabel="Paket Umroh"
       banner={
         (error || del.error || del.notice) ? (

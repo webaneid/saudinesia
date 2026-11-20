@@ -11,6 +11,8 @@ import { FormField } from '@/components/admin/ui/FormField'
 import { Tabs, tabId, tabPanelId } from '@/components/admin/ui/Tabs'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
+import { usePublicHref } from '@/components/admin/shell/AdminPublicOrigin'
 
 // Editor Konten Situs (docs/arsitektur-frontend-publik.md §6.5 C6). Kolom dari server (diturunkan dari berkas pesan); teks bawaan jadi placeholder,
 // kosong = bawaan. Tujuan tombol hanya dari daftar putih server. Simpan = isi lengkap + versi (409 bila basi).
@@ -66,8 +68,9 @@ function toForm(d: PageData): Form {
 }
 
 export function SiteContentEditor({ page, locale }: { page: string; locale: string }) {
+  const toPublic = usePublicHref()
   const endpoint = `/api/v1/admin/system/site-content/${page}`
-  const listHref = `/${locale}/admin/system/site-content`
+  const listHref = adminHref(locale, `/admin/system/site-content`)
   const { item, loading, missing, saving, error, notice, save } = useEditEntity<PageData>(endpoint, listHref)
   const [form, setForm] = useState<Form | null>(null)
   const [lang, setLang] = useState<Locale>('id')
@@ -114,7 +117,7 @@ export function SiteContentEditor({ page, locale }: { page: string; locale: stri
     await submit(empty)
   }
 
-  const publicHref = `/${locale}${item.path ? `/${item.path}` : ''}`
+  const publicHref = toPublic(`/${locale}${item.path ? `/${item.path}` : ''}`)
   const targetOptions = [
     { id: HIDDEN, label: 'Sembunyikan tombol' },
     ...item.targets.map(t => ({ id: t.value === '' ? HOME : t.value, label: t.label })),

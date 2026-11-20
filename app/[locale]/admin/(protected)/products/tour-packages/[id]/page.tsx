@@ -15,6 +15,7 @@ import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -95,7 +96,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
   // Dilacak: info paket (nama, deskripsi, status). Kotak situs/kendaraan/hotel/biaya tersimpan langsung per aksi.
   const { dirty, markClean, patchClean } = useDirtyForm(loaded ? form : null)
   useUnsavedGuard(dirty)
-  const del = useDeleteEntity(`/api/v1/admin/products/tour-packages/${id}`, `/${locale}/admin/products/tour-packages`)
+  const del = useDeleteEntity(`/api/v1/admin/products/tour-packages/${id}`, adminHref(locale, `/admin/products/tour-packages`))
   async function handleDelete() {
     if (await del.run() === 'deactivated') { setForm(f => ({ ...f, isActive: false })); patchClean(prev => ({ ...prev, isActive: false })) }
   }
@@ -319,7 +320,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
 
   return (
     <EditorShell
-      backHref={`/${locale}/admin/products/tour-packages`}
+      backHref={adminHref(locale, `/admin/products/tour-packages`)}
       backLabel="Paket Ziarah"
       banner={
         (error || del.error || del.notice) ? (

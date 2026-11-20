@@ -13,6 +13,7 @@ import type { AddressValue } from '@/components/shared/AddressPicker'
 import { WARNING_TEXT } from '@/components/shared/pilgrims/warningText'
 import type { PilgrimWarning } from '@/lib/pilgrims/service'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
+import { adminHref } from '@/lib/admin/href'
 
 // Tautan jamaah booking ↔ data jamaah tersimpan pelanggan (docs/arsitektur-jamaah.md §5.3, Fase 7a) — kotak "Kartu jamaah" di halaman Kelola jamaah
 // (pilgrims/[pilgrimId]; halaman booking hanya memeriksa). Menautkan / memperbarui mengisi field berperan dari kartu (snapshot). Kartu baru dan ubah
@@ -97,7 +98,7 @@ export function PilgrimCardPanel({ locale, bookingId, pilgrimId, customerId, lin
         <>
           <p className="m-0 text-[13px] text-admin-ink">
             Tertaut ke kartu{' '}
-            <Link href={`/${locale}/admin/customers/${customerId}/pilgrims/${linked.id}`} className="font-semibold text-admin-accent hover:underline">{linked.name}</Link>
+            <Link href={adminHref(locale, `/admin/customers/${customerId}/pilgrims/${linked.id}`)} className="font-semibold text-admin-accent hover:underline">{linked.name}</Link>
             <span className="text-admin-muted"> milik pelanggan — isian berperan (nama, NIK, paspor, …) disalin dari kartu ini.</span>
           </p>
           {!locked && (

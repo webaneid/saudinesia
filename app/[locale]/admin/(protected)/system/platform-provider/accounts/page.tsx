@@ -9,15 +9,16 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { listProviderAccounts, type ProviderBankAccount } from '@/lib/revenue-share/accounts'
+import { adminHref } from '@/lib/admin/href'
 
 // Rekening penerimaan Platform Provider (Fase 13e-1, docs/arsitektur-bagi-hasil.md §5e). Superadmin melihat (klien mentransfer ke sini); hanya akun
 // Platform Provider yang menambah/mengubah/menghapus (dijaga API). Master data kecil (≤ 100 rekening).
 export default async function ProviderAccountsPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   const rows = await listProviderAccounts()
-  const base = `/${locale}/admin/system/platform-provider/accounts`
+  const base = adminHref(locale, `/admin/system/platform-provider/accounts`)
   const columns: Column<ProviderBankAccount>[] = [
     { key: 'bank', header: 'Bank', mobile: 'title', cell: r => <span className="text-[13px] font-medium text-admin-ink">{r.bankName}</span> },
     { key: 'num', header: 'Nomor', cell: r => <span className="text-[12px] tabular-nums">{r.accountNumber}</span> },

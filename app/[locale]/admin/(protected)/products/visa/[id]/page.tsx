@@ -17,6 +17,7 @@ import { bodyFromManifestRows, rowFromField, type ManifestRow } from '@/componen
 import { RulesTab } from './RulesTab'
 import { parseRequiredComponents, visaSalesModel, type RequiredComponent } from '@/lib/validators/visa'
 import type { DeleteResult, InfoForm, ProductDetail } from './types'
+import { adminHref } from '@/lib/admin/href'
 
 type TabKey = 'info' | 'docs' | 'fields' | 'rules' | 'price'
 type Props = { params: Promise<{ locale: string; id: string }> }
@@ -141,7 +142,7 @@ export default function VisaEditPage({ params }: Props) {
       const res = await fetch(`/api/v1/admin/products/visa/${id}`, { method: 'DELETE' })
       const j = await res.json().catch(() => null)
       if (!res.ok || !j?.data) return { error: j?.error ?? 'Produk gagal dihapus.' }
-      if (j.data.deleted) { router.push(`/${locale}/admin/products/visa`); return null }
+      if (j.data.deleted) { router.push(adminHref(locale, `/admin/products/visa`)); return null }
       // Status di formulir DAN baseline ikut nonaktif, ketikan lain yang belum disimpan tetap terhitung "belum disimpan".
       setForm(f => (f ? { ...f, isActive: false } : f))
       setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, baseReqs, saved.rules, baseFieldRows) })

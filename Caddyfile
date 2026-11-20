@@ -1,11 +1,14 @@
 # Caddyfile
 # Caddy mengurus sertifikat HTTPS (Let's Encrypt) otomatis begitu DNS domain mengarah ke IP VPS — tanpa certbot.
 # Domain TIDAK dikeraskan di sini: dibaca dari environment container (docker-compose.prod.yml):
-#   APP_DOMAIN    → aplikasi (Next.js), mis. saudinesia.com
+#   APP_DOMAIN    → situs publik + area jamaah (Next.js), mis. app.saudinesia.id
+#   ADMIN_DOMAIN  → panel admin (Next.js yang sama; middleware me-rewrite `/X` → `/id/admin/X`), mis. admin.saudinesia.id
+#                   — docs/rencana-domain-admin.md. Halaman/API admin TIDAK dilayani di APP_DOMAIN dan sebaliknya (lapis
+#                   kedua di sini; lapis pertama middleware.ts, akses sesungguhnya getSession() di tiap route).
 #   FILES_DOMAIN  → MinIO publik, mis. berkas.saudinesia.com — host yang ditandatangani URL presigned
 #                   (MINIO_PUBLIC_URL harus = https://$FILES_DOMAIN). Bucket tetap PRIVAT: tanpa tanda tangan
 #                   presigned yang valid, MinIO menolak akses.
-# Kedua A record harus sudah mengarah ke VPS sebelum Caddy dinyalakan, kalau tidak penerbitan sertifikat gagal.
+# Ketiga A record harus sudah mengarah ke VPS sebelum Caddy dinyalakan, kalau tidak penerbitan sertifikat gagal.
 
 # Header keamanan untuk semua host.
 (keamanan) {
@@ -18,7 +21,7 @@
     }
 }
 
-# Proxy ke aplikasi — dipakai kedua cabang batas body di {$APP_DOMAIN}.
+# Proxy ke aplikasi — dipakai kedua cabang batas body di (batas_body).
 (aplikasi) {
     reverse_proxy web:3000 {
         # IP klien = alamat yang benar-benar terhubung ke Caddy (Caddy adalah tepi, tanpa CDN di depan).
@@ -38,20 +41,15 @@
     respond @tolak 405
     respond /minio/* 404
     # Preview dokumen memakai <iframe> (components/shared/documents/FileViewerDialog.tsx) dari URL presigned, jadi
-    # X-Frame-Options: DENY akan memblokirnya. Hanya aplikasi sendiri yang boleh menyematkan.
-    header Content-Security-Policy "frame-ancestors https://{$APP_DOMAIN}"
+    # X-Frame-Options: DENY akan memblokirnya. Hanya aplikasi sendiri (situs jamaah DAN panel admin) yang boleh menyematkan.
+    header Content-Security-Policy "frame-ancestors https://{$APP_DOMAIN} https://{$ADMIN_DOMAIN}"
     request_body {
         max_size 1KB
     }
 }
 
-{$APP_DOMAIN} {
-    import keamanan
-    # Anti-clickjacking: aplikasi hanya boleh di-frame oleh dirinya sendiri. CSP penuh (script-src dst.) belum —
-    # Next.js/Tiptap butuh nonce; lihat docs/lessons-learned.md SEC-06.
-    header Content-Security-Policy "frame-ancestors 'self'"
-    header X-Frame-Options "SAMEORIGIN"
-    encode zstd gzip
+# Batas body untuk host aplikasi (app & admin).
+(batas_body) {
     # Batas body: 8 MB HANYA untuk POST ke route unggah (dokumen/bukti/foto maks 5 MB + overhead multipart);
     # semua body lain maks 1 MB. Zod 3 memvalidasi SEMUA elemen array meski `.max()` sudah terlampaui (GHSA-mrhx-c7xc-m3w5):
     # JSON 8 MB berisi array → ±2 GB RAM per request. Body JSON sah terbesar (teks kaya ≤ 100 ribu karakter) jauh di bawah 1 MB.
@@ -75,13 +73,55 @@
     }
 }
 
+{$APP_DOMAIN} {
+    import keamanan
+    # Anti-clickjacking: aplikasi hanya boleh di-frame oleh dirinya sendiri. CSP penuh (script-src dst.) belum —
+    # Next.js/Tiptap butuh nonce; lihat docs/lessons-learned.md SEC-06.
+    header Content-Security-Policy "frame-ancestors 'self'"
+    header X-Frame-Options "SAMEORIGIN"
+    encode zstd gzip
+    # Panel admin hanya di {$ADMIN_DOMAIN} (K3: 404, tanpa menyebut alamat admin). Jalur dibandingkan tanpa membedakan huruf;
+    # bentuk tersandi (`%61dmin`, `//admin`) juga ditolak middleware.ts.
+    @adminDiApp {
+        path_regexp (?i)^/+([a-z]{2}/+)?admin(/|$)
+    }
+    @apiAdminDiApp {
+        path_regexp (?i)^/+api/+v1/+admin(/|$)
+    }
+    # `handle`, bukan `respond` langsung: urutan bawaan Caddy menjalankan `handle` (batas_body) SEBELUM `respond`.
+    handle @adminDiApp {
+        respond 404
+    }
+    handle @apiAdminDiApp {
+        respond 404
+    }
+    import batas_body
+}
+
+{$ADMIN_DOMAIN} {
+    import keamanan
+    header Content-Security-Policy "frame-ancestors 'self'"
+    header X-Frame-Options "SAMEORIGIN"
+    # Panel admin tak pernah diindeks mesin pencari.
+    header X-Robots-Tag "noindex, nofollow"
+    encode zstd gzip
+    # Alur jamaah/pihak luar (daftar, Google, webhook) hanya di {$APP_DOMAIN} — semua beralamat APP_URL.
+    @jamaahDiAdmin {
+        path_regexp (?i)^/+api/+v1/+(auth/+(google|register|registration)|webhooks)(/|$)
+    }
+    handle @jamaahDiAdmin {
+        respond 404
+    }
+    import batas_body
+}
+
 {$FILES_DOMAIN} {
     import files
     # Host header diteruskan apa adanya (bawaan Caddy) — URL presigned ditandatangani untuk host ini.
     reverse_proxy minio:9000
 }
 
-# Belum punya domain dan hanya mau uji lewat IP? Ganti dua blok di atas sementara menjadi (HTTP saja, tanpa HTTPS):
+# Belum punya domain dan hanya mau uji lewat IP? Ganti blok-blok di atas sementara menjadi (HTTP saja, tanpa HTTPS):
 #
 # :80 {
 #     reverse_proxy web:3000

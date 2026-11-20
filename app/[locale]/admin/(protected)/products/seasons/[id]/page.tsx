@@ -6,12 +6,13 @@ import { CalendarDays } from 'lucide-react'
 import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 type Season = { id: string; name: string; startDate: string; endDate: string }
 
 export default function EditSeasonPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/seasons`
+  const list = adminHref(locale, `/admin/products/seasons`)
   const e = useEditEntity<Season>(`/api/v1/admin/products/seasons/${id}`, list)
   const [form, setForm] = useState<{ name: string; startDate: string; endDate: string } | null>(null)
 

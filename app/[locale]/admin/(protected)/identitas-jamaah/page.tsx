@@ -12,6 +12,7 @@ import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { listIdentities, listUnmatchedCards, type IdentityRow, type UnmatchedCard } from '@/lib/pilgrims/warehouse'
 import { DATE_LONG, formatCalendarDate } from '@/lib/time'
 import { LinkCardButton } from './LinkCardButton'
+import { adminHref } from '@/lib/admin/href'
 
 // Gudang identitas jamaah (docs/arsitektur-jamaah.md §4.4, Fase 8) — semua peran staf (K4). Cari nama, atau NIK 16 digit (tepat, lewat indeks
 // HMAC — NIK tak pernah tampil di daftar). Tampilan "Kartu tanpa identitas" = kartu bayi tanpa NIK untuk ditautkan petugas.
@@ -32,7 +33,7 @@ export default async function IdentityWarehousePage({ params, searchParams }: Pr
   const q = (typeof sp.q === 'string' ? sp.q : '').trim().slice(0, 100)
   const view: View | undefined = typeof sp.status === 'string' && sp.status in VIEWS ? (sp.status as View) : undefined
 
-  const base = `/${locale}/admin/identitas-jamaah`
+  const base = adminHref(locale, `/admin/identitas-jamaah`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { q: q || undefined, status: view, limit: limitParam, ...over })
   const filters = (
@@ -46,7 +47,7 @@ export default async function IdentityWarehousePage({ params, searchParams }: Pr
 
   if (view === 'unmatched') {
     const r = await listUnmatchedCards(actor, { ...list, ...(q ? { q } : {}) })
-    if (!r) redirect(`/${locale}/admin`)
+    if (!r) redirect(adminHref(locale, `/admin`))
     const columns: Column<UnmatchedCard>[] = [
       {
         key: 'card', header: 'Jamaah', mobile: 'title',

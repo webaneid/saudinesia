@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Scale, ShieldCheck } from 'lucide-react'
 import type { RefundApprovalMode } from '@prisma/client'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
+import { adminHref } from '@/lib/admin/href'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
@@ -43,7 +44,7 @@ export function RefundSettingsEditor({ initial }: { initial: RefundSettingsDto }
 
   return (
     <EditorShell
-      backHref="/admin/finance/refunds" backLabel="Refund"
+      backHref={adminHref('id', '/admin/finance/refunds')} backLabel="Refund"
       title={<h1 className="m-0 text-2xl font-bold text-admin-ink">Kebijakan Refund</h1>}
       banner={error ? <p role="alert" className="m-0 rounded-xl border border-admin-danger/30 bg-admin-danger/5 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
       main={

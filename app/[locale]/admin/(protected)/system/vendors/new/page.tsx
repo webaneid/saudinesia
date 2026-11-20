@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { SUPERADMIN_ROLES } from '@/lib/auth/session'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { safeLocale } from '@/lib/utils/locale'
+import { adminHref } from '@/lib/admin/href'
 import { listCategories } from '@/lib/vendors/service'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { VendorCreatePanel } from '@/components/admin/vendor/VendorCreatePanel'
@@ -11,7 +12,7 @@ type Props = { params: Promise<{ locale: string }> }
 export default async function NewVendorPage({ params }: Props) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
 
   const categories = await listCategories()
   return (

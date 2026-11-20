@@ -6,12 +6,13 @@ import { Users } from 'lucide-react'
 import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { Badge } from '@/components/admin/ui/Badge'
+import { adminHref } from '@/lib/admin/href'
 
 type AdminUser = { id: string; fullName: string; email: string; role: string; isActive: boolean }
 
 export default function EditAdminUserPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/system/users`
+  const list = adminHref(locale, `/admin/system/users`)
   const e = useEditEntity<AdminUser>(`/api/v1/admin/system/users/${id}`, list)
   const [fullName, setFullName] = useState<string | null>(null)
 

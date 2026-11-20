@@ -7,12 +7,13 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
+import { adminHref } from '@/lib/admin/href'
 
 type TourismSite = { id: string; name: string; city: string | null; isActive: boolean }
 
 export default function TourismSitesPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/tourism-sites`
+  const base = adminHref(locale, `/admin/products/tourism-sites`)
   const columns = (reload: () => void): Column<TourismSite>[] => [
     { key: 'name', header: 'Nama', mobile: 'title', cell: s => <Link href={`${base}/${s.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{s.name}</Link> },
     { key: 'city', header: 'Kota', cell: s => <span className="text-[12px] capitalize text-admin-muted">{s.city}</span> },

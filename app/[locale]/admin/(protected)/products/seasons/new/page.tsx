@@ -6,18 +6,19 @@ import { CalendarDays } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewSeasonPage() {
   const { locale } = useParams() as { locale: string }
   // Musim tak punya halaman edit — setelah dibuat kembali ke daftar.
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/seasons', () => `/${locale}/admin/products/seasons`, 'Musim gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/seasons', () => adminHref(locale, `/admin/products/seasons`), 'Musim gagal dibuat.')
   const [form, setForm] = useState({ name: 'ramadan', startDate: '', endDate: '' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={CalendarDays} title="Musim Baru" backHref={`/${locale}/admin/products/seasons`} backLabel="Daftar Musim"
+      icon={CalendarDays} title="Musim Baru" backHref={adminHref(locale, `/admin/products/seasons`)} backLabel="Daftar Musim"
       description="Tanggal di luar rentang Ramadan/Haji otomatis dianggap Regular."
       onSubmit={() => submit(form)} saving={saving} canSubmit={!!form.startDate && !!form.endDate} error={error}
     >

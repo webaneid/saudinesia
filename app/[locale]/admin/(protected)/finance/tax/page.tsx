@@ -17,6 +17,7 @@ import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
 import { Badge, type BadgeTone } from '@/components/admin/ui/Badge'
+import { adminHref } from '@/lib/admin/href'
 
 // Laporan PPN (docs/arsitektur-booking-engine-v2.md §10.14 Fase 12c, K12-3): ditagihkan (invoice terbit dalam periode) vs diterima (buku kas dalam periode).
 // Baca saja; data dari GET /api/v1/admin/finance/tax (aturan hitung di lib/reports/tax.ts). Filter di URL.
@@ -87,7 +88,7 @@ export default function TaxReportPage() {
   const columns: Column<Row>[] = [
     { key: 'n', header: 'Invoice', mobile: 'title', cell: r => (
       <div className="min-w-0">
-        <Link href={`/${locale}/admin/bookings/${r.bookingId}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{r.invoiceNumber}</Link>
+        <Link href={adminHref(locale, `/admin/bookings/${r.bookingId}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{r.invoiceNumber}</Link>
         <p className="m-0 text-[11px] text-admin-muted">{r.bookingCode} · {formatInstant(r.issuedAt, DATE_MEDIUM)}</p>
       </div>
     ) },

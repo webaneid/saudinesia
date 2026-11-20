@@ -7,13 +7,14 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
+import { adminHref } from '@/lib/admin/href'
 
 type Season = { id: string; name: string; startDate: string; endDate: string }
 const LABELS: Record<string, string> = { regular: 'Regular', ramadan: 'Ramadan', hajj: 'Haji' }
 
 export default function SeasonsPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/seasons`
+  const base = adminHref(locale, `/admin/products/seasons`)
   const columns = (reload: () => void): Column<Season>[] => [
     {
       key: 'name', header: 'Musim', mobile: 'title',

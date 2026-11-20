@@ -18,6 +18,7 @@ import { applyVisaRows, lockedMembers, syncVisaCounts, visaRowTotal, visaRowsFro
 import { grouping, groupChoices, groupsInput, moveSlot, removeGroup, startGroups, type GroupDraft } from '../../drafts/[id]/groupRows'
 import { GroupsBox } from '../../drafts/[id]/GroupsBox'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 // Editor REVISI booking terbit (docs/arsitektur-booking-engine-v2.md §10.4 6b, R1): isi booking sekarang dimuat, beberapa perubahan sekaligus → pratinjau (mesin yang sama,
 // di-rollback) → Simpan revisi = SATU revisi invoice + SATU catatan riwayat. Jamaah tampil sebagai "Jamaah ke-N" (data pribadi tetap di form data jamaah).
@@ -137,7 +138,7 @@ export default function BookingRevisionPage({ params }: Props) {
       const json = await res.json().catch(() => null)
       if (!res.ok) { setError({ message: json?.error ?? 'Revisi gagal disimpan.', violations: json?.meta?.violations ?? [], itemIndex: json?.meta?.itemIndex }); return }
       setBaseline(fingerprint(rows, pilgrims, groups, invoiceDate, dueDate))
-      router.push(`/${locale}/admin/bookings/${id}`)
+      router.push(adminHref(locale, `/admin/bookings/${id}`))
     } catch { setError({ message: 'Tidak dapat menghubungi server.', violations: [] }) } finally { setSaving(false) }
   }
 
@@ -263,5 +264,5 @@ export default function BookingRevisionPage({ params }: Props) {
     </>
   )
 
-  return <EditorShell backHref={`/${locale}/admin/bookings/${id}`} backLabel="Detail booking" title={<>Edit booking</>} main={main} sidebar={sidebar} />
+  return <EditorShell backHref={adminHref(locale, `/admin/bookings/${id}`)} backLabel="Detail booking" title={<>Edit booking</>} main={main} sidebar={sidebar} />
 }

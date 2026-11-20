@@ -19,6 +19,7 @@ import { Pagination } from '@/components/admin/data-table/Pagination'
 import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { formatCalendarDate } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -58,7 +59,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     }),
   )
 
-  const base = `/${locale}/admin/bookings`
+  const base = adminHref(locale, `/admin/bookings`)
   const hrefFor = (over: Record<string, string | number | undefined>) =>
     buildListHref(base, { status, q, limit: sp.limit === undefined ? undefined : list.limit, ...over })
 
@@ -66,7 +67,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     {
       key: 'code', header: 'Kode', mobile: 'title',
       cell: b => (
-        <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">
+        <Link href={adminHref(locale, `/admin/bookings/${b.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">
           {b.bookingCode}
         </Link>
       ),
@@ -94,7 +95,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
     },
     {
       key: 'actions', header: '', actions: true,
-      cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions>,
+      cell: b => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${b.id}`)} label={`Lihat booking ${b.bookingCode}`} /></RowActions>,
     },
   ]
 
@@ -104,7 +105,7 @@ export default async function AdminBookings({ params, searchParams }: Props) {
   return (
     <div className="space-y-5">
       <PageHeader title="Daftar Booking" description="Cari berdasarkan kode booking atau nama pemesan."
-        actions={<Link href={`/${locale}/admin/bookings/new`} className="admin-btn"><Plus className="h-4 w-4" /> Booking Baru</Link>} />
+        actions={<Link href={adminHref(locale, `/admin/bookings/new`)} className="admin-btn"><Plus className="h-4 w-4" /> Booking Baru</Link>} />
 
       <FilterBar active={Boolean(q || status)} resetHref={buildListHref(base, { limit: limitParam })}>
         <SearchForm

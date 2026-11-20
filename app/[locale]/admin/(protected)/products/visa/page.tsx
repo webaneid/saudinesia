@@ -10,6 +10,7 @@ import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { ProfitCell } from '@/components/admin/pricing/ProfitCell'
 import { parseRequiredComponents, visaSalesModel } from '@/lib/validators/visa'
+import { adminHref } from '@/lib/admin/href'
 
 type VisaProduct = {
   id: string; name: string; country: string; visaType: string
@@ -18,7 +19,7 @@ type VisaProduct = {
 
 export default function VisaPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/visa`
+  const base = adminHref(locale, `/admin/products/visa`)
   const columns = (reload: () => void): Column<VisaProduct>[] => [
     { key: 'name', header: 'Nama', mobile: 'title', cell: v => <Link href={`${base}/${v.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{v.name}</Link> },
     { key: 'country', header: 'Negara', cell: v => <span className="text-[12px] text-admin-muted">{v.country || 'Saudi Arabia'}</span> },

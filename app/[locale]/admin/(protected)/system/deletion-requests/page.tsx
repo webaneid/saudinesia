@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Modal } from '@/components/admin/ui/Modal'
 import { ShieldCheck } from 'lucide-react'
 import { DATE_NUMERIC, formatInstant } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 type DeletionRequest = {
   id: string
@@ -135,7 +136,7 @@ export default function DeletionRequestsPage() {
         title="Permintaan Hapus Akun"
         description="UU PDP — hak subjek data. Data pribadi dihapus/dianonimkan permanen; catatan booking/pembayaran (angka & kode) tetap disimpan untuk kewajiban hukum/pajak. Akun dengan booking berjalan atau refund belum tuntas tidak bisa diproses."
       />
-      <FilterBar active={Boolean(statusFilter)} resetHref={`/${locale}/admin/system/deletion-requests`}>
+      <FilterBar active={Boolean(statusFilter)} resetHref={adminHref(locale, `/admin/system/deletion-requests`)}>
         <FilterSelect label="Status" value={statusFilter} options={(Object.keys(STATUS_LABEL) as Array<DeletionRequest['status']>).map(v => ({ value: v, label: STATUS_LABEL[v] }))} onChange={v => setParams({ status: v || undefined })} />
       </FilterBar>
 

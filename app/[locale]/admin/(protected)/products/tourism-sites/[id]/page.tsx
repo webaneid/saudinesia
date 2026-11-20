@@ -9,13 +9,14 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 type TourismSite = { id: string; name: string; city: string | null; description: string | null; gmapsUrl: string | null; isActive: boolean }
 type Form = { name: string; city: string; description: string; gmapsUrl: string; isActive: boolean }
 
 export default function TourismSiteEditPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/tourism-sites`
+  const list = adminHref(locale, `/admin/products/tourism-sites`)
   const e = useEditEntity<TourismSite>(`/api/v1/admin/products/tourism-sites/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)

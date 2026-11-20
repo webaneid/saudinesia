@@ -8,10 +8,11 @@ import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewHotelPage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/hotels', id => `/${locale}/admin/products/hotels/${id}`, 'Hotel gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/hotels', id => adminHref(locale, `/admin/products/hotels/${id}`), 'Hotel gagal dibuat.')
   const [form, setForm] = useState({ name: '', city: 'makkah', stars: 4, distanceToHaramM: 500, description: '', facilities: [] as string[] })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
@@ -19,7 +20,7 @@ export default function NewHotelPage() {
 
   return (
     <CreatePage
-      icon={Building2} title="Hotel Baru" backHref={`/${locale}/admin/products/hotels`} backLabel="Daftar Hotel"
+      icon={Building2} title="Hotel Baru" backHref={adminHref(locale, `/admin/products/hotels`)} backLabel="Daftar Hotel"
       description="Isi data dasar dulu — foto, fasilitas detail, periode harga, dan jadwal kamar diatur di halaman hotel setelah dibuat."
       onSubmit={() => submit({ ...form, stars: +form.stars, distanceToHaramM: +form.distanceToHaramM })}
       saving={saving} canSubmit={!!form.name.trim()} error={error} submitLabel="Simpan & Lanjut"

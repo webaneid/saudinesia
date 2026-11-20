@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { adminHref } from '@/lib/admin/href'
 import { ADMIN_ROLES, getSession, type SessionPayload } from '@/lib/auth/session'
 import { safeLocale } from '@/lib/utils/locale'
 
@@ -11,6 +12,6 @@ import { safeLocale } from '@/lib/utils/locale'
  */
 export async function requireAdminPage(locale: string): Promise<SessionPayload> {
   const session = await getSession()
-  if (!session || !ADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin/login`)
+  if (!session || !ADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin/login'))
   return session
 }

@@ -17,6 +17,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { ManageBox } from './ManageBox'
 import { RefundActions } from './RefundActions'
+import { adminHref } from '@/lib/admin/href'
 
 // Detail refund (SEC-244, docs/arsitektur-booking-engine-v2.md §10.13): ringkasan, arus uang booking dari buku kas, rekening tujuan, riwayat langkah; tindakan di
 // kanan (hanya peran refund). Baca: semua admin.
@@ -77,12 +78,12 @@ export default async function RefundDetail({ params }: Props) {
 
   return (
     <EditorShell
-      backHref={`/${locale}/admin/finance/refunds`} backLabel="Daftar Refund"
+      backHref={adminHref(locale, `/admin/finance/refunds`)} backLabel="Daftar Refund"
       title={(
         <div className="space-y-1">
           <h1 className="m-0 flex flex-wrap items-center gap-2 text-xl font-semibold text-admin-ink">Refund {formatRupiah(Number(r.amount))} <Badge tone={status.tone}>{status.label}</Badge></h1>
           <p className="m-0 text-[12px] text-admin-muted">
-            <Link href={`/${locale}/admin/bookings/${r.booking.id}`} className="font-mono font-semibold text-admin-accent hover:text-admin-accent-strong">{r.booking.bookingCode}</Link>
+            <Link href={adminHref(locale, `/admin/bookings/${r.booking.id}`)} className="font-mono font-semibold text-admin-accent hover:text-admin-accent-strong">{r.booking.bookingCode}</Link>
             {' · '}{r.booking.user.fullName} · {REFUND_SOURCE_LABEL[r.source]}
           </p>
         </div>

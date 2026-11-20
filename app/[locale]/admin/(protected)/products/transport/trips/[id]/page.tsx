@@ -11,6 +11,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { TransportQuotaPanel } from './TransportQuotaPanel'
 import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
+import { adminHref } from '@/lib/admin/href'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -246,7 +247,7 @@ export default function TripEditPage({ params }: Props) {
     setDeleteNotice(null)
     const j = await fetch(`/api/v1/admin/products/transport/trips/${id}`, { method: 'DELETE' }).then(r => r.json()).catch(() => null)
     if (!j?.success) { setDeleteNotice(j?.error ?? 'Gagal menghapus trip'); return }
-    if (j.data?.deleted) { router.push(`/${locale}/admin/products/transport`); return }
+    if (j.data?.deleted) { router.push(adminHref(locale, `/admin/products/transport`)); return }
     setDeleteNotice(j.data?.message ?? 'Trip dinonaktifkan')
     void load(id)
   }
@@ -261,7 +262,7 @@ export default function TripEditPage({ params }: Props) {
     <div className="space-y-6 max-w-4xl">
       {dialog}
       <div className="flex items-center gap-3">
-        <button onClick={() => router.push(`/${locale}/admin/products/transport`)}
+        <button onClick={() => router.push(adminHref(locale, `/admin/products/transport`))}
           className="text-admin-muted/70 hover:text-admin-ink transition-colors">
           <ArrowLeft className="h-4 w-4" />
         </button>

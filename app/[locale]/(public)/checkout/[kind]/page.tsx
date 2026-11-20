@@ -16,6 +16,7 @@ import { safeLocale } from '@/lib/utils/locale'
 import { todayInApp } from '@/lib/time'
 import { CheckoutForm } from './CheckoutForm'
 import { ProductIntro } from './ProductIntro'
+import { staffPanelHref } from '@/lib/auth/staffPanel'
 
 type Props = { params: Promise<{ locale: string; kind: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
 
@@ -69,7 +70,7 @@ export default async function CheckoutPage({ params, searchParams }: Props) {
         <div className="space-y-5">
           <ProductIntro product={product} />
           <p className="checkout-panel text-sm text-muted-foreground">
-            {t.rich('page.staffNote', { link: chunks => <Link href={`/${locale}/admin/bookings`} className="font-semibold text-brand hover:underline">{chunks}</Link> })}
+            {t.rich('page.staffNote', { link: chunks => <Link href={staffPanelHref(locale, `/admin/bookings`)} className="font-semibold text-brand hover:underline">{chunks}</Link> })}
           </p>
         </div>
       ) : (

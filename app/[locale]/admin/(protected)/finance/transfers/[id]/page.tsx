@@ -11,6 +11,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { ManageBox } from './ManageBox'
 import { VoidTransfer } from './VoidTransfer'
+import { adminHref } from '@/lib/admin/href'
 
 // Detail transfer antar akun (docs/arsitektur-booking-engine-v2.md §10.14 Fase 12b): ringkasan, entri buku kas (termasuk pembalik), riwayat; batalkan di kanan
 // (manager + superadmin). Baca: semua admin.
@@ -44,7 +45,7 @@ export default async function CashTransferDetail({ params }: Props) {
 
   return (
     <EditorShell
-      backHref={`/${locale}/admin/finance/transfers`} backLabel="Transfer Antar Akun"
+      backHref={adminHref(locale, `/admin/finance/transfers`)} backLabel="Transfer Antar Akun"
       title={(
         <div className="space-y-1">
           <h1 className="m-0 flex flex-wrap items-center gap-2 text-xl font-semibold text-admin-ink">Transfer {formatRupiah(t.amountIdr)} <Badge tone={t.voided ? 'neutral' : 'ok'}>{t.voided ? 'Dibatalkan' : 'Berlaku'}</Badge></h1>

@@ -12,6 +12,7 @@ import { RowActions } from '@/components/shared/data-table/RowActions'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
 import { canResendLog } from '@/lib/notifications/resend'
 import { ResendAction } from './ResendAction'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = {
   params: Promise<{ locale: string }>
@@ -60,7 +61,7 @@ export default async function AdminNotifications({ params, searchParams }: Props
     }),
   )
 
-  const base = `/${locale}/admin/notifications`
+  const base = adminHref(locale, `/admin/notifications`)
   const limitParam = sp.limit === undefined ? undefined : String(list.limit)
   const hrefFor = (page: number) => buildListHref(base, { channel, status, page, limit: limitParam })
 

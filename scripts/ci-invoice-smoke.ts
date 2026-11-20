@@ -43,12 +43,14 @@ try {
     },
   })
 
-  const login = await fetch(`${BASE}/api/v1/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }) })
+  // Staf hanya bisa masuk di host admin bila ADMIN_DOMAIN terisi (docs/rencana-domain-admin.md K2) — CI meminjam Host itu lewat SMOKE_HOST.
+  const host: Record<string, string> = process.env.SMOKE_HOST ? { Host: process.env.SMOKE_HOST } : {}
+  const login = await fetch(`${BASE}/api/v1/auth/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...host }, body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }) })
   if (login.status !== 200) fail(`login admin ${login.status}`)
   const cookie = (login.headers.getSetCookie()[0] ?? '').split(';')[0] ?? ''
   if (!cookie.startsWith('snd-session=')) fail('cookie sesi tidak diterima')
 
-  const res = await fetch(`${BASE}/api/v1/bookings/${booking.id}/invoice`, { headers: { Cookie: cookie } })
+  const res = await fetch(`${BASE}/api/v1/bookings/${booking.id}/invoice`, { headers: { Cookie: cookie, ...host } })
   const body = Buffer.from(await res.arrayBuffer())
   console.log('invoice', res.status, res.headers.get('content-type'), `${body.length} bytes`)
   if (res.status !== 200) fail(`invoice HTTP ${res.status}`)

@@ -16,6 +16,7 @@ import { FormField } from '@/components/admin/ui/FormField'
 import { Tabs, tabId, tabPanelId, type TabItem } from '@/components/admin/ui/Tabs'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
+import { adminHref } from '@/lib/admin/href'
 
 // Sistem → Platform Provider (docs/arsitektur-bagi-hasil.md, Fase 13a). Data dari GET /api/v1/admin/system/platform-provider; simpan = POST (hanya akun
 // Platform Provider — tombol dikunci untuk superadmin klien, dan API menolak juga). Contoh angka dari fungsi murni yang sama dengan rencana (lib/revenue-share/example).
@@ -52,7 +53,7 @@ function Example({ percent, basis }: { percent: number; basis: RevenueShareBasis
 
 export function PlatformProviderEditor() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/system/platform-provider`
+  const base = adminHref(locale, `/admin/system/platform-provider`)
   const [tab, setTab] = useState<Tab>('info')
   const [data, setData] = useState<Data | null>(null)
   const [error, setError] = useState<string | null>(null)

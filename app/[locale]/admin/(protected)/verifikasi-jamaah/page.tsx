@@ -14,6 +14,7 @@ import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { REVIEW_LABEL } from '@/lib/pilgrims/reviewState'
 import { DATETIME_LONG, formatInstant } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 // Antrean pemeriksaan data jamaah (docs/arsitektur-jamaah.md §8.4 butir 7, Fase 6): jamaah booking AKTIF per status pengajuan, bawaan
 // "Menunggu pemeriksaan" (terlama dulu). Pemeriksaan dilakukan di halaman booking. Kolom tersegel tak pernah dimuat (select eksplisit).
@@ -59,7 +60,7 @@ export default async function PilgrimReviewQueue({ params, searchParams }: Props
     }),
   )
 
-  const base = `/${locale}/admin/verifikasi-jamaah`
+  const base = adminHref(locale, `/admin/verifikasi-jamaah`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const statusParam = status === 'submitted' ? undefined : status
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { q: q || undefined, status: statusParam, limit: limitParam, ...over })
@@ -76,7 +77,7 @@ export default async function PilgrimReviewQueue({ params, searchParams }: Props
     },
     {
       key: 'booking', header: 'Booking',
-      cell: r => <Link href={`/${locale}/admin/bookings/${r.booking.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{r.booking.bookingCode}</Link>,
+      cell: r => <Link href={adminHref(locale, `/admin/bookings/${r.booking.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{r.booking.bookingCode}</Link>,
     },
     { key: 'status', header: 'Status', cell: r => <Badge tone={TONE[r.reviewStatus]}>{REVIEW_LABEL[r.reviewStatus]}</Badge> },
     {
@@ -85,7 +86,7 @@ export default async function PilgrimReviewQueue({ params, searchParams }: Props
     },
     {
       key: 'actions', header: '', actions: true,
-      cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.booking.id}`} label={`Periksa jamaah booking ${r.booking.bookingCode}`} /></RowActions>,
+      cell: r => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${r.booking.id}`)} label={`Periksa jamaah booking ${r.booking.bookingCode}`} /></RowActions>,
     },
   ]
 

@@ -42,6 +42,8 @@ services:
       # Kredensial ROOT MinIO hanya untuk kontainer minio & minio-setup; web memakai user aplikasi berpolicy satu bucket (SEC-305).
       MINIO_ROOT_USER: ""
       MINIO_ROOT_PASSWORD: ""
+      # Wajib: middleware memisahkan host admin dan host app (docs/rencana-domain-admin.md).
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN belum diisi}
       TZ: UTC
     <<: *hardening
     # Non-root (user `bun`) dan tak butuh capability apa pun — port 3000 bukan port istimewa.
@@ -194,8 +196,9 @@ services:
       - "443:443"
       - "443:443/udp" # HTTP/3
     environment:
-      # Domain dibaca Caddyfile lewat {$APP_DOMAIN}/{$FILES_DOMAIN} — tidak ada domain yang dikeraskan di repo.
+      # Domain dibaca Caddyfile lewat {$APP_DOMAIN}/{$ADMIN_DOMAIN}/{$FILES_DOMAIN} — tidak ada domain yang dikeraskan di repo.
       APP_DOMAIN: ${APP_DOMAIN:?APP_DOMAIN belum diisi}
+      ADMIN_DOMAIN: ${ADMIN_DOMAIN:?ADMIN_DOMAIN belum diisi}
       FILES_DOMAIN: ${FILES_DOMAIN:?FILES_DOMAIN belum diisi}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro

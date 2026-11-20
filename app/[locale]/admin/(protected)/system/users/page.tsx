@@ -14,6 +14,7 @@ import { ConfirmDialog } from '@/components/admin/ui/ConfirmDialog'
 import { ApiAction } from '@/components/admin/data-table/ApiAction'
 import { ActionButton, ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 type User = { id: string; fullName: string | null; email: string; role: string; isActive: boolean; phone: string | null; whatsappVerifiedAt: string | null }
 
@@ -69,7 +70,7 @@ export default function UsersPage() {
   const changeRole = (id: string, role: string) => updateUser(id, { role })
 
   const columns: Column<User>[] = [
-    { key: 'name', header: 'Nama', mobile: 'title', cell: u => <Link href={`/${locale}/admin/system/users/${u.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{u.fullName ?? '-'}</Link> },
+    { key: 'name', header: 'Nama', mobile: 'title', cell: u => <Link href={adminHref(locale, `/admin/system/users/${u.id}`)} className="text-[13px] font-medium hover:text-admin-accent-strong">{u.fullName ?? '-'}</Link> },
     { key: 'email', header: 'Email', cell: u => <span className="text-[12px] text-admin-muted">{u.email}</span> },
     {
       key: 'role', header: 'Role',
@@ -82,7 +83,7 @@ export default function UsersPage() {
       key: 'actions', header: '', actions: true,
       cell: u => (
         <RowActions>
-          <ActionLink kind="edit" href={`/${locale}/admin/system/users/${u.id}`} label={`Edit ${u.email}`} />
+          <ActionLink kind="edit" href={adminHref(locale, `/admin/system/users/${u.id}`)} label={`Edit ${u.email}`} />
           {u.whatsappVerifiedAt && <ActionButton icon={MessageCircleOff} label={`Lepas verifikasi WhatsApp ${u.email}`} onClick={() => setReleasing(u)} />}
           <ActionButton icon={LockOpen} label={`Buka pembatasan login ${u.email}`} onClick={() => resetLimits(u.id)} />
           <ApiAction kind="toggle" url={`/api/v1/admin/system/users/${u.id}`} active={u.isActive} label={`${u.isActive ? 'Nonaktifkan' : 'Aktifkan'} ${u.email}`} onDone={load} />
@@ -95,7 +96,7 @@ export default function UsersPage() {
     <div className="space-y-5">
       <PageHeader
         title="Manajemen Pengguna"
-        actions={<Link href={`/${locale}/admin/system/users/new`} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</Link>}
+        actions={<Link href={adminHref(locale, `/admin/system/users/new`)} className="admin-btn"><Plus className="h-4 w-4" /> Tambah Admin</Link>}
       />
 
       {notice && <p role={notice.error ? 'alert' : 'status'} className={`m-0 text-[13px] font-medium ${notice.error ? 'text-admin-danger' : 'text-admin-ink'}`}>{notice.text}</p>}

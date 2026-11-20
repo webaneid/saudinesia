@@ -17,6 +17,7 @@ import { SearchForm } from '@/components/admin/data-table/SearchForm'
 import { requireAdminPage } from '@/lib/auth/pageGuards'
 import { canManageRefund } from '@/lib/pricing/policy'
 import { FORCE_MAJEURE_LABEL, REFUND_SOURCE_LABEL, REFUND_STATUS as STATUS } from '@/lib/refunds/labels'
+import { adminHref } from '@/lib/admin/href'
 
 // Daftar refund (Fase 7b-2a §10.10; halaman khusus §10.13): baca untuk semua admin; Buat Refund + tindakan (setujui/bayar) di halaman detail, peran refund.
 type Props = { params: Promise<{ locale: string }>; searchParams: Promise<Record<string, string | string[] | undefined>> }
@@ -43,7 +44,7 @@ export default async function AdminRefunds({ params, searchParams }: Props) {
   )
   const open = await prisma.refund.aggregate({ where: { status: { in: ['pending', 'approved'] } }, _sum: { amount: true }, _count: true })
 
-  const base = `/${locale}/admin/finance/refunds`
+  const base = adminHref(locale, `/admin/finance/refunds`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { q: q || undefined, status, limit: limitParam, ...over })
 
@@ -52,7 +53,7 @@ export default async function AdminRefunds({ params, searchParams }: Props) {
       key: 'code', header: 'Booking', mobile: 'title',
       cell: r => (
         <>
-          <Link href={`/${locale}/admin/bookings/${r.booking.id}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{r.booking.bookingCode}</Link>
+          <Link href={adminHref(locale, `/admin/bookings/${r.booking.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{r.booking.bookingCode}</Link>
           <div className="text-[12px] text-admin-muted">{r.booking.user.fullName}</div>
         </>
       ),

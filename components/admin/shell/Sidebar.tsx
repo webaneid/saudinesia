@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { ChevronDown, ChevronsLeft, ChevronsRight } from 'lucide-react'
 import { getAdminNavigation, type NavGroup, type NavItem } from '@/lib/admin/navigation'
+import { adminHref } from '@/lib/admin/href'
 
 export type AdminNavProps = {
   locale: string
@@ -48,8 +49,8 @@ export function SidebarContent({ locale, isManager, isSuperAdmin, collapsed = fa
 
   // Satu item aktif: kecocokan terpanjang (mis. /admin/products/transport tidak ikut menyorot /admin).
   const activeHref = groups
-    .flatMap(g => g.items.map(i => `/${locale}${i.path}`))
-    .filter(href => isActive(pathname, href, `/${locale}/admin`))
+    .flatMap(g => g.items.map(i => adminHref(locale, i.path)))
+    .filter(href => isActive(pathname, href, adminHref(locale, `/admin`)))
     .sort((a, b) => b.length - a.length)[0]
 
   return (
@@ -106,7 +107,7 @@ function NavGroupBlock({ group, locale, collapsed, activeHref, onNavigate }: Nav
       {open && (
         <div className="space-y-1">
           {group.items.map(item => (
-            <NavRow key={item.path} item={item} href={`/${locale}${item.path}`} collapsed={collapsed} active={`/${locale}${item.path}` === activeHref} onNavigate={onNavigate} />
+            <NavRow key={item.path} item={item} href={adminHref(locale, item.path)} collapsed={collapsed} active={adminHref(locale, item.path) === activeHref} onNavigate={onNavigate} />
           ))}
         </div>
       )}

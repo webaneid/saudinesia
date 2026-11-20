@@ -11,6 +11,7 @@ import { FORCE_MAJEURE_OPTIONS, forceMajeureOf } from '@/lib/refunds/labels'
 import { formatRupiah } from '@/lib/utils'
 import type { RefundCandidate } from '@/lib/refunds/candidates'
 import { EMPTY_RECIPIENT, RecipientFields, recipientPayload, type RecipientValue } from '../RecipientFields'
+import { adminHref } from '@/lib/admin/href'
 
 const STATUS_LABEL: Record<string, string> = { active: 'Aktif', completed: 'Selesai', cancelled: 'Batal', expired: 'Hangus' }
 
@@ -23,7 +24,7 @@ export default function NewRefundPage() {
 function NewRefundForm() {
   const { locale } = useParams() as { locale: string }
   const preset = useSearchParams().get('booking')
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/refunds', id => `/${locale}/admin/finance/refunds/${id}`, 'Refund gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/refunds', id => adminHref(locale, `/admin/finance/refunds/${id}`), 'Refund gagal dibuat.')
   const [options, setOptions] = useState<RefundCandidate[]>([])
   const [picked, setPicked] = useState<RefundCandidate | null>(null)
   const [loading, setLoading] = useState(false)
@@ -74,7 +75,7 @@ function NewRefundForm() {
 
   return (
     <CreatePage
-      icon={Undo2} title="Buat Refund" backHref={`/${locale}/admin/finance/refunds`} backLabel="Daftar Refund"
+      icon={Undo2} title="Buat Refund" backHref={adminHref(locale, `/admin/finance/refunds`)} backLabel="Daftar Refund"
       description="Mengusulkan pengembalian uang ke pelanggan. Sesudah disimpan: setujui, lalu catat pembayarannya dari halaman detail refund."
       onSubmit={onSubmit} saving={saving} canSubmit={amountOk && reason.trim().length >= 3} error={localError ?? error} submitLabel="Simpan usulan"
     >

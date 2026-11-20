@@ -13,6 +13,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { ManageBox } from './ManageBox'
 import { VoidPayout } from './VoidPayout'
+import { adminHref } from '@/lib/admin/href'
 
 // Detail pencairan bagi hasil (Fase 13e-1, docs/arsitektur-bagi-hasil.md §5e): ringkasan (rekening tujuan = salinan beku saat dibayar), entri buku kas
 // (termasuk pembalik), riwayat; batalkan di kanan (superadmin klien). Baca: superadmin.
@@ -22,7 +23,7 @@ type Entry = { id: string; at: Date; direction: 'in' | 'out'; component: keyof t
 export default async function RevenueSharePayoutDetail({ params }: Props) {
   const { locale, id } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   if (!/^[0-9a-f-]{36}$/.test(id)) notFound()
   const p = await getPayout(id)
   if (!p) notFound()
@@ -47,7 +48,7 @@ export default async function RevenueSharePayoutDetail({ params }: Props) {
 
   return (
     <EditorShell
-      backHref={`/${locale}/admin/system/platform-provider/payouts`} backLabel="Pencairan Bagi Hasil"
+      backHref={adminHref(locale, `/admin/system/platform-provider/payouts`)} backLabel="Pencairan Bagi Hasil"
       title={(
         <div className="space-y-1">
           <h1 className="m-0 flex flex-wrap items-center gap-2 text-xl font-semibold text-admin-ink">Pencairan {formatRupiah(p.amountIdr)} <Badge tone={p.voided ? 'neutral' : 'ok'}>{p.voided ? 'Dibatalkan' : 'Berlaku'}</Badge></h1>

@@ -6,15 +6,16 @@ import { Landmark } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewTourPackagePage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/tour-packages', id => `/${locale}/admin/products/tour-packages/${id}`, 'Paket ziarah gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/tour-packages', id => adminHref(locale, `/admin/products/tour-packages/${id}`), 'Paket ziarah gagal dibuat.')
   const [form, setForm] = useState({ name: '', description: '' })
 
   return (
     <CreatePage
-      icon={Landmark} title="Paket Ziarah Baru" backHref={`/${locale}/admin/products/tour-packages`} backLabel="Daftar Paket Ziarah"
+      icon={Landmark} title="Paket Ziarah Baru" backHref={adminHref(locale, `/admin/products/tour-packages`)} backLabel="Daftar Paket Ziarah"
       description="Isi info dasar dulu — kendaraan, hotel, situs, dan komponen biaya dikonfigurasi di halaman paket setelah dibuat."
       onSubmit={() => submit(form)} saving={saving} canSubmit={!!form.name.trim()} error={error} submitLabel="Simpan & Lanjut"
     >

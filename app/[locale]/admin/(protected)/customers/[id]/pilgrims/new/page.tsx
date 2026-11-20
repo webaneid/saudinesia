@@ -7,6 +7,7 @@ import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { SavedPilgrimFields } from '@/components/shared/pilgrims/SavedPilgrimFields'
 import { EMPTY_PILGRIM_FORM, bodyFromForm, canSubmitPilgrim, type SavedPilgrimFormValue } from '@/components/shared/pilgrims/savedPilgrimForm'
+import { adminHref } from '@/lib/admin/href'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i // segmen URL dipakai membangun URL API — jangan biarkan '../' atau '?' lewat
 
@@ -14,7 +15,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i /
 export default function NewCustomerPilgrimPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
   const valid = UUID.test(id)
-  const customerHref = `/${locale}/admin/customers/${valid ? id : ''}`
+  const customerHref = adminHref(locale, `/admin/customers/${valid ? id : ''}`)
   const [form, setForm] = useState<SavedPilgrimFormValue>(EMPTY_PILGRIM_FORM)
   const c = useCreateEntity(`/api/v1/admin/customers/${valid ? id : 'invalid'}/pilgrims`, cardId => `${customerHref}/pilgrims/${cardId}`, 'Data jamaah gagal disimpan.')
 

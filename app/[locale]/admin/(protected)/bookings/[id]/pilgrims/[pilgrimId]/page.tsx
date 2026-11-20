@@ -18,6 +18,7 @@ import { calendarDateOf } from '@/lib/time'
 import { PilgrimCardPanel } from './PilgrimCardPanel'
 import { PilgrimDataForm } from './PilgrimDataForm'
 import { DocumentsBox } from './DocumentsBox'
+import { adminHref } from '@/lib/admin/href'
 
 // Kelola SATU jamaah booking (permintaan pemilik 2026-11-10): halaman booking hanya untuk MEMERIKSA, mengubah data/dokumen di halaman ini —
 // per jamaah supaya tidak ribet. Kiri: kartu, data jamaah booking ini, dokumen pribadi, dokumen perjalanan (semua tersimpan sendiri-sendiri
@@ -43,7 +44,7 @@ export default async function ManagePilgrimPage({ params }: Props) {
     },
   })
   if (!booking) notFound()
-  if (booking.status === 'draft') redirect(`/${locale}/admin/bookings/drafts/${id}`)
+  if (booking.status === 'draft') redirect(adminHref(locale, `/admin/bookings/drafts/${id}`))
   const index = booking.pilgrims.findIndex(p => p.id === pilgrimId)
   const p = booking.pilgrims[index]
   if (!p) notFound()
@@ -86,7 +87,7 @@ export default async function ManagePilgrimPage({ params }: Props) {
   const readOnly = locked || closed
   const linked = check?.card ?? null
   const base = `/api/v1/admin/bookings/${id}/pilgrims/${p.id}`
-  const bookingHref = `/${locale}/admin/bookings/${id}`
+  const bookingHref = adminHref(locale, `/admin/bookings/${id}`)
 
   const docsHint = (list: typeof items) => list.length === 0 ? null : `${list.filter(i => DONE.has(i.state)).length} dari ${list.length} diunggah`
   const noCard = <p className="m-0 text-[13px] text-admin-muted">Tautkan atau buat kartu jamaah dulu (kotak Kartu jamaah di atas), lalu dokumen bisa diunggah di sini.</p>
@@ -178,7 +179,7 @@ export default async function ManagePilgrimPage({ params }: Props) {
                   <li key={q.id}>
                     {q.id === p.id
                       ? <span className="flex items-center justify-between gap-2 rounded-lg bg-admin-spot px-2.5 py-1.5 text-[13px] font-semibold text-admin-ink">{nameOf(i)}<Badge tone={TONE[q.reviewStatus]}>{REVIEW_LABEL[q.reviewStatus]}</Badge></span>
-                      : <Link href={`/${locale}/admin/bookings/${id}/pilgrims/${q.id}`} className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-admin-ink hover:bg-admin-spot">{nameOf(i)}<Badge tone={TONE[q.reviewStatus]}>{REVIEW_LABEL[q.reviewStatus]}</Badge></Link>}
+                      : <Link href={adminHref(locale, `/admin/bookings/${id}/pilgrims/${q.id}`)} className="flex items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-[13px] text-admin-ink hover:bg-admin-spot">{nameOf(i)}<Badge tone={TONE[q.reviewStatus]}>{REVIEW_LABEL[q.reviewStatus]}</Badge></Link>}
                   </li>
                 ))}
               </ul>

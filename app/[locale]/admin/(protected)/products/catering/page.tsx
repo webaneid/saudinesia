@@ -8,12 +8,13 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
+import { adminHref } from '@/lib/admin/href'
 
 type Catering = { id: string; name: string; boardType: string; menuStyle: string; pricePerPersonRegular: number; isActive: boolean }
 
 export default function CateringPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/catering`
+  const base = adminHref(locale, `/admin/products/catering`)
   const columns = (reload: () => void): Column<Catering>[] => [
     { key: 'name', header: 'Nama', mobile: 'title', cell: c => <Link href={`${base}/${c.id}`} className="text-[13px] font-medium hover:text-admin-accent-strong">{c.name}</Link> },
     { key: 'type', header: 'Tipe', cell: c => <span className="text-[12px] text-admin-muted">{c.boardType} · {c.menuStyle}</span> },

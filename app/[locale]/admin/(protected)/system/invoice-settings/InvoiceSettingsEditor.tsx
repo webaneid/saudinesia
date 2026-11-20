@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Banknote, CreditCard, Building2, Clock, FileText, Hash, Landmark, Percent, QrCode, ScrollText, Wallet } from 'lucide-react'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
+import { adminHref } from '@/lib/admin/href'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { PublishBox } from '@/components/admin/editor/PublishBox'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
@@ -145,7 +146,7 @@ export function InvoiceSettingsEditor({ ipaymuKeys, sandboxAllowed }: { ipaymuKe
 
   return (
     <EditorShell
-      backHref="/admin/system/settings" backLabel="Pengaturan"
+      backHref={adminHref('id', '/admin/system/settings')} backLabel="Pengaturan"
       title={<h1 className="m-0 text-2xl font-bold text-admin-ink">Pengaturan Invoice</h1>}
       banner={error ? <p role="alert" className="m-0 rounded-xl border border-admin-danger/30 bg-admin-danger/5 px-3 py-2 text-sm font-medium text-admin-danger">{error}</p> : undefined}
       main={

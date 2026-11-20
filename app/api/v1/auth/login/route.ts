@@ -8,6 +8,7 @@ import { ok } from '@/lib/validators'
 import { accountKey, clientIp, consume, policy, reset, tooManyRequests } from '@/lib/auth/rateLimit'
 import { apiErrorJson, zodFailure } from '@/lib/errors/api'
 import { logError } from '@/lib/log'
+import { hostKind, loginHostRefusal } from '@/lib/admin/domain'
 
 // Hash bcrypt cost 12 yang valid, tidak cocok dengan password mana pun yang dipakai pengguna — hanya untuk menyamakan waktu.
 const DUMMY_HASH = '$2b$12$mMjECRUCpXjI1zuGrztAd.jA/C6.JUsjG4mWPzlh9aGhJLtg1mD7C'
@@ -64,7 +65,7 @@ export async function POST(request: Request) {
     // Jejak staf (SEC-304, keputusan pemilik: login STAF saja). Gagal = best-effort (galat dicatat, respons tetap sama); berhasil = fail-closed di bawah.
     const staff = isStaffRole(user.role)
     const fullIp = auditIp(request)
-    const staffFailed = async (reason: 'password' | 'inactive' | 'unverified') => {
+    const staffFailed = async (reason: 'password' | 'inactive' | 'unverified' | 'wrong_host') => {
       if (!staff) return
       try { await recordStaffEvent(prisma, { action: 'login_failed', actorId: user.id, targetUserId: user.id, ip: fullIp, summary: { reason } }) }
       catch (e) { logError('auth/login staff-audit', e) }
@@ -82,6 +83,13 @@ export async function POST(request: Request) {
     if (!user.isActive) {
       await staffFailed('inactive')
       return apiErrorJson('accountDisabled', 403)
+    }
+    // K2 (docs/rencana-domain-admin.md §3.5): dengan domain admin terpisah, staf masuk HANYA di host admin dan jamaah HANYA di host app.
+    // Sesudah password benar dan status akun diperiksa — penebak tak mengetahui peran akun.
+    const wrongHost = loginHostRefusal(hostKind(request.headers.get('host')), staff)
+    if (wrongHost) {
+      if (staff) await staffFailed('wrong_host')
+      return apiErrorJson(wrongHost, 403)
     }
     if (!user.emailVerifiedAt) {
       // Akun lama (sebelum verifikasi email): reset password membuktikan kepemilikan email dan mengaktifkannya.

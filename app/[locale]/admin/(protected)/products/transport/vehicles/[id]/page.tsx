@@ -8,6 +8,7 @@ import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
 
@@ -16,7 +17,7 @@ type Form = { name: string; vehicleType: string; capacity: string; fleetCount: s
 
 export default function VehicleEditPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/transport`
+  const list = adminHref(locale, `/admin/products/transport`)
   const e = useEditEntity<Vehicle>(`/api/v1/admin/products/transport/vehicles/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)

@@ -7,6 +7,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { VendorForm } from './VendorForm'
 import type { VendorCategoryOption, VendorRecord } from './types'
+import { adminHref } from '@/lib/admin/href'
 
 export type VendorUsageView = { costsByType: Record<string, number>; costs: number; preferred: number; snapshots: number; costActuals: number; total: number }
 
@@ -45,7 +46,7 @@ export function VendorEditPanel({ locale, vendor, usage, categories }: Props) {
       const res = await fetch(`/api/v1/admin/system/vendors/${vendor.id}`, { method: 'DELETE' })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) return setNotice({ text: json?.error ?? 'Vendor gagal dihapus', error: true })
-      if (json.data?.deleted) return router.push(`/${locale}/admin/system/vendors`)
+      if (json.data?.deleted) return router.push(adminHref(locale, `/admin/system/vendors`))
       setConfirming(null)
       setNotice({ text: json.data?.message ?? 'Vendor dipakai sehingga dinonaktifkan.', error: false })
       router.refresh()

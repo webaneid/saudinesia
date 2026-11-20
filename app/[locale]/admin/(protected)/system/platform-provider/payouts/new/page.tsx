@@ -8,6 +8,7 @@ import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { DateTimeField } from '@/components/shared/DateTimeField'
 import { formatRupiah } from '@/lib/utils'
+import { adminHref } from '@/lib/admin/href'
 
 type Option = { value: string; label: string }
 type Options = { cashAccounts: Option[]; recipients: Array<Option & { version: string }>; balanceIdr: number }
@@ -16,7 +17,7 @@ type Options = { cashAccounts: Option[]; recipients: Array<Option & { version: s
 // aktif, dan saldo dari GET …/payouts/options; batas saldo dan aturan waktu dinilai server.
 export default function NewPayoutPage() {
   const { locale } = useParams() as { locale: string }
-  const list = `/${locale}/admin/system/platform-provider/payouts`
+  const list = adminHref(locale, `/admin/system/platform-provider/payouts`)
   const [options, setOptions] = useState<Options | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
   useEffect(() => {

@@ -14,6 +14,7 @@ import { CardActions } from './CardActions'
 import { EraseIdentity } from './EraseIdentity'
 import { MergeBox } from './MergeBox'
 import { RevealNik } from './RevealNik'
+import { adminHref } from '@/lib/admin/href'
 
 // Satu identitas jamaah (docs/arsitektur-jamaah.md §4.4, Fase 8): data kanonik, kartu akun yang menautnya (status dihitung saat dibaca), riwayat
 // booking, jejak; Buka NIK (berjejak), Gabung, Hapus. Semua aturan di lib/pilgrims/warehouse.ts. MetaBox = komponen klien: jangan kirim `icon` dari sini.
@@ -43,7 +44,7 @@ export default async function IdentityDetailPage({ params }: Props) {
           <span className="text-[13px] font-semibold text-admin-ink">{c.fullName}{c.archived ? ' (diarsipkan)' : ''}</span>
           <div className="text-[12px] text-admin-muted">
             Lahir {c.birthDate ? formatCalendarDate(c.birthDate, DATE_LONG) : '-'} · Pemilik:{' '}
-            <Link href={`/${locale}/admin/customers/${c.ownerId}`} className="text-admin-accent hover:text-admin-accent-strong">{c.ownerName ?? c.ownerEmail}</Link>
+            <Link href={adminHref(locale, `/admin/customers/${c.ownerId}`)} className="text-admin-accent hover:text-admin-accent-strong">{c.ownerName ?? c.ownerEmail}</Link>
             {c.passport ? ` · Paspor ${c.passport}` : ''}
           </div>
         </>
@@ -59,15 +60,15 @@ export default async function IdentityDetailPage({ params }: Props) {
     },
   ]
   const bookingColumns: Column<IdentityDetail['bookings'][number]>[] = [
-    { key: 'code', header: 'Booking', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.bookingId}`} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
+    { key: 'code', header: 'Booking', mobile: 'title', cell: b => <Link href={adminHref(locale, `/admin/bookings/${b.bookingId}`)} className="font-mono text-[12px] font-semibold text-admin-accent hover:text-admin-accent-strong">{b.bookingCode}</Link> },
     { key: 'review', header: 'Pemeriksaan', cell: b => <span className="text-[12px]">{REVIEW_LABEL[b.reviewStatus]}</span> },
-    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.bookingId}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${b.bookingId}`)} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
   ]
 
   const conflicts = d.cards.filter(c => c.status === 'conflict').length
   return (
     <EditorShell
-      backHref={`/${locale}/admin/identitas-jamaah`} backLabel="Identitas Jamaah"
+      backHref={adminHref(locale, `/admin/identitas-jamaah`)} backLabel="Identitas Jamaah"
       title={<h1 className="m-0 text-xl font-extrabold tracking-tight text-admin-ink sm:text-2xl">{d.fullName}</h1>}
       main={(
         <>

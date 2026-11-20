@@ -8,13 +8,14 @@ import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
 import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
+import { adminHref } from '@/lib/admin/href'
 
 type Vehicle = { id: string; name: string; vehicleType: string; capacity: number; fleetCount: number; isActive: boolean }
 type Trip    = { id: string; name: string; category: string | null; origin: string; destination: string; isActive: boolean; pricing: { id: string }[] }
 
 export default function TransportPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/transport`
+  const base = adminHref(locale, `/admin/products/transport`)
   // Tab memisahkan DUA entitas (bukan menyaring data); tiap tabel punya halaman/filter sendiri (awalan param v / t).
   const [tab, setTab] = useState<'vehicles' | 'trips'>('vehicles')
 

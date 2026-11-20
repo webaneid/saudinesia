@@ -13,6 +13,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { DataTable, type Column } from '@/components/admin/data-table/DataTable'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { startOfDayInApp, todayInApp } from '@/lib/time'
+import { adminHref } from '@/lib/admin/href'
 
 type Props = { params: Promise<{ locale: string }> }
 
@@ -40,17 +41,17 @@ export default async function AdminOverview({ params }: Props) {
   const [activeHotels, activeHaji, activeVisa, activePackages] = productStats
 
   const opsStats = [
-    { icon: Clock,      label: 'Menunggu Bayar',       value: pendingPayment, href: `/${locale}/admin/bookings?status=awaiting_payment`, tone: 'bg-admin-gold/15 text-admin-gold-strong' },
-    { icon: CreditCard, label: 'Verifikasi Bayar',     value: paymentReview,  href: `/${locale}/admin/payments`,                         tone: 'bg-admin-accent/10 text-admin-accent-strong' },
-    { icon: FileText,   label: 'Dokumen Visa Kurang',  value: pendingVisa,    href: `/${locale}/admin/visa`,                             tone: 'bg-admin-danger/10 text-admin-danger' },
-    { icon: BookOpen,   label: 'Dikonfirmasi Hari Ini', value: confirmedToday, href: `/${locale}/admin/bookings?status=confirmed`,        tone: 'bg-admin-ok/10 text-admin-ok' },
+    { icon: Clock,      label: 'Menunggu Bayar',       value: pendingPayment, href: adminHref(locale, `/admin/bookings?status=awaiting_payment`), tone: 'bg-admin-gold/15 text-admin-gold-strong' },
+    { icon: CreditCard, label: 'Verifikasi Bayar',     value: paymentReview,  href: adminHref(locale, `/admin/payments`),                         tone: 'bg-admin-accent/10 text-admin-accent-strong' },
+    { icon: FileText,   label: 'Dokumen Visa Kurang',  value: pendingVisa,    href: adminHref(locale, `/admin/visa`),                             tone: 'bg-admin-danger/10 text-admin-danger' },
+    { icon: BookOpen,   label: 'Dikonfirmasi Hari Ini', value: confirmedToday, href: adminHref(locale, `/admin/bookings?status=confirmed`),        tone: 'bg-admin-ok/10 text-admin-ok' },
   ]
 
   const productStatCards = isManager ? [
-    { icon: Building2, label: 'Hotel Aktif',  value: activeHotels,   href: `/${locale}/admin/products/hotels`,   tone: 'bg-admin-accent/10 text-admin-accent-strong' },
-    { icon: Star,      label: 'Paket Haji',   value: activeHaji,     href: `/${locale}/admin/products/haji`,     tone: 'bg-admin-gold/15 text-admin-gold-strong' },
-    { icon: KeyRound,  label: 'Produk Visa',  value: activeVisa,     href: `/${locale}/admin/products/visa`,     tone: 'bg-admin-accent/10 text-admin-accent-strong' },
-    { icon: Package,   label: 'Paket Bundle', value: activePackages, href: `/${locale}/admin/products/packages`, tone: 'bg-admin-primary-medium/15 text-admin-primary-medium' },
+    { icon: Building2, label: 'Hotel Aktif',  value: activeHotels,   href: adminHref(locale, `/admin/products/hotels`),   tone: 'bg-admin-accent/10 text-admin-accent-strong' },
+    { icon: Star,      label: 'Paket Haji',   value: activeHaji,     href: adminHref(locale, `/admin/products/haji`),     tone: 'bg-admin-gold/15 text-admin-gold-strong' },
+    { icon: KeyRound,  label: 'Produk Visa',  value: activeVisa,     href: adminHref(locale, `/admin/products/visa`),     tone: 'bg-admin-accent/10 text-admin-accent-strong' },
+    { icon: Package,   label: 'Paket Bundle', value: activePackages, href: adminHref(locale, `/admin/products/packages`), tone: 'bg-admin-primary-medium/15 text-admin-primary-medium' },
   ] : []
 
   const recentBookings = await prisma.booking.findMany({
@@ -60,11 +61,11 @@ export default async function AdminOverview({ params }: Props) {
 
   type RecentRow = (typeof recentBookings)[number]
   const recentColumns: Column<RecentRow>[] = [
-    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={`/${locale}/admin/bookings/${b.id}`} className="font-mono text-[12px] font-semibold text-admin-accent-strong hover:text-admin-accent">{b.bookingCode}</Link> },
+    { key: 'code', header: 'Kode', mobile: 'title', cell: b => <Link href={adminHref(locale, `/admin/bookings/${b.id}`)} className="font-mono text-[12px] font-semibold text-admin-accent-strong hover:text-admin-accent">{b.bookingCode}</Link> },
     { key: 'name', header: 'Pemesan', cell: b => <span className="text-[13px] text-admin-ink/80">{b.user.fullName ?? '-'}</span> },
     { key: 'pilgrims', header: 'Jamaah', hideBelowLg: true, cell: b => <span className="text-[12px] text-admin-muted">{b._count.pilgrims} jamaah</span> },
     { key: 'status', header: 'Status', cell: b => { const st = displayStatusOf(b); return <Badge tone={BOOKING_TONE[st] ?? 'neutral'}>{BOOKING_STATUS[st].label}</Badge> } },
-    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${b.id}`} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: b => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${b.id}`)} label={`Lihat booking ${b.bookingCode}`} /></RowActions> },
   ]
 
   return (
@@ -113,7 +114,7 @@ export default async function AdminOverview({ params }: Props) {
       <div className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-[14px] font-bold text-admin-ink">Booking Terbaru</span>
-          <Link href={`/${locale}/admin/bookings`} className="text-[12px] text-admin-accent hover:text-admin-accent-strong font-medium transition-colors">
+          <Link href={adminHref(locale, `/admin/bookings`)} className="text-[12px] text-admin-accent hover:text-admin-accent-strong font-medium transition-colors">
             Lihat semua →
           </Link>
         </div>

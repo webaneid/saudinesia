@@ -9,12 +9,13 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { Badge } from '@/components/admin/ui/Badge'
 import { DocumentTypeFields } from '../DocumentTypeFields'
 import { bodyFromTypeForm, canSubmitType, formFromType, type DocumentTypeForm, type DocumentTypeRow } from '../documentTypeForm'
+import { adminHref } from '@/lib/admin/href'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i // segmen URL dipakai membangun URL API (SEC-180)
 
 export default function DocumentTypeEditPage() {
   const { locale, id } = useParams() as { locale: string; id: string }
-  const list = `/${locale}/admin/products/document-types`
+  const list = adminHref(locale, `/admin/products/document-types`)
   const e = useEditEntity<DocumentTypeRow>(`/api/v1/admin/products/document-types/${UUID.test(id) ? id : 'invalid'}`, list)
   const [form, setForm] = useState<DocumentTypeForm | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)

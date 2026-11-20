@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation'
 import { CalendarPlus, Check, UserPlus } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
+import { adminHref } from '@/lib/admin/href'
 
 // Booking baru oleh admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): pilih pelanggan → draf dibuat → editor draf. Pelanggan baru dibuat di halaman
 // Tambah Pelanggan, lalu "Buat booking" dari detail pelanggan itu.
@@ -16,7 +17,7 @@ export default function NewBookingPage() {
   const [q, setQ] = useState('')
   const [results, setResults] = useState<Customer[]>([])
   const [picked, setPicked] = useState<Customer | null>(null)
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/bookings/drafts', id => `/${locale}/admin/bookings/drafts/${id}`, 'Draf booking gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/bookings/drafts', id => adminHref(locale, `/admin/bookings/drafts/${id}`), 'Draf booking gagal dibuat.')
 
   useEffect(() => {
     const ctrl = new AbortController()
@@ -29,7 +30,7 @@ export default function NewBookingPage() {
 
   return (
     <CreatePage
-      icon={CalendarPlus} title="Booking Baru" backHref={`/${locale}/admin/bookings`} backLabel="Daftar Booking"
+      icon={CalendarPlus} title="Booking Baru" backHref={adminHref(locale, `/admin/bookings`)} backLabel="Daftar Booking"
       description="Pilih pelanggan pemesan. Draf tersimpan otomatis di sistem — produk, jamaah, dan jatuh tempo diatur di halaman berikutnya sebelum diterbitkan."
       onSubmit={() => (picked ? submit({ customerId: picked.id }) : undefined)} saving={saving} canSubmit={!!picked} error={error} submitLabel="Buat draf booking"
     >
@@ -50,7 +51,7 @@ export default function NewBookingPage() {
           ))}
           {results.length === 0 && <li className="text-sm text-admin-muted">Tidak ada pelanggan yang cocok.</li>}
         </ul>
-        <Link href={`/${locale}/admin/customers/new`} className="inline-flex items-center gap-1.5 text-sm font-semibold text-admin-accent-strong">
+        <Link href={adminHref(locale, `/admin/customers/new`)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-admin-accent-strong">
           <UserPlus className="size-4" /> Tambah pelanggan baru
         </Link>
       </div>

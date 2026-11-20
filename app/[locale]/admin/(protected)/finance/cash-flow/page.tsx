@@ -15,6 +15,7 @@ import { FilterSelect } from '@/components/admin/data-table/FilterSelect'
 import { PeriodFilter } from '@/components/admin/data-table/PeriodFilter'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
+import { adminHref } from '@/lib/admin/href'
 
 // Arus kas (docs/arsitektur-booking-engine-v2.md §10.14 Fase 12a): saldo awal → masuk/keluar per komponen → saldo akhir, per akun. Baca saja; data dari
 // GET /api/v1/admin/finance/cash-flow (angka = buku kas). Filter di URL (daftar putih di server).
@@ -89,7 +90,7 @@ export default function CashFlowPage() {
   return (
     <div className="space-y-5">
       <PageHeader icon={ArrowLeftRight} title="Arus Kas" description="Dari mana uang masuk dan ke mana keluar dalam satu periode. Semua angka dari buku kas: saldo awal + masuk − keluar = saldo akhir."
-        actions={<><Link href={`/${locale}/admin/finance/cash-book?${query()}`} className="admin-btn-sm">Buku Kas</Link><a href={`/api/v1/admin/finance/cash-flow/export?${query()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>} />
+        actions={<><Link href={adminHref(locale, `/admin/finance/cash-book?${query()}`)} className="admin-btn-sm">Buku Kas</Link><a href={`/api/v1/admin/finance/cash-flow/export?${query()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>} />
       <FilterBar active={from !== def.from || to !== def.to || !!account} resetHref={pathname}>
         <PeriodFilter from={from} to={to} onChange={r => go({ from: r.from, to: r.to })} />
         <FilterSelect label="Akun" allLabel="Semua akun" value={account} options={(data?.accounts ?? []).map(a => ({ value: a.id, label: a.name }))} onChange={v => go({ account: v })} />

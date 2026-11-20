@@ -10,6 +10,7 @@ import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
+import { adminHref } from '@/lib/admin/href'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -139,7 +140,7 @@ export default function FlightEditPage({ params }: Props) {
     if (!schedule) return
     if (!(await ask({ title: `Hapus jadwal ${schedule.route.origin} → ${schedule.route.destination}?`, body: 'Jadwal yang sudah dipakai booking dinonaktifkan, bukan dihapus.' }))) return
     await fetch(`/api/v1/admin/products/flight/schedules/${id}`, { method: 'DELETE' })
-    router.push(`/${locale}/admin/products/flight`)
+    router.push(adminHref(locale, `/admin/products/flight`))
   }
 
   if (!schedule) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
@@ -149,7 +150,7 @@ export default function FlightEditPage({ params }: Props) {
       {dialog}
       <div className="flex items-center gap-3">
         <button
-          onClick={() => router.push(`/${locale}/admin/products/flight`)}
+          onClick={() => router.push(adminHref(locale, `/admin/products/flight`))}
           className="text-admin-muted/70 hover:text-admin-ink transition-colors"
         >
           <ArrowLeft className="h-4 w-4" />

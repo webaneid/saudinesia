@@ -17,6 +17,7 @@ import { useListPage } from '@/components/admin/data-table/useListPage'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Card } from '@/components/admin/ui/Card'
 import { Badge } from '@/components/admin/ui/Badge'
+import { adminHref } from '@/lib/admin/href'
 
 // Laporan untung (docs/arsitektur-harga-terpadu.md §19): semua angka dari snapshot harga yang dibekukan saat dipesan. Data dari GET /api/v1/admin/reports/profit
 // (peran lewat lib/pricing/policy.ts). Filter di URL supaya bisa di-bookmark. Untung hanya dihitung dari baris yang modalnya diketahui — sisanya ditampilkan terpisah.
@@ -115,7 +116,7 @@ export default function ProfitReportPage() {
   const bookingColumns: Column<BookingRow>[] = [
     { key: 'code', header: 'Booking', mobile: 'title', cell: r => (
       <div className="min-w-0">
-        <Link href={`/${locale}/admin/bookings/${r.id}`} className="font-semibold text-admin-ink hover:underline">{r.bookingCode}</Link>
+        <Link href={adminHref(locale, `/admin/bookings/${r.id}`)} className="font-semibold text-admin-ink hover:underline">{r.bookingCode}</Link>
         <p className="m-0 text-[11px] text-admin-muted">{r.createdDate}</p>
       </div>
     ) },
@@ -124,7 +125,7 @@ export default function ProfitReportPage() {
     { key: 'real', header: 'Terealisasi', align: 'right', hideBelowLg: true, cell: r => <span className="tabular-nums text-admin-ink/80">{Math.round(r.realizedRatio * 100)}%</span> },
     { key: 'cashIn', header: 'Kas masuk', align: 'right', hideBelowLg: true, cell: r => <Rp v={r.cash.inIdr} /> },
     { key: 'cashNet', header: 'Kas bersih', align: 'right', hideBelowLg: true, cell: r => <span className={cn('font-semibold tabular-nums', r.cash.netIdr < 0 && 'text-admin-danger')}>{formatRupiah(r.cash.netIdr)}</span> },
-    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.id}`} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${r.id}`)} label={`Lihat booking ${r.bookingCode}`} /></RowActions> },
   ]
 
   return (
@@ -133,7 +134,7 @@ export default function ProfitReportPage() {
         icon={LineChart}
         title="Laporan Untung"
         description="Dihitung dari harga yang dibekukan saat dipesan — tidak bergeser oleh kurs atau harga sesudahnya. Untung hanya dari baris yang modalnya diketahui."
-        actions={<><Link href={`/${locale}/admin/reports/variance`} className="admin-btn-sm">Selisih HPP vs Aktual</Link><a href={`/api/v1/admin/reports/profit/export?${qs()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>}
+        actions={<><Link href={adminHref(locale, `/admin/reports/variance`)} className="admin-btn-sm">Selisih HPP vs Aktual</Link><a href={`/api/v1/admin/reports/profit/export?${qs()}`} className="admin-btn-sm inline-flex items-center gap-1.5"><Download className="size-3.5" />Unduh CSV</a></>}
       />
 
       <FilterBar active={from !== def.from || to !== def.to || scope === 'with_pending' || onlyLoss} resetHref={pathname}>

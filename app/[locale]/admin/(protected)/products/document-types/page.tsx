@@ -9,10 +9,11 @@ import type { Column } from '@/components/admin/data-table/DataTable'
 import { CatalogActions, CatalogList } from '@/components/admin/data-table/CatalogList'
 import { documentIcon } from '@/lib/documents/icons'
 import type { DocumentTypeRow } from './documentTypeForm'
+import { adminHref } from '@/lib/admin/href'
 
 export default function DocumentTypesPage() {
   const { locale } = useParams() as { locale: string }
-  const base = `/${locale}/admin/products/document-types`
+  const base = adminHref(locale, `/admin/products/document-types`)
   const columns = (reload: () => void): Column<DocumentTypeRow>[] => [
     { key: 'label', header: 'Jenis Dokumen', mobile: 'title', cell: t => { const Icon = documentIcon(t.icon); return <Link href={`${base}/${t.id}`} className="inline-flex items-center gap-2 text-[13px] font-medium hover:text-admin-accent-strong"><Icon className="h-4 w-4 text-admin-muted" aria-hidden />{t.label}</Link> } },
     { key: 'kind', header: 'Sifat', cell: t => <span className="text-[12px] text-admin-muted">{t.reusable ? 'Milik orang' : 'Per perjalanan'}{t.hasExpiry ? ' · masa berlaku' : ''}{t.allowMultiple ? ' · banyak berkas' : ''}</span> },

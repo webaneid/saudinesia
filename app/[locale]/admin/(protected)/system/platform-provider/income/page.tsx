@@ -17,6 +17,7 @@ import { Pagination } from '@/components/admin/data-table/Pagination'
 import { ActionLink, RowActions } from '@/components/admin/data-table/RowActions'
 import { REVENUE_SHARE_BASIS_LABEL } from '@/lib/revenue-share/example'
 import { bookingIncome, firstIncomeYear, INCOME_STATUSES, isIncomeStatus, monthlyIncome, type BookingIncomeRow, type IncomeStatus, type MonthRow } from '@/lib/revenue-share/income'
+import { adminHref } from '@/lib/admin/href'
 
 // Pendapatan Platform Provider (Fase 13e-2, docs/arsitektur-bagi-hasil.md §5e): ringkasan per bulan satu tahun (zona aplikasi) + potensi vs hak per booking,
 // keduanya bisa diekspor CSV. Superadmin (termasuk akun Platform Provider) — rincian bagi hasil internal. Tanpa data pribadi (hanya kode booking/invoice).
@@ -31,7 +32,7 @@ const pct = (n: number) => `${n.toLocaleString('id-ID', { maximumFractionDigits:
 export default async function RevenueShareIncome({ params, searchParams }: Props) {
   const { locale } = await params
   const session = await requireAdminPage(locale)
-  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(`/${safeLocale(locale)}/admin`)
+  if (!SUPERADMIN_ROLES.includes(session.role)) redirect(adminHref(safeLocale(locale), '/admin'))
   const sp = await searchParams
   const thisYear = yearInApp()
   const first = await firstIncomeYear()
@@ -43,7 +44,7 @@ export default async function RevenueShareIncome({ params, searchParams }: Props
   const list = parseListParams(sp)
   const [summary, { items, meta }] = await Promise.all([monthlyIncome(year), bookingIncome({ status, q: q || undefined }, list)])
 
-  const base = `/${locale}/admin/system/platform-provider/income`
+  const base = adminHref(locale, `/admin/system/platform-provider/income`)
   const limitParam = sp.limit === undefined ? undefined : list.limit
   const keep = { year: year === thisYear ? undefined : String(year), status, q: q || undefined, limit: limitParam === undefined ? undefined : String(limitParam) }
   const hrefFor = (over: Record<string, string | number | undefined>) => buildListHref(base, { ...keep, ...over })
@@ -62,7 +63,7 @@ export default async function RevenueShareIncome({ params, searchParams }: Props
     { key: 'rule', header: 'Aturan', hideBelowLg: true, cell: r => <span className="text-[12px] text-admin-muted">{r.rule ? `${pct(r.rule.percent)} · ${REVENUE_SHARE_BASIS_LABEL[r.rule.basis]}` : '—'}</span> },
     { key: 'pot', header: 'Potensi', align: 'right', cell: r => <span className="text-[12px] tabular-nums">{formatRupiah(r.potentialIdr)}{r.final && <span className="block text-[11px] text-admin-muted">akhir</span>}</span> },
     { key: 'hak', header: 'Hak', align: 'right', cell: r => <span className="text-[12px] font-semibold tabular-nums">{formatRupiah(r.entitledIdr)}{r.entitledPct !== null && <span className="block text-[11px] font-normal text-admin-muted">{pct(r.entitledPct)}</span>}</span> },
-    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={`/${locale}/admin/bookings/${r.bookingId}`} label={`Buka booking ${r.bookingCode}`} /></RowActions> },
+    { key: 'actions', header: '', actions: true, cell: r => <RowActions><ActionLink kind="view" href={adminHref(locale, `/admin/bookings/${r.bookingId}`)} label={`Buka booking ${r.bookingCode}`} /></RowActions> },
   ]
   const yearOptions = Array.from({ length: thisYear - firstYear + 1 }, (_, i) => String(thisYear - i)).map(y => ({ value: y, label: y }))
 

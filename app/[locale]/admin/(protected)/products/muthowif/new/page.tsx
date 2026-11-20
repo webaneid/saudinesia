@@ -6,17 +6,18 @@ import { UserRound } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
+import { adminHref } from '@/lib/admin/href'
 
 export default function NewMuthowifPage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/muthowif', id => `/${locale}/admin/products/muthowif/${id}`, 'Muthowif gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/muthowif', id => adminHref(locale, `/admin/products/muthowif/${id}`), 'Muthowif gagal dibuat.')
   const [form, setForm] = useState({ name: '', bio: '', dailyCapacity: 40, languages: 'Bahasa Indonesia' })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={UserRound} title="Muthowif Baru" backHref={`/${locale}/admin/products/muthowif`} backLabel="Daftar Muthowif"
+      icon={UserRound} title="Muthowif Baru" backHref={adminHref(locale, `/admin/products/muthowif`)} backLabel="Daftar Muthowif"
       description="Foto dan data lain dilengkapi di halaman muthowif setelah dibuat. Harga layanan diatur di daftar Muthowif (satu harga untuk semua)."
       onSubmit={() => submit({ ...form, dailyCapacity: +form.dailyCapacity, languages: form.languages.split(',').map(s => s.trim()).filter(Boolean) })}
       saving={saving} canSubmit={!!form.name.trim()} error={error} submitLabel="Simpan & Lanjut"

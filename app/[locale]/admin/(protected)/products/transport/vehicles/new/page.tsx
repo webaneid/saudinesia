@@ -6,19 +6,20 @@ import { Bus } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
+import { adminHref } from '@/lib/admin/href'
 
 const TYPES = ['bus', 'coaster', 'hiace', 'staria', 'gmc', 'innova', 'sedan']
 
 export default function NewVehiclePage() {
   const { locale } = useParams() as { locale: string }
-  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/transport/vehicles', id => `/${locale}/admin/products/transport/vehicles/${id}`, 'Kendaraan gagal dibuat.')
+  const { saving, error, clearError, submit } = useCreateEntity('/api/v1/admin/products/transport/vehicles', id => adminHref(locale, `/admin/products/transport/vehicles/${id}`), 'Kendaraan gagal dibuat.')
   const [form, setForm] = useState({ name: '', vehicleType: 'bus', capacity: 49, fleetCount: 1 })
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => { clearError(); setForm(p => ({ ...p, [k]: e.target.value })) }
 
   return (
     <CreatePage
-      icon={Bus} title="Kendaraan Baru" backHref={`/${locale}/admin/products/transport`} backLabel="Daftar Transport"
+      icon={Bus} title="Kendaraan Baru" backHref={adminHref(locale, `/admin/products/transport`)} backLabel="Daftar Transport"
       description="Harga tidak diatur di sini — diatur di halaman Trip per kombinasi trip + kendaraan."
       onSubmit={() => submit({ ...form, capacity: +form.capacity, fleetCount: +form.fleetCount })}
       saving={saving} canSubmit={!!form.name.trim()} error={error} submitLabel="Simpan & Lanjut"
