@@ -3,7 +3,7 @@ import { Fingerprint,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
   Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent, BadgeCheck,
   type LucideIcon,
-  History, ShieldCheck,
+  History, ShieldCheck, MessageCircle,
 } from 'lucide-react'
 
 export type NavItem  = { path: string; icon: LucideIcon; label: string; superadminOnly?: boolean }
@@ -57,6 +57,7 @@ const SISTEM: NavItem[] = [
   { path: '/admin/system/staff-audit',       icon: History,     label: 'Jejak Staf' },
   { path: '/admin/system/invoice-settings',  icon: Receipt,     label: 'Pengaturan Invoice' },
   { path: '/admin/system/site-content',      icon: PanelsTopLeft, label: 'Konten Situs' },
+  { path: '/admin/system/whatsapp',          icon: MessageCircle, label: 'WhatsApp' },
   { path: '/admin/system/platform-provider', icon: BadgeCheck,  label: 'Platform Provider' },
   { path: '/admin/system/settings',          icon: Settings,    label: 'Pengaturan' },
 ]
@@ -119,6 +120,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   settings: 'Pengaturan',
   'invoice-settings': 'Pengaturan Invoice',
   'site-content': 'Konten Situs',
+  whatsapp: 'WhatsApp',
 }
 
 /** Segmen yang tidak punya halaman sendiri (hanya folder pengelompok) — di breadcrumb tampil sebagai teks, bukan tautan. */
