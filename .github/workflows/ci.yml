@@ -418,7 +418,7 @@ jobs:
           docker inspect -f '{{.HostConfig.CapDrop}}' "$ID" | grep -q ALL || { echo "gowa tanpa cap_drop ALL"; exit 1; }
           docker inspect -f '{{.HostConfig.SecurityOpt}}' "$ID" | grep -q no-new-privileges || { echo "gowa tanpa no-new-privileges"; exit 1; }
           # Proses GOWA berjalan sebagai gowauser (uid 20001), bukan root (entrypoint turun hak lewat su-exec).
-          docker top "$ID" -o uid,comm | awk 'NR>1 && $2 ~ /whatsapp/ {print $1}' | grep -qx 20001 || { echo "proses gowa bukan uid 20001"; docker top "$ID" -o uid,comm; exit 1; }
+          docker top "$ID" -o pid,uid,comm | awk 'NR>1 && $3 ~ /whatsapp/ {print $2}' | grep -qx 20001 || { echo "proses gowa bukan uid 20001"; docker top "$ID" -o pid,uid,comm; exit 1; }
           for K in DATABASE_URL JWT_SECRET PII_ENCRYPTION_KEY RESEND_API_KEY MINIO_SECRET_KEY; do
             test -z "$($C exec -T gowa printenv $K || true)" || { echo "$K terbaca di kontainer gowa"; exit 1; }
           done
