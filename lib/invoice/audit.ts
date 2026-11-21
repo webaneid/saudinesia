@@ -3,7 +3,7 @@ import type { Prisma } from '@prisma/client'
 import { qrisMerchantName } from '@/lib/qris/emv'
 
 type Tx = Prisma.TransactionClient
-export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account' | 'refund_settings' | 'whatsapp'
+export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account' | 'refund_settings' | 'whatsapp' | 'whatsapp_template'
 /** `whatsapp_*` = tindakan atas gateway WhatsApp (Sistem → WhatsApp, docs/rencana-gowa-self-host.md §4.1) — tanpa nomor di ringkasan. */
 export type AuditAction = 'create' | 'update' | 'delete' | 'toggle' | 'wa_qr' | 'wa_pair_code' | 'wa_disconnect' | 'wa_reconnect' | 'wa_test'
 

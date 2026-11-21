@@ -13,7 +13,6 @@ import { revokeInvoiceLink } from '@/lib/invoice/issue'
 import { loadPublicInvoice } from '@/lib/invoice/publicView'
 import { sendInvoiceNotification } from '@/lib/invoice/notifyInvoice'
 import { waMessage } from '@/lib/notifications/events'
-import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -91,16 +90,12 @@ await t('PEMUAT PUBLIK: data invoice tanpa HPP/modal/catatan staf; batas laju pe
 })
 
 await t('NOTIFIKASI: `invoice_issued` WhatsApp memuat tautan https saja; log notifikasi menyamarkan tautan; kirim ulang tanpa dedupe tercatat lagi', async () => {
-  const msg = waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: '1 Jan', path: '/id/invoice/x' })
+  const msg = await waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: '1 Jan', path: '/id/invoice/x' })
   assert.ok(msg && msg.includes('INV-1'))
-  const bad = waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: null, path: null })
-  assert.ok(bad && !/invoice\//.test(bad))
-  const insecure = waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: null, path: '/id/invoice/x' })
+  const bad = await waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: null, path: null })
+  assert.ok(bad && !/invoice\//.test(bad) && !/Lihat & unduh invoice/.test(bad), 'tanpa tautan → baris tautan hilang')
+  const insecure = await waMessage({ type: 'invoice_issued', code: 'SND-1', number: 'INV-1', total: 'Rp 1', dueDate: null, path: '/id/invoice/x' })
   assert.ok(insecure && (process.env.NODE_ENV === 'development' || !/http:\/\//.test(insecure)), 'tautan http tak dikirim di luar development')
-  if (process.env.NODE_ENV !== 'development') {
-    assert.doesNotMatch(waTemplates.invoiceIssued('INV-1', 'SND-1', 'Rp 1', '-', 'http://contoh.test/id/invoice/x'), /http:/, 'templat menolak tautan http')
-    assert.match(waTemplates.invoiceIssued('INV-1', 'SND-1', 'Rp 1', '-', 'https://contoh.test/id/invoice/x'), /https:\/\/contoh\.test/)
-  }
   const tok = `${'a'.repeat(32)}.${'B'.repeat(43)}`
   assert.equal(redactInvoiceLinks(`lihat https://x.test/id/invoice/${tok} ya`), 'lihat https://x.test/id/invoice/[tautan] ya')
   const id = await published()

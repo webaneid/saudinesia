@@ -4,7 +4,7 @@ import { redactInvoiceLinks } from '@/lib/invoice/link'
 import { whatsapp } from '@/lib/whatsapp/client'
 import { sendEmail } from '@/lib/email/resend'
 import { emailContent } from '@/lib/email/templates'
-import { waMessage, type NotificationEvent } from '@/lib/notifications/events'
+import { waContent, type NotificationEvent } from '@/lib/notifications/events'
 import { errorSummary } from '@/lib/log'
 
 // SATU pintu notifikasi (docs/arsitektur-notifikasi.md §3). Dipanggil dari route/cron; TIDAK PERNAH melempar —
@@ -54,28 +54,35 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
 
   // KEDUA KANAL BERJALAN PARALEL dan tidak saling menunggu: email adalah jaring pengaman. Gateway WhatsApp yang mati/lambat/diblokir
   // (timeout 10 dtk × 3 percobaan + jeda ≈ 34 dtk) tidak boleh menunda atau menggagalkan email. Tiap kanal menulis log sendiri dan tidak melempar.
-  const tasks: Promise<ChannelOutcome>[] = []
+  const tasks: Promise<ChannelOutcome | null>[] = []
 
-  // WhatsApp — hanya bila kejadian punya pesan WA dan akun punya nomor WhatsApp (bukan nomor telepon biasa).
-  const wa = waMessage(event)
-  if (wa && user.whatsapp) {
-    const phone = user.whatsapp
-    // Tautan invoice = kredensial pembaca: disamarkan sebelum masuk log (pesan yang DIKIRIM tetap utuh).
-    tasks.push(deliver('whatsapp', phone, redactInvoiceLinks(wa).slice(0, 200), async () => {
-      // WhatsApp HANYA ke nomor yang sudah dibuktikan milik pemilik akun (ADR-0002) — menutup risiko pesan ke nomor orang lain (SEC-32).
-      // Nomor belum terverifikasi: email saja (email tak terpengaruh).
-      if (!user.whatsappVerifiedAt || user.verifiedWhatsapp !== phone) return { status: 'skipped' as const, reason: 'Nomor WhatsApp belum terverifikasi' }
-      // Penjaga defensif: WhatsApp hanya untuk akun yang tercatat menyetujuinya (UU PDP) — jangan bergantung pada "kebetulan hanya dua jalur
-      // yang mengisi nomor". Dan batas harian per NOMOR TUJUAN: nomor tak terverifikasi bisa milik orang lain; pesan beruntun ke orang yang
-      // tak mengenal Saudinesia membahayakan nomor gateway (alasan lingkup WhatsApp diperkecil). Email tetap terkirim.
-      const consented = await prisma.consentLog.findFirst({ where: { userId, type: 'whatsapp_notifications' }, select: { id: true } })
-      if (!consented) return { status: 'skipped' as const, reason: 'Belum ada persetujuan notifikasi WhatsApp' }
-      const sentToday = await prisma.notificationLog.count({
-        where: { channel: 'whatsapp', recipient: phone, status: { in: ['sent', 'failed'] }, sentAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+  // WhatsApp — hanya bila kejadian punya pesan WA dan akun punya nomor WhatsApp (bukan nomor telepon biasa). Teks dibaca dari template
+  // (bisa diedit, F3) DI DALAM tugas kanal ini supaya email tidak menunggu bacaan template.
+  const phone = user.whatsapp
+  if (phone) {
+    tasks.push((async () => {
+      const content = await waContent(event)
+      if (!content) return null
+      // Dimatikan admin (Sistem → WhatsApp, K2): dicatat "dilewati" supaya terlihat di log notifikasi; email tetap jalan.
+      if (content.kind === 'disabled') return deliver('whatsapp', phone, '', async () => ({ status: 'skipped' as const, reason: 'Notifikasi WhatsApp ini dinonaktifkan di Sistem → WhatsApp' }))
+      const wa = content.text
+      // Tautan invoice = kredensial pembaca: disamarkan sebelum masuk log (pesan yang DIKIRIM tetap utuh).
+      return deliver('whatsapp', phone, redactInvoiceLinks(wa).slice(0, 200), async () => {
+        // WhatsApp HANYA ke nomor yang sudah dibuktikan milik pemilik akun (ADR-0002) — menutup risiko pesan ke nomor orang lain (SEC-32).
+        // Nomor belum terverifikasi: email saja (email tak terpengaruh).
+        if (!user.whatsappVerifiedAt || user.verifiedWhatsapp !== phone) return { status: 'skipped' as const, reason: 'Nomor WhatsApp belum terverifikasi' }
+        // Penjaga defensif: WhatsApp hanya untuk akun yang tercatat menyetujuinya (UU PDP) — jangan bergantung pada "kebetulan hanya dua jalur
+        // yang mengisi nomor". Dan batas harian per NOMOR TUJUAN: nomor tak terverifikasi bisa milik orang lain; pesan beruntun ke orang yang
+        // tak mengenal Saudinesia membahayakan nomor gateway (alasan lingkup WhatsApp diperkecil). Email tetap terkirim.
+        const consented = await prisma.consentLog.findFirst({ where: { userId, type: 'whatsapp_notifications' }, select: { id: true } })
+        if (!consented) return { status: 'skipped' as const, reason: 'Belum ada persetujuan notifikasi WhatsApp' }
+        const sentToday = await prisma.notificationLog.count({
+          where: { channel: 'whatsapp', recipient: phone, status: { in: ['sent', 'failed'] }, sentAt: { gt: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        })
+        if (sentToday >= WA_MAX_PER_NUMBER_PER_DAY) return { status: 'skipped' as const, reason: 'Batas pesan WhatsApp per nomor per hari tercapai' }
+        return whatsapp.sendMessage({ phone, message: wa })
       })
-      if (sentToday >= WA_MAX_PER_NUMBER_PER_DAY) return { status: 'skipped' as const, reason: 'Batas pesan WhatsApp per nomor per hari tercapai' }
-      return whatsapp.sendMessage({ phone, message: wa })
-    }))
+    })())
   }
 
   // Email — hanya bila akun punya alamat yang bisa dituju dan terverifikasi. Email placeholder (`*.invalid`) tidak pernah dikirimi.
@@ -104,7 +111,7 @@ async function run({ userId, bookingId = null, event, dedupe = false }: NotifyIn
   const settled = await Promise.allSettled(tasks)
   const out: ChannelOutcome[] = []
   for (const r of settled) {
-    if (r.status === 'fulfilled') out.push(r.value)
+    if (r.status === 'fulfilled') { if (r.value) out.push(r.value) }
     else console.error('[notify] satu kanal gagal tak terduga:', errorSummary(r.reason))
   }
 

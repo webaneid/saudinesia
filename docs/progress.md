@@ -737,7 +737,7 @@ Sumber: register `docs/lessons-learned.md`. Diurutkan menurut kebutuhan go-live;
 **Produk & operasional (arah besar, perlu keputusan):**
 - [x] Checkout lewat browser untuk Hotel, Muthowif, Paket Umroh, Paket Ziarah, Katering, Haji (kini hanya Visa dan Transport) — API sudah menerima semuanya. — **Rapikan 2026-11-19:** tertutup — Fase 11a/11b/11c (semua jenis produk di `/checkout/[jenis]`)
 - [x] Refund: alur persetujuan admin; Group Booking (stub kosong); laporan keuangan; pengingat keberangkatan. — **Rapikan 2026-11-19:** refund (7b-2a), laporan keuangan (Fase 12) selesai, Group Booking diganti 11d; pengingat keberangkatan H-7/H-1 selesai 2026-11-19 (`docs/arsitektur-notifikasi.md` §13)
-- [~] M15 deployment: ~~VPS, TLS, `migrate deploy`~~ (selesai 2026-11-21, deploy pertama sukses); GOWA self-host (`docs/rencana-gowa-self-host.md`: F1 infra+klien v9 selesai 2026-11-21, F2 halaman Sistem → WhatsApp selesai 2026-11-21, F3 template, lalu uji nomor nyata), smoke test; ~~backup terjadwal + uji restore~~ (aktif 2026-11-21); ~~SEC-308/309~~ (2026-11-21: 309 ditambal, 308 diterima tak terjangkau).
+- [~] M15 deployment: ~~VPS, TLS, `migrate deploy`~~ (selesai 2026-11-21, deploy pertama sukses); GOWA self-host (`docs/rencana-gowa-self-host.md`: F1 infra+klien v9 selesai 2026-11-21, F2 halaman Sistem → WhatsApp selesai 2026-11-21, F3 template + saklar selesai 2026-11-21, lalu uji nomor nyata), smoke test; ~~backup terjadwal + uji restore~~ (aktif 2026-11-21); ~~SEC-308/309~~ (2026-11-21: 309 ditambal, 308 diterima tak terjangkau).
 
 ---
 
