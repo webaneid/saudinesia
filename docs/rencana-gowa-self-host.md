@@ -1,6 +1,6 @@
 # Rencana — GOWA self-host + halaman Sistem → WhatsApp (koneksi & template)
 
-Status: **RENCANA DISETUJUI (2026-11-21)** — keputusan §6 diambil pemilik. **F1 + F2 SELESAI 2026-11-21** (§7); F3 (template) berikutnya. Acuan pola: jalajogja (`docs/arsitektur-gowa-deployment.md`,
+Status: **RENCANA DISETUJUI (2026-11-21)** — keputusan §6 diambil pemilik. **F1 + F2 + F3 SELESAI 2026-11-21** (§7); berikutnya uji nomor bisnis nyata. Acuan pola: jalajogja (`docs/arsitektur-gowa-deployment.md`,
 `docs/arsitektur-whatsapp.md` §5/§7/§8/§16.8). Kebijakan WhatsApp yang TIDAK berubah: ADR-0001 (WhatsApp hanya kanal notifikasi, email jaring
 pengaman wajib), ADR-0002 (hanya nomor terverifikasi yang menerima pesan; verifikasi lewat pesan MASUK `VERIF <kode>` + webhook HMAC).
 
@@ -110,3 +110,21 @@ tertaut, nomor bisnis, webhook), modal QR (data URI, hitung mundur, muat ulang o
 tertutup sendiri saat terhubung), modal kode pasangan, putuskan lewat `useConfirm`. Panel Integrasi di Pengaturan kini ringkasan + tautan.
 Diuji: `scripts/test-whatsapp-admin.ts` (DB sekali pakai + GOWA tiruan) dan browser lewat `dev:eval` (QR → simulasi scan → terhubung → uji
 ditolak untuk nomor belum terverifikasi → putuskan → kode pasangan; lebar HP tanpa geser horizontal). Security: 0 C/H/M/L baru.
+
+**F3 (2026-11-21):** template WhatsApp bisa diedit + saklar per notifikasi (K1, K2, K5). **Beda dari rencana §4.2:** tabel `whatsapp_templates`
+berisi TETAP 7 baris (disemai migrasi, CHECK kunci = `WA_TEMPLATE_KEYS`, CHECK panjang 1–1.000) dengan `body` NULL = bawaan dan `enabled` =
+saklar — "kembalikan bawaan" = `body` NULL, bukan hapus baris (saklar ikut tersimpan); tanpa `updatedById` (pelaku ada di `settings_audit`
+entity `whatsapp_template`, ringkasan `{ enabled: [lama, baru] }` / `{ body: 'berubah'|'bawaan' }` — isi teks tak pernah masuk jejak).
+Definisi murni `lib/whatsapp/templateDefs.ts` (kunci, variabel per template + wajib, label, contoh nilai, `templateProblem`, `renderTemplate`
+satu lintasan yang membuang baris bila semua variabelnya kosong) dipakai server DAN pratinjau editor. Penulis/pembaca tunggal
+`lib/whatsapp/templates.ts` (`saveWaTemplate`: teks = bawaan disimpan NULL, kunci baris `FOR UPDATE`, versi `expectedUpdatedAt` → 409;
+`renderWa`: tak pernah melempar — DB gagal atau teks tersimpan tak lagi sah → teks bawaan). Pemetaan kejadian → kunci di `waContent`
+(`lib/notifications/events.ts`); `notify()` membaca template di DALAM tugas kanal WhatsApp (email tak menunggu), saklar mati → baris log
+WhatsApp `skipped` "dinonaktifkan" tanpa memanggil gateway, email tetap. Balasan verifikasi nomor dan `bookingSubmitted` tetap di kode (K1).
+Teks bawaan = teks lama persis, kecuali baris tautan invoice kini satu baris ("Lihat & unduh invoice: {{tautanInvoice}}"). Route
+`PUT api/v1/admin/system/whatsapp/templates/[key]` (superadmin, kunci daftar putih → 404, `.strict()`), UI kartu per template di halaman
+Sistem → WhatsApp (pratinjau format *tebal*/_miring_ sebagai elemen React, chip variabel, `useConfirm` untuk kembalikan bawaan).
+**Trade-off sadar:** bila DB tak terbaca saat kirim, pesan memakai teks bawaan meski saklar mati (notifikasi tak boleh gagal karena template).
+Diuji: `scripts/test-whatsapp-templates.ts` (render, validasi, ekuivalensi teks lama 9 kasus, migrasi = kunci, simpan/409/jejak, saklar →
+notify skipped + email jalan, fallback) dan browser lewat `dev:eval` (variabel asing ditolak sebaris, simpan → Kustom, saklar mati → badge,
+kembalikan bawaan, bertahan setelah muat ulang; API: 409/404/400 isian asing/400 variabel asing; lebar HP tanpa geser). Security: 0 C/H/M/L.

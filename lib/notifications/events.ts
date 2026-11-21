@@ -2,6 +2,8 @@ import { waTemplates } from '@/lib/notifications/templates/whatsapp'
 import { DATETIME_LONG, formatInstant } from '@/lib/time'
 import { appUrl } from '@/lib/email/templates'
 import { departureDays, type DepartureReminderType } from '@/lib/notifications/departure'
+import { formatRupiah } from '@/lib/utils'
+import { renderWa, type WaRendered } from '@/lib/whatsapp/templates'
 
 // Semua kejadian notifikasi di SATU union (docs/arsitektur-notifikasi.md §3–4). Menambah kejadian = tambah satu varian di sini;
 // `waMessage` dan `emailContent` (lib/email/templates.ts) memakai `switch` yang lengkap, jadi kompiler memaksa kedua kanal diisi.
@@ -29,28 +31,42 @@ export type NotificationEvent =
 
 export type NotificationType = NotificationEvent['type']
 
+/** Tautan invoice hanya bila HTTPS (http hanya di development) — selain itu kosong dan barisnya hilang dari pesan. */
+function invoiceLink(path: string | null): string {
+  if (!path) return ''
+  const url = `${appUrl()}${path}`
+  return /^https:\/\//.test(url) || (process.env.NODE_ENV === 'development' && /^http:\/\//.test(url)) ? url : ''
+}
+const rupiah = (n: number | undefined): string => (n && n > 0 ? formatRupiah(n) : '')
+
 /**
- * Pesan WhatsApp untuk kejadian ini; `null` = TIDAK dikirim lewat WhatsApp. Lingkup sengaja kecil (keputusan produk 2026-10-21, ADR-0001 —
- * gateway pihak ketiga makin sering memblokir): hanya konfirmasi booking, pengingat pembayaran, pembayaran dikonfirmasi/ditolak, dan pengingat keberangkatan
- * (ditambahkan pemilik 2026-11-19, §13 docs/arsitektur-notifikasi.md).
- * Status visa dan booking hangus hanya lewat email; ditinjau lagi nanti.
+ * Pesan WhatsApp untuk kejadian ini; `null` = kejadian TIDAK dikirim lewat WhatsApp; `disabled` = dimatikan admin (Sistem → WhatsApp, K2).
+ * Lingkup sengaja kecil (keputusan produk 2026-10-21, ADR-0001): invoice terbit, pengingat pembayaran, pembayaran dikonfirmasi/ditolak,
+ * pengingat keberangkatan (§13 docs/arsitektur-notifikasi.md). Teksnya = template yang bisa diedit (lib/whatsapp/templateDefs.ts, F3);
+ * `booking_submitted` (tak lagi dikirim kode mana pun sejak Fase 6c) tetap di kode. Tak pernah melempar.
  */
-export function waMessage(e: NotificationEvent): string | null {
+export async function waContent(e: NotificationEvent): Promise<WaRendered | null> {
   switch (e.type) {
     case 'booking_submitted':
-      return waTemplates.bookingSubmitted(e.code, e.deadline ?? '-')
+      return { kind: 'message', text: waTemplates.bookingSubmitted(e.code, e.deadline ?? '-') }
     case 'invoice_issued':
-      return waTemplates.invoiceIssued(e.number, e.code, e.total, e.dueDate ?? '-', e.path ? `${appUrl()}${e.path}` : null)
+      return renderWa('invoice_issued', { kodeBooking: e.code, nomorInvoice: e.number, total: e.total, jatuhTempo: e.dueDate ?? '-', tautanInvoice: invoiceLink(e.path) })
     case 'payment_reminder_d1':
     case 'payment_reminder_d0':
-      return waTemplates.paymentReminder(e.code, e.deadline, e.balance, e.partial)
+      return e.partial && e.balance && e.balance > 0
+        ? renderWa('payment_reminder_partial', { kodeBooking: e.code, sisaTagihan: rupiah(e.balance), batasWaktu: e.deadline })
+        : renderWa('payment_reminder_unpaid', { kodeBooking: e.code, tagihan: rupiah(e.balance), batasWaktu: e.deadline })
     case 'payment_confirmed':
-      return waTemplates.paymentConfirmed(e.code, e.balance)
+      return e.balance && e.balance > 0
+        ? renderWa('payment_confirmed_partial', { kodeBooking: e.code, sisaTagihan: rupiah(e.balance) })
+        : renderWa('payment_confirmed_full', { kodeBooking: e.code })
     case 'payment_rejected':
-      return waTemplates.paymentRejected(e.code)
+      return renderWa('payment_rejected', { kodeBooking: e.code })
     case 'departure_reminder_7d':
-    case 'departure_reminder_1d':
-      return waTemplates.departureReminder(e.code, e.days ?? departureDays(e.type), e.date)
+    case 'departure_reminder_1d': {
+      const days = e.days ?? departureDays(e.type)
+      return renderWa('departure_reminder', { kodeBooking: e.code, hariLagi: days === 1 ? 'besok' : `${days} hari lagi`, tanggalBerangkat: e.date })
+    }
     case 'booking_expired':
     case 'booking_cancelled':
     case 'visa_status_change':
@@ -60,6 +76,12 @@ export function waMessage(e: NotificationEvent): string | null {
     case 'test':
       return null
   }
+}
+
+/** Teks WhatsApp yang akan dikirim, atau null (tak lewat WhatsApp / dimatikan). */
+export async function waMessage(e: NotificationEvent): Promise<string | null> {
+  const c = await waContent(e)
+  return c?.kind === 'message' ? c.text : null
 }
 
 /** Format batas waktu untuk pesan (zona aplikasi, bahasa Indonesia) — satu tempat, dipakai route dan cron. */

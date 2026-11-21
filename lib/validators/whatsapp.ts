@@ -17,3 +17,10 @@ export type WhatsappPanelStatus = {
   /** Terhubung dengan nomor lain selain nomor bisnis → pesan `VERIF` jamaah tak pernah sampai ke gateway ini. */
   numberMismatch: boolean
 }
+
+/** Simpan satu template WhatsApp (F3): `body` null = kembali ke bawaan. Isi teks dinilai `templateProblem` di layanan (daftar putih variabel). */
+export const waTemplateSaveSchema = z.object({
+  body: z.string().max(1000, { error: 'Teks maksimal 1000 karakter.' }).nullable(),
+  enabled: z.boolean(),
+  expectedUpdatedAt: z.string().max(40),
+}).strict()

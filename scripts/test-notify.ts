@@ -152,8 +152,8 @@ await t('WhatsApp HANYA untuk konfirmasi booking, pengingat pembayaran, pembayar
     { type: 'welcome', name: 'Budi' },
     { type: 'test' },
   ]
-  for (const e of wa) assert.ok(waMessage(e), `${e.type} harus punya pesan WA`)
-  for (const e of emailOnly) assert.equal(waMessage(e), null, `${e.type} tidak boleh lewat WhatsApp`)
+  for (const e of wa) assert.ok(await waMessage(e), `${e.type} harus punya pesan WA`)
+  for (const e of emailOnly) assert.equal(await waMessage(e), null, `${e.type} tidak boleh lewat WhatsApp`)
 })
 
 await t('kejadian email-saja: nomor WhatsApp ada pun TIDAK ada request ke gateway WA dan tidak ada baris log WA', async () => {

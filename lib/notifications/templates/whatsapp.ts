@@ -1,7 +1,7 @@
-// Template yang TIDAK dipakai saat ini (lingkup WhatsApp diperkecil — waMessage di lib/notifications/events.ts hanya memakai bookingSubmitted, paymentReminder,
-// paymentConfirmed, paymentRejected, departureReminder + dua balasan verifikasi): autoCancelled, visaStatusChange, refundApproved. Sengaja dipertahankan untuk
+// Teks WhatsApp yang TETAP di kode: balasan verifikasi nomor (K1, teks keamanan) dan bookingSubmitted (tak lagi dikirim). Tujuh notifikasi
+// yang dikirim (invoice, pengingat/konfirmasi/penolakan bayar, pengingat berangkat) = template yang bisa diedit di lib/whatsapp/templateDefs.ts (F3).
+// Tidak dipakai saat ini: autoCancelled, visaStatusChange, refundApproved. Sengaja dipertahankan untuk
 // dibuka kembali saat WhatsApp dipakai lagi (ADR-0001); hapus bila keputusan itu berubah.
-import { formatRupiah } from '@/lib/utils'
 export const waTemplates = {
   // Balasan atas pesan verifikasi yang DIKIRIM PENGGUNA sendiri (percakapan dimulai pengguna — bukan pesan tak diminta).
   whatsappVerified: (maskedEmail: string) =>
@@ -14,33 +14,14 @@ export const waTemplates = {
   whatsappReleased: (maskedEmail: string) =>
     `Verifikasi nomor ini untuk akun ${maskedEmail} sudah dilepas. Nomor ini tidak lagi menerima notifikasi WhatsApp Saudinesia untuk akun tersebut (email tetap dipakai). Untuk memakai nomor ini lagi, verifikasi ulang dari akun Anda.`,
 
-  invoiceIssued: (number: string, code: string, total: string, due: string, url: string | null) =>
-    `Invoice *${number}* untuk booking *${code}* sudah terbit.\nTotal tagihan: *${total}*\nJatuh tempo: *${due}*${url && (/^https:\/\//.test(url) || (process.env.NODE_ENV === 'development' && /^http:\/\//.test(url))) ? `\n\nLihat & unduh invoice:\n${url}` : ''}`,
-
   bookingSubmitted: (code: string, deadline: string) =>
     `Booking *${code}* berhasil dibuat.\nSelesaikan pembayaran sebelum: *${deadline}*\n\nLihat detail di aplikasi Saudinesia.`,
-
-  paymentReminder: (code: string, deadline: string, balance?: number, partial?: boolean) =>
-    partial && balance && balance > 0
-      ? `Reminder: Booking *${code}* masih memiliki sisa tagihan *${formatRupiah(balance)}*.\nBatas waktu: *${deadline}*\n\nBukti pelunasan dapat dikirim dari halaman booking.`
-      : `Reminder: Pembayaran booking *${code}* belum kami terima.${balance && balance > 0 ? `\nTagihan: *${formatRupiah(balance)}*` : ''}\nBatas waktu: *${deadline}*\n\nSegera lakukan pembayaran agar tempat Anda tetap aman.`,
-
-  paymentConfirmed: (code: string, balance?: number) =>
-    balance && balance > 0
-      ? `Pembayaran booking *${code}* telah kami terima. Terima kasih!\n\nSisa tagihan: *${formatRupiah(balance)}*. Bukti pelunasan dapat dikirim dari halaman booking.`
-      : `Pembayaran booking *${code}* telah dikonfirmasi. Terima kasih!\n\nDokumen perjalanan akan kami kirimkan segera setelah visa diproses.`,
-
-  paymentRejected: (code: string) =>
-    `Bukti pembayaran untuk booking *${code}* tidak dapat diverifikasi.\nMohon upload ulang bukti transfer yang jelas.`,
 
   autoCancelled: (code: string) =>
     `Booking *${code}* dibatalkan otomatis karena pembayaran tidak diterima dalam 24 jam.\n\nHubungi kami jika ada pertanyaan.`,
 
   visaStatusChange: (code: string, status: string) =>
     `Update visa untuk booking *${code}*:\nStatus: *${status}*\n\nLihat detail di aplikasi Saudinesia.`,
-
-  departureReminder: (code: string, days: number, date: string) =>
-    `Persiapkan diri Anda! Keberangkatan booking *${code}* ${days === 1 ? 'besok' : `${days} hari lagi`}, *${date}*.\n\nSemoga perjalanan ibadah Anda lancar dan mabrur.`,
 
   refundApproved: (code: string, amount: string) =>
     `Refund untuk booking *${code}* sebesar *${amount}* telah disetujui.\nProses transfer akan selesai dalam 3-5 hari kerja.`,

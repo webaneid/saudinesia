@@ -1652,6 +1652,18 @@ enum RefundApprovalMode {
 }
 
 // Kebijakan refund (docs/rencana-force-majeure.md): SATU baris 'global' (CHECK), ditulis HANYA lib/refunds/settings.ts (+ jejak settings_audit).
+// Template WhatsApp yang bisa diedit superadmin (docs/rencana-gowa-self-host.md §4.2, K1/K2): SATU baris per kunci (disemai migrasi, CHECK
+// daftar kunci = WA_TEMPLATE_KEYS di lib/whatsapp/templateDefs.ts). `body` NULL = teks bawaan di kode; `enabled` = saklar WhatsApp (email tak
+// terpengaruh). Ditulis HANYA lib/whatsapp/templates.ts (versi updatedAt → 409, jejak settings_audit). Tanpa kolom staf (jejak di settings_audit).
+model WhatsappTemplate {
+  key       String   @id @db.VarChar(40)
+  body      String?
+  enabled   Boolean  @default(true)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+
+  @@map("whatsapp_templates")
+}
+
 model RefundSettings {
   id           String             @id @default("global") @db.VarChar(16)
   approvalMode RefundApprovalMode @default(above_policy)
