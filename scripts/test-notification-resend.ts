@@ -19,7 +19,8 @@ env.NODE_ENV = 'test'
 
 let waSeen: FakeRequest[] = []
 let mailSeen: FakeRequest[] = []
-const wa = await startFakeServer(async (req) => { waSeen.push(req); return { status: 200 } })
+// `/devices` = pencarian perangkat GOWA oleh klien (lib/whatsapp/client.ts) — bukan pesan, tidak dihitung.
+const wa = await startFakeServer(async (req) => { if (req.path === '/devices') return { status: 200, body: { results: [{ id: 'saudinesia' }] } }; waSeen.push(req); return { status: 200 } })
 const mail = await startFakeServer((req) => { mailSeen.push(req); return { status: 200, body: { id: `msg_${mailSeen.length}` } } })
 env.WA_GATEWAY_URL = `http://127.0.0.1:${wa.port}`
 env.RESEND_API_KEY = 're_test_key'; env.RESEND_FROM = 'Saudinesia <noreply@saudinesia.test>'; env.RESEND_API_URL = `http://127.0.0.1:${mail.port}`

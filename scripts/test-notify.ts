@@ -33,7 +33,11 @@ let mailSeen: Req[] = []
 let waStatus = 200
 let waDelayMs = 0 // simulasi gateway lambat
 let mailScript: number[] = []
-const wa = await startFakeServer(async (req) => { waSeen.push(req); if (waDelayMs) await new Promise((r) => setTimeout(r, waDelayMs)); return { status: waStatus } })
+// Perangkat GOWA (lib/whatsapp/client.ts): `/devices` dijawab tetap dan tidak dihitung — yang diuji di sini hanya pesan yang dikirim.
+const wa = await startFakeServer(async (req) => {
+  if (req.path === '/devices') return { status: 200, body: { code: 'SUCCESS', results: [{ id: 'saudinesia' }] } }
+  waSeen.push(req); if (waDelayMs) await new Promise((r) => setTimeout(r, waDelayMs)); return { status: waStatus }
+})
 const mail = await startFakeServer((req) => {
   mailSeen.push(req)
   const status = mailScript.shift() ?? 200

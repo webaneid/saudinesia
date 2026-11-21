@@ -86,6 +86,8 @@ const outgoing: Out[] = []
 let lastSimulation = ''
 let lastFrom = '6281234567890' // formulir mengingat nomor terakhir yang dipakai
 let simLoggedIn = false
+/** Registry perangkat tiruan: GOWA baru = kosong; rute berperangkat wajib `X-Device-Id` (sama dengan GOWA v9.9.0 asli). */
+const simDevices = new Set<string>()
 const BUSINESS_WA = (process.env.NEXT_PUBLIC_BUSINESS_WA || '628111222333').replace(/\D/g, '')
 // PNG 1×1 — cukup untuk membuktikan alur gambar QR (server → data URI → <img>); bukan QR sungguhan.
 const SIM_QR_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
@@ -95,6 +97,18 @@ const gowa = createServer(async (req, res) => {
   // Sistem → WhatsApp lalu tekan "Simulasikan scan QR" di halaman ini.
   const pub = new Set(['/', '/simulate', '/simulate-scan'])
   if (!pub.has(url.pathname) && req.headers.authorization !== `Basic ${Buffer.from('evaluasi:evaluasi-sandi').toString('base64')}`) return json(res, 401, { code: 'UNAUTHORIZED' })
+  if (url.pathname === '/devices' && req.method === 'GET') return json(res, 200, { code: 'SUCCESS', results: simDevices.size ? [...simDevices].map(id => ({ id, state: simLoggedIn ? 'logged_in' : 'disconnected' })) : null })
+  if (url.pathname === '/devices' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)) || '{}') as { device_id?: string }
+    const id = body.device_id || 'perangkat-simulasi'
+    if (simDevices.has(id)) return json(res, 500, { code: 'INTERNAL_SERVER_ERROR', message: `device ${id} already exists` })
+    simDevices.add(id); return json(res, 200, { code: 'SUCCESS', results: { id } })
+  }
+  if (url.pathname.startsWith('/app/') || url.pathname.startsWith('/send/')) {
+    const dev = String(req.headers['x-device-id'] ?? '')
+    if (!dev && simDevices.size !== 1) return json(res, 400, { code: 'DEVICE_ID_REQUIRED', message: 'device_id is required via X-Device-Id header or device_id query' })
+    if (dev && !simDevices.has(dev)) return json(res, 404, { code: 'DEVICE_NOT_FOUND' })
+  }
   if (url.pathname === '/app/status') return json(res, 200, { code: 'SUCCESS', message: 'simulasi', results: { is_connected: true, is_logged_in: simLoggedIn, device_id: 'simulasi', jid: simLoggedIn ? `${BUSINESS_WA}@s.whatsapp.net` : '' } })
   if (url.pathname === '/app/login') return json(res, 200, { code: 'SUCCESS', results: { qr_link: `http://localhost:${PORT.gowa}/statics/qrcode/scan-qr-simulasi.png`, qr_duration: 30 } })
   if (url.pathname === '/statics/qrcode/scan-qr-simulasi.png') { res.writeHead(200, { 'content-type': 'image/png' }); res.end(SIM_QR_PNG); return }

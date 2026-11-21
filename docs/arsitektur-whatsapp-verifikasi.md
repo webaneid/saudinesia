@@ -12,7 +12,7 @@
 | Pengirim | `payload.from` = JID penuh, mis. `628123456789@s.whatsapp.net` (kadang ada `from_lid`). Grup: `chat_id` berakhiran `@g.us` |
 | Tanda tangan | Header `X-Hub-Signature-256: sha256=<hex>` = HMAC-SHA256 atas **body mentah**, kunci `WHATSAPP_WEBHOOK_SECRET` (bawaan `secret` — WAJIB diganti) |
 | Pengiriman ulang | timeout 10 dtk; hingga 5 kali retry (1, 2, 4, 8, 16 dtk); penerima harus 2xx cepat dan **menangani duplikat** |
-| Status koneksi | `GET /app/status` (perangkat bawaan), `GET /devices/:id/status`; `GET /health` hanya kesehatan server. **Tidak ada event putus-koneksi/logout** |
+| Status koneksi | `GET /app/status` (dengan `X-Device-Id` — GOWA baru tak punya perangkat bawaan, lihat `docs/rencana-gowa-self-host.md` §7), `GET /devices/:id/status`; `GET /health` hanya kesehatan server. **Tidak ada event putus-koneksi/logout** |
 
 Yang belum terkonfirmasi (perlu dicoba pada instalasi Sumopod Anda): bentuk persis `/app/status`, apakah `from` selalu JID nomor (bukan LID) untuk kontak baru.
 

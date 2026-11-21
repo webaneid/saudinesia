@@ -1,7 +1,10 @@
 // GOWA — go-whatsapp-web-multidevice (aldinokemal) v9, self-host di VPS sendiri sebagai layanan `gowa` di jaringan internal compose
 // (docs/rencana-gowa-self-host.md). SATU-SATUNYA pemanggil GOWA — jangan `fetch` ke GOWA di tempat lain.
 // API (openapi v9.9.0): Basic auth (`APP_BASIC_AUTH`), `POST /send/message`, `GET /app/status|login|login-with-code|logout|reconnect`.
-// Satu perangkat bawaan (dibuat GOWA saat start) → tanpa header `X-Device-Id`.
+// Perangkat: instalasi BARU GOWA tidak mendaftarkan perangkat apa pun (perangkat awal "transient", ID kosong) dan setiap rute `/app/*`/`/send/*`
+// menolak tanpa `X-Device-Id` (400 DEVICE_ID_REQUIRED — ditemukan CI, bukan dugaan). Maka klien memakai SATU perangkat: yang sudah terdaftar
+// (`GET /devices`, utamakan ID `DEVICE_ID`), atau membuatnya (`POST /devices`); ID disimpan di memori dan dicari ulang bila GOWA menjawab
+// perangkat tak ada (mis. volume dihapus).
 // Tidak ada fungsi yang melempar: WhatsApp tak boleh memblokir operasi booking; hasil dikembalikan agar pemanggil mencatat kebenaran.
 // Nomor dan isi pesan tidak pernah dicatat di log (SEC-09).
 import { redactPii } from '@/lib/log'
@@ -14,6 +17,10 @@ const QR_MAX_BYTES = 256 * 1024
  *  gambar selalu diambil dari `WA_GATEWAY_URL`, jadi respons GOWA tak bisa mengarahkan server ke alamat lain (SSRF). */
 const QR_PATH = /^\/statics\/qrcode\/[A-Za-z0-9._-]{1,120}\.png$/
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]
+/** ID perangkat yang dibuat aplikasi ini di GOWA (registry perangkat tersimpan di volume `gowa_data`). */
+export const DEVICE_ID = 'saudinesia'
+/** ID perangkat dari GOWA: huruf/angka/JID — bukan teks bebas yang masuk header. */
+const DEVICE_ID_SHAPE = /^[A-Za-z0-9._:@-]{1,120}$/
 
 interface SendPayload {
   phone: string
@@ -44,18 +51,66 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms))
 }
 
-/** GET JSON ke GOWA; `null` = tak terjangkau. `results` diteruskan apa adanya (unknown) untuk dipersempit pemanggil. */
-async function getJson(path: string, timeoutMs: number): Promise<{ http: number; results: unknown; code: string | null } | null> {
+let cachedDevice: { base: string; id: string } | null = null
+
+type Raw = { http: number; results: unknown; code: string | null }
+
+async function raw(g: Gateway, path: string, init: { method?: string; body?: unknown; headers?: Record<string, string> }, timeoutMs: number): Promise<Raw> {
+  const res = await fetch(`${g.base}${path}`, {
+    method: init.method ?? 'GET',
+    headers: { ...g.headers, ...(init.body !== undefined ? { 'Content-Type': 'application/json' } : {}), ...init.headers },
+    body: init.body !== undefined ? JSON.stringify(init.body) : undefined,
+    signal: AbortSignal.timeout(timeoutMs),
+    redirect: 'error',
+  })
+  const json = (await res.json().catch(() => null)) as { results?: unknown; code?: unknown } | null
+  return { http: res.status, results: json?.results ?? null, code: typeof json?.code === 'string' ? json.code : null }
+}
+
+/** ID perangkat yang dipakai: terdaftar (utamakan `DEVICE_ID`) atau dibuat. `{ http: 401 }` diteruskan supaya pemanggil melapor "kredensial salah". */
+async function resolveDevice(g: Gateway): Promise<{ id: string } | { http: number }> {
+  if (cachedDevice?.base === g.base) return { id: cachedDevice.id }
+  const pick = (r: Raw): string | null => {
+    const list = Array.isArray(r.results) ? r.results : []
+    const ids = list.map(d => field(d, 'id')).filter((v): v is string => typeof v === 'string' && DEVICE_ID_SHAPE.test(v))
+    return ids.includes(DEVICE_ID) ? DEVICE_ID : (ids[0] ?? null)
+  }
+  let r = await raw(g, '/devices', {}, 4000)
+  if (r.http !== 200) return { http: r.http }
+  let id = pick(r)
+  if (!id) {
+    // Dua permintaan serentak bisa sama-sama membuat: yang kalah dijawab "sudah ada" (500) — daftar dibaca ulang, bukan dianggap gagal.
+    const created = await raw(g, '/devices', { method: 'POST', body: { device_id: DEVICE_ID } }, 4000)
+    if (created.http === 401) return { http: 401 }
+    r = await raw(g, '/devices', {}, 4000)
+    if (r.http !== 200) return { http: r.http }
+    id = pick(r)
+    if (!id) return { http: created.http === 200 ? 502 : created.http }
+  }
+  cachedDevice = { base: g.base, id }
+  return { id }
+}
+
+/** Permintaan ke rute GOWA berperangkat (`/app/*`, `/send/*`) dengan `X-Device-Id`; perangkat hilang → dicari/dibuat ulang SEKALI. `null` = tak terjangkau. */
+async function call(path: string, init: { method?: string; body?: unknown }, timeoutMs: number): Promise<Raw | null> {
   const g = gateway()
   if (!g) return null
   try {
-    const res = await fetch(`${g.base}${path}`, { headers: g.headers, signal: AbortSignal.timeout(timeoutMs), redirect: 'error' })
-    const json = (await res.json().catch(() => null)) as { results?: unknown; code?: unknown } | null
-    return { http: res.status, results: json?.results ?? null, code: typeof json?.code === 'string' ? json.code : null }
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const dev = await resolveDevice(g)
+      if ('http' in dev) return { http: dev.http, results: null, code: null }
+      const r = await raw(g, path, { ...init, headers: { 'X-Device-Id': dev.id } }, timeoutMs)
+      if ((r.http === 404 && r.code === 'DEVICE_NOT_FOUND') || (r.http === 400 && r.code === 'DEVICE_ID_REQUIRED')) { cachedDevice = null; continue }
+      return r
+    }
+    return { http: 502, results: null, code: null }
   } catch {
     return null
   }
 }
+
+/** GET JSON ke rute berperangkat; `null` = tak terjangkau. `results` diteruskan apa adanya (unknown) untuk dipersempit pemanggil. */
+const getJson = (path: string, timeoutMs: number) => call(path, {}, timeoutMs)
 
 const field = (o: unknown, k: string): unknown => (o && typeof o === 'object' ? (o as Record<string, unknown>)[k] : undefined)
 
@@ -65,8 +120,7 @@ export type WhatsAppResult =
   | { status: 'failed'; error: string }
 
 async function sendMessage(payload: SendPayload): Promise<WhatsAppResult> {
-  const g = gateway()
-  if (!g) {
+  if (!gateway()) {
     console.error('[whatsapp] WA_GATEWAY_URL is not set')
     return { status: 'skipped', reason: 'WA_GATEWAY_URL belum diisi' }
   }
@@ -74,28 +128,12 @@ async function sendMessage(payload: SendPayload): Promise<WhatsAppResult> {
   let lastError: string | null = null
 
   for (let attempt = 0; attempt <= RETRY_ATTEMPTS; attempt++) {
-    try {
-      const res = await fetch(`${g.base}/send/message`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...g.headers },
-        body: JSON.stringify({ phone: toGatewayNumber(payload.phone), message: payload.message }),
-        signal: AbortSignal.timeout(10_000),
-        redirect: 'error',
-      })
-
-      if (!res.ok) {
-        lastError = `HTTP ${res.status}`
-        // 401/400 tidak akan sembuh dengan mencoba ulang (kredensial salah / nomor tak sah).
-        if (res.status === 401 || res.status === 400) break
-        if (attempt < RETRY_ATTEMPTS) await sleep(RETRY_DELAY_MS)
-        continue
-      }
-
-      return { status: 'sent' }
-    } catch (err) {
-      lastError = err instanceof Error ? err.message : String(err)
-      if (attempt < RETRY_ATTEMPTS) await sleep(RETRY_DELAY_MS)
-    }
+    const r = await call('/send/message', { method: 'POST', body: { phone: toGatewayNumber(payload.phone), message: payload.message } }, 10_000)
+    if (r && r.http >= 200 && r.http < 300) return { status: 'sent' }
+    lastError = r ? `HTTP ${r.http}` : 'gateway tidak terjangkau'
+    // 401/400 tidak akan sembuh dengan mencoba ulang (kredensial salah / nomor tak sah).
+    if (r && (r.http === 401 || r.http === 400)) break
+    if (attempt < RETRY_ATTEMPTS) await sleep(RETRY_DELAY_MS)
   }
 
   console.error(`[whatsapp] Failed to send after retries: ${redactPii(lastError ?? 'unknown')}`)

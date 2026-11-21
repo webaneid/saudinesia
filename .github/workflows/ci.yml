@@ -429,9 +429,17 @@ jobs:
             const fail = (m) => { console.log('GAGAL:', m); process.exit(1) }
             if (base !== 'http://gowa:3000') fail('WA_GATEWAY_URL = ' + base)
             let r = await fetch(base + '/app/status'); if (r.status !== 401) fail('tanpa kredensial harus 401: ' + r.status)
+            // GOWA baru = nol perangkat → rute berperangkat menolak tanpa X-Device-Id; klien (lib/whatsapp/client.ts) membuat perangkat saudinesia.
             r = await fetch(base + '/app/status', { headers: { Authorization: auth } }); let j = await r.json()
+            if (r.status !== 400 || j.code !== 'DEVICE_ID_REQUIRED') fail('tanpa perangkat harus DEVICE_ID_REQUIRED: ' + r.status + JSON.stringify(j))
+            r = await fetch(base + '/devices', { method: 'POST', headers: { Authorization: auth, 'Content-Type': 'application/json' }, body: JSON.stringify({ device_id: 'saudinesia' }) })
+            if (r.status !== 200) fail('buat perangkat: ' + r.status)
+            r = await fetch(base + '/devices', { headers: { Authorization: auth } }); j = await r.json()
+            if (!Array.isArray(j.results) || j.results[0]?.id !== 'saudinesia') fail('daftar perangkat: ' + JSON.stringify(j))
+            const h = { Authorization: auth, 'X-Device-Id': 'saudinesia' }
+            r = await fetch(base + '/app/status', { headers: h }); j = await r.json()
             if (r.status !== 200 || j.results?.is_logged_in !== false) fail('status: ' + r.status + JSON.stringify(j))
-            r = await fetch(base + '/app/login', { headers: { Authorization: auth } }); j = await r.json()
+            r = await fetch(base + '/app/login', { headers: h }); j = await r.json()
             const path = new URL(j.results?.qr_link ?? 'http://x/').pathname
             if (r.status !== 200 || !/^\/statics\/qrcode\/[A-Za-z0-9._-]+\.png$/.test(path)) fail('login: ' + r.status + ' ' + path)
             const img = Buffer.from(await (await fetch(base + path, { headers: { Authorization: auth } })).arrayBuffer())

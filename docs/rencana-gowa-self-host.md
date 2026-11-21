@@ -85,8 +85,13 @@ Satu PR per fase. Security review tiap fase (QR proxy, auth Basic, kontainer bar
 
 ## 7. Catatan as-built
 
-**F1 (2026-11-21):** dicek terhadap kode sumber GOWA v9.9.0 (Docker tak ada di Mac): GOWA membuat SATU perangkat bawaan saat start
-(`EnsureDefault`) → klien tanpa `X-Device-Id`; `/app/logout` mempertahankan slot. `qr_link` memuat host permintaan → klien hanya memakai JALUR
+**F1 (2026-11-21):** dicek terhadap kode sumber GOWA v9.9.0 (Docker tak ada di Mac). **Koreksi dari CI (GOWA asli):** anggapan awal "GOWA
+membuat satu perangkat bawaan saat start (`EnsureDefault`)" SALAH untuk instalasi baru — tanpa sesi tersimpan perangkat awal *transient* (ID
+kosong, tak terdaftar), jadi `/app/*` dan `/send/*` menjawab 400 `DEVICE_ID_REQUIRED`. Klien kini memakai satu perangkat lewat `GET /devices`
+(utamakan ID `saudinesia`, atau perangkat lama yang sudah ada) atau membuatnya `POST /devices {device_id:"saudinesia"}` (registry tersimpan di
+volume), mengirim `X-Device-Id` di setiap panggilan berperangkat, dan mencari/membuat ulang SEKALI bila dijawab `DEVICE_NOT_FOUND`. Pelajaran:
+GOWA tiruan meniru anggapan kita, bukan GOWA — tiruan (`test-whatsapp-client`, `dev-eval`) kini meniru `DeviceMiddleware` asli dan CI smoke
+memeriksa alur perangkat pada image asli. `/app/logout` mempertahankan slot. `qr_link` memuat host permintaan → klien hanya memakai JALUR
 (`/statics/qrcode/<nama>.png`, regex) di atas `WA_GATEWAY_URL`, gambar dicek magic PNG + ≤ 256 KB. Kirim 401/400 tidak dicoba ulang. Kontainer:
 image dipin digest multi-arsitektur, read-only (`/app/statics` + `/tmp` tmpfs, `/app/storages` volume), `cap_add` hanya untuk entrypoint
 (root → chown → su-exec ke uid 20001), tanpa `env_file`, dasbor GOWA/MCP mati, chat storage & unduh media mati. `scripts/lengkapi-env-production.sh`
