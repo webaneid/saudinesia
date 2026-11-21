@@ -14,4 +14,7 @@ regexes = [
   # piiKeysProblem MENOLAK kunci berentropi rendah (SEC-166) — bukan kunci sungguhan.
   # Allowlist dicocokkan ke nilai yang tertangkap (regexTarget bawaan = secret), jadi hanya string persis ini.
   '''^0123456789abcdef$''',
+  # Positif palsu `generic-api-key` di scripts/test-lengkapi-env.ts: secret webhook buatan yang SUDAH terisi di .env tiruan, untuk
+  # membuktikan lengkapi-env-production.sh tidak menimpa nilai yang ada — bukan rahasia sungguhan.
+  '''^sudahada0123456789abcdef0123456789$''',
 ]
