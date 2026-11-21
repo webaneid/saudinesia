@@ -123,7 +123,7 @@ services:
   # Berpassword (SEC-10): jaringan internal bukan batas keamanan — kontainer lain yang terkompromi tak boleh bisa menguras/menghapus
   # hitungan rate limit. REDIS_PASSWORD yang sama harus ada di REDIS_URL (redis://:<password>@redis:6379) di .env.production.
   redis:
-    image: redis:7-alpine@sha256:7f7d30b7fdd09467bac58198a1f166dd69789d348d4fe859cccb20e0cf287fbe
+    image: redis:8-alpine@sha256:7958cfbb9d152f87dadfbc89f1b0b15938f0b81ff8982feb327476f4911935c3
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--maxmemory", "128mb", "--maxmemory-policy", "volatile-lru", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD belum diisi}"]
     volumes:
