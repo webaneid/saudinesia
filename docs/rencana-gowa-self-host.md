@@ -1,6 +1,6 @@
 # Rencana — GOWA self-host + halaman Sistem → WhatsApp (koneksi & template)
 
-Status: **RENCANA DISETUJUI (2026-11-21)** — keputusan §6 diambil pemilik. **F1 SELESAI 2026-11-21** (§7); F2 berikutnya. Acuan pola: jalajogja (`docs/arsitektur-gowa-deployment.md`,
+Status: **RENCANA DISETUJUI (2026-11-21)** — keputusan §6 diambil pemilik. **F1 + F2 SELESAI 2026-11-21** (§7); F3 (template) berikutnya. Acuan pola: jalajogja (`docs/arsitektur-gowa-deployment.md`,
 `docs/arsitektur-whatsapp.md` §5/§7/§8/§16.8). Kebijakan WhatsApp yang TIDAK berubah: ADR-0001 (WhatsApp hanya kanal notifikasi, email jaring
 pengaman wajib), ADR-0002 (hanya nomor terverifikasi yang menerima pesan; verifikasi lewat pesan MASUK `VERIF <kode>` + webhook HMAC).
 
@@ -99,3 +99,14 @@ dipanggil `deploy-server.sh` sebelum `pull` (compose menolak jalan tanpa `WA_GAT
 sehat, tanpa port, read-only, proses uid 20001, rahasia web tak terbaca, 401 tanpa kredensial, QR PNG terambil dari web. GOWA tiruan
 `scripts/dev-eval.ts` mengikuti API v9 (perangkat mulai terputus + tombol "Simulasikan scan QR"). Uji: `test-whatsapp-client`, `test-lengkapi-env`,
 penjaga compose di `test-routes` (SEC-10). Security: 0 C/H/M; 1 Low diterima (SEC-311).
+
+**F2 (2026-11-21):** halaman **Sistem → WhatsApp** (`app/[locale]/admin/(protected)/system/whatsapp/`, superadmin — `requireAdminPage` +
+`SUPERADMIN_ROLES`) dan SATU route `api/v1/admin/system/whatsapp` (`GET` status; `POST { action }` = `qr|pairCode|disconnect|reconnect|test`,
+`.strict()` — tanpa nomor/teks dari klien; QR lewat POST karena memulai sesi masuk di GOWA). Layanan `lib/whatsapp/admin.ts`: `panelStatus`
+(peringatan `numberMismatch` bila nomor tertaut ≠ `NEXT_PUBLIC_BUSINESS_WA`, K6), `sendTestToStaff` (hanya nomor terverifikasi staf yang menekan,
+ADR-0002), `recordWhatsappAction` → `settings_audit` entity `whatsapp`, aksi `wa_*`, ringkasan `{ outcome }` tanpa nomor. Kode pasangan selalu
+untuk nomor bisnis. Respons `no-store`; batas laju `whatsappAdminUser` (60/10 mnt) dan `whatsappTestUser` (5/jam). UI: kartu status (nomor
+tertaut, nomor bisnis, webhook), modal QR (data URI, hitung mundur, muat ulang otomatis ≤ 6 kali, polling status 3 dtk hanya selama modal terbuka,
+tertutup sendiri saat terhubung), modal kode pasangan, putuskan lewat `useConfirm`. Panel Integrasi di Pengaturan kini ringkasan + tautan.
+Diuji: `scripts/test-whatsapp-admin.ts` (DB sekali pakai + GOWA tiruan) dan browser lewat `dev:eval` (QR → simulasi scan → terhubung → uji
+ditolak untuk nomor belum terverifikasi → putuskan → kode pasangan; lebar HP tanpa geser horizontal). Security: 0 C/H/M/L baru.

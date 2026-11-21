@@ -31,6 +31,8 @@ export const LIMITS = {
   webhookCancelSender: { limit: 5, windowSec: 3600 },  // pesan BATAL (lepas verifikasi) per nomor PENGIRIM — pelepasan terlalu sering = penyalahgunaan
   webhookSender:      { limit: 10, windowSec: 3600 },  // pesan verifikasi per nomor PENGIRIM — membatasi tebakan kode per nomor
   emailTestUser:  { limit: 5,  windowSec: 3600 }, // email uji dari panel admin, per admin (cegah penyalahgunaan kuota Resend)
+  whatsappTestUser:   { limit: 5,  windowSec: 3600 }, // WhatsApp uji dari Sistem → WhatsApp, per admin (hanya ke nomor terverifikasi staf sendiri)
+  whatsappAdminUser:  { limit: 60, windowSec: 600 },  // QR/kode pasangan/putus/sambung di Sistem → WhatsApp, per admin (QR dimuat ulang tiap ±30 dtk saat modal terbuka)
   customerCreateAdmin: { limit: 60, windowSec: 3600 }, // akun pelanggan baru dari panel admin, per admin (tiap akun bisa memicu satu email undangan)
   customerInviteAdmin: { limit: 30, windowSec: 3600 }, // email undangan (baru/kirim ulang) per admin — pagar di atas batas per alamat
   invoicePublicIp:    { limit: 60,  windowSec: 600 },  // halaman + PDF invoice publik per IP (token 256-bit tak tertebak; menahan pemindaian & beban PDF)

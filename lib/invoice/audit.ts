@@ -3,8 +3,9 @@ import type { Prisma } from '@prisma/client'
 import { qrisMerchantName } from '@/lib/qris/emv'
 
 type Tx = Prisma.TransactionClient
-export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account' | 'refund_settings'
-export type AuditAction = 'create' | 'update' | 'delete' | 'toggle'
+export type AuditEntity = 'invoice_settings' | 'bank_account' | 'qris_account' | 'tax_rule' | 'gateway_fee_rule' | 'public_page' | 'platform_provider_account' | 'refund_settings' | 'whatsapp'
+/** `whatsapp_*` = tindakan atas gateway WhatsApp (Sistem → WhatsApp, docs/rencana-gowa-self-host.md §4.1) — tanpa nomor di ringkasan. */
+export type AuditAction = 'create' | 'update' | 'delete' | 'toggle' | 'wa_qr' | 'wa_pair_code' | 'wa_disconnect' | 'wa_reconnect' | 'wa_test'
 
 /** Tulis satu baris jejak (SEC-109) DI DALAM transaksi perubahan — tanpa jejak, perubahan ikut dibatalkan. Tabel append-only (trigger). */
 export async function writeAudit(tx: Tx, staffId: string, entity: AuditEntity, entityId: string, action: AuditAction, summary: Prisma.InputJsonValue): Promise<void> {

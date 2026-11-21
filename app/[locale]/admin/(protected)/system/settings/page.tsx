@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
+import { useParams } from 'next/navigation'
+import { adminHref } from '@/lib/admin/href'
 import { Send } from 'lucide-react'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
 import { Badge } from '@/components/admin/ui/Badge'
@@ -29,6 +32,7 @@ type IntegrationStatus = {
 type TestEmailResult = { status: 'sent' | 'failed' | 'skipped'; detail: string | null; to: string }
 
 export default function SettingsPage() {
+  const { locale } = useParams<{ locale: string }>()
   const [rule, setRule] = useState<PricingRule | null>(null)
   const [ruleForm, setRuleForm] = useState({ defaultMarginPercent: 20, roundingIncrement: 50000, warnBelowPercent: 0 })
   const [ruleError, setRuleError] = useState<string | null>(null)
@@ -243,7 +247,8 @@ export default function SettingsPage() {
                               : 'Gateway dapat dijangkau (status perangkat tidak diketahui).'}
                     </p>
                     <p className="text-[11px] text-admin-muted">
-                      Verifikasi nomor (pesan masuk): secret webhook {integrations.whatsapp.webhookSecretSet ? 'terisi (kuat)' : 'BELUM diisi / terlalu lemah (WHATSAPP_WEBHOOK_SECRET ≥32 karakter acak — webhook mati)'}, nomor bisnis {integrations.whatsapp.businessNumberSet ? 'terisi' : 'BELUM diisi (NEXT_PUBLIC_BUSINESS_WA)'}.
+                      Hubungkan nomor, kirim uji, dan putuskan di{' '}
+                      <Link href={adminHref(locale, '/admin/system/whatsapp')} className="font-semibold text-admin-accent hover:underline">Sistem → WhatsApp</Link>.
                     </p>
                   </div>
                   <Badge tone={integrations.whatsapp.configured && integrations.whatsapp.gateway.reachable && !integrations.whatsapp.gateway.unauthorized && integrations.whatsapp.gateway.connected !== false ? 'ok' : 'warning'}>
