@@ -134,11 +134,11 @@ disiapkan, `docs/progress.md` M15), dan Docker tidak terpasang di mesin dev — 
    **Email (Resend)**: verifikasi domain pengirim di Resend (SPF + DKIM + DMARC) dulu, lalu isi `RESEND_API_KEY`/`RESEND_FROM`,
    `docker compose up -d web`, login superadmin → Pengaturan → Integrasi & Notifikasi → **Kirim uji**. Detail: `docs/arsitektur-notifikasi.md` §7.
    Sebelum diisi, email dicatat `dilewati` di Log Notifikasi (aplikasi tetap normal).
-   **Verifikasi WhatsApp (webhook GOWA)**: `scripts/buat-env-production.sh` membuat `WHATSAPP_WEBHOOK_SECRET` otomatis. Di GOWA (Sumopod) atur
-   `WHATSAPP_WEBHOOK=https://<APP_DOMAIN>/api/v1/webhooks/whatsapp`, `WHATSAPP_WEBHOOK_SECRET=<NILAI YANG SAMA>` dan `WHATSAPP_WEBHOOK_EVENTS=message`;
-   pastikan `NEXT_PUBLIC_BUSINESS_WA` (GitHub Variable build-arg) adalah nomor yang terhubung ke GOWA. Admin → Pengaturan → Integrasi menampilkan status
-   gateway langsung (aktif/terputus/tak terjangkau), apakah secret terisi, dan URL webhook yang harus dipasang. Tanpa secret webhook mati (fail-closed) dan
-   nomor tak bisa diverifikasi — notifikasi tetap lewat email.
+   **WhatsApp (GOWA self-host, `docs/rencana-gowa-self-host.md`)**: layanan `gowa` ikut compose (internal, tanpa port; sesi di volume `gowa_data`,
+   sengaja tidak di-backup — server hilang = scan QR ulang). Kredensial Basic (`WA_GATEWAY_USER/PASSWORD`) dan `WHATSAPP_WEBHOOK_SECRET` dibuat
+   `buat-env-production.sh`; server lama dilengkapi otomatis oleh `scripts/lengkapi-env-production.sh` (dipanggil `deploy-server.sh`, hanya menambah
+   yang kosong). Webhook pesan masuk `http://web:3000/api/v1/webhooks/whatsapp` diatur compose. Nomor yang dihubungkan harus = `NEXT_PUBLIC_BUSINESS_WA`
+   (GitHub Variable build-arg). Menghubungkan nomor: admin Sistem → WhatsApp (F2). Tanpa secret webhook mati (fail-closed) — notifikasi tetap lewat email.
    **Login Google (opsional)**: Google Cloud Console → buat project → OAuth consent screen (External; scope `openid`, `email`, `profile`;
    scope itu tidak butuh verifikasi manual, tapi status aplikasi harus *In production* agar semua pengguna bisa masuk, bukan hanya penguji) →
    Credentials → OAuth client ID → *Web application* → Authorized redirect URI **persis** `https://<APP_DOMAIN>/api/v1/auth/google/callback`

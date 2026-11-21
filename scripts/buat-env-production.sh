@@ -2,7 +2,7 @@
 # Jalankan DI SERVER BARU, sekali:  bash scripts/buat-env-production.sh <APP_DOMAIN> <ADMIN_DOMAIN> <FILES_DOMAIN> [DIR]
 #   mis. bash scripts/buat-env-production.sh app.saudinesia.id admin.saudinesia.id files.saudinesia.id /opt/app
 # Membuat DIR/.env.production dari .env.production.example dengan rahasia acak (password Postgres pemilik + peran aplikasi, kunci MinIO,
-# JWT_SECRET). Rahasia TIDAK ditampilkan. Nilai yang harus diisi manual (WhatsApp, Resend) dibiarkan kosong dan
+# JWT_SECRET). Rahasia TIDAK ditampilkan. Nilai yang harus diisi manual (Resend, Google) dibiarkan kosong dan
 # dilaporkan di akhir. Tidak pernah menimpa .env.production yang sudah ada.
 # Pola mengikuti smart-ai (scripts/buat-env-production.sh).
 set -euo pipefail
@@ -53,6 +53,8 @@ PW_REDIS="$(acak 24)"
     -e "s#^PII_INDEX_KEY=\$#PII_INDEX_KEY=$(acak 32)#" \
     -e "s#^PII_ENCRYPTION_KEY=\$#PII_ENCRYPTION_KEY=$(acak 32)#" \
     -e "s#^WHATSAPP_WEBHOOK_SECRET=\$#WHATSAPP_WEBHOOK_SECRET=$(acak 32)#" \
+    -e "s#^WA_GATEWAY_USER=\$#WA_GATEWAY_USER=saudinesia#" \
+    -e "s#^WA_GATEWAY_PASSWORD=\$#WA_GATEWAY_PASSWORD=$(acak 24)#" \
     .env.production.example > .env.production )
 chmod 600 .env.production
 
@@ -60,4 +62,4 @@ echo "OK: $DIR/.env.production dibuat (hanya bisa dibaca user ini)."
 KOSONG="$(grep -E '^[A-Z_]+=$' .env.production | cut -d= -f1 | tr '\n' ' ')"
 [ -z "$KOSONG" ] || echo "Isi MANUAL (masih kosong): $KOSONG"
 echo "Simpan cadangan JWT_SECRET, POSTGRES_PASSWORD, PII_INDEX_KEY & PII_ENCRYPTION_KEY di password manager (kunci PII hilang = NIK/paspor tak terbaca)."
-echo "WHATSAPP_WEBHOOK_SECRET dibuat otomatis — salin NILAI YANG SAMA ke GOWA (WHATSAPP_WEBHOOK_SECRET) dan atur WHATSAPP_WEBHOOK=https://$APP_DOMAIN/api/v1/webhooks/whatsapp, WHATSAPP_WEBHOOK_EVENTS=message."
+echo "WhatsApp (GOWA self-host): kredensial & secret webhook dibuat otomatis; sesudah deploy hubungkan nomor di admin: Sistem → WhatsApp."

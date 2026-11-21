@@ -183,8 +183,15 @@ await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa
   // Sisa SEC-10 (2026-11-21): SEMUA service cap_drop ALL (cap_add hanya yang dicatat), web read-only, image pihak ketiga dipin digest.
   assert.equal((compose.match(/^    cap_drop: \[ALL\]$/gm) ?? []).length, services, 'setiap service harus cap_drop: [ALL]')
   assert.deepEqual((compose.match(/^    cap_add: .*$/gm) ?? []).map(l => l.trim()), [
-    'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [CHOWN, SETGID, SETUID]', 'cap_add: [NET_BIND_SERVICE]',
-  ], 'cap_add hanya postgres, redis (entrypoint) dan caddy (bind 80/443)')
+    'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [CHOWN, SETGID, SETUID]',
+    'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [NET_BIND_SERVICE]',
+  ], 'cap_add hanya postgres, redis, gowa (entrypoint root → turun hak) dan caddy (bind 80/443)')
+  // GOWA (docs/rencana-gowa-self-host.md): internal saja — tanpa ports, read-only, tanpa env_file (tak menerima rahasia web).
+  const gowa = compose.slice(compose.indexOf('\n  gowa:'), compose.indexOf('\n  caddy:'))
+  assert.ok(gowa.length > 100, 'service gowa tak terbaca')
+  assert.ok(!/\n    ports:/.test(gowa) && !/\n    env_file:/.test(gowa), 'gowa tak boleh membuka port atau memuat env_file')
+  assert.match(gowa, /\n    read_only: true\n/, 'gowa wajib read_only')
+  assert.match(gowa, /APP_UI_AUTO_UPDATE: "false"/, 'gowa tak boleh mengunduh dasbor saat jalan')
   const web = compose.slice(compose.indexOf('\n  web:'), compose.indexOf('\n  migrate:'))
   assert.match(web, /\n    read_only: true\n/, 'web wajib read_only')
   assert.match(web, /- \/app\/\.next\/cache:uid=1000,gid=1000/, 'cache Next di tmpfs milik user bun')
