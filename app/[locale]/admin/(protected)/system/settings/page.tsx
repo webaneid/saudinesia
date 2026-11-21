@@ -21,8 +21,8 @@ type IntegrationStatus = {
   appUrl: { set: boolean; value: string | null }
   email: { configured: boolean; hasApiKey: boolean; from: string | null; hasReplyTo: boolean }
   whatsapp: {
-    configured: boolean; hasToken: boolean; webhookSecretSet: boolean; businessNumberSet: boolean; webhookUrl: string | null
-    gateway: { reachable: boolean; connected: boolean | null }
+    configured: boolean; hasCredentials: boolean; webhookSecretSet: boolean; businessNumberSet: boolean; webhookUrl: string | null
+    gateway: { reachable: boolean; connected: boolean | null; unauthorized: boolean; phone: string | null }
   }
   google: { configured: boolean; redirectUri: string | null }
 }
@@ -234,6 +234,8 @@ export default function SettingsPage() {
                         ? 'WA_GATEWAY_URL belum diisi — pesan WhatsApp dicatat sebagai "dilewati"; notifikasi tetap lewat email.'
                         : !integrations.whatsapp.gateway.reachable
                           ? 'Gateway tidak dapat dijangkau — WhatsApp gagal terkirim; notifikasi tetap lewat email.'
+                          : integrations.whatsapp.gateway.unauthorized
+                            ? 'Gateway menolak kredensial (WA_GATEWAY_USER/WA_GATEWAY_PASSWORD tidak sama dengan GOWA) — notifikasi tetap lewat email.'
                           : integrations.whatsapp.gateway.connected === false
                             ? 'Gateway aktif tetapi perangkat WhatsApp belum login/terhubung — notifikasi tetap lewat email.'
                             : integrations.whatsapp.gateway.connected === true
@@ -242,11 +244,10 @@ export default function SettingsPage() {
                     </p>
                     <p className="text-[11px] text-admin-muted">
                       Verifikasi nomor (pesan masuk): secret webhook {integrations.whatsapp.webhookSecretSet ? 'terisi (kuat)' : 'BELUM diisi / terlalu lemah (WHATSAPP_WEBHOOK_SECRET ≥32 karakter acak — webhook mati)'}, nomor bisnis {integrations.whatsapp.businessNumberSet ? 'terisi' : 'BELUM diisi (NEXT_PUBLIC_BUSINESS_WA)'}.
-                      {integrations.whatsapp.webhookUrl && <> Pasang di GOWA: <code className="text-admin-ink">WHATSAPP_WEBHOOK={integrations.whatsapp.webhookUrl}</code></>}
                     </p>
                   </div>
-                  <Badge tone={integrations.whatsapp.configured && integrations.whatsapp.gateway.reachable && integrations.whatsapp.gateway.connected !== false ? 'ok' : 'warning'}>
-                    {!integrations.whatsapp.configured ? 'Belum diatur' : !integrations.whatsapp.gateway.reachable ? 'Tidak terjangkau' : integrations.whatsapp.gateway.connected === false ? 'Terputus' : 'Aktif'}
+                  <Badge tone={integrations.whatsapp.configured && integrations.whatsapp.gateway.reachable && !integrations.whatsapp.gateway.unauthorized && integrations.whatsapp.gateway.connected !== false ? 'ok' : 'warning'}>
+                    {!integrations.whatsapp.configured ? 'Belum diatur' : !integrations.whatsapp.gateway.reachable ? 'Tidak terjangkau' : integrations.whatsapp.gateway.unauthorized ? 'Kredensial salah' : integrations.whatsapp.gateway.connected === false ? 'Terputus' : 'Aktif'}
                   </Badge>
                 </li>
                 <li className="flex items-start justify-between gap-3 py-2">

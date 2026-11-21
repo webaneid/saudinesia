@@ -6,7 +6,7 @@
 # adalah bentuk awal/dev yang MEMBANGUN image di mesin sendiri dan membuka port — jangan dipakai di production.
 #
 # Pola mengikuti smart-ai (docker-compose.prod.yml), disesuaikan: satu app Next.js (bukan api+web+worker), Redis
-# (rate limit auth), GOWA eksternal di Sumopod (tidak ada service WhatsApp di sini). Dua peran database (SEC-303): pemilik skema
+# (rate limit auth), GOWA self-host (layanan `gowa`, docs/rencana-gowa-self-host.md). Dua peran database (SEC-303): pemilik skema
 # `saudinesia` (POSTGRES_USER, hanya kontainer migrate) dan `saudinesia_app` (DML saja, dipakai web).
 #
 # RESOURCE LIMITS: tanpa batas, satu container yang bocor/spike menghabiskan RAM dan memicu OOM-kill container
@@ -189,6 +189,57 @@ services:
     cpus: 0.25
     logging: *logging
 
+  # WhatsApp gateway (GOWA v9, docs/rencana-gowa-self-host.md) — SELF-HOST, menggantikan Sumopod. Hanya jaringan internal, TANPA `ports:`:
+  # web memanggilnya di http://gowa:3000 (Basic auth), QR diambil web di server lalu dikirim ke admin sebagai gambar — GOWA tak pernah publik.
+  # Pesan masuk (verifikasi `VERIF`, ADR-0002) → webhook web lewat jaringan internal, ditandatangani HMAC WHATSAPP_WEBHOOK_SECRET.
+  # Sesi WhatsApp di volume gowa_data — SENGAJA tidak ikut backup (K4): sesi = kunci akun WhatsApp bisnis; server hilang → scan QR ulang.
+  # Tidak memakai env_file: hanya variabel di bawah yang sampai ke GOWA (tak memegang rahasia DB/JWT/PII; SEC-10).
+  gowa:
+    image: aldinokemal2104/go-whatsapp-web-multidevice:v9.9.0@sha256:8a668eee5b4e41cd636f53cc5f2e6e566a0c2670960bb6162fc662e6dc33e7ad
+    restart: unless-stopped
+    command: ["rest"]
+    environment:
+      APP_PORT: "3000"
+      APP_BASIC_AUTH: ${WA_GATEWAY_USER:?WA_GATEWAY_USER belum diisi}:${WA_GATEWAY_PASSWORD:?WA_GATEWAY_PASSWORD belum diisi}
+      # Nama yang tampil di HP: WhatsApp → Perangkat tertaut.
+      APP_OS: Saudinesia
+      # Dasbor web GOWA (diunduh dari GitHub saat jalan) dan MCP dimatikan: tak dipakai, dan unduhan kode saat jalan = rantai pasok.
+      APP_UI_ENABLED: "false"
+      APP_UI_AUTO_UPDATE: "false"
+      MCP_ENABLED: "false"
+      WHATSAPP_WEBHOOK: http://web:3000/api/v1/webhooks/whatsapp
+      WHATSAPP_WEBHOOK_SECRET: ${WHATSAPP_WEBHOOK_SECRET:?WHATSAPP_WEBHOOK_SECRET belum diisi}
+      WHATSAPP_WEBHOOK_EVENTS: message
+      WHATSAPP_WEBHOOK_IGNORE_JIDS: "@g.us,@newsletter"
+      WHATSAPP_WEBHOOK_INCLUDE_OUTGOING: "false"
+      # Tidak membalas/membaca otomatis, tidak mengunduh media, tidak menyimpan isi chat (data pribadi jamaah tak menumpuk di GOWA).
+      WHATSAPP_AUTO_REPLY: ""
+      WHATSAPP_AUTO_MARK_READ: "false"
+      WHATSAPP_AUTO_DOWNLOAD_MEDIA: "false"
+      WHATSAPP_CHAT_STORAGE: "false"
+      TZ: UTC
+    volumes:
+      - gowa_data:/app/storages
+    <<: *hardening
+    # Entrypoint image: root → buat/chown storages & statics → turun ke gowauser (su-exec). Hanya hak itu yang diberi.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+      # Gambar QR & berkas kirim sementara — tak perlu bertahan.
+      - /app/statics:size=32m
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:3000/health || exit 1"] # alpine: wget busybox; /health publik (tanpa auth)
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [internal]
+    mem_limit: 384m
+    cpus: 0.5
+    logging: *logging
+
   caddy:
     image: caddy:2.11.4-alpine@sha256:6aeddd44c3078b0f9a35206472a11420648a79c184603ef95957d0a20044cb2b
     restart: unless-stopped
@@ -224,3 +275,4 @@ volumes:
   minio_data:
   caddy_data:
   caddy_config:
+  gowa_data:

@@ -1,7 +1,7 @@
 import { emailConfigured, emailFrom } from '@/lib/email/resend'
 import { appUrl } from '@/lib/email/templates'
 import { googleConfigured, googleRedirectUri } from '@/lib/auth/google'
-import { whatsapp, type GatewayStatus } from '@/lib/whatsapp/client'
+import { whatsapp, gatewayConfigured, type GatewayStatus } from '@/lib/whatsapp/client'
 import { businessWaDigits } from '@/lib/constants/payment'
 import { webhookSecret } from '@/lib/whatsapp/webhook'
 
@@ -13,7 +13,8 @@ export type IntegrationStatus = {
   email: { configured: boolean; hasApiKey: boolean; from: string | null; hasReplyTo: boolean }
   whatsapp: {
     configured: boolean
-    hasToken: boolean
+    /** Kredensial Basic GOWA (WA_GATEWAY_USER + WA_GATEWAY_PASSWORD) terisi. */
+    hasCredentials: boolean
     /** Webhook pesan masuk (verifikasi nomor): secret terisi? nomor bisnis terisi? URL yang harus dipasang di GOWA. */
     webhookSecretSet: boolean
     businessNumberSet: boolean
@@ -36,8 +37,8 @@ export async function integrationStatus(): Promise<IntegrationStatus> {
       hasReplyTo: Boolean(process.env.RESEND_REPLY_TO?.trim()),
     },
     whatsapp: {
-      configured: Boolean(process.env.WA_GATEWAY_URL?.trim()),
-      hasToken: Boolean(process.env.WA_GATEWAY_TOKEN?.trim()),
+      configured: gatewayConfigured().url,
+      hasCredentials: gatewayConfigured().credentials,
       // true hanya bila secret KUAT (≥32 karakter, bukan bawaan/placeholder) — sama dengan yang dipakai webhook; selain itu webhook mati.
       webhookSecretSet: webhookSecret() !== null,
       businessNumberSet: businessWaDigits() !== '',

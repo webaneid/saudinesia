@@ -27,6 +27,9 @@ if [ -n "${GHCR_TOKEN:-}" ]; then
   trap 'docker logout ghcr.io >/dev/null 2>&1 || true' EXIT
 fi
 
+# 0. Variabel baru yang bisa dibuat mesin (mis. kredensial GOWA) ditambahkan ke .env.production lama — tanpa menimpa nilai yang ada.
+bash "$(dirname "$0")/lengkapi-env-production.sh"
+
 compose() { docker compose -f docker-compose.prod.yml --env-file .env.production --env-file "$1" "${@:2}"; }
 
 # 1. Tarik image versi baru tanpa menyentuh yang sedang berjalan.

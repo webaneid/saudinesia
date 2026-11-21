@@ -135,7 +135,7 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           fingerprint: ${{ secrets.SERVER_SSH_FINGERPRINT }}
-          source: docker-compose.prod.yml,Caddyfile,.env.production.example,scripts/buat-env-production.sh,scripts/deploy-server.sh,scripts/backup-produksi.sh,scripts/setup-backup.sh,scripts/uji-restore.sh
+          source: docker-compose.prod.yml,Caddyfile,.env.production.example,scripts/buat-env-production.sh,scripts/lengkapi-env-production.sh,scripts/deploy-server.sh,scripts/backup-produksi.sh,scripts/setup-backup.sh,scripts/uji-restore.sh
           target: /opt/app
 
       # Repo private: server login GHCR dengan token job ini (berlaku selama job) — dikirim lewat env, bukan ditulis di skrip.

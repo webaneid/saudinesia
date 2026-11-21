@@ -85,10 +85,38 @@ type Out = { at: Date; phone: string; message: string }
 const outgoing: Out[] = []
 let lastSimulation = ''
 let lastFrom = '6281234567890' // formulir mengingat nomor terakhir yang dipakai
+let simLoggedIn = false
+/** Registry perangkat tiruan: GOWA baru = kosong; rute berperangkat wajib `X-Device-Id` (sama dengan GOWA v9.9.0 asli). */
+const simDevices = new Set<string>()
+const BUSINESS_WA = (process.env.NEXT_PUBLIC_BUSINESS_WA || '628111222333').replace(/\D/g, '')
+// PNG 1×1 — cukup untuk membuktikan alur gambar QR (server → data URI → <img>); bukan QR sungguhan.
+const SIM_QR_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64')
 const gowa = createServer(async (req, res) => {
   const url = new URL(req.url ?? '/', 'http://x')
-  if (url.pathname === '/app/status') return json(res, 200, { code: 'SUCCESS', message: 'simulasi', results: { is_connected: true, is_logged_in: true, device_id: 'simulasi' } })
-  if (req.method === 'POST' && url.pathname === '/app/send/message/text') {
+  // Tiruan GOWA v9 (docs/rencana-gowa-self-host.md): Basic auth sama dengan env aplikasi; perangkat mulai TERPUTUS — hubungkan dari admin
+  // Sistem → WhatsApp lalu tekan "Simulasikan scan QR" di halaman ini.
+  const pub = new Set(['/', '/simulate', '/simulate-scan'])
+  if (!pub.has(url.pathname) && req.headers.authorization !== `Basic ${Buffer.from('evaluasi:evaluasi-sandi').toString('base64')}`) return json(res, 401, { code: 'UNAUTHORIZED' })
+  if (url.pathname === '/devices' && req.method === 'GET') return json(res, 200, { code: 'SUCCESS', results: simDevices.size ? [...simDevices].map(id => ({ id, state: simLoggedIn ? 'logged_in' : 'disconnected' })) : null })
+  if (url.pathname === '/devices' && req.method === 'POST') {
+    const body = JSON.parse((await readBody(req)) || '{}') as { device_id?: string }
+    const id = body.device_id || 'perangkat-simulasi'
+    if (simDevices.has(id)) return json(res, 500, { code: 'INTERNAL_SERVER_ERROR', message: `device ${id} already exists` })
+    simDevices.add(id); return json(res, 200, { code: 'SUCCESS', results: { id } })
+  }
+  if (url.pathname.startsWith('/app/') || url.pathname.startsWith('/send/')) {
+    const dev = String(req.headers['x-device-id'] ?? '')
+    if (!dev && simDevices.size !== 1) return json(res, 400, { code: 'DEVICE_ID_REQUIRED', message: 'device_id is required via X-Device-Id header or device_id query' })
+    if (dev && !simDevices.has(dev)) return json(res, 404, { code: 'DEVICE_NOT_FOUND' })
+  }
+  if (url.pathname === '/app/status') return json(res, 200, { code: 'SUCCESS', message: 'simulasi', results: { is_connected: true, is_logged_in: simLoggedIn, device_id: 'simulasi', jid: simLoggedIn ? `${BUSINESS_WA}@s.whatsapp.net` : '' } })
+  if (url.pathname === '/app/login') return json(res, 200, { code: 'SUCCESS', results: { qr_link: `http://localhost:${PORT.gowa}/statics/qrcode/scan-qr-simulasi.png`, qr_duration: 30 } })
+  if (url.pathname === '/statics/qrcode/scan-qr-simulasi.png') { res.writeHead(200, { 'content-type': 'image/png' }); res.end(SIM_QR_PNG); return }
+  if (url.pathname === '/app/login-with-code') return json(res, 200, { code: 'SUCCESS', results: { pair_code: 'SIMU-1234' } })
+  if (url.pathname === '/app/logout') { simLoggedIn = false; return json(res, 200, { code: 'SUCCESS' }) }
+  if (url.pathname === '/app/reconnect') return json(res, 200, { code: 'SUCCESS' })
+  if (req.method === 'POST' && url.pathname === '/simulate-scan') { simLoggedIn = true; return redirect(res, '/') }
+  if (req.method === 'POST' && url.pathname === '/send/message') {
     const b = JSON.parse((await readBody(req)) || '{}') as { phone?: string; message?: string }
     outgoing.unshift({ at: new Date(), phone: b.phone ?? '', message: b.message ?? '' })
     console.log(`[whatsapp] → ${b.phone}: ${(b.message ?? '').split('\n')[0]}`)
@@ -113,6 +141,8 @@ const gowa = createServer(async (req, res) => {
   }
   const rows = outgoing.map((m) => `<div class="card"><div class="muted">Ke +${esc(m.phone)} · ${time(m.at)}</div><pre>${esc(m.message)}</pre></div>`).join('')
   html(res, page('WhatsApp (simulasi GOWA)', 'pesan keluar aplikasi + simulator pesan masuk', `
+    <div class="card"><b>Perangkat: ${simLoggedIn ? `terhubung (+${esc(BUSINESS_WA)})` : 'TERPUTUS'}</b><div class="muted">Buka admin Sistem → WhatsApp → Hubungkan, lalu tekan tombol ini untuk meniru HP yang memindai QR.</div>
+    <form method="post" action="/simulate-scan"><p><button type="submit">Simulasikan scan QR</button></p></form></div>
     <div class="card"><b>Simulator pesan masuk</b><div class="muted">Meniru pengguna yang mengirim pesan ke nomor bisnis — dikirim ke webhook aplikasi dengan tanda tangan HMAC sungguhan.</div>
     <form method="post" action="/simulate"><label>Dari nomor (dengan kode negara, tanpa +)</label><input type="text" name="from" value="${esc(lastFrom)}">
     <label>Isi pesan</label><input type="text" name="body" value="VERIF "><div class="muted">Salin kode dari halaman Profil → Verifikasi WhatsApp, mis. <code>VERIF K7Q2M9XD</code>. Nomor pengirim harus sama dengan nomor WhatsApp akun.</div>
@@ -185,8 +215,8 @@ const env = {
   // Email → kotak masuk simulasi
   RESEND_API_KEY: 're_evaluasi_lokal', RESEND_FROM: 'Saudinesia <noreply@saudinesia.test>', RESEND_API_URL: `http://127.0.0.1:${PORT.mail}`,
   // WhatsApp → GOWA simulasi; webhook memakai secret acak sesi ini
-  WA_GATEWAY_URL: `http://127.0.0.1:${PORT.gowa}`, WA_GATEWAY_TOKEN: 'evaluasi', WHATSAPP_WEBHOOK_SECRET: WEBHOOK_SECRET,
-  NEXT_PUBLIC_BUSINESS_WA: process.env.NEXT_PUBLIC_BUSINESS_WA || '628111222333',
+  WA_GATEWAY_URL: `http://127.0.0.1:${PORT.gowa}`, WA_GATEWAY_USER: 'evaluasi', WA_GATEWAY_PASSWORD: 'evaluasi-sandi', WHATSAPP_WEBHOOK_SECRET: WEBHOOK_SECRET,
+  NEXT_PUBLIC_BUSINESS_WA: BUSINESS_WA,
   // Google → pemilih akun simulasi
   GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET,
   // 127.0.0.1 (BUKAN localhost) = situs berbeda dari aplikasi di localhost → navigasi balik dari 'Google' bersifat LINTAS-SITUS seperti Google asli;

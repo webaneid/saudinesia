@@ -45,7 +45,7 @@ await t('SSH/SCP: kunci host dipin (fingerprint), token GHCR lewat envs, skrip s
   assert.equal(run.with?.script, 'bash /opt/app/scripts/deploy-server.sh')
   assert.match(run.with?.envs ?? '', /GHCR_TOKEN/)
   const scp = ssh.find(s => s.uses?.startsWith('appleboy/scp-action'))!
-  for (const f of ['docker-compose.prod.yml', 'Caddyfile', 'scripts/deploy-server.sh']) assert.ok((scp.with?.source ?? '').split(',').includes(f), f)
+  for (const f of ['docker-compose.prod.yml', 'Caddyfile', 'scripts/deploy-server.sh', 'scripts/lengkapi-env-production.sh']) assert.ok((scp.with?.source ?? '').split(',').includes(f), f)
 })
 await t('build: NEXT_PUBLIC_APP_URL & MINIO wajib diperiksa sebelum build; web=runner, migrate=migrate; deploy menunggu build/rollback', () => {
   const b = wf.jobs.build!
