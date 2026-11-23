@@ -43,6 +43,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'app/[locale]/admin/(protected)/system/platform-provider/accounts/page.tsx': { count: 1, reason: 'rekening Platform Provider: master data kecil (≤ 100, take di listProviderAccounts)' },
   'app/[locale]/admin/(protected)/system/platform-provider/income/page.tsx': { count: 1, reason: 'ringkasan bulanan Pendapatan: ukuran tetap 12 baris (satu per bulan); daftar per booking di halaman yang sama berpaginasi' },
   'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': { count: 1, reason: 'arus uang buku kas SATU booking (daftar bersarang milik satu induk, dibatasi 200 entri dengan penanda); buku kas lengkap berpaginasi' },
+  'components/admin/documents/RequirementsTable.tsx': { count: 1, reason: 'syarat dokumen SATU produk (daftar bersarang milik satu induk, dibatasi 30 oleh documentRequirementListSchema); disimpan bersama produk' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },
 }
 

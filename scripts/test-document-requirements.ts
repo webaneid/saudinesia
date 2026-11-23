@@ -155,7 +155,7 @@ await t('PENJAGA V4b: rute buat/ubah Paket & Haji menulis syarat lewat writeRequ
     assert.match(s, new RegExp(`productType: '${owner}'`), f)
   }
   for (const f of ['app/[locale]/admin/(protected)/products/packages/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/haji/[id]/page.tsx']) {
-    assert.match(src(f), /<RequirementsEditor /, f)
+    assert.match(src(f), /<RequirementsTable /, f)
     assert.match(src(f), /requirements: bodyFromRows\(/, f)
   }
 })

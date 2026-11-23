@@ -1,7 +1,7 @@
 import type { RequirementView } from '@/lib/documents/completeness'
 import type { DocumentRequirementInput } from '@/lib/validators/documents'
 
-// Nilai murni editor syarat dokumen produk (docs/arsitektur-jamaah.md §7.6) — dipakai RequirementsEditor dan diuji tanpa peramban.
+// Nilai murni editor syarat dokumen produk (docs/arsitektur-jamaah.md §7.6) — dipakai RequirementsTable dan diuji tanpa peramban.
 
 /** Satu baris editor. `label` kosong = label katalog; `typeLabel` hanya untuk tampilan. */
 export type RequirementRow = { documentTypeId: string; typeLabel: string; label: string; description: string; required: boolean }

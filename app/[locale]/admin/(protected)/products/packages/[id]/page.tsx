@@ -14,7 +14,7 @@ import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
+import { RequirementsTable } from '@/components/admin/documents/RequirementsTable'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import type { RequirementView } from '@/lib/documents/completeness'
 import { DeparturesBox } from './DeparturesBox'
@@ -483,7 +483,7 @@ export default function PackageBuilderPage({ params }: Props) {
       {/* Dimuat ulang (peringatan periode/durasi) setiap durasi tersimpan atau komponen paket berubah. */}
       <DeparturesBox key={`${baseline.durationDays}-${priceTick}`} packageId={pkg.id} />
 
-      <RequirementsEditor rows={form.reqs} onChange={reqs => setForm(f => ({ ...f, reqs }))} productNoun="paket ini" />
+      <RequirementsTable rows={form.reqs} onChange={reqs => setForm(f => ({ ...f, reqs }))} productNoun="paket ini" />
 
       {/* Hotel Makkah */}
       <MetaBox title="Hotel Makkah" icon={Building2} description="Pilih bagaimana hotel Makkah masuk ke paket ini — lihat docs/arsitektur-paket-umroh.md §3" defaultOpen={pkg.hotelMakkahMode !== 'none'} aside={<Badge tone={pkg.hotelMakkahMode === 'none' ? 'neutral' : 'accent'}>{MODE_LABEL[pkg.hotelMakkahMode]}</Badge>}>

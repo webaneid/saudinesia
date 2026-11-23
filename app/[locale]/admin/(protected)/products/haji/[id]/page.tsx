@@ -14,7 +14,7 @@ import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPa
 import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
+import { RequirementsTable } from '@/components/admin/documents/RequirementsTable'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import type { RequirementView } from '@/lib/documents/completeness'
 import { adminHref } from '@/lib/admin/href'
@@ -93,7 +93,7 @@ export default function HajiEditPage() {
       }}
       after={
         <>
-        <RequirementsEditor rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="produk haji ini" />
+        <RequirementsTable rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="produk haji ini" />
         <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
         <CostComponentsPanel
           apiBase={`/api/v1/admin/products/haji/${id}/costs`}

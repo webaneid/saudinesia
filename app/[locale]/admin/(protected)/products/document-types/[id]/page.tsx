@@ -7,8 +7,8 @@ import { EditPage } from '@/components/admin/shell/EditPage'
 import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { Badge } from '@/components/admin/ui/Badge'
-import { DocumentTypeFields } from '../DocumentTypeFields'
-import { bodyFromTypeForm, canSubmitType, formFromType, type DocumentTypeForm, type DocumentTypeRow } from '../documentTypeForm'
+import { DocumentTypeFields } from '@/components/admin/documents/DocumentTypeFields'
+import { bodyFromTypeForm, canSubmitType, formFromType, type DocumentTypeForm, type DocumentTypeRow } from '@/components/admin/documents/documentTypeForm'
 import { adminHref } from '@/lib/admin/href'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i // segmen URL dipakai membangun URL API (SEC-180)
