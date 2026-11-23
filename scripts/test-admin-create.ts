@@ -21,6 +21,7 @@ const MODULES: Array<{ list: string; news: string[] }> = [
   { list: 'products/tourism-sites', news: ['products/tourism-sites/new'] },
   { list: 'products/catering', news: ['products/catering/new'] },
   { list: 'products/seasons', news: ['products/seasons/new'] },
+  { list: 'products/pilgrim-fields', news: ['products/pilgrim-fields/new'] },
   { list: 'products/flight', news: ['products/flight/new', 'products/flight/routes/new'] },
   { list: 'products/transport', news: ['products/transport/vehicles/new', 'products/transport/trips/new'] },
   { list: 'system/users', news: ['system/users/new'] },

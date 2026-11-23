@@ -1,6 +1,6 @@
 # Arsitektur — Katalog Data Jamaah + Saklar per Produk
 
-> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8).** D2–D5 belum. Menggantikan
+> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8), D2 SELESAI (2026-11-24, as-built §9).** D3–D5 belum. Menggantikan
 > pengatur kolom per produk di `docs/arsitektur-manifest.md` §9 (tab "Data jamaah" visa, sejak 2026-11-24 disembunyikan).
 
 ## 1. Permintaan pemilik (2026-11-24)
@@ -177,3 +177,25 @@ snapshot kartu dan penyegel jamaah baru (`bookingLink.ts`: `linkCard` + `sealNew
 jamaah termasuk saklar & rombongan, penulis tunggal), `test-booking-link`/`test-pilgrim-extra-fields`/`test-pilgrim-review` (katalog uji
 lewat `scripts/lib/pilgrimCatalog.ts`), `test-admin-delete`/`test-haji-pricing` (saklar ikut terhapus; penyidik tabel polimorfik) — semua
 di DB sekali pakai; `bun run test` penuh.
+
+## 9. As-built D2 (2026-11-24) — menu Produk → Data Jamaah
+
+- **Menu** `lib/admin/navigation.ts`: "Data Jamaah" tepat di bawah "Jenis Dokumen". Halaman `products/pilgrim-fields` (daftar `CatalogList`:
+  Kolom · Kode · Tipe · Sifat · Status · aksi), `new` (`CreatePage`), `[id]` (`EditPage`, tanpa foto) — pola sama Jenis Dokumen. Isian =
+  satu komponen `components/admin/pilgrim-data/PilgrimFieldFields.tsx` + modul murni `pilgrimFieldForm.ts`. Kolom "Diminta untuk" di
+  rencana tidak dibuat: sebelum D3 semua kolom aktif berlaku untuk setiap produk ber-saklar nyala (tak ada yang berbeda untuk ditampilkan).
+- **Route** `api/v1/admin/products/pilgrim-fields` (GET berpaginasi opt-in, POST) dan `[id]` (GET + pemakaian, PUT, DELETE) — `requireManager`.
+- **Penulis tunggal** `lib/pilgrim-data/fields.ts` (`createPilgrimField`/`updatePilgrimField`/`deletePilgrimField`, baris dikunci `FOR UPDATE`);
+  masukan `lib/validators/pilgrimFields.ts` (`.strict()`):
+  - kode = camelCase `^[a-z][A-Za-z0-9]{1,39}$`, diusulkan dari label, tak pernah berubah; bukan nama properti bawaan objek; kembar → 409;
+  - kolom admin: tipe tanpa `address`; label NIK/KTP/paspor ditolak (`looksLikeSealedData` — nilainya tak disegel); Pilihan ≥ 2 unik;
+    tipe hanya bisa diganti selama kuncinya belum berisi data (`fieldUsage`: `jsonb_exists` atas `booking_pilgrims.fieldValues` dan
+    `saved_pilgrims.extraValues`);
+  - kolom bawaan: label, wajib, urutan, aktif boleh; tipe/pilihan ditolak; Nama Lengkap tak bisa dinonaktifkan, dibuat opsional, atau dihapus;
+  - hapus aman: bawaan atau berisi data → nonaktif, selain itu dihapus.
+- **Bukti:** `scripts/test-pilgrim-data.ts` (+6 uji D2: validator, buat, ubah bawaan/admin, hapus aman, sumber route/menu) di DB sekali pakai;
+  penjaga `test-admin-create`/`test-admin-editor` (halaman didaftarkan), `test-table-consistency`, `test-routes`, `test-combobox`; browser
+  (server dev terpisah): daftar 13 kolom, buat "Golongan Darah" (Pilihan) → halaman edit, hapus sungguhan, penolakan API (Nama Lengkap,
+  tipe bawaan, kunci, label KTP, kode kembar, id asing), tanpa sesi 403, 375 px tanpa gulir samping; `bun run build` hijau.
+- **Gap yang diketahui:** mengubah wajib/aktif di katalog tidak membuka ulang jamaah yang sudah diajukan/terverifikasi (sama dengan keputusan
+  syarat dokumen); nilai kolom admin di kartu belum bisa diisi pelanggan (D4).
