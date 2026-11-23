@@ -16,7 +16,7 @@ const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'pro
 /** Entri berakhiran .tsx = berkas editor di folder halaman (page.tsx hanya penjaga peran server); selain itu `<entri>/page.tsx`. */
 const fileOf = (e: string) => ADMIN + (e.endsWith('.tsx') ? e : e + '/page.tsx')
 // EditPage tanpa foto (entitas tak bergambar — dokumen jamaah menyusul Fase 4 jamaah sebagai kotak sendiri).
-const EDITPAGE_NO_MEDIA_PAGES = ['customers/[id]/pilgrims/[cardId]']
+const EDITPAGE_NO_MEDIA_PAGES = ['customers/[id]/pilgrims/[cardId]', 'products/pilgrim-fields/[id]']
 // Halaman kelola server (EditorShell + MetaBox) yang setiap kotaknya komponen yang menyimpan sendiri — tanpa satu tombol Simpan (PublishBox).
 const PANEL_PAGES = ['bookings/[id]/pilgrims/[pilgrimId]', 'finance/refunds/[id]', 'finance/transfers/[id]', 'system/platform-provider/payouts/[id]']
 

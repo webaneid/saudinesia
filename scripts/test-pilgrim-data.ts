@@ -12,6 +12,8 @@ import { MANIFEST_ROLES } from '@/lib/manifest/roles'
 import { PILGRIM_DATA_OWNERS, PILGRIM_DATA_OWNER_TYPES } from '@/lib/pilgrim-data/owners'
 import { activeFields, displayFields, pilgrimCatalog, valueByRole } from '@/lib/pilgrim-data/catalog'
 import { pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
+import { createPilgrimField, deletePilgrimField, fieldUsage, updatePilgrimField } from '@/lib/pilgrim-data/fields'
+import { pilgrimFieldCreateSchema, pilgrimFieldUpdateSchema } from '@/lib/validators/pilgrimFields'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -160,6 +162,81 @@ await t('kolom aktif baru di katalog langsung diminta; nonaktif = tak diminta', 
     await prisma.pilgrimField.update({ where: { id: f.id }, data: { isActive: false } })
     assert.ok(!(await demandedOf()).visa.includes(f.key))
   } finally { await prisma.pilgrimField.delete({ where: { id: f.id } }) }
+})
+
+// ── D2: penulis katalog (lib/pilgrim-data/fields.ts) + route admin ───────────────────────────────────────────────
+const sysId = (key: string) => catalog.find(f => f.fieldKey === key)!.id
+const parseCreate = (x: unknown) => pilgrimFieldCreateSchema.safeParse(x)
+
+await t('D2 validator: kode camelCase saja; label NIK/paspor ditolak; Pilihan wajib ≥ 2 dan unik; opsi pada teks ditolak; alamat bukan tipe kolom admin; kunci asing ditolak', () => {
+  assert.ok(parseCreate({ key: 'golonganDarah', label: 'Golongan Darah', fieldType: 'text' }).success)
+  for (const bad of [
+    { key: 'golongan_darah', label: 'Golongan Darah', fieldType: 'text' }, { key: 'Gol', label: 'Golongan', fieldType: 'text' },
+    { key: 'constructor', label: 'Konstruktor', fieldType: 'text' }, { key: 'nomorKtp', label: 'Nomor KTP Ayah', fieldType: 'text' },
+    { key: 'pilih', label: 'Pilih', fieldType: 'select', options: [{ label: 'A', value: 'a' }] },
+    { key: 'pilih', label: 'Pilih', fieldType: 'select', options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'a' }] },
+    { key: 'teks', label: 'Teks', fieldType: 'text', options: [{ label: 'A', value: 'a' }, { label: 'B', value: 'b' }] },
+    { key: 'alamatKos', label: 'Alamat Kos', fieldType: 'address' }, { key: 'x1', label: 'X Satu', fieldType: 'text', role: 'nik' },
+  ]) assert.equal(parseCreate(bad).success, false, JSON.stringify(bad))
+  assert.equal(pilgrimFieldUpdateSchema.safeParse({ key: 'baru' }).success, false, 'kunci tak pernah diubah')
+})
+
+await t('D2 buat: kolom admin tanpa peran/bawaan; kode kembar → 409', async () => {
+  const r = await createPilgrimField(pilgrimFieldCreateSchema.parse({ key: 'golonganDarah', label: 'Golongan Darah', fieldType: 'select', options: [{ label: 'A', value: 'A' }, { label: 'B', value: 'B' }] }))
+  assert.ok(r.ok)
+  const row = await prisma.pilgrimField.findUniqueOrThrow({ where: { key: 'golonganDarah' } })
+  assert.deepEqual([row.role, row.isSystem, row.isActive, row.required], [null, false, true, false])
+  const dup = await createPilgrimField(pilgrimFieldCreateSchema.parse({ key: 'golonganDarah', label: 'Lagi', fieldType: 'text' }))
+  assert.ok(!dup.ok && dup.status === 409 && dup.field === 'key')
+  const sys = await createPilgrimField(pilgrimFieldCreateSchema.parse({ key: 'fullName', label: 'Nama Lain', fieldType: 'text' }))
+  assert.ok(!sys.ok && sys.status === 409, 'kode kolom bawaan tak bisa dipakai ulang')
+})
+
+await t('D2 ubah bawaan: label/wajib/urutan/aktif boleh; tipe/pilihan ditolak; Nama Lengkap tak bisa dimatikan/opsional', async () => {
+  const pp = sysId('passportNumber')
+  assert.ok((await updatePilgrimField(pp, { label: 'No. Paspor', required: true, order: 5 })).ok)
+  const after = await prisma.pilgrimField.findUniqueOrThrow({ where: { id: pp } })
+  assert.deepEqual([after.label, after.required, after.fieldType, after.key], ['No. Paspor', true, 'text', 'passportNumber'])
+  const t1 = await updatePilgrimField(pp, { fieldType: 'number' }); assert.ok(!t1.ok && t1.field === 'fieldType')
+  const t2 = await updatePilgrimField(sysId('gender'), { options: [{ label: 'X', value: 'x' }, { label: 'Y', value: 'y' }] }); assert.ok(!t2.ok && t2.field === 'options')
+  for (const p of [{ isActive: false }, { required: false }]) { const r = await updatePilgrimField(sysId('fullName'), p); assert.ok(!r.ok && r.status === 400, JSON.stringify(p)) }
+  await prisma.pilgrimField.update({ where: { id: pp }, data: { label: 'Nomor Paspor', required: false, order: 5 } }) // pulihkan
+  assert.ok(!(await updatePilgrimField('00000000-0000-0000-0000-000000000000', { label: 'Ada' })).ok)
+})
+
+await t('D2 ubah admin: tipe boleh diganti selama belum berisi data, ditolak sesudahnya; select tanpa pilihan cukup ditolak; label NIK ditolak', async () => {
+  const id = (await prisma.pilgrimField.findUniqueOrThrow({ where: { key: 'golonganDarah' } })).id
+  assert.ok((await updatePilgrimField(id, { fieldType: 'text' })).ok, 'belum dipakai → boleh')
+  assert.equal((await prisma.pilgrimField.findUniqueOrThrow({ where: { id } })).options, null, 'pilihan dibuang saat bukan Pilihan')
+  const sel = await updatePilgrimField(id, { fieldType: 'select' }); assert.ok(!sel.ok && sel.field === 'options')
+  const nik = await updatePilgrimField(id, { label: 'NIK Ibu' }); assert.ok(!nik.ok && nik.field === 'label')
+  await prisma.bookingPilgrim.update({ where: { id: inG2.id }, data: { fieldValues: { golonganDarah: 'O' } } })
+  assert.deepEqual(await fieldUsage('golonganDarah'), { bookingPilgrims: 1, cards: 0 })
+  const locked = await updatePilgrimField(id, { fieldType: 'number' }); assert.ok(!locked.ok && locked.field === 'fieldType')
+  assert.ok((await updatePilgrimField(id, { label: 'Gol. Darah', required: true })).ok, 'label/wajib tetap boleh')
+})
+
+await t('D2 hapus-aman: berisi data → nonaktif; tak dipakai → terhapus; bawaan → nonaktif (bisa diaktifkan lagi)', async () => {
+  const used = (await prisma.pilgrimField.findUniqueOrThrow({ where: { key: 'golonganDarah' } })).id
+  const r1 = await deletePilgrimField(used)
+  assert.ok(!r1.deleted && (await prisma.pilgrimField.findUniqueOrThrow({ where: { id: used } })).isActive === false)
+  await prisma.bookingPilgrim.update({ where: { id: inG2.id }, data: { fieldValues: {} } })
+  assert.deepEqual(await deletePilgrimField(used), { deleted: true }, 'sesudah tak dipakai → hapus sungguhan')
+  const bp = sysId('birthPlace')
+  const r3 = await deletePilgrimField(bp)
+  assert.ok(!r3.deleted)
+  assert.ok((await updatePilgrimField(bp, { isActive: true })).ok)
+  await prisma.pilgrimField.update({ where: { id: bp }, data: { isActive: false } }) // pulihkan bawaan migrasi
+  await assert.rejects(() => deletePilgrimField('00000000-0000-0000-0000-000000000000'), (e: unknown) => (e as { code?: string }).code === 'P2025')
+})
+
+await t('D2 route: requireManager di setiap handler, memakai penulis tunggal, Nama Lengkap tak bisa dihapus, menu Produk → Data Jamaah', () => {
+  const list = readFileSync(join(root, 'app/api/v1/admin/products/pilgrim-fields/route.ts'), 'utf8')
+  const one = readFileSync(join(root, 'app/api/v1/admin/products/pilgrim-fields/[id]/route.ts'), 'utf8')
+  for (const [src, n] of [[list, 2], [one, 3]] as const) assert.equal(src.match(/await requireManager\(\)/g)?.length, n)
+  assert.ok(list.includes('createPilgrimField(') && one.includes('updatePilgrimField(') && one.includes('deletePilgrimField(') && one.includes("role === 'display_name'"))
+  const nav = readFileSync(join(root, 'lib/admin/navigation.ts'), 'utf8')
+  assert.ok(nav.indexOf("'/admin/products/pilgrim-fields'") > nav.indexOf("'/admin/products/document-types'"), 'menu Data Jamaah di bawah Jenis Dokumen')
 })
 
 // ── pembersihan (DB uji) ────────────────────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-import { Fingerprint,
+import { ClipboardList, Fingerprint,
   Receipt, LayoutDashboard, BookOpen, CreditCard, FileText, BarChart3, Bell,
   Package, Star, KeyRound, Building2, Bus, UserRound, UtensilsCrossed, MapPin, Landmark, CalendarDays, Plane,
   Users, UserCheck, Settings, PanelsTopLeft, ShieldAlert, Handshake, HeartPulse, LineChart, Scale, FileBadge, ClipboardCheck, BookOpenCheck, Undo2, ArrowLeftRight, Repeat, BadgePercent, BadgeCheck,
@@ -48,6 +48,7 @@ const PRODUK: NavItem[] = [
   { path: '/admin/products/tour-packages', icon: Landmark,        label: 'Paket Ziarah' },
   { path: '/admin/products/seasons',       icon: CalendarDays,    label: 'Musim' },
   { path: '/admin/products/document-types', icon: FileBadge,      label: 'Jenis Dokumen' },
+  { path: '/admin/products/pilgrim-fields', icon: ClipboardList,  label: 'Data Jamaah' },
 ]
 
 const SISTEM: NavItem[] = [
@@ -110,6 +111,7 @@ export const LABEL_SEGMEN: Record<string, string> = {
   'tour-packages': 'Paket Ziarah',
   seasons: 'Musim',
   'document-types': 'Jenis Dokumen',
+  'pilgrim-fields': 'Data Jamaah',
   system: 'Sistem',
   users: 'Pengguna',
   'deletion-requests': 'Hapus Akun',
