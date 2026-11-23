@@ -195,7 +195,7 @@ services:
   # Sesi WhatsApp di volume gowa_data — SENGAJA tidak ikut backup (K4): sesi = kunci akun WhatsApp bisnis; server hilang → scan QR ulang.
   # Tidak memakai env_file: hanya variabel di bawah yang sampai ke GOWA (tak memegang rahasia DB/JWT/PII; SEC-10).
   gowa:
-    image: aldinokemal2104/go-whatsapp-web-multidevice:v9.9.0@sha256:8a668eee5b4e41cd636f53cc5f2e6e566a0c2670960bb6162fc662e6dc33e7ad
+    image: aldinokemal2104/go-whatsapp-web-multidevice:v9.10.0@sha256:026f31c4d2e3fb448a7cc1abbb3319a7ddc25d51ed9136f2ea7ae0b03219a53c
     restart: unless-stopped
     command: ["rest"]
     environment:
