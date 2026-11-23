@@ -501,9 +501,6 @@ export default function TourPackageBuilderPage({ params }: Props) {
         )}
       </MetaBox>
 
-      {/* Harga: modal · jual · untung (titik harga) */}
-      <PriceCard ownerType="tour_package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
-
       {/* Komponen biaya */}
       <CostComponentsTable
         apiBase={`/api/v1/admin/products/tour-packages/${id}/costs`}
@@ -566,6 +563,9 @@ export default function TourPackageBuilderPage({ params }: Props) {
           )}
         </MetaBox>
       )}
+
+      {/* Kesimpulan harga: modal · jual · untung (titik harga) — selalu paling akhir */}
+      <PriceCard ownerType="tour_package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
         </>
       }
     />

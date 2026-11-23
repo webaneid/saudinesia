@@ -39,7 +39,7 @@ Bentuk dijaga `visaRequiredComponentsSchema` (`.strict()`, tiap jenis sekali); d
 ## 3. Harga
 
 - Visa = pemilik harga `visa` (`lib/pricing/engine/owners/visa.ts`): satu **varian per rentang hari** (`days:<min>-<max>`) dari batas tier semua komponen biaya;
-  modal = HPP pada hari awal rentang (`computeSellPrice`), unit `person`. Harga manual per tier lewat `setManualSell` (PriceCard).
+  modal = HPP pada hari awal rentang (`computeSellPrice`), unit `person`. Harga manual per tier lewat `setManualSell` (popup `VisaTiersTable`, §10).
 - Jalur pesan: `takeVisaTier(tx, visaProductId, days)` (`lib/pricing/engine/snapshot.ts`) memilih tier yang memuat lama tinggal (`selectedDurationDays`,
   bawaan `DEFAULT_DURATION_PROBE_DAY`); tak ada tier/≤ 0 → `ItemNotBookableError` 422. Baris snapshot `itemType='visa'`, `itemId` = id `VisaApplication`.
 - Visa yang ikut **Paket Umroh** (`included`) TIDAK punya baris harga sendiri — sudah dibayar di baris paket; `VisaApplication` tetap dibuat untuk anggota paket.
@@ -61,7 +61,7 @@ Bentuk dijaga `visaRequiredComponentsSchema` (`.strict()`, tiap jenis sekali); d
 
 1. **Admin menyusun produk** di Produk → Visa → edit (`products/visa/[id]/page.tsx`, `EditPage` tanpa tab, sama dengan Haji/Paket — §10): Informasi
    (`VisaInfoFields`, dipakai juga halaman `new`) · Persyaratan dokumen (`RequirementsTable`) · Model penjualan (`SalesModelCard`: Visa only / Visa plus + daftar
-   centang 7 jenis, filter transport) · Harga per rentang hari (`VisaTiersTable` + `PriceCard`).
+   centang 7 jenis, filter transport) · Harga per rentang hari (`VisaTiersTable`; tanpa `PriceCard` sejak 2026-11-24).
 2. **Booking dibuat** (admin: draf `bookings/drafts/[id]` dengan baris Visa di `ItemRows` — pemetaan kelompok ↔ slot jamaah di `visaRows.ts`; revisi sesudah terbit;
    jamaah: checkout pendek `bookings/checkout/visa` hanya untuk Visa only). Semua lewat `prepareBooking` (`lib/booking/create.ts`):
    - aturan "wajib dibeli bersama" dinilai `visaRuleViolations` (`lib/booking/ruleContext.ts`: `bookingCoverage` dari item + isi Paket Umroh yang ditagih + Paket Ziarah;
@@ -123,6 +123,6 @@ Visa plus → "Dipesan bersama: … Hubungi admin" (checkout pendek hanya memuat
 
 Arahan pemilik: edit dan tambah disamakan dengan produk lain (tanpa tab berjenjang); data jamaah sementara TIDAK DITAMPILKAN (bukan dihapus); harga & HPP memakai komponen yang sama dengan produk lain.
 
-- **Tata letak**: `products/visa/[id]/page.tsx` = `EditPage` + `useEditEntity` + `useDirtyForm` (form diisi sekali). Kiri: `VisaInfoFields`; bawah: `RequirementsTable` → `SalesModelCard` → `VisaTiersTable` → `PriceCard`. Kanan: Terbitkan, Foto Unggulan (`MediaField`), "Harga Jual per Orang" (+ model penjualan), Hapus (hapus-aman `deleteVisaProduct`: dirujuk → nonaktif). Halaman `new` = `CreatePage` + `VisaInfoFields` yang sama. `ProductInfoTab`/`CostTiersTab` dihapus; `RulesTab` → `SalesModelCard`.
+- **Tata letak**: `products/visa/[id]/page.tsx` = `EditPage` + `useEditEntity` + `useDirtyForm` (form diisi sekali). Kiri: `VisaInfoFields`; bawah: `RequirementsTable` → `SalesModelCard` → `VisaTiersTable`. Kartu "Harga: modal, jual, untung" (`PriceCard`) TIDAK dipakai di Visa — tabel rentang sudah menampilkan biaya, HPP, jual, dan untung per rentang (arahan pemilik 2026-11-24). Kanan: Terbitkan, Foto Unggulan (`MediaField`), "Harga Jual per Orang" (+ model penjualan), Hapus (hapus-aman `deleteVisaProduct`: dirujuk → nonaktif). Halaman `new` = `CreatePage` + `VisaInfoFields` yang sama. `ProductInfoTab`/`CostTiersTab` dihapus; `RulesTab` → `SalesModelCard`.
 - **Data jamaah disembunyikan**: halaman tidak memuat `ManifestFieldsEditor` dan TIDAK mengirim `manifestFields` saat simpan — route `PUT` hanya menulis kolom bila dikirim, jadi kolom tersimpan utuh (diuji: 11 kolom sama sebelum/sesudah simpan). Komponen, API, dan pemakaian checkout tidak berubah. Dijaga `scripts/test-admin-editor.ts`.
 - **Harga per rentang hari** (`VisaTiersTable`): tabel Rentang · Biaya → HPP · Harga Jual · Untung + popup lihat/tambah/edit/hapus memakai `CostFields` (§10.1 `docs/arsitektur-komponen-biaya.md`) dengan isian khusus visa: Dari/Sampai hari ke- (`before`, tidak boleh tumpang tindih) dan Biaya BRN opsional (`afterCost`). Vendor + mata uang Visa dan BRN tetap SATU per produk (model `ProductCost` per komponen): dikunci di popup rentang bila rentang lain ada, diubah lewat popup "Vendor & mata uang" (termasuk "Hapus BRN dari semua rentang"). Simpan = PUT seluruh rentang ke `cost-tiers` (route mengganti semuanya), lalu harga manual per varian `days:<min>-<max>` lewat `syncManualSell({ variantKey })`. Rentang terakhir tak bisa dihapus (route mewajibkan ≥ 1). GET `cost-tiers` kini juga mengembalikan `vendorName` (superadmin-only).

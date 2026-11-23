@@ -94,13 +94,14 @@ export default function HajiEditPage() {
       after={
         <>
         <RequirementsTable rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="produk haji ini" />
-        <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
         <CostComponentsTable
           apiBase={`/api/v1/admin/products/haji/${id}/costs`}
           hint="Tiap komponen (visa, akomodasi, transportasi, dst) dapat margin sendiri, baru dijumlah jadi harga per orang — lihat docs/arsitektur-komponen-biaya.md"
           namePlaceholder="Visa Haji, Akomodasi Makkah, Transportasi, dst"
           onChanged={async () => { await e.reload(); setPriceTick(t => t + 1) }}
         />
+        {/* Kesimpulan harga — selalu paling akhir */}
+        <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
         </>
       }
     >

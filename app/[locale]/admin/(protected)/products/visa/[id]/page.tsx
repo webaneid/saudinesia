@@ -10,7 +10,6 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { Badge } from '@/components/admin/ui/Badge'
 import { MediaField } from '@/components/admin/media/MediaField'
-import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { RequirementsTable } from '@/components/admin/documents/RequirementsTable'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import { parseRequiredComponents, visaSalesModel, type RequiredComponent } from '@/lib/validators/visa'
@@ -37,7 +36,7 @@ export default function VisaEditPage() {
   const e = useEditEntity<ProductDetail>(`/api/v1/admin/products/visa/${id}`, list)
   const [form, setForm] = useState<Form | null>(null)
   const { dirty, markClean, patchClean } = useDirtyForm(form)
-  const [priceTick, setPriceTick] = useState(0) // naik setiap harga berubah → PriceCard memuat ulang
+  const [priceTick, setPriceTick] = useState(0) // naik setiap harga berubah → tabel rentang memuat ulang
 
   // Formulir diisi SEKALI dari data yang dimuat; muat-ulang akibat harga berubah tidak menimpa ketikan yang belum disimpan.
   useEffect(() => {
@@ -89,7 +88,6 @@ export default function VisaEditPage() {
           <RequirementsTable rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="visa ini" />
           <SalesModelCard rules={form.rules} onChange={rules => patch({ rules })} />
           <VisaTiersTable productId={id} onChanged={reloadPrice} reloadKey={priceTick} />
-          <PriceCard ownerType="visa" ownerId={id} reloadKey={priceTick} onChanged={() => { void reloadPrice() }} />
         </>
       }
     >

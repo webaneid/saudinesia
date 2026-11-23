@@ -5,7 +5,7 @@ import { AlertTriangle, Check, ChevronDown, History, Loader2, Pencil, RotateCcw,
 import { Badge } from '@/components/admin/ui/Badge'
 import { Button } from '@/components/admin/ui/Button'
 import { Card } from '@/components/admin/ui/Card'
-import { formatRupiah } from '@/lib/utils'
+import { cn, formatRupiah } from '@/lib/utils'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
 import { marginNote, type NoteRef } from '@/lib/pricing/marginNote'
 import { MarginNote } from './MarginNote'
@@ -58,6 +58,9 @@ type Props = {
   onChanged?: () => void
 }
 
+/** Kartu ini KESIMPULAN harga produk: selalu diletakkan paling akhir di halaman edit, ditandai border warna utama (arahan pemilik 2026-11-24). */
+const CONCLUSION = 'border-admin-accent/50 bg-admin-accent/5'
+
 export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, untung', reloadKey, onChanged }: Props) {
   const [data, setData] = useState<Payload | null>(null)
   const [status, setStatus] = useState<'loading' | 'ok' | 'forbidden' | 'error'>('loading')
@@ -76,8 +79,8 @@ export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, unt
   useEffect(() => { void load() }, [load, reloadKey])
 
   if (status === 'forbidden') return null // peran tanpa hak melihat modal/untung (policy) — kartu tidak ditampilkan
-  if (status === 'loading') return <Card className="flex items-center gap-2 p-5 text-sm text-admin-muted"><Loader2 className="size-4 animate-spin" /> Memuat harga…</Card>
-  if (status === 'error' || !data) return <Card className="p-5 text-sm text-admin-danger">Harga gagal dimuat. Muat ulang halaman.</Card>
+  if (status === 'loading') return <Card className={cn(CONCLUSION, 'flex items-center gap-2 p-5 text-sm text-admin-muted')}><Loader2 className="size-4 animate-spin" /> Memuat harga…</Card>
+  if (status === 'error' || !data) return <Card className={cn(CONCLUSION, 'p-5 text-sm text-admin-danger')}>Harga gagal dimuat. Muat ulang halaman.</Card>
 
   const rows: Array<{ key: string; point: Point | null }> = data.points.map(p => ({ key: p.variantKey, point: p }))
   for (const key of data.creatable) if (!data.points.some(p => p.variantKey === key)) rows.push({ key, point: null })
@@ -85,7 +88,7 @@ export function PriceCard({ ownerType, ownerId, title = 'Harga: modal, jual, unt
   const afterChange = () => { void load(); onChanged?.() }
 
   return (
-    <Card className="space-y-4 p-5">
+    <Card className={cn(CONCLUSION, 'space-y-4 p-5')}>
       <div>
         <h2 className="m-0 flex items-center gap-2 text-sm font-bold text-admin-ink"><Wallet className="size-4 text-admin-accent" /> {title}</h2>
         <p className="m-0 mt-1 text-xs text-admin-muted">
@@ -162,7 +165,7 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
   const unpriced = point != null && point.sellIdr === 0
 
   return (
-    <div className="space-y-3 rounded-xl border border-admin-line p-3">
+    <div className="space-y-3 rounded-xl border border-admin-line bg-white p-3">
       {(label || point) && (
         <div className="flex flex-wrap items-center gap-2">
           {label && <span className="text-xs font-bold text-admin-ink">{label}</span>}

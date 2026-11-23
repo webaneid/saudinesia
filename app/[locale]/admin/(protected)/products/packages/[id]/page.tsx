@@ -731,9 +731,6 @@ export default function PackageBuilderPage({ params }: Props) {
         )}
       </MetaBox>
 
-      {/* Harga: modal · jual · untung (titik harga) */}
-      <PriceCard ownerType="package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
-
       {/* Komponen biaya */}
       <CostComponentsTable
         apiBase={`/api/v1/admin/products/packages/${id}/costs`}
@@ -858,6 +855,9 @@ export default function PackageBuilderPage({ params }: Props) {
           )}
         </MetaBox>
       )}
+
+      {/* Kesimpulan harga: modal · jual · untung (titik harga) — selalu paling akhir */}
+      <PriceCard ownerType="package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
         </>
       }
     />
