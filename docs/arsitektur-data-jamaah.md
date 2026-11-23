@@ -1,6 +1,6 @@
 # Arsitektur — Katalog Data Jamaah + Saklar per Produk
 
-> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8), D2 SELESAI (2026-11-24, as-built §9).** D3–D5 belum. Menggantikan
+> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8), D2 SELESAI (2026-11-24, as-built §9), D3 SELESAI (2026-11-24, as-built §10).** D4–D5 belum. Menggantikan
 > pengatur kolom per produk di `docs/arsitektur-manifest.md` §9 (tab "Data jamaah" visa, sejak 2026-11-24 disembunyikan).
 
 ## 1. Permintaan pemilik (2026-11-24)
@@ -199,3 +199,23 @@ di DB sekali pakai; `bun run test` penuh.
   tipe bawaan, kunci, label KTP, kode kembar, id asing), tanpa sesi 403, 375 px tanpa gulir samping; `bun run build` hijau.
 - **Gap yang diketahui:** mengubah wajib/aktif di katalog tidak membuka ulang jamaah yang sudah diajukan/terverifikasi (sama dengan keputusan
   syarat dokumen); nilai kolom admin di kartu belum bisa diisi pelanggan (D4).
+
+## 10. As-built D3 (2026-11-24) — saklar "Minta data jamaah" di setiap editor produk
+
+- **Penulis tunggal saklar** `setPilgrimDataEnabled(ref, enabled)` di `lib/pilgrim-data/products.ts` (pembaca `enabledProducts` tetap di
+  berkas yang sama): di dalam transaksi produk dikunci `FOR SHARE` (tabel dari peta tetap `OWNER_TABLE`, id sebagai parameter), lalu
+  `upsert` satu baris `product_pilgrim_data`; produk tak ada → `null` (tak ada baris ditulis). Keadaan untuk editor =
+  `pilgrimDataState(ref)` → `{ enabled, defaultEnabled, stored }` (tanpa baris = bawaan pemilik). Kunci `FOR SHARE` menjamin saklar tak
+  pernah tertulis untuk produk yang sudah dihapus. Balapan sempit yang diterima: penghapus produk sudah membersihkan saklarnya lalu menunggu
+  kunci ini → tersisa satu baris yatim berkunci uuid yang tak pernah dibaca lagi.
+- **Route** `api/v1/admin/products/pilgrim-data`: GET `?productType&productId` dan PUT `{ productType, productId, enabled }` — `requireManager`,
+  Zod `.strict()`, `productType` = registry `PILGRIM_DATA_OWNER_TYPES`, `productId` uuid; produk tak ada / id tipe lain → 404.
+- **Komponen** `components/admin/pilgrim-data/PilgrimDataToggle.tsx` — `MetaBox` "Data Jamaah" (lencana "Bawaan" bila belum disimpan),
+  tersimpan sendiri saat diubah (seperti foto, tak ikut tombol Simpan), galat server ditampilkan, tautan ke Produk → Data Jamaah. Dipasang
+  di 9 editor: Visa, Haji, Paket Umroh, Paket Ziarah, Hotel, Katering, Pesawat, Transport (trip), Muthowif (layanan).
+- **Bukti:** `scripts/test-pilgrim-data.ts` (+2 uji D3: penulis/keadaan — produk hantu, bawaan, mati → tak ada kolom diminta, nyala → kolom
+  aktif, upsert tanpa duplikat; penjaga sumber — setiap tipe pemilik punya `<PilgrimDataToggle productType=…>` di editornya, route
+  `requireManager` + `.strict()` + uuid) di DB sekali pakai; penjaga statis lulus; browser (server dev terpisah): trip Transport menampilkan
+  "Bawaan", nyala tersimpan lalu dikembalikan, Visa menampilkan saklar; API menolak tipe asing (400), uuid hantu (404), bukan uuid (400),
+  kunci tambahan (400), id tipe lain (404), tanpa sesi (403); `bun run build` hijau.
+- **Untuk D4:** halaman booking pelanggan masih menampilkan bagian jamaah walau tak ada kewajiban — disembunyikan/ditandai di D4.

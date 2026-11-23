@@ -11,6 +11,7 @@ import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 type Catering = { id: string; name: string; boardType: string; menuStyle: string; description: string | null; isActive: boolean }
 
@@ -43,6 +44,7 @@ export default function EditCateringPage() {
       onSubmit={async () => { if (await e.save({ ...form })) markClean(form) }}
       saving={e.saving} canSubmit={!!form.name.trim()} error={e.error} notice={e.notice}
       media={<MediaField productType="catering" productId={id} label="Foto Unggulan Katering" />}
+      sidebar={<PilgrimDataToggle productType="catering" productId={id} />}
       after={<PriceCard ownerType="catering" ownerId={id} title="Harga per orang per hari (tiga musim): modal, jual, untung" />}
       remove={{ confirmText: 'Hapus paket katering ini? Bila sudah dipakai booking atau paket, ia hanya dinonaktifkan (bisa diaktifkan kembali).', onDelete: async () => { if (await e.remove() === 'deactivated') { setForm(p => p && ({ ...p, isActive: false })); patchClean({ isActive: false }) } }, deleting: e.deleting }}
     >

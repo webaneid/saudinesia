@@ -20,6 +20,7 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { PeriodForm, type RoomType } from './PeriodForm'
 import { PeriodRow, type Period } from './PeriodRow'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 type AddressRecord = {
   type: 'domestic' | 'international'; fullAddress: string; postalCode: string | null
@@ -241,6 +242,7 @@ export default function HotelDetailPage() {
               <input id="hotel-distance" type="number" className="admin-inp" value={form.distanceToHaramM} onChange={set('distanceToHaramM')} />
             </div>
           </MetaBox>
+          <PilgrimDataToggle productType="hotel" productId={hotel.id} />
           <DeleteBox
             confirmText="Hapus hotel ini beserta periode, harga kamar, layanan, dan alamatnya? Bila sudah dipakai booking atau paket, ia hanya dinonaktifkan (bisa diaktifkan kembali)."
             onDelete={handleDelete} deleting={del.deleting}

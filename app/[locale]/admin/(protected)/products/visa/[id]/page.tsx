@@ -18,10 +18,11 @@ import { VisaInfoFields, visaInfoBody, visaInfoValid, type VisaInfo } from '../V
 import { SalesModelCard } from './SalesModelCard'
 import { VisaTiersTable } from './VisaTiersTable'
 import type { ProductDetail } from './types'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 // Editor produk visa — tata letak sama dengan Haji/Paket (EditPage: konten kiri, Terbitkan/Foto/Harga/Hapus kanan), bagian tersusun ke bawah tanpa tab.
-// "Data jamaah" (kolom manifest per produk) SENGAJA TIDAK DITAMPILKAN sementara (arahan pemilik 2026-11-24): akan diganti komponen data jamaah universal.
-// Data, API (`manifestFields` di GET/PUT), dan pemakaiannya di checkout TIDAK berubah — halaman ini hanya tidak mengirim `manifestFields` (tak dikirim = tetap).
+// Data jamaah = saklar `PilgrimDataToggle` di kanan (katalog global Produk → Data Jamaah, docs/arsitektur-data-jamaah.md). Kolom manifest per
+// produk lama (`manifestFields` di API) tidak dikirim halaman ini dan tidak dibaca jalur jamaah mana pun — dihapus di D5.
 
 type Form = VisaInfo & { isActive: boolean; reqs: RequirementRow[]; rules: RequiredComponent[] }
 
@@ -57,7 +58,6 @@ export default function VisaEditPage() {
       icon={KeyRound} title={visa.name} backHref={list} backLabel="Daftar Produk Visa"
       active={form.isActive} onActiveChange={isActive => patch({ isActive })} dirty={dirty}
       onSubmit={async () => {
-        // `manifestFields` tidak dikirim: kolom data jamaah tersimpan tetap utuh (lihat catatan di atas).
         const ok = await e.save({ ...visaInfoBody(form), isActive: form.isActive, requirements: bodyFromRows(form.reqs), requiredComponents: form.rules })
         if (ok) {
           const kept = { ...form, reqs: form.reqs.filter(r => r.documentTypeId) }
@@ -67,6 +67,7 @@ export default function VisaEditPage() {
       saving={e.saving} canSubmit={visaInfoValid(form)} error={e.error} notice={e.notice}
       media={<MediaField productType="visa" productId={visa.id} label="Foto Unggulan Visa" />}
       sidebar={
+        <>
         <MetaBox title="Harga Jual per Orang" icon={Wallet} collapsible={false}>
           {price > 0 ? (
             <p className="m-0 text-xl font-bold text-admin-accent-strong">{formatRupiah(price)}</p>
@@ -76,6 +77,8 @@ export default function VisaEditPage() {
           <p className="m-0 text-[11px] text-admin-muted">Harga terendah dari semua rentang hari (tampil “mulai dari” di katalog).</p>
           <div className="flex items-center gap-2 pt-1 text-[11px] text-admin-muted">Model penjualan <Badge tone={model.plus ? 'accent' : 'neutral'}>{model.label}</Badge></div>
         </MetaBox>
+        <PilgrimDataToggle productType="visa" productId={visa.id} />
+        </>
       }
       remove={{
         label: 'Hapus produk',

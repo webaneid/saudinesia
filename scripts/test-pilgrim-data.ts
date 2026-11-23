@@ -12,6 +12,7 @@ import { MANIFEST_ROLES } from '@/lib/manifest/roles'
 import { PILGRIM_DATA_OWNERS, PILGRIM_DATA_OWNER_TYPES } from '@/lib/pilgrim-data/owners'
 import { activeFields, displayFields, pilgrimCatalog, valueByRole } from '@/lib/pilgrim-data/catalog'
 import { pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
+import { pilgrimDataState, setPilgrimDataEnabled } from '@/lib/pilgrim-data/products'
 import { createPilgrimField, deletePilgrimField, fieldUsage, updatePilgrimField } from '@/lib/pilgrim-data/fields'
 import { pilgrimFieldCreateSchema, pilgrimFieldUpdateSchema } from '@/lib/validators/pilgrimFields'
 import { assertThrowawayDb } from './lib/testDb'
@@ -237,6 +238,39 @@ await t('D2 route: requireManager di setiap handler, memakai penulis tunggal, Na
   assert.ok(list.includes('createPilgrimField(') && one.includes('updatePilgrimField(') && one.includes('deletePilgrimField(') && one.includes("role === 'display_name'"))
   const nav = readFileSync(join(root, 'lib/admin/navigation.ts'), 'utf8')
   assert.ok(nav.indexOf("'/admin/products/pilgrim-fields'") > nav.indexOf("'/admin/products/document-types'"), 'menu Data Jamaah di bawah Jenis Dokumen')
+})
+
+// ── D3: saklar per produk (setPilgrimDataEnabled) + editor ─────────────────────────────────────────────────────────
+await t('D3 saklar: produk tak ada → null; bawaan terbaca tanpa baris; tulis eksplisit tersimpan dan langsung mengubah kolom yang diminta', async () => {
+  const ghost = { productType: 'visa' as const, productId: '00000000-0000-0000-0000-000000000000' }
+  assert.equal(await pilgrimDataState(ghost), null)
+  assert.equal(await setPilgrimDataEnabled(ghost, true), null)
+  assert.equal(await prisma.productPilgrimData.count({ where: { productId: ghost.productId } }), 0, 'tak ada baris untuk produk tak ada')
+  const cat = { productType: 'catering' as const, productId: catering.id }
+  assert.deepEqual(await setPilgrimDataEnabled(cat, false), { enabled: false, defaultEnabled: false, stored: true }, 'katering (semua jamaah, dari uji rombongan) dimatikan lewat penulis')
+  assert.deepEqual(await demandedOf(), { visa: active, g1: [], g2: [] })
+  const ref = { productType: 'visa' as const, productId: visa.id }
+  assert.deepEqual(await pilgrimDataState(ref), { enabled: true, defaultEnabled: true, stored: false })
+  assert.deepEqual(await setPilgrimDataEnabled(ref, false), { enabled: false, defaultEnabled: true, stored: true })
+  assert.deepEqual((await demandedOf()).visa, [], 'mati → visa tak meminta data')
+  assert.deepEqual(await setPilgrimDataEnabled(ref, true), { enabled: true, defaultEnabled: true, stored: true })
+  assert.deepEqual((await demandedOf()).visa, activeFields(await pilgrimCatalog()).map(f => f.fieldKey))
+  assert.equal(await prisma.productPilgrimData.count({ where: { productType: 'catering', productId: catering.id } }), 1, 'upsert, bukan baris ganda')
+})
+
+await t('D3 editor: setiap jenis pemilik saklar punya <PilgrimDataToggle productType="…"> di halaman edit/kelolanya; route manager+ & strict', () => {
+  const A = join(root, 'app/[locale]/admin/(protected)/products')
+  const PAGE: Record<string, string> = {
+    visa: 'visa/[id]/page.tsx', package: 'packages/[id]/page.tsx', haji: 'haji/[id]/page.tsx', tour_package: 'tour-packages/[id]/page.tsx',
+    hotel: 'hotels/[id]/page.tsx', transport: 'transport/trips/[id]/page.tsx', flight: 'flight/[id]/page.tsx', catering: 'catering/[id]/page.tsx',
+    muthowif: 'muthowif/page.tsx',
+  }
+  assert.deepEqual(Object.keys(PAGE).sort(), [...PILGRIM_DATA_OWNER_TYPES].sort(), 'jenis pemilik baru → tambahkan halamannya di sini')
+  for (const [type, page] of Object.entries(PAGE)) assert.match(readFileSync(join(A, page), 'utf8'), new RegExp(`<PilgrimDataToggle productType="${type}"`), `${page}: saklar ${type} hilang`)
+  const route = readFileSync(join(root, 'app/api/v1/admin/products/pilgrim-data/route.ts'), 'utf8')
+  assert.equal(route.match(/await requireManager\(\)/g)?.length, 2)
+  assert.equal(route.match(/\.strict\(\)/g)?.length, 2)
+  assert.ok(route.includes('setPilgrimDataEnabled(') && route.includes('z.string().uuid()'))
 })
 
 // ── pembersihan (DB uji) ────────────────────────────────────────────────────────────────────────────────────────────

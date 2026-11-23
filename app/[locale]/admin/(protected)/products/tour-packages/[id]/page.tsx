@@ -16,6 +16,7 @@ import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -352,6 +353,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
               <p className="m-0 text-[11px] text-admin-muted">Rincian ada di kotak &quot;Rincian Harga&quot; di bawah.</p>
             </MetaBox>
           )}
+          <PilgrimDataToggle productType="tour_package" productId={pkg.id} />
           <DeleteBox
             confirmText="Hapus paket ziarah ini beserta situs, hotel, dan komponen biayanya? Bila sudah dipesan, ia hanya dinonaktifkan (bisa diaktifkan kembali)."
             onDelete={handleDelete} deleting={del.deleting}

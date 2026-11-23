@@ -1004,6 +1004,6 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 **Data jamaah universal — katalog global + saklar per produk (`docs/arsitektur-data-jamaah.md`, rencana disetujui 2026-11-24, K1–K3)**
 - [x] D1 — skema `pilgrim_fields` (13 kolom bawaan, CHECK bentuk) + `product_pilgrim_data` (tak ada baris = bawaan: Visa/Paket/Haji nyala) + `SavedPilgrim.extraValues`; pembaca `lib/pilgrim-data/` (`pilgrimFieldSets`: kolom aktif katalog bila produk jamaah ber-saklar nyala, selain itu tidak ada — K2; produk tingkat booking per rombongan); semua pembaca "visa atau core" diganti, `getRequirements.ts` dihapus; pembersih saklar di penghapus produk — selesai 2026-11-24 (`test-pilgrim-data` baru + uji lama di DB sekali pakai, suite penuh, build; as-built §8)
 - [x] D2 — menu Produk → Data Jamaah (CRUD katalog, pola Jenis Dokumen; penulis tunggal `lib/pilgrim-data/fields.ts`, hapus aman, Nama Lengkap terkunci) — selesai 2026-11-24 (uji skrip + browser, build; as-built §9)
-- [ ] D3 — saklar `PilgrimDataToggle` di semua halaman edit produk + API
+- [x] D3 — saklar `PilgrimDataToggle` di semua halaman edit produk + API (penulis tunggal `setPilgrimDataEnabled`) — selesai 2026-11-24 (uji skrip + browser, build; as-built §10)
 - [ ] D4 — front-end kartu/profil kolom buatan admin + validasi server checkout
 - [ ] D5 — kontraksi (`manifest_field_requirements`, editor lama, isian non-kartu) + dokumentasi akhir

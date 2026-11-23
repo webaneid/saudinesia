@@ -7,6 +7,7 @@ import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { TransportQuotaPanel } from './TransportQuotaPanel'
 import { TransportPricingTable, type TripPricing } from './TransportPricingTable'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 type VehicleInfo = { id: string; name: string; vehicleType: string; capacity: number }
 type Trip = {
@@ -148,6 +149,8 @@ export default function TripEditPage({ params }: Props) {
           </button>
         </div>
       </div>
+
+      <PilgrimDataToggle productType="transport" productId={trip.id} />
 
       <TransportPricingTable tripId={trip.id} pricing={trip.pricing} vehicles={allVehicles} onChanged={() => load(id)} />
 
