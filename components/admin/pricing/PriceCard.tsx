@@ -9,6 +9,7 @@ import { formatRupiah } from '@/lib/utils'
 import { DATETIME_MEDIUM, formatInstant } from '@/lib/time'
 import { marginNote, type NoteRef } from '@/lib/pricing/marginNote'
 import { MarginNote } from './MarginNote'
+import { SellPriceWarnings } from './SellPriceWarnings'
 
 // Satu kartu harga untuk SEMUA produk (docs/arsitektur-harga-terpadu.md §6, §16): Modal · Harga Jual · Untung seragam, mode Otomatis/Manual, peringatan, atur / kembalikan
 // harga manual, riwayat. Sumbernya satu: GET /api/v1/admin/pricing/points (titik harga). Rincian MODAL tetap editor biayanya masing-masing (di atas/di samping kartu ini);
@@ -154,7 +155,6 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
   const typed = Number(sell)
   const noteRef: NoteRef = inherits ? 'package' : COMPOSITE.has(ownerType) ? 'components' : 'margin'
   const noteFor = (sellIdr: number) => marginNote({ sell: sellIdr, recommended: point?.autoSellIdr ?? null, ref: noteRef, marginPercent: rule.marginPercent })
-  const typedNote = !belowCost && !manualOnly ? noteFor(typed) : null
   const loss = point != null && point.profitIdr != null && point.profitIdr < 0
   const thin = point != null && !loss && point.marginPct != null && rule.warnBelowPercent > 0 && point.marginPct < rule.warnBelowPercent
   const savedNote = point?.mode === 'manual' && !manualOnly && !loss ? noteFor(point.sellIdr) : null
@@ -220,8 +220,7 @@ function VariantRow({ ownerType, ownerId, variantKey, label, inherits, point, ru
           {point?.autoSellIdr != null && !manualOnly && (
             <button type="button" className="text-[11px] font-semibold text-admin-accent underline" onClick={() => setSell(String(point.autoSellIdr))}>{inherits ? 'Pakai harga paket' : 'Pakai harga otomatis'} ({formatRupiah(point.autoSellIdr)})</button>
           )}
-          {belowCost && <Warn>Di bawah modal ({formatRupiah(point!.costIdr!)}) — rugi {formatRupiah(point!.costIdr! - typed)} per satuan. Peringatan internal; tetap bisa disimpan.</Warn>}
-          {typedNote && <MarginNote note={typedNote} />}
+          <SellPriceWarnings sell={typed} cost={point?.costIdr ?? null} recommended={manualOnly ? null : point?.autoSellIdr ?? null} marginPercent={rule.marginPercent} noteRef={noteRef} />
           {error && <p className="m-0 text-xs font-medium text-admin-danger">{error}</p>}
           <div className="flex flex-wrap gap-2">
             <Button size="sm" onClick={save} loading={busy}><Check className="size-4" /> Simpan harga</Button>

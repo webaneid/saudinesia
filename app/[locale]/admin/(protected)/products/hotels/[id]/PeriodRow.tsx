@@ -2,11 +2,11 @@
 
 import { useState } from 'react'
 import { formatRupiah } from '@/lib/utils'
-import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { KindButton } from '@/components/shared/data-table/RowActions'
 import { useIsSuperAdmin } from '@/components/admin/shell/AdminRole'
 import { DATE_SHORT_MONTH, formatCalendarDate, type CalendarDate } from '@/lib/time'
 import { PeriodForm, type RoomType } from './PeriodForm'
+import { PeriodRoomsTable } from './PeriodRoomsTable'
 
 type Schedule = {
   id: string; roomTypeId: string; roomType: RoomType
@@ -28,7 +28,6 @@ export function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSa
   const [mode, setMode] = useState<'view' | 'edit' | 'duplicate'>('view')
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState<{ tone: 'ok' | 'error'; text: string } | null>(null)
-  const [priceTick, setPriceTick] = useState(0)
   const open = (m: 'edit' | 'duplicate') => { setNotice(null); setMode(cur => cur === m ? 'view' : m) }
 
   async function call(method: 'PUT' | 'DELETE', body?: unknown) {
@@ -80,34 +79,14 @@ export function PeriodRow({ period, hotelId, roomTypes, expanded, onToggle, onSa
         <PeriodForm
           key={mode} mode={mode} hotelId={hotelId} roomTypes={roomTypes} source={period} ask={ask}
           onCancel={() => setMode('view')}
-          onDone={async id => { setMode('view'); setPriceTick(t => t + 1); if (mode === 'duplicate') await onDuplicated(id); else await onSaved() }}
+          onDone={async id => { setMode('view'); if (mode === 'duplicate') await onDuplicated(id); else await onSaved() }}
         />
       )}
       {notice && <p role={notice.tone === 'error' ? 'alert' : 'status'} className={`m-0 border-t border-admin-line px-4 py-2 text-[12px] font-medium ${notice.tone === 'error' ? 'text-admin-danger' : 'text-admin-muted'}`}>{notice.text}</p>}
 
       {expanded && mode === 'view' && (
-        <div className="space-y-3 border-t border-admin-line bg-admin-spot/20 p-4">
-          {active.length === 0 ? (
-            <p className="m-0 text-[12px] text-admin-muted">Belum ada harga kamar. Klik ikon pensil untuk mengisi.</p>
-          ) : (
-            <div className="-mx-1 overflow-x-auto px-1">
-              <div className="min-w-max space-y-1.5">
-                <div className="flex items-center gap-2 px-1 text-[11px] font-medium text-admin-muted/70">
-                  <span className="w-28">Tipe Kamar</span><span className="w-32">Kuota (terpakai)</span><span className="w-32">Harga Jual</span>
-                </div>
-                {active.map(s => (
-                  <div key={s.id} className="flex items-center gap-2 px-1 text-[12.5px]">
-                    <span className="w-28 truncate text-admin-ink/80">{s.roomType.name}</span>
-                    <span className="w-32 text-admin-muted">{s.totalQuota} ({s.pendingQuota + s.bookedQuota})</span>
-                    <span className="w-32 font-semibold text-admin-ink">{formatRupiah(s.price)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-          {active.map(s => (
-            <PriceCard key={s.id} ownerType="hotel" ownerId={s.id} title={`Harga kamar ${s.roomType.name}: modal, jual, untung`} reloadKey={priceTick} onChanged={() => void onSaved()} />
-          ))}
+        <div className="border-t border-admin-line bg-admin-spot/20 p-4">
+          <PeriodRoomsTable hotelId={hotelId} periodId={period.id} schedules={period.schedules} roomTypes={roomTypes} ask={ask} onChanged={onSaved} />
         </div>
       )}
     </div>

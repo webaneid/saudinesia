@@ -2,172 +2,22 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Plus, Trash2, Wallet } from 'lucide-react'
-import { formatRupiah } from '@/lib/utils'
-import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
-import { PriceCard } from '@/components/admin/pricing/PriceCard'
+import { ArrowLeft, Save } from 'lucide-react'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
-import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { CurrencySelect } from '@/components/shared/CurrencySelect'
 import { TransportQuotaPanel } from './TransportQuotaPanel'
-import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
+import { TransportPricingTable, type TripPricing } from './TransportPricingTable'
 import { adminHref } from '@/lib/admin/href'
 
-const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
-
 type VehicleInfo = { id: string; name: string; vehicleType: string; capacity: number }
-type Pricing = { id: string; vehicleId: string; price: number; isActive: boolean; vehicle: VehicleInfo }
 type Trip = {
   id: string; name: string; category: string | null; description: string | null
   origin: string; destination: string; isActive: boolean
-  pricing: Pricing[]
+  pricing: TripPricing[]
 }
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
 const CATEGORIES = ['airport', 'intercity', 'city_tour', 'shuttle', 'other']
-
-function PricingRow({ pricing, onChanged }: {
-  pricing: Pricing
-  onChanged: () => void
-}) {
-  const [vendorId, setVendorId]   = useState('')
-  const [currency, setCurrency]   = useState('IDR')
-  const [hargaKendaraan, setHargaKendaraan] = useState('')
-  const [preview, setPreview]     = useState<{ hppRupiah: number; sellPrice: number } | null>(null)
-  const [loaded, setLoaded]       = useState(false)
-  const [saving, setSaving]       = useState(false)
-  const [saved, setSaved]         = useState(false)
-  const [deleting, setDeleting]   = useState(false)
-  const [saveError, setSaveError] = useState<string | null>(null)
-
-  useEffect(() => {
-    fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}/cost`)
-      .then(r => r.json())
-      .then(j => {
-        if (j.data) {
-          setVendorId(j.data.vendorId ?? '')
-          setCurrency(j.data.currency ?? 'IDR')
-          setHargaKendaraan(j.data.hargaKendaraan ? String(j.data.hargaKendaraan) : '')
-        }
-        setLoaded(true)
-      })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pricing.id])
-
-  useEffect(() => {
-    if (!loaded) return
-    const cost = Number(hargaKendaraan)
-    if (!cost || cost <= 0) { setPreview(null); return }
-    const timer = setTimeout(async () => {
-      const params = new URLSearchParams({ hargaKendaraan: String(cost), currency })
-      const r = await fetch(`/api/v1/admin/products/transport/simulate?${params}`)
-      const j = await r.json()
-      setPreview(j.data ? { hppRupiah: j.data.hppRupiah, sellPrice: j.data.sellPrice } : null)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [hargaKendaraan, currency, loaded])
-
-  const canSave = !!vendorId && Number(hargaKendaraan) > 0
-
-  async function handleSave() {
-    setSaving(true)
-    setSaveError(null)
-    const r = await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}/cost`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vendorId, currency, hargaKendaraan: Number(hargaKendaraan) }),
-    })
-    if (!r.ok) {
-      const j = await r.json().catch(() => null)
-      setSaveError(j?.error ?? 'Harga kendaraan gagal disimpan.')
-      setSaving(false)
-      return
-    }
-    setSaving(false); setSaved(true)
-    setTimeout(() => setSaved(false), 2000)
-    onChanged()
-  }
-
-  async function setActive(isActive: boolean) {
-    setSaveError(null)
-    const j = await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ isActive }),
-    }).then(r => r.json()).catch(() => null)
-    if (!j?.success) { setSaveError(j?.error ?? 'Gagal mengubah status kendaraan'); return }
-    onChanged()
-  }
-
-  async function handleDelete() {
-    setDeleting(true); setSaveError(null)
-    const j = await fetch(`/api/v1/admin/products/transport/pricing/${pricing.id}`, { method: 'DELETE' }).then(r => r.json()).catch(() => null)
-    setDeleting(false)
-    if (!j?.success) { setSaveError(j?.error ?? 'Gagal menghapus kendaraan'); return }
-    if (j.data?.message) setSaveError(j.data.message)
-    onChanged()
-  }
-
-  return (
-    <div className="border border-admin-line rounded-xl p-4 space-y-3 bg-admin-spot/30">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-[13px] font-semibold text-admin-ink capitalize">{pricing.vehicle.name}</p>
-          <p className="text-[11px] text-admin-muted">{pricing.vehicle.capacity} kursi · {pricing.vehicle.vehicleType}</p>
-          {!pricing.isActive && (
-            <p className="text-[11px] text-admin-danger">Nonaktif, tidak tampil di booking.{' '}
-              <button type="button" onClick={() => void setActive(true)} className="font-medium underline">Aktifkan</button>
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-right">
-            <p className="text-[10px] text-admin-muted/70">Harga saat ini</p>
-            <p className="text-sm font-bold text-admin-ink">{formatRupiah(pricing.price)}</p>
-          </div>
-          <button onClick={handleDelete} disabled={deleting}
-            className="h-7 w-7 rounded-lg grid place-items-center text-admin-muted/70 hover:text-admin-danger/80 hover:bg-admin-danger/10 transition-colors disabled:opacity-50">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </div>
-
-      <div className="border border-admin-line rounded-lg p-3 space-y-2">
-        <div className="flex items-start gap-2">
-          <div className="min-w-0 flex-1">
-            <VendorPicker value={vendorId} onChange={setVendorId} context="transport" label="Vendor transport" />
-          </div>
-          <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
-        </div>
-      </div>
-
-      <div className="grid md:grid-cols-3 gap-2 items-end">
-        <div>
-          <p className="text-[11px] text-admin-muted mb-1">Harga Kendaraan ({currency})</p>
-          <input type="number" className="admin-inp text-sm" value={hargaKendaraan}
-            onChange={e => setHargaKendaraan(e.target.value)} placeholder="0" />
-        </div>
-        <div>
-          <p className="text-[11px] text-admin-muted mb-1">HPP (Rupiah)</p>
-          <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink text-sm">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
-        </div>
-        <div>
-          <p className="text-[11px] text-admin-muted mb-1">Harga Jual Rekomendasi</p>
-          <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink text-sm">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
-        </div>
-      </div>
-      <RecommendationNote />
-
-      <button onClick={handleSave} disabled={saving || !canSave}
-        className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
-        <Save className="h-3.5 w-3.5" />
-        {saving ? 'Menyimpan...' : saved ? 'Tersimpan ✓' : 'Simpan Harga'}
-      </button>
-      {saveError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{saveError}</p>}
-
-      <PriceCard ownerType="transport" ownerId={pricing.id} title={`Harga ${pricing.vehicle.name}: modal, jual, untung`} reloadKey={`${pricing.price}-${saved}`} onChanged={onChanged} />
-    </div>
-  )
-}
 
 export default function TripEditPage({ params }: Props) {
   const { ask, dialog } = useConfirm()
@@ -181,8 +31,6 @@ export default function TripEditPage({ params }: Props) {
   })
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
-  const [addVehicleId,  setAddVehicleId]  = useState('')
-  const [addingPricing, setAddingPricing] = useState(false)
   const [deleteNotice, setDeleteNotice] = useState<string | null>(null)
 
   async function load(tripId: string) {
@@ -229,19 +77,6 @@ export default function TripEditPage({ params }: Props) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  async function handleAddPricing() {
-    if (!addVehicleId) return
-    setAddingPricing(true)
-    await fetch('/api/v1/admin/products/transport/pricing', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ tripId: id, vehicleId: addVehicleId }),
-    })
-    setAddVehicleId('')
-    await load(id)
-    setAddingPricing(false)
-  }
-
   async function handleDeleteTrip() {
     if (!(await ask({ title: `Hapus trip "${trip?.name}"?`, body: 'Semua harga kendaraan yang terkait juga akan dihapus. Trip yang sudah dipakai booking dinonaktifkan, bukan dihapus.' }))) return
     setDeleteNotice(null)
@@ -251,10 +86,6 @@ export default function TripEditPage({ params }: Props) {
     setDeleteNotice(j.data?.message ?? 'Trip dinonaktifkan')
     void load(id)
   }
-
-  // Vehicles not yet added to this trip
-  const usedVehicleIds = new Set(trip?.pricing.map(p => p.vehicleId) ?? [])
-  const availableVehicles = allVehicles.filter(v => !usedVehicleIds.has(v.id))
 
   if (!trip) return <div className="text-sm text-admin-muted/70 p-6">Memuat...</div>
 
@@ -318,44 +149,7 @@ export default function TripEditPage({ params }: Props) {
         </div>
       </div>
 
-      {/* Pricing per kendaraan */}
-      <div className="admin-form-panel space-y-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> Harga per Kendaraan</p>
-            <p className="text-[11px] text-admin-muted/70 mt-0.5">
-              Satu harga flat per kombinasi rute×kendaraan, dihitung dari HPP — docs/arsitektur-transportasi.md §9
-            </p>
-          </div>
-          {availableVehicles.length > 0 && (
-            <div className="flex items-center gap-2">
-              <ChoiceSelect className="min-w-0 flex-1" placeholder="— pilih kendaraan —" value={addVehicleId} onChange={setAddVehicleId}
-                options={availableVehicles.map(v => ({ id: v.id, label: v.name, hint: `${v.capacity} org` }))} />
-              <button onClick={handleAddPricing} disabled={!addVehicleId || addingPricing}
-                className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5">
-                <Plus className="h-3.5 w-3.5" />
-                {addingPricing ? 'Menambah...' : 'Tambah'}
-              </button>
-            </div>
-          )}
-        </div>
-
-        {trip.pricing.length === 0 && (
-          <p className="text-[13px] text-admin-muted/70 py-4 text-center border border-dashed border-admin-line rounded-xl">
-            Belum ada kendaraan. Pilih kendaraan di atas untuk menambahkan harga.
-          </p>
-        )}
-
-        <div className="space-y-4">
-          {trip.pricing.map((pricing) => (
-            <PricingRow
-              key={pricing.id}
-              pricing={pricing}
-              onChanged={() => load(id)}
-            />
-          ))}
-        </div>
-      </div>
+      <TransportPricingTable tripId={trip.id} pricing={trip.pricing} vehicles={allVehicles} onChanged={() => load(id)} />
 
       <TransportQuotaPanel tripId={trip.id} pricing={trip.pricing} />
 

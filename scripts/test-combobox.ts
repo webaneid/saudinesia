@@ -104,7 +104,7 @@ t('Fase 2+3: TIDAK ADA `<select>` polos di app/ maupun components/ (selain imple
     if (/<select\b/.test(read(f).replace(/\/\*\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, ''))) bad.push(f)
   }
   assert.deepEqual(bad, [], 'ganti dengan <ChoiceSelect> (components/shared/ChoiceSelect.tsx)')
-  const mods = ['packages/[id]/page.tsx', 'tour-packages/[id]/page.tsx', 'transport/trips/[id]/page.tsx', 'flight/new/page.tsx', 'flight/[id]/page.tsx']
+  const mods = ['packages/[id]/page.tsx', 'tour-packages/[id]/page.tsx', 'transport/trips/[id]/TransportPricingTable.tsx', 'flight/new/page.tsx', 'flight/[id]/page.tsx']
   for (const m of mods) assert.match(read(`app/[locale]/admin/(protected)/products/${m}`), /<ChoiceSelect/, m)
   for (const m of ['MuthowifAssignPanel', 'CostActualsPanel']) assert.match(read(`app/[locale]/admin/(protected)/bookings/[id]/${m}.tsx`), /<ChoiceSelect/, m)
   assert.match(read('components/shared/ChoiceSelect.tsx'), /value=\{value \|\| null\} onChange=\{id => onChange\(id \?\? ''\)\}/, 'adaptor string ↔ null')
@@ -117,12 +117,13 @@ t('Fase 3: kotak cari otomatis hanya untuk daftar > 7 pilihan atau onSearch; enu
   assert.match(comp, /findIndex\(o => o\.id === value\)/, 'sorotan awal = pilihan terpilih')
   const cur = read('components/shared/CurrencySelect.tsx')
   assert.match(cur, /clearable=\{false\}/)
-  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx', 'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/muthowif/page.tsx']) {
+  // CostFields = isian modal bersama (Komponen Biaya, Pesawat, Muthowif, Transport, kamar Hotel)
+  for (const f of ['components/admin/pricing/CostFields.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) {
     const src = read(f)
     assert.match(src, /<CurrencySelect/, f)
     assert.doesNotMatch(src, /CURRENCIES\.map|currencies\.map/, `${f}: tak boleh membuat opsi mata uang sendiri`)
   }
-  for (const f of ['components/admin/pricing/VendorCurrencyField.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
+  for (const f of ['app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
 })
 
 t('bendera SVG (Windows tak menggambar emoji bendera): tiap negara punya berkas, berkas aman dan kecil, sinkron dengan paket sumber, LICENSE ikut, emoji bendera tak dipakai lagi', () => {

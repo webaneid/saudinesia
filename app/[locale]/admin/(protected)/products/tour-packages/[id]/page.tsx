@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Pencil, Trash2, MapPin, Landmark, Building2, Bus, Wallet } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
-import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { CostComponentsTable } from '@/components/admin/pricing/CostComponentsTable'
 import { Badge } from '@/components/admin/ui/Badge'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
@@ -505,7 +505,7 @@ export default function TourPackageBuilderPage({ params }: Props) {
       <PriceCard ownerType="tour_package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
 
       {/* Komponen biaya */}
-      <CostComponentsPanel
+      <CostComponentsTable
         apiBase={`/api/v1/admin/products/tour-packages/${id}/costs`}
         hint="Tiap komponen (Guide, Makan, Minum, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-ziarah.md §8.3"
         namePlaceholder="Guide, Makan Siang, Air Mineral, dst"

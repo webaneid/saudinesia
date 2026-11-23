@@ -72,11 +72,9 @@ await t('F4: satu pemilih vendor — tak ada jalur lama (settings/vendors, quick
   const users = files.filter(f => /<VendorPicker\b/.test(read(f))).map(f => f.replace(/\\/g, '/')).sort()
   assert.deepEqual(users, [
     'app/[locale]/admin/(protected)/bookings/[id]/CostActualsPanel.tsx', // pengeluaran aktual vendor (Fase 7)
-    'app/[locale]/admin/(protected)/products/flight/[id]/page.tsx',
     'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx',
-    'app/[locale]/admin/(protected)/products/transport/trips/[id]/page.tsx',
     'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx',
-    'components/admin/pricing/VendorCurrencyField.tsx',
+    'components/admin/pricing/CostFields.tsx', // isian modal → harga jual bersama: Komponen Biaya, Pesawat, Muthowif, Transport, kamar Hotel (§10)
   ])
 })
 
@@ -90,18 +88,23 @@ await t('F4: VendorPicker hanya menawarkan "Vendor Baru" kepada superadmin dan m
 
 await t('F4: editor biaya Pesawat/Transport/Hotel tidak lagi "Tersimpan ✓" saat server menolak (vendor nonaktif → 400) — respons diperiksa dan galat ditampilkan', () => {
   const dir = 'app/[locale]/admin/(protected)/products/'
-  for (const [f, call, errVar] of [
-    ['flight/[id]/page.tsx', 'schedules/${id}/cost', 'setCostError'],
-    ['transport/trips/[id]/page.tsx', 'pricing/${pricing.id}/cost', 'setSaveError'],
+  // Isian bersama (CostFields): simpan biaya → periksa respons → baru tutup/tanda sukses.
+  for (const [f, call, done] of [
+    ['components/admin/pricing/SingleCostForm.tsx', "method: 'PUT'", 'setSaved(true)'],
+    [dir + 'transport/trips/[id]/TransportPricingTable.tsx', 'pricing/${pricingId}/cost', 'setDialog(null)'],
+    [dir + 'hotels/[id]/PeriodRoomsTable.tsx', 'fetch(base, {', 'setDialog(null)'],
+    ['components/admin/pricing/CostComponentsTable.tsx', 'fetch(editingId', 'setDialog(null)'],
   ] as const) {
-    const src = read(dir + f)
-    const i = src.indexOf("method: 'PUT'", src.indexOf(call))
+    const src = read(f)
+    const i = src.indexOf(call)
     assert.ok(i > 0, `${f}: panggilan simpan tidak ditemukan`)
-    const after = src.slice(i, i + 900)
-    assert.match(after, /if \(!r\.ok\)/, `${f}: respons simpan tidak diperiksa`)
-    assert.ok(after.includes(errVar + '('), `${f}: galat simpan tidak ditampilkan`)
-    assert.ok(after.indexOf('!r.ok') < after.search(/setSaved\(true\)|setCostSaved\(true\)/), `${f}: penanda sukses mendahului pemeriksaan`)
+    const after = src.slice(i, i + 1600)
+    assert.match(after, /if \(!r\??\.ok\)/, `${f}: respons simpan tidak diperiksa`)
+    assert.match(after, /setError\(/, `${f}: galat simpan tidak ditampilkan`)
+    assert.ok(after.search(/!r\??\.ok/) < after.indexOf(done), `${f}: penanda sukses mendahului pemeriksaan`)
   }
+  for (const f of ['flight/[id]/page.tsx', 'muthowif/page.tsx']) assert.match(read(dir + f), /<SingleCostForm\b/, `${f}: biaya lewat SingleCostForm`)
+  assert.match(read(dir + 'transport/trips/[id]/page.tsx'), /<TransportPricingTable\b/)
   // Hotel: harga kamar disimpan bersama tanggal lewat formulir periode (docs/arsitektur-hotel.md §12.4)
   const hp = read(dir + 'hotels/[id]/PeriodForm.tsx')
   const i = hp.indexOf("method: mode === 'edit' ? 'PUT' : 'POST'")
