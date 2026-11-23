@@ -170,11 +170,11 @@ Dipakai: Haji, Paket Umroh, Paket Ziarah (disetujui pemilik 2026-11-24). `CostCo
 
 ### 10.1 Isian modal bersama untuk SEMUA editor biaya (2026-11-24)
 
-Isian di popup di atas diekstrak menjadi `components/admin/pricing/CostFields.tsx` — SATU bentuk "Vendor → Biaya (mata uang) → HPP Rupiah → Harga Jual Rekomendasi → Untung" untuk setiap produk yang biayanya diisi admin (kecuali Visa, sengaja terakhir). Isinya:
+Isian di popup di atas diekstrak menjadi `components/admin/pricing/CostFields.tsx` — SATU bentuk "Vendor → Biaya (mata uang) → HPP Rupiah → Harga Jual Rekomendasi → Untung" untuk setiap produk yang biayanya diisi admin (Visa menyusul terakhir, 2026-11-24). Isinya:
 
-- `CostFields` — tampilan terkendali (nilai `CostValue`), opsi `before` (isian tambahan di atas, mis. nama komponen, tipe kamar + kuota), `vendorSlot` (vendor tetap ditampilkan, mis. Muthowif "Saudinesia" atau vendor periode hotel), `currencyLocked` (mata uang ikut induk).
+- `CostFields` — tampilan terkendali (nilai `CostValue`), opsi `before` (isian tambahan di atas, mis. nama komponen, tipe kamar + kuota), `vendorSlot` (vendor tetap ditampilkan, mis. Muthowif "Saudinesia" atau vendor periode hotel), `currencyLocked` (mata uang ikut induk), `afterCost` (isian sesudah biaya, sebelum HPP — mis. Biaya BRN visa), `hppHint` (keterangan HPP).
 - `useCostPreview(url)` — pratinjau HPP/rekomendasi dari route simulate MODUL (debounce 500 ms); harga tak pernah dihitung di klien.
-- `manualSellOf` + `syncManualSell` — angka jual ≠ rekomendasi = harga manual titik harga pemilik (PUT `/api/v1/admin/pricing/points`); kembali ke rekomendasi = DELETE. Route sama dengan `PriceCard`. `loadSellState` membaca harga manual tersimpan + margin bawaan dari route yang sama.
+- `manualSellOf` + `syncManualSell` — angka jual ≠ rekomendasi = harga manual titik harga pemilik (PUT `/api/v1/admin/pricing/points`, `variantKey` untuk pemilik bervarian seperti tier visa); kembali ke rekomendasi = DELETE. Route sama dengan `PriceCard`. `loadSellState` membaca harga manual tersimpan + margin bawaan dari route yang sama.
 - `ProfitText` — untung rupiah + % dari modal (`stacked` untuk sel tabel sempit).
 
 Pemakai:
@@ -184,6 +184,7 @@ Pemakai:
 | Haji, Paket Umroh, Paket Ziarah | tabel + popup | `CostComponentsTable` |
 | Pesawat (per jadwal), Muthowif (layanan) | formulir isian (satu biaya; pilihan pemilik "Form isian saja") | `components/admin/pricing/SingleCostForm.tsx` (route biaya modul `costUrl` + `costKey`), `PriceCard` tetap di bawahnya untuk riwayat |
 | Transport | tabel kendaraan + popup (tambah kendaraan = pilih kendaraan + biaya sekaligus) | `transport/trips/[id]/TransportPricingTable.tsx` — `PricingRow` + `PriceCard` per kendaraan dihapus |
+| Visa | tabel rentang hari + popup (isian Dari/Sampai hari + Biaya BRN opsional) | `visa/[id]/VisaTiersTable.tsx` — vendor + mata uang Visa/BRN satu per produk, dikunci di popup rentang dan diubah lewat popup "Vendor & mata uang"; `CostTiersTab` dihapus (`docs/arsitektur-visa.md` §10) |
 | Hotel | tabel kamar per periode + popup | `hotels/[id]/PeriodRoomsTable.tsx` — satu kamar disimpan lewat PUT periode berisi kamar itu saja (`writePrices` membiarkan kamar lain); vendor + mata uang tetap SATU per periode (§11.1 `arsitektur-hotel.md`): dikunci di popup bila kamar lain sudah ada; `PeriodForm` tetap untuk tanggal + isi massal / duplikat; `PriceCard` per kamar dihapus |
 
 `RecommendationNote` dihapus (petunjuk rekomendasi kini di isian). Route biaya Transport dan isi periode Hotel kini juga mengembalikan `vendorName` (superadmin-only, bukan data pribadi). Dijaga `scripts/test-vendor-ui.ts` (pemakai `VendorPicker`, respons simpan diperiksa sebelum sukses), `test-combobox.ts` (mata uang lewat `CurrencySelect` di `CostFields`), `test-table-consistency.ts` (tabel bersarang terdaftar).

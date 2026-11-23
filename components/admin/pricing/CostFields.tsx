@@ -45,11 +45,11 @@ export function useCostPreview(url: string | null): CostPreview | null {
  * Simpan harga jual manual titik harga pemilik (route yang sama dengan PriceCard): manual → PUT, sebelumnya manual tapi kini ikut rekomendasi →
  * DELETE, selain itu tak ada panggilan. Mengembalikan pesan galat atau null.
  */
-export async function syncManualSell(o: { ownerType: string; ownerId: string; manual: number | null; wasManual: boolean; note: string }): Promise<string | null> {
+export async function syncManualSell(o: { ownerType: string; ownerId: string; variantKey?: string; manual: number | null; wasManual: boolean; note: string }): Promise<string | null> {
   if (o.manual == null && !o.wasManual) return null
   const r = await fetch('/api/v1/admin/pricing/points', {
     method: o.manual != null ? 'PUT' : 'DELETE', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ownerType: o.ownerType, ownerId: o.ownerId, variantKey: '', ...(o.manual != null ? { sellIdr: o.manual, note: o.note.trim() || null } : {}) }),
+    body: JSON.stringify({ ownerType: o.ownerType, ownerId: o.ownerId, variantKey: o.variantKey ?? '', ...(o.manual != null ? { sellIdr: o.manual, note: o.note.trim() || null } : {}) }),
   }).catch(() => null)
   if (r?.ok) return null
   const j: { error?: string } | null = await r?.json().catch(() => null) ?? null
@@ -114,9 +114,13 @@ type Props = {
   before?: ReactNode
   /** Mata uang mengikuti induk (mis. satu mata uang per periode hotel) — ditampilkan, tidak dipilih di sini. */
   currencyLocked?: boolean
+  /** Isian biaya tambahan sesudah biaya utama, ikut masuk HPP (mis. BRN Visa). */
+  afterCost?: ReactNode
+  /** Petunjuk HPP pengganti (mis. "Visa + BRN × kurs"). */
+  hppHint?: string
 }
 
-export function CostFields({ value: v, onChange, preview, marginPercent, currencies, vendorContext = 'costComponent', vendorLabel = 'Vendor', vendorSlot, costLabel = 'Biaya', unitHint = 'per satuan', idPrefix = 'cost', before, currencyLocked = false }: Props) {
+export function CostFields({ value: v, onChange, preview, marginPercent, currencies, vendorContext = 'costComponent', vendorLabel = 'Vendor', vendorSlot, costLabel = 'Biaya', unitHint = 'per satuan', idPrefix = 'cost', before, currencyLocked = false, afterCost, hppHint }: Props) {
   const set = (p: Partial<CostValue>) => onChange({ ...v, ...p })
   const manual = manualSellOf(v, preview)
   const shownSell = v.sellEdited ? Number(v.sell) || 0 : preview?.sellPrice ?? null
@@ -138,7 +142,8 @@ export function CostFields({ value: v, onChange, preview, marginPercent, currenc
             <input id={id('amount')} className="admin-input min-w-0 flex-1 tabular-nums" type="number" min={0} step="any" placeholder="0" value={v.cost} onChange={e => set({ cost: e.target.value })} />
           </div>
         </FormField>
-        <FormField label="HPP (Rupiah)" htmlFor={id('hpp')} hint={v.currency === 'IDR' ? 'Sama dengan biaya.' : 'Biaya × kurs terbaru.'}>
+        {afterCost}
+        <FormField label="HPP (Rupiah)" htmlFor={id('hpp')} hint={hppHint ?? (v.currency === 'IDR' ? 'Sama dengan biaya.' : 'Biaya × kurs terbaru.')}>
           <ReadOnly>{preview ? rp(preview.hppRupiah) : '—'}</ReadOnly>
         </FormField>
         <FormField label="Harga Jual Rekomendasi" htmlFor={id('sell')} hint={`HPP + margin bawaan ${marginPercent}%.`}>

@@ -73,8 +73,8 @@ await t('F4: satu pemilih vendor — tak ada jalur lama (settings/vendors, quick
   assert.deepEqual(users, [
     'app/[locale]/admin/(protected)/bookings/[id]/CostActualsPanel.tsx', // pengeluaran aktual vendor (Fase 7)
     'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx',
-    'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx',
-    'components/admin/pricing/CostFields.tsx', // isian modal → harga jual bersama: Komponen Biaya, Pesawat, Muthowif, Transport, kamar Hotel (§10)
+    'app/[locale]/admin/(protected)/products/visa/[id]/VisaTiersTable.tsx', // vendor BRN (vendor Visa lewat CostFields)
+    'components/admin/pricing/CostFields.tsx', // isian modal → harga jual bersama: Komponen Biaya, Pesawat, Muthowif, Transport, kamar Hotel, rentang Visa (§10)
   ])
 })
 
@@ -103,6 +103,11 @@ await t('F4: editor biaya Pesawat/Transport/Hotel tidak lagi "Tersimpan ✓" saa
     assert.match(after, /setError\(/, `${f}: galat simpan tidak ditampilkan`)
     assert.ok(after.search(/!r\??\.ok/) < after.indexOf(done), `${f}: penanda sukses mendahului pemeriksaan`)
   }
+  // Visa: satu pembantu PUT semua rentang mengembalikan galat; setiap pemanggil menampilkan galat SEBELUM menutup popup.
+  const vt = read(dir + 'visa/[id]/VisaTiersTable.tsx')
+  assert.match(vt, /if \(r\?\.ok\) return null[\s\S]{0,200}return j\?\.error \?\? /, 'VisaTiersTable: respons simpan tidak diperiksa')
+  for (const m of vt.matchAll(/if \(failed\) \{ setError\(failed\)/g)) assert.ok(vt.indexOf('setDialog(null)', m.index) > m.index, 'VisaTiersTable: popup ditutup sebelum galat diperiksa')
+  assert.equal([...vt.matchAll(/if \(failed\) \{ setError\(failed\)/g)].length, 3, 'VisaTiersTable: simpan rentang, vendor, dan hapus harus memeriksa galat')
   for (const f of ['flight/[id]/page.tsx', 'muthowif/page.tsx']) assert.match(read(dir + f), /<SingleCostForm\b/, `${f}: biaya lewat SingleCostForm`)
   assert.match(read(dir + 'transport/trips/[id]/page.tsx'), /<TransportPricingTable\b/)
   // Hotel: harga kamar disimpan bersama tanggal lewat formulir periode (docs/arsitektur-hotel.md §12.4)

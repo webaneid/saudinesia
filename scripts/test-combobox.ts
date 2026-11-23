@@ -117,13 +117,13 @@ t('Fase 3: kotak cari otomatis hanya untuk daftar > 7 pilihan atau onSearch; enu
   assert.match(comp, /findIndex\(o => o\.id === value\)/, 'sorotan awal = pilihan terpilih')
   const cur = read('components/shared/CurrencySelect.tsx')
   assert.match(cur, /clearable=\{false\}/)
-  // CostFields = isian modal bersama (Komponen Biaya, Pesawat, Muthowif, Transport, kamar Hotel)
-  for (const f of ['components/admin/pricing/CostFields.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) {
+  // CostFields = isian modal bersama (Komponen Biaya, Pesawat, Muthowif, Transport, kamar Hotel, rentang Visa)
+  for (const f of ['components/admin/pricing/CostFields.tsx', 'app/[locale]/admin/(protected)/products/visa/[id]/VisaTiersTable.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) {
     const src = read(f)
     assert.match(src, /<CurrencySelect/, f)
     assert.doesNotMatch(src, /CURRENCIES\.map|currencies\.map/, `${f}: tak boleh membuat opsi mata uang sendiri`)
   }
-  for (const f of ['app/[locale]/admin/(protected)/products/visa/[id]/CostTiersTab.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
+  for (const f of ['app/[locale]/admin/(protected)/products/visa/[id]/VisaTiersTable.tsx', 'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodForm.tsx']) assert.doesNotMatch(read(f), /flex items-start gap-2/, `${f}: vendor dan mata uang tidak berbagi baris`)
 })
 
 t('bendera SVG (Windows tak menggambar emoji bendera): tiap negara punya berkas, berkas aman dan kecil, sinkron dengan paket sumber, LICENSE ikut, emoji bendera tak dipakai lagi', () => {

@@ -45,6 +45,7 @@ const UNPAGINATED_TABLES: Record<string, { count: number; reason: string }> = {
   'app/[locale]/admin/(protected)/finance/refunds/[id]/page.tsx': { count: 1, reason: 'arus uang buku kas SATU booking (daftar bersarang milik satu induk, dibatasi 200 entri dengan penanda); buku kas lengkap berpaginasi' },
   'components/admin/pricing/CostComponentsTable.tsx': { count: 1, reason: 'komponen biaya SATU produk (daftar bersarang milik satu induk; jumlah kecil, dikelola per produk)' },
   'app/[locale]/admin/(protected)/products/transport/trips/[id]/TransportPricingTable.tsx': { count: 1, reason: 'harga kendaraan SATU trip (daftar bersarang milik satu induk; ≤ jumlah kendaraan)' },
+  'app/[locale]/admin/(protected)/products/visa/[id]/VisaTiersTable.tsx': { count: 1, reason: 'rentang hari SATU produk visa (daftar bersarang milik satu induk; maks 100 per putSchema cost-tiers)' },
   'app/[locale]/admin/(protected)/products/hotels/[id]/PeriodRoomsTable.tsx': { count: 1, reason: 'kamar SATU periode hotel (daftar bersarang milik satu induk; ≤ jumlah tipe kamar, maks 50 per periodPricesSchema)' },
   'components/admin/documents/RequirementsTable.tsx': { count: 1, reason: 'syarat dokumen SATU produk (daftar bersarang milik satu induk, dibatasi 30 oleh documentRequirementListSchema); disimpan bersama produk' },
   'app/[locale]/admin/(protected)/reports/variance/page.tsx': { count: 4, reason: 'ringkasan per produk/bulan/vendor/komponen = agregat berukuran tetap; daftar per baris rencana berpaginasi' },

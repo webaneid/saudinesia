@@ -27,7 +27,7 @@ const AFTER_TRANSPORT: readonly Simple[] = [
   { type: 'catering', hint: 'Booking wajib memuat katering (atau paket berkatering).', icon: UtensilsCrossed },
 ]
 
-export function RulesTab({ rules, onChange }: Props) {
+export function SalesModelCard({ rules, onChange }: Props) {
   const [trips, setTrips] = useState<Trip[]>([])
   useEffect(() => {
     fetch('/api/v1/admin/products/transport/trips').then(r => r.json()).then(j => { if (Array.isArray(j.data)) setTrips(j.data) }).catch(() => setTrips([]))
@@ -72,7 +72,7 @@ export function RulesTab({ rules, onChange }: Props) {
         <p className="m-0 text-xs text-admin-muted">
           {model.plus
             ? <>Booking berisi visa ini tidak bisa diterbitkan bila produk yang dicentang di bawah tidak ada. Isi Paket Umroh / Paket Ziarah ikut dihitung. Berlaku untuk semua pelanggan.</>
-            : <>Visa dijual tanpa kewajiban membeli komponen lain. Bukti booking hotel/tiket dari luar diminta lewat tab <span className="inline-flex items-center gap-1 font-semibold text-admin-ink"><FileCheck2 className="size-3.5" /> Persyaratan dokumen</span>.</>}
+            : <>Visa dijual tanpa kewajiban membeli komponen lain. Bukti booking hotel/tiket dari luar diminta lewat bagian <span className="inline-flex items-center gap-1 font-semibold text-admin-ink"><FileCheck2 className="size-3.5" /> Persyaratan dokumen</span>.</>}
         </p>
       </div>
 
