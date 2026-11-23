@@ -1,237 +1,97 @@
 'use client'
 
-import { use, useCallback, useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Check, FileText, Info, KeyRound, Link2, ListChecks, Loader2, Save, Wallet } from 'lucide-react'
-import { PageHeader } from '@/components/admin/shell/PageHeader'
-import { Badge } from '@/components/admin/ui/Badge'
-import { Button } from '@/components/admin/ui/Button'
-import { Tabs, tabId, tabPanelId, type TabItem } from '@/components/admin/ui/Tabs'
+import { useEffect, useState } from 'react'
+import { useParams } from 'next/navigation'
+import { KeyRound, Wallet } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
-import { CostTiersTab } from './CostTiersTab'
-import { ProductInfoTab } from './ProductInfoTab'
+import { EditPage } from '@/components/admin/shell/EditPage'
+import { useEditEntity } from '@/components/admin/shell/useEditEntity'
+import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
+import { MetaBox } from '@/components/admin/editor/MetaBox'
+import { Badge } from '@/components/admin/ui/Badge'
+import { MediaField } from '@/components/admin/media/MediaField'
 import { RequirementsTable } from '@/components/admin/documents/RequirementsTable'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
-import { ManifestFieldsEditor } from '@/components/admin/manifest/ManifestFieldsEditor'
-import { bodyFromManifestRows, rowFromField, type ManifestRow } from '@/components/admin/manifest/manifestRows'
-import { RulesTab } from './RulesTab'
 import { parseRequiredComponents, visaSalesModel, type RequiredComponent } from '@/lib/validators/visa'
-import type { DeleteResult, InfoForm, ProductDetail } from './types'
 import { adminHref } from '@/lib/admin/href'
+import { VisaInfoFields, visaInfoBody, visaInfoValid, type VisaInfo } from '../VisaInfoFields'
+import { SalesModelCard } from './SalesModelCard'
+import { VisaTiersTable } from './VisaTiersTable'
+import type { ProductDetail } from './types'
 
-type TabKey = 'info' | 'docs' | 'fields' | 'rules' | 'price'
-type Props = { params: Promise<{ locale: string; id: string }> }
+// Editor produk visa — tata letak sama dengan Haji/Paket (EditPage: konten kiri, Terbitkan/Foto/Harga/Hapus kanan), bagian tersusun ke bawah tanpa tab.
+// "Data jamaah" (kolom manifest per produk) SENGAJA TIDAK DITAMPILKAN sementara (arahan pemilik 2026-11-24): akan diganti komponen data jamaah universal.
+// Data, API (`manifestFields` di GET/PUT), dan pemakaiannya di checkout TIDAK berubah — halaman ini hanya tidak mengirim `manifestFields` (tak dikirim = tetap).
 
-// Snapshot memakai BADAN API syarat (bukan baris mentah) — label yang diketik sama dengan katalog tidak dihitung perubahan.
-const snapshotOf = (form: InfoForm, reqs: RequirementRow[], rules: RequiredComponent[], fields: ManifestRow[]) => JSON.stringify({ form, reqs: bodyFromRows(reqs), rules, fields: bodyFromManifestRows(fields) })
+type Form = VisaInfo & { isActive: boolean; reqs: RequirementRow[]; rules: RequiredComponent[] }
 
-export default function VisaEditPage({ params }: Props) {
-  const { locale, id } = use(params)
-  const router = useRouter()
+const toForm = (v: ProductDetail): Form => ({
+  name: v.name, country: v.country, visaType: v.visaType, description: v.description ?? '', processDays: String(v.processDays),
+  isActive: v.isActive, reqs: v.documentRequirements.map(rowFromView), rules: parseRequiredComponents(v.requiredComponents).components,
+})
 
-  const [product, setProduct] = useState<ProductDetail | null>(null)
-  const [form, setForm] = useState<InfoForm | null>(null)
-  const [reqs, setReqs] = useState<RequirementRow[]>([])
-  const [baseReqs, setBaseReqs] = useState<RequirementRow[]>([]) // baris tersimpan, untuk Batalkan
-  const [rules, setRules] = useState<RequiredComponent[]>([])
-  const [fieldRows, setFieldRows] = useState<ManifestRow[]>([])
-  const [baseFieldRows, setBaseFieldRows] = useState<ManifestRow[]>([]) // baris tersimpan, untuk Batalkan
-  const [snapshot, setSnapshot] = useState('')
-  const [tab, setTab] = useState<TabKey>('info')
-  const [saving, setSaving] = useState(false)
-  const [justSaved, setJustSaved] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [notFound, setNotFound] = useState(false)
+export default function VisaEditPage() {
+  const { locale, id } = useParams() as { locale: string; id: string }
+  const list = adminHref(locale, `/admin/products/visa`)
+  const e = useEditEntity<ProductDetail>(`/api/v1/admin/products/visa/${id}`, list)
+  const [form, setForm] = useState<Form | null>(null)
+  const { dirty, markClean, patchClean } = useDirtyForm(form)
+  const [priceTick, setPriceTick] = useState(0) // naik setiap harga berubah → tabel rentang memuat ulang
 
-  const refreshProduct = useCallback(async () => {
-    const r = await fetch(`/api/v1/admin/products/visa/${id}`)
-    const j = await r.json()
-    if (j.data) setProduct(j.data)
-    return j.data as ProductDetail | undefined
-  }, [id])
-
+  // Formulir diisi SEKALI dari data yang dimuat; muat-ulang akibat harga berubah tidak menimpa ketikan yang belum disimpan.
   useEffect(() => {
-    refreshProduct().then(v => {
-      if (!v) { setNotFound(true); return }
-      const nextForm: InfoForm = {
-        name: v.name, country: v.country, visaType: v.visaType, description: v.description ?? '',
-        processDays: String(v.processDays), isActive: v.isActive,
+    if (e.item && !form) { const f = toForm(e.item); setForm(f); markClean(f) }
+  }, [e.item, form, markClean])
+
+  if (e.missing) return <p className="text-sm text-admin-muted">Produk visa tidak ditemukan — mungkin sudah dihapus. <a className="font-semibold underline" href={list}>Kembali ke daftar</a></p>
+  if (e.loading || !form || !e.item) return <p className="text-sm text-admin-muted">{e.error ?? 'Memuat…'}</p>
+
+  const visa = e.item
+  const price = Number(visa.price)
+  const model = visaSalesModel(form.rules)
+  const patch = (p: Partial<Form>) => { e.clearMessages(); setForm(f => f && ({ ...f, ...p })) }
+  const reloadPrice = async () => { await e.reload(); setPriceTick(t => t + 1) }
+
+  return (
+    <EditPage
+      icon={KeyRound} title={visa.name} backHref={list} backLabel="Daftar Produk Visa"
+      active={form.isActive} onActiveChange={isActive => patch({ isActive })} dirty={dirty}
+      onSubmit={async () => {
+        // `manifestFields` tidak dikirim: kolom data jamaah tersimpan tetap utuh (lihat catatan di atas).
+        const ok = await e.save({ ...visaInfoBody(form), isActive: form.isActive, requirements: bodyFromRows(form.reqs), requiredComponents: form.rules })
+        if (ok) {
+          const kept = { ...form, reqs: form.reqs.filter(r => r.documentTypeId) }
+          setForm(kept); markClean(kept)
+        }
+      }}
+      saving={e.saving} canSubmit={visaInfoValid(form)} error={e.error} notice={e.notice}
+      media={<MediaField productType="visa" productId={visa.id} label="Foto Unggulan Visa" />}
+      sidebar={
+        <MetaBox title="Harga Jual per Orang" icon={Wallet} collapsible={false}>
+          {price > 0 ? (
+            <p className="m-0 text-xl font-bold text-admin-accent-strong">{formatRupiah(price)}</p>
+          ) : (
+            <p className="m-0 text-[13px] text-admin-warning">Belum ditetapkan — tambahkan rentang hari di bagian Harga. Selama belum berharga, produk ini tidak dapat dipesan.</p>
+          )}
+          <p className="m-0 text-[11px] text-admin-muted">Harga terendah dari semua rentang hari (tampil “mulai dari” di katalog).</p>
+          <div className="flex items-center gap-2 pt-1 text-[11px] text-admin-muted">Model penjualan <Badge tone={model.plus ? 'accent' : 'neutral'}>{model.label}</Badge></div>
+        </MetaBox>
       }
-      const nextReqs = v.documentRequirements.map(rowFromView)
-      const nextRules = parseRequiredComponents(v.requiredComponents).components
-      setForm(nextForm)
-      setReqs(nextReqs)
-      setBaseReqs(nextReqs)
-      setRules(nextRules)
-      const nextFields = v.manifestFields.map(rowFromField)
-      setFieldRows(nextFields)
-      setBaseFieldRows(nextFields)
-      setSnapshot(snapshotOf(nextForm, nextReqs, nextRules, nextFields))
-    })
-  }, [refreshProduct])
-
-  useEffect(() => {
-    if (!justSaved) return
-    const timer = setTimeout(() => setJustSaved(false), 3000)
-    return () => clearTimeout(timer)
-  }, [justSaved])
-
-  if (notFound) return <p className="p-6 text-sm text-admin-muted">Produk visa tidak ditemukan.</p>
-  if (!product || !form) {
-    return <div className="flex items-center gap-2 p-6 text-sm text-admin-muted"><Loader2 className="size-4 animate-spin" /> Memuat…</div>
-  }
-
-  const dirty = snapshotOf(form, reqs, rules, fieldRows) !== snapshot
-  const fieldsChanged = JSON.stringify(bodyFromManifestRows(fieldRows)) !== JSON.stringify(bodyFromManifestRows(baseFieldRows))
-  const canSave = !!form.name.trim() && !!form.visaType.trim() && Number(form.processDays) > 0
-  const requiredCount = reqs.filter(r => r.required).length
-  const price = Number(product.price)
-  const ruleCount = Array.isArray(product.durationFeeRules) ? product.durationFeeRules.length : 0
-
-  const patchForm = (patch: Partial<InfoForm>) => { setForm(f => (f ? { ...f, ...patch } : f)); setJustSaved(false) }
-  const setRequirements = (next: RequirementRow[]) => { setReqs(next); setJustSaved(false) }
-  const setRuleList = (next: RequiredComponent[]) => { setRules(next); setJustSaved(false) }
-  const setFieldList = (next: ManifestRow[]) => { setFieldRows(next); setJustSaved(false) }
-
-  function discard() {
-    const saved = JSON.parse(snapshot) as { form: InfoForm; rules: RequiredComponent[] }
-    setForm(saved.form)
-    setReqs(baseReqs)
-    setRules(saved.rules)
-    setFieldRows(baseFieldRows)
-    setError(null)
-  }
-
-  async function save() {
-    if (!form) return
-    setSaving(true)
-    setError(null)
-    const requirements = bodyFromRows(reqs)
-    const res = await fetch(`/api/v1/admin/products/visa/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        name: form.name.trim(), country: form.country.trim(), visaType: form.visaType.trim(),
-        description: form.description, processDays: Number(form.processDays), isActive: form.isActive, requirements, requiredComponents: rules,
-        // Hanya bila berubah: produk lama tanpa kolom tetap bisa disimpan bagian lainnya (daftar kosong ditolak server).
-        ...(fieldsChanged && { manifestFields: bodyFromManifestRows(fieldRows) }),
-      }),
-    })
-    if (!res.ok) {
-      const j = await res.json().catch(() => null)
-      setError(j?.error ?? 'Perubahan gagal disimpan. Coba lagi.')
-      setSaving(false)
-      return
-    }
-    const kept = reqs.filter(r => r.documentTypeId)
-    setReqs(kept)
-    setBaseReqs(kept)
-    // Kolom dimuat ulang dari server: kolom baru baru punya kuncinya sesudah tersimpan (menyimpan lagi tanpa kunci akan membuatnya ulang).
-    const fresh = await refreshProduct()
-    const savedFields = fresh ? fresh.manifestFields.map(rowFromField) : fieldRows
-    setFieldRows(savedFields)
-    setBaseFieldRows(savedFields)
-    setSnapshot(snapshotOf(form, kept, rules, savedFields))
-    setSaving(false)
-    setJustSaved(true)
-  }
-
-  // Hapus-aman (lib/admin/productDelete.ts): terhapus → kembali ke daftar; dirujuk pesanan/pengajuan/paket → dinonaktifkan dan pesannya ditampilkan.
-  async function remove(): Promise<DeleteResult> {
-    try {
-      const res = await fetch(`/api/v1/admin/products/visa/${id}`, { method: 'DELETE' })
-      const j = await res.json().catch(() => null)
-      if (!res.ok || !j?.data) return { error: j?.error ?? 'Produk gagal dihapus.' }
-      if (j.data.deleted) { router.push(adminHref(locale, `/admin/products/visa`)); return null }
-      // Status di formulir DAN baseline ikut nonaktif, ketikan lain yang belum disimpan tetap terhitung "belum disimpan".
-      setForm(f => (f ? { ...f, isActive: false } : f))
-      setSnapshot(prev => { const saved = JSON.parse(prev) as { form: InfoForm; rules: RequiredComponent[] }; return snapshotOf({ ...saved.form, isActive: false }, baseReqs, saved.rules, baseFieldRows) })
-      await refreshProduct()
-      return { notice: j.data.message ?? 'Dipakai sehingga dinonaktifkan.' }
-    } catch {
-      return { error: 'Tidak dapat menghubungi server.' }
-    }
-  }
-
-  const tabs: readonly TabItem<TabKey>[] = [
-    { id: 'info', label: 'Informasi', icon: Info },
-    { id: 'docs', label: 'Persyaratan dokumen', icon: FileText, count: reqs.length },
-    { id: 'fields', label: 'Data jamaah', icon: ListChecks, count: fieldRows.length },
-    { id: 'rules', label: 'Model penjualan', icon: Link2 },
-    { id: 'price', label: 'Harga dan HPP', icon: Wallet, count: ruleCount || undefined },
-  ]
-
-  return (
-    <div className="mx-auto max-w-6xl space-y-5 pb-24">
-      <PageHeader
-        icon={KeyRound}
-        title={form.name || 'Produk visa'}
-        description={[form.visaType, form.country].filter(Boolean).join(' · ')}
-        actions={<div className="flex gap-2"><Badge tone={visaSalesModel(rules).plus ? 'accent' : 'neutral'}>{visaSalesModel(rules).label}</Badge><Badge tone={form.isActive ? 'ok' : 'neutral'}>{form.isActive ? 'Aktif' : 'Nonaktif'}</Badge></div>}
-      />
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Harga saat ini" value={formatRupiah(price)} hint="per orang" />
-        <Stat label="Estimasi proses" value={`${form.processDays || '—'} hari`} hint="hari kerja" />
-        <Stat label="Dokumen" value={`${requiredCount} wajib`} hint={`dari ${reqs.length} dokumen`} />
-        <Stat label="Rentang harga" value={ruleCount ? `${ruleCount} rentang` : 'Belum diatur'} hint="berdasarkan durasi" warn={!ruleCount} />
-      </div>
-
-      <Tabs items={tabs} value={tab} onChange={setTab} label="Bagian produk visa" />
-
-      {/* Semua panel tetap ter-mount (hanya disembunyikan) supaya isian yang belum disimpan dan riwayat undo editor tidak hilang saat pindah tab. */}
-      <div id={tabPanelId('info')} role="tabpanel" aria-labelledby={tabId('info')} hidden={tab !== 'info'}>
-        <ProductInfoTab productId={product.id} form={form} onChange={patchForm} price={price} locale={locale} productName={product.name} onShowPrice={() => setTab('price')} onDelete={remove} />
-      </div>
-      <div id={tabPanelId('docs')} role="tabpanel" aria-labelledby={tabId('docs')} hidden={tab !== 'docs'}>
-        <RequirementsTable rows={reqs} onChange={setRequirements} productNoun="visa ini" />
-      </div>
-      <div id={tabPanelId('fields')} role="tabpanel" aria-labelledby={tabId('fields')} hidden={tab !== 'fields'}>
-        <ManifestFieldsEditor rows={fieldRows} onChange={setFieldList} used={product.manifestFieldsUsed} productNoun="visa ini" />
-      </div>
-      <div id={tabPanelId('rules')} role="tabpanel" aria-labelledby={tabId('rules')} hidden={tab !== 'rules'}>
-        <RulesTab rules={rules} onChange={setRuleList} />
-      </div>
-      <div id={tabPanelId('price')} role="tabpanel" aria-labelledby={tabId('price')} hidden={tab !== 'price'}>
-        <CostTiersTab productId={id} onSaved={refreshProduct} />
-      </div>
-
-      {(dirty || justSaved || error) && (
-        <div className="sticky bottom-4 z-30">
-          <div className="kartu flex flex-wrap items-center justify-between gap-3 border-admin-line-strong px-4 py-3 shadow-lg">
-            <div className="min-w-0 text-sm">
-              {error ? (
-                <span className="font-medium text-admin-danger">{error}</span>
-              ) : dirty ? (
-                <span className="font-semibold text-admin-ink">
-                  Ada perubahan yang belum disimpan
-                  {!canSave && <span className="ml-2 font-normal text-admin-warning">Nama, jenis visa, dan estimasi proses wajib diisi.</span>}
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 font-semibold text-admin-ok"><Check className="size-4" /> Perubahan tersimpan</span>
-              )}
-            </div>
-            <div className="flex gap-2">
-              {dirty && <Button variant="ghost" size="sm" onClick={discard} disabled={saving}>Batalkan</Button>}
-              {dirty && (
-                <Button size="sm" onClick={save} loading={saving} disabled={!canSave}>
-                  <Save className="size-4" /> Simpan perubahan
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function Stat({ label, value, hint, warn }: { label: string; value: string; hint: string; warn?: boolean }) {
-  return (
-    <div className="ubin space-y-0.5">
-      <p className="label-kecil m-0">{label}</p>
-      <p className={`m-0 text-lg font-extrabold tracking-tight ${warn ? 'text-admin-warning' : 'text-admin-ink'}`}>{value}</p>
-      <p className="m-0 text-[11px] text-admin-muted">{hint}</p>
-    </div>
+      remove={{
+        label: 'Hapus produk',
+        confirmText: `Hapus produk "${visa.name}"? Bila sudah dipakai pesanan, pengajuan visa, atau paket, produk hanya dinonaktifkan (riwayat tetap utuh, bisa diaktifkan kembali).`,
+        onDelete: async () => { if (await e.remove() === 'deactivated') { setForm(p => p && ({ ...p, isActive: false })); patchClean({ isActive: false }) } },
+        deleting: e.deleting,
+      }}
+      after={
+        <>
+          <RequirementsTable rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="visa ini" />
+          <SalesModelCard rules={form.rules} onChange={rules => patch({ rules })} />
+          <VisaTiersTable productId={id} onChanged={reloadPrice} reloadKey={priceTick} />
+        </>
+      }
+    >
+      <VisaInfoFields value={form} onChange={patch} idPrefix="visa-edit" />
+    </EditPage>
   )
 }

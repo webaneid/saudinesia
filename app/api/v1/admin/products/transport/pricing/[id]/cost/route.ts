@@ -30,12 +30,14 @@ export async function GET(_req: Request, { params }: Ctx) {
 
     const cost = await prisma.productCost.findFirst({
       where: { productType: 'transport', productId: id, costComponent: COMPONENT_KENDARAAN, isActive: true },
+      include: { vendor: { select: { name: true } } },
     })
     const tiers = (cost?.costTiers as unknown as CostTier[]) ?? []
     const hargaKendaraan = tiers[0]?.cost ?? null
 
     return NextResponse.json(ok({
       vendorId: cost?.vendorId ?? null,
+      vendorName: cost?.vendor?.name ?? null,
       currency: cost?.currency ?? null,
       hargaKendaraan,
     }))

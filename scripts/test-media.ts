@@ -228,7 +228,7 @@ await t('F2: SETIAP tipe di registry punya <MediaField productType="…"> di hal
   const dir = 'app/[locale]/admin/(protected)/products/'
   const pages: Record<keyof typeof MEDIA_OWNERS, string> = {
     hotel: 'hotels/[id]/page.tsx', tour_package: 'tour-packages/[id]/page.tsx', vehicle: 'transport/vehicles/[id]/page.tsx', haji: 'haji/[id]/page.tsx',
-    package: 'packages/[id]/page.tsx', catering: 'catering/[id]/page.tsx', visa: 'visa/[id]/ProductInfoTab.tsx', muthowif: 'muthowif/[id]/page.tsx', tourism_site: 'tourism-sites/[id]/page.tsx',
+    package: 'packages/[id]/page.tsx', catering: 'catering/[id]/page.tsx', visa: 'visa/[id]/page.tsx', muthowif: 'muthowif/[id]/page.tsx', tourism_site: 'tourism-sites/[id]/page.tsx',
     invoice_settings: '../system/invoice-settings/InvoiceSettingsEditor.tsx', // logo perusahaan (Pengaturan Invoice, bukan produk)
     public_page: '../system/site-content/[page]/SiteContentEditor.tsx', // foto hero halaman publik (Konten Situs)
   }

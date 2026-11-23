@@ -220,7 +220,7 @@ await t('wiring: route [id] punya GET/PUT/DELETE (DELETE lewat deleteOrDeactivat
 await t('UI Haji (Fase 4): halaman edit memakai panel Komponen Biaya Haji, punya Simpan (PUT), Hapus/Nonaktifkan (DELETE) dan saklar Aktif; daftar menautkan ke halaman edit; tak ada input harga', () => {
   const dir = 'app/[locale]/admin/(protected)/products/haji'
   const edit = readFileSync(`${dir}/[id]/page.tsx`, 'utf8')
-  assert.match(edit, /<CostComponentsPanel[\s\S]*?apiBase=\{`\/api\/v1\/admin\/products\/haji\/\$\{id\}\/costs`\}/)
+  assert.match(edit, /<CostComponentsTable[\s\S]*?apiBase=\{`\/api\/v1\/admin\/products\/haji\/\$\{id\}\/costs`\}/)
   // Simpan/hapus/aktif kini lewat EditPage + useEditEntity (PUT/DELETE satu pintu yang memeriksa respons; docs/arsitektur-admin-editor.md §5).
   assert.match(edit, /<EditPage\b/); assert.match(edit, /useEditEntity</); assert.match(edit, /e\.save\(/); assert.match(edit, /e\.remove\(/)
   assert.match(edit, /Nonaktifkan produk/); assert.match(edit, /Hapus produk/); assert.match(edit, /active=\{form\.isActive\}/)

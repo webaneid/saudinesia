@@ -152,7 +152,41 @@ Tiap fase satu PR ke `main` (CI `validate` + `docker` hijau, merge setelah perse
 `docs/arsitektur-haji.md` ditulis as-built (skema dengan rujukan baris, tabel route, alur data, gap terbuka, pengujian); `CLAUDE.md` memuat komponen universal ke-6, status modul Haji, dan aturan **CRUD lengkap**; dokumen modul yang memakai komponen ini (`arsitektur-paket-umroh.md`, `arsitektur-ziarah.md`, `arsitektur-harga.md`) diberi rujukan silang; komentar basi di `lib/quota/adapters/index.ts` ("haji belum dipanggil") dikoreksi — adapter Haji dipanggil oleh konfirmasi pembayaran, pembatalan, dan pembuatan booking. Seluruh temuan rangkaian ini sudah **Selesai** di register: SEC-63, SEC-64, SEC-65, SEC-66, SEC-67.
 
 **Hasil akhir rangkaian:** 6 PR (#30-#34 + dokumen ini); route biaya per modul 6 baris re-export; halaman Paket Umroh/Ziarah −376 baris; satu implementasi hitung/handler/panel dipakai tiga pemilik; Haji berharga turunan dengan CRUD lengkap; 5 celah lama ditutup; suite uji baru: `test-cost-components.ts` (15), `test-haji-pricing.ts` (12).
-**Cara menambah pemilik baru:** satu entri di `lib/pricing/costComponentOwners.ts` (`productType`, `exists`, `refresh`), tiga berkas route 6 baris (`createCostComponentHandlers('<kunci>')`), satu fungsi `refresh*PriceCache` + `refreshAll*` yang didaftarkan di `lib/cron/exchangeRateJob.ts`, `<CostComponentsPanel apiBase=… vendorCategory=… />` di halaman edit, dan tes (ikuti `scripts/test-haji-pricing.ts`).
+**Cara menambah pemilik baru:** satu entri di `lib/pricing/costComponentOwners.ts` (`productType`, `exists`, `refresh`), tiga berkas route 6 baris (`createCostComponentHandlers('<kunci>')`), satu fungsi `refresh*PriceCache` + `refreshAll*` yang didaftarkan di `lib/cron/exchangeRateJob.ts`, `<CostComponentsTable apiBase=… />` di halaman edit (dulu `CostComponentsPanel`, diganti §10), dan tes (ikuti `scripts/test-haji-pricing.ts`).
 
 ### 9.6 Harga jual manual per komponen (2026-11-19)
 Tiap baris Komponen Biaya punya titik harga `cost_component` (modal = HPP, otomatis = rekomendasi margin, harga manual opsional) — rancangan dan as-built di `docs/arsitektur-harga-terpadu.md` §22. Harga produk = Σ harga berlaku komponen (+ bagian included); harga manual total produk tetap menang. Di panel: kotak "Harga Jual Rekomendasi" di form tambah/ubah komponen bisa diketik (angka awal = rekomendasi, diubah = manual), catatan selisih `marginNote`. Pemilik baru yang ingin harga per komponen = tambahkan tipenya di `COMPOSITE_COST_TYPES` dan `PARENT_OWNERS`; penghapusnya WAJIB menghapus titik `cost_component` milik komponennya (dijaga `scripts/test-cost-component-prices.ts`).
+
+## 10. Tampilan tabel + popup (2026-11-24, uji coba di Haji)
+
+`components/admin/pricing/CostComponentsTable.tsx` — pengganti tampilan kartu `CostComponentsPanel` dengan props dan route yang SAMA (`apiBase`, `hint`, `namePlaceholder`, `onChanged`; `GET/POST apiBase`, `PUT/DELETE apiBase/<id>`, `apiBase/simulate`, harga manual komponen lewat `/api/v1/admin/pricing/points`). Gaya mengikuti tabel Persyaratan dokumen (`RequirementsTable`):
+
+- **Tabel** (`DataTable`): #, Komponen (+ vendor, lencana Manual), Biaya → HPP (mata uang vendor; HPP Rupiah di bawahnya bila bukan IDR), Harga Jual (+ "rekomendasi …" bila manual), **Untung** (jual − HPP, % dari modal, merah bila rugi), aksi ikon Lihat / Edit / Hapus (`useConfirm`). Baris total di kaki tabel: HPP, harga jual, untung.
+- **Popup tambah/edit** (urutan isian pemilik): Nama komponen → Vendor (`VendorPicker`) → Biaya (pilih mata uang + nominal) → HPP (Rupiah, otomatis, baca-saja) → Harga Jual Rekomendasi (terisi rekomendasi, bisa diubah = harga manual komponen; tanpa label "bisa diubah") → Untung (baca-saja, ikut angka yang diketik). Harga diubah → tautan "Kembalikan ke rekomendasi", peringatan, dan catatan opsional.
+- **Popup lihat**: semua nilai baca-saja + tombol Edit.
+- **Peringatan** = `components/admin/pricing/SellPriceWarnings.tsx`, SATU tampilan untuk `PriceCard` dan tabel ini (di bawah modal → rugi per satuan; selain itu `marginNote`). Hanya mengingatkan (Fase 8 harga terpadu).
+
+Dipakai: Haji, Paket Umroh, Paket Ziarah (disetujui pemilik 2026-11-24). `CostComponentsPanel` dan `VendorCurrencyField` (kotak "Vendor & Mata Uang" yang hanya dipakai panel itu) DIHAPUS. Menambah pemilik baru (§9.5) kini memasang `<CostComponentsTable apiBase=… />`.
+
+### 10.1 Isian modal bersama untuk SEMUA editor biaya (2026-11-24)
+
+Isian di popup di atas diekstrak menjadi `components/admin/pricing/CostFields.tsx` — SATU bentuk "Vendor → Biaya (mata uang) → HPP Rupiah → Harga Jual Rekomendasi → Untung" untuk setiap produk yang biayanya diisi admin (Visa menyusul terakhir, 2026-11-24). Isinya:
+
+- `CostFields` — tampilan terkendali (nilai `CostValue`), opsi `before` (isian tambahan di atas, mis. nama komponen, tipe kamar + kuota), `vendorSlot` (vendor tetap ditampilkan, mis. Muthowif "Saudinesia" atau vendor periode hotel), `currencyLocked` (mata uang ikut induk), `afterCost` (isian sesudah biaya, sebelum HPP — mis. Biaya BRN visa), `hppHint` (keterangan HPP).
+- `useCostPreview(url)` — pratinjau HPP/rekomendasi dari route simulate MODUL (debounce 500 ms); harga tak pernah dihitung di klien.
+- `manualSellOf` + `syncManualSell` — angka jual ≠ rekomendasi = harga manual titik harga pemilik (PUT `/api/v1/admin/pricing/points`, `variantKey` untuk pemilik bervarian seperti tier visa); kembali ke rekomendasi = DELETE. Route sama dengan `PriceCard`. `loadSellState` membaca harga manual tersimpan + margin bawaan dari route yang sama.
+- `ProfitText` — untung rupiah + % dari modal (`stacked` untuk sel tabel sempit).
+
+Pemakai:
+
+| Produk | Bentuk | Berkas |
+|---|---|---|
+| Haji, Paket Umroh, Paket Ziarah | tabel + popup | `CostComponentsTable` |
+| Pesawat (per jadwal), Muthowif (layanan) | formulir isian (satu biaya; pilihan pemilik "Form isian saja") | `components/admin/pricing/SingleCostForm.tsx` (route biaya modul `costUrl` + `costKey`), `PriceCard` tetap di bawahnya untuk riwayat |
+| Transport | tabel kendaraan + popup (tambah kendaraan = pilih kendaraan + biaya sekaligus) | `transport/trips/[id]/TransportPricingTable.tsx` — `PricingRow` + `PriceCard` per kendaraan dihapus |
+| Visa | tabel rentang hari + popup (isian Dari/Sampai hari + Biaya BRN opsional) | `visa/[id]/VisaTiersTable.tsx` — vendor + mata uang Visa/BRN satu per produk, dikunci di popup rentang dan diubah lewat popup "Vendor & mata uang"; `CostTiersTab` dihapus (`docs/arsitektur-visa.md` §10) |
+| Hotel | tabel kamar per periode + popup | `hotels/[id]/PeriodRoomsTable.tsx` — satu kamar disimpan lewat PUT periode berisi kamar itu saja (`writePrices` membiarkan kamar lain); vendor + mata uang tetap SATU per periode (§11.1 `arsitektur-hotel.md`): dikunci di popup bila kamar lain sudah ada; `PeriodForm` tetap untuk tanggal + isi massal / duplikat; `PriceCard` per kamar dihapus |
+
+`PriceCard` = kartu kesimpulan: di halaman yang masih memakainya (Haji, Paket Umroh, Paket Ziarah, Pesawat, Muthowif, Katering) selalu PALING AKHIR (sesudah Komponen Biaya/Rincian Harga) dengan border warna utama (`CONCLUSION` di komponennya); Visa tidak memakainya (2026-11-24).
+
+`RecommendationNote` dihapus (petunjuk rekomendasi kini di isian). Route biaya Transport dan isi periode Hotel kini juga mengembalikan `vendorName` (superadmin-only, bukan data pribadi). Dijaga `scripts/test-vendor-ui.ts` (pemakai `VendorPicker`, respons simpan diperiksa sebelum sukses), `test-combobox.ts` (mata uang lewat `CurrencySelect` di `CostFields`), `test-table-consistency.ts` (tabel bersarang terdaftar).

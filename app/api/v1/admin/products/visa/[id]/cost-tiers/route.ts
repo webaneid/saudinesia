@@ -38,6 +38,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
     const costs = await prisma.productCost.findMany({
       where: { productType: 'visa', productId: id, costComponent: { in: [COMPONENT_VISA, COMPONENT_BRN] }, isActive: true },
+      include: { vendor: { select: { name: true } } },
     })
     const individu = costs.find(c => c.costComponent === COMPONENT_VISA)
     const brnCost = costs.find(c => c.costComponent === COMPONENT_BRN)
@@ -55,8 +56,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     }))
 
     return NextResponse.json(ok({
-      visa: individu ? { vendorId: individu.vendorId, currency: individu.currency } : null,
-      brn: brnCost ? { vendorId: brnCost.vendorId, currency: brnCost.currency } : null,
+      visa: individu ? { vendorId: individu.vendorId, vendorName: individu.vendor.name, currency: individu.currency } : null,
+      brn: brnCost ? { vendorId: brnCost.vendorId, vendorName: brnCost.vendor.name, currency: brnCost.currency } : null,
       rows,
     }))
   } catch (e) {

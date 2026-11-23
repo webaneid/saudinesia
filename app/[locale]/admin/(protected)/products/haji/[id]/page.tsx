@@ -10,7 +10,7 @@ import { useEditEntity } from '@/components/admin/shell/useEditEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { MetaBox } from '@/components/admin/editor/MetaBox'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
-import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { CostComponentsTable } from '@/components/admin/pricing/CostComponentsTable'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
@@ -94,13 +94,14 @@ export default function HajiEditPage() {
       after={
         <>
         <RequirementsTable rows={form.reqs} onChange={reqs => patch({ reqs })} productNoun="produk haji ini" />
-        <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
-        <CostComponentsPanel
+        <CostComponentsTable
           apiBase={`/api/v1/admin/products/haji/${id}/costs`}
           hint="Tiap komponen (visa, akomodasi, transportasi, dst) dapat margin sendiri, baru dijumlah jadi harga per orang — lihat docs/arsitektur-komponen-biaya.md"
           namePlaceholder="Visa Haji, Akomodasi Makkah, Transportasi, dst"
           onChanged={async () => { await e.reload(); setPriceTick(t => t + 1) }}
         />
+        {/* Kesimpulan harga — selalu paling akhir */}
+        <PriceCard ownerType="haji" ownerId={id} reloadKey={priceTick} onChanged={() => { void e.reload() }} />
         </>
       }
     >

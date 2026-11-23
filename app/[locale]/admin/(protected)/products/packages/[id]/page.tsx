@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Building2, Bus, Users, FileText, Plane, Utensils, Wallet, Package as PackageIcon } from 'lucide-react'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
-import { CostComponentsPanel } from '@/components/admin/pricing/CostComponentsPanel'
+import { CostComponentsTable } from '@/components/admin/pricing/CostComponentsTable'
 import { Badge } from '@/components/admin/ui/Badge'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { EditorShell } from '@/components/admin/editor/EditorShell'
@@ -731,11 +731,8 @@ export default function PackageBuilderPage({ params }: Props) {
         )}
       </MetaBox>
 
-      {/* Harga: modal · jual · untung (titik harga) */}
-      <PriceCard ownerType="package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
-
       {/* Komponen biaya */}
-      <CostComponentsPanel
+      <CostComponentsTable
         apiBase={`/api/v1/admin/products/packages/${id}/costs`}
         hint="Tiap komponen (dokumen, admin fee, dst) dapat margin sendiri, baru dijumlah ke harga paket — lihat docs/arsitektur-paket-umroh.md §5"
         namePlaceholder="Dokumen, Admin Fee, dst"
@@ -858,6 +855,9 @@ export default function PackageBuilderPage({ params }: Props) {
           )}
         </MetaBox>
       )}
+
+      {/* Kesimpulan harga: modal · jual · untung (titik harga) — selalu paling akhir */}
+      <PriceCard ownerType="package" ownerId={id} reloadKey={priceTick} onChanged={() => { void Promise.all([loadBreakdown(id), loadPackage(id)]) }} />
         </>
       }
     />

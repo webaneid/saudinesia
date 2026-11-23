@@ -27,7 +27,7 @@
 | `VisaApplication` (`visa_applications`) | `bookingPilgrimId` (unik — satu visa per jamaah booking), `visaProductId?` (FK `SET NULL`), `visaType` (salinan tampilan), `status VisaStatus`, `submittedAt`, `issuedAt`, `rejectionReason`, `isForceMajeure`, `notes`, `selectedDurationDays?`, `plannedTravelDate? @db.Date` | Ditulis HANYA `lib/booking/lineItems.ts` (pesan) dan `lib/booking/revise.ts` (revisi); status lewat route status (§4). |
 | `VisaStatus` | `pending_documents → documents_complete → submitted_to_syarikah → in_review → issued \| rejected`; `rejected → pending_documents` | Transisi = `VISA_STATUS_TRANSITIONS` (`lib/validators/visaStatus.ts`), dipakai klien (`VisaActions.tsx`) DAN server. |
 | `DocumentRequirement` (`productType='visa'`) | `documentTypeId`, `label?`, `description`, `required`, `order` | Syarat dokumen produk (katalog `DocumentType`), penulis tunggal `lib/documents/requirements.ts`. |
-| `ManifestFieldRequirement` (`productType='visa'`) | field data jamaah per produk | Dikelola di tab "Data jamaah" editor visa, ditulis hanya oleh `lib/manifest/fields.ts`; `POST` produk mengisi 9 kolom bawaan, `GET`/`PUT` `[id]` membawa `manifestFields` (`docs/arsitektur-manifest.md` §9). Jamaah tanpa visa memakai field "core". |
+| `ManifestFieldRequirement` (`productType='visa'`) | field data jamaah per produk | Ditulis hanya oleh `lib/manifest/fields.ts`; editor kolomnya (`ManifestFieldsEditor`) **sejak 2026-11-24 TIDAK ditampilkan** di halaman visa (data, API, dan pemakaian di checkout tetap — menunggu komponen data jamaah universal, §10); `POST` produk mengisi 9 kolom bawaan, `GET`/`PUT` `[id]` membawa `manifestFields` (`docs/arsitektur-manifest.md` §9). Jamaah tanpa visa memakai field "core". |
 | `ProductCost` / `PreferredVendor` (`productType='visa'`) | komponen `individu` dan `biaya_non_hotel` (BRN), `costTiers` per rentang hari | Masukan HPP; harga jual hidup di `price_points` (§3). |
 | `ProductImage` (`ownerType='visa'`) | satu foto unggulan | `lib/media/owners.ts` mode `featured`. |
 
@@ -39,7 +39,7 @@ Bentuk dijaga `visaRequiredComponentsSchema` (`.strict()`, tiap jenis sekali); d
 ## 3. Harga
 
 - Visa = pemilik harga `visa` (`lib/pricing/engine/owners/visa.ts`): satu **varian per rentang hari** (`days:<min>-<max>`) dari batas tier semua komponen biaya;
-  modal = HPP pada hari awal rentang (`computeSellPrice`), unit `person`. Harga manual per tier lewat `setManualSell` (PriceCard).
+  modal = HPP pada hari awal rentang (`computeSellPrice`), unit `person`. Harga manual per tier lewat `setManualSell` (popup `VisaTiersTable`, §10).
 - Jalur pesan: `takeVisaTier(tx, visaProductId, days)` (`lib/pricing/engine/snapshot.ts`) memilih tier yang memuat lama tinggal (`selectedDurationDays`,
   bawaan `DEFAULT_DURATION_PROBE_DAY`); tak ada tier/≤ 0 → `ItemNotBookableError` 422. Baris snapshot `itemType='visa'`, `itemId` = id `VisaApplication`.
 - Visa yang ikut **Paket Umroh** (`included`) TIDAK punya baris harga sendiri — sudah dibayar di baris paket; `VisaApplication` tetap dibuat untuk anggota paket.
@@ -59,8 +59,9 @@ Bentuk dijaga `visaRequiredComponentsSchema` (`.strict()`, tiap jenis sekali); d
 
 ## 5. Alur data end-to-end
 
-1. **Admin menyusun produk** di Produk → Visa → edit (`products/visa/[id]/page.tsx`, tab: Informasi · Persyaratan dokumen (`RequirementsEditor`) ·
-   Model penjualan (`RulesTab`: Visa only / Visa plus + daftar centang 7 jenis, filter transport) · Harga dan HPP (`CostTiersTab` + `PriceCard`)).
+1. **Admin menyusun produk** di Produk → Visa → edit (`products/visa/[id]/page.tsx`, `EditPage` tanpa tab, sama dengan Haji/Paket — §10): Informasi
+   (`VisaInfoFields`, dipakai juga halaman `new`) · Persyaratan dokumen (`RequirementsTable`) · Model penjualan (`SalesModelCard`: Visa only / Visa plus + daftar
+   centang 7 jenis, filter transport) · Harga per rentang hari (`VisaTiersTable`; tanpa `PriceCard` sejak 2026-11-24).
 2. **Booking dibuat** (admin: draf `bookings/drafts/[id]` dengan baris Visa di `ItemRows` — pemetaan kelompok ↔ slot jamaah di `visaRows.ts`; revisi sesudah terbit;
    jamaah: checkout pendek `bookings/checkout/visa` hanya untuk Visa only). Semua lewat `prepareBooking` (`lib/booking/create.ts`):
    - aturan "wajib dibeli bersama" dinilai `visaRuleViolations` (`lib/booking/ruleContext.ts`: `bookingCoverage` dari item + isi Paket Umroh yang ditagih + Paket Ziarah;
@@ -117,3 +118,11 @@ Visa plus → "Dipesan bersama: … Hubungi admin" (checkout pendek hanya memuat
 - Baca: `visaEventsOf(ids, { withActor })` (`lib/visa/events.ts`; nama petugas hanya untuk staf); murni `visaTimeline` (`lib/visa/timeline.ts`: 4 langkah proses + Terbit/Ditolak, putaran terakhir sesudah kembali dari Ditolak).
 - UI: `components/shared/visa/VisaTimeline` (satu komponen jamaah + admin, teks `shared.visa.*` id/en); kolom "Visa" di `PilgrimSlotsTable` (muncul bila ada jamaah bervisa); halaman per jamaah `bookings/[id]/jamaah/[pilgrimId]`; panel "Status visa" di detail booking admin + `VisaActions` (isian alasan saat menolak, `router.refresh()`).
 - Uji: `scripts/test-visa-status.ts` (murni, skema, layanan termasuk serentak, append-only/cascade/CHECK, isi ulang migrasi, penjaga penulis tunggal); `test-pilgrim-review` diarahkan ke penulis baru; `test-deletion` mendaftarkan `VisaStatusEvent.actorId`. Browser server audit: admin Dokumen Lengkap → Syarikah ditolak (belum terverifikasi) → jamaah terverifikasi sampai Ditolak dengan alasan; jamaah melihat linimasa id/en tanpa nama petugas + alasan. Galat yang ditemukan uji browser: argumen `formatInstant` tertukar (zona vs bahasa) — diperbaiki.
+
+## 10. Editor produk visa seragam (2026-11-24)
+
+Arahan pemilik: edit dan tambah disamakan dengan produk lain (tanpa tab berjenjang); data jamaah sementara TIDAK DITAMPILKAN (bukan dihapus); harga & HPP memakai komponen yang sama dengan produk lain.
+
+- **Tata letak**: `products/visa/[id]/page.tsx` = `EditPage` + `useEditEntity` + `useDirtyForm` (form diisi sekali). Kiri: `VisaInfoFields`; bawah: `RequirementsTable` → `SalesModelCard` → `VisaTiersTable`. Kartu "Harga: modal, jual, untung" (`PriceCard`) TIDAK dipakai di Visa — tabel rentang sudah menampilkan biaya, HPP, jual, dan untung per rentang (arahan pemilik 2026-11-24). Kanan: Terbitkan, Foto Unggulan (`MediaField`), "Harga Jual per Orang" (+ model penjualan), Hapus (hapus-aman `deleteVisaProduct`: dirujuk → nonaktif). Halaman `new` = `CreatePage` + `VisaInfoFields` yang sama. `ProductInfoTab`/`CostTiersTab` dihapus; `RulesTab` → `SalesModelCard`.
+- **Data jamaah disembunyikan**: halaman tidak memuat `ManifestFieldsEditor` dan TIDAK mengirim `manifestFields` saat simpan — route `PUT` hanya menulis kolom bila dikirim, jadi kolom tersimpan utuh (diuji: 11 kolom sama sebelum/sesudah simpan). Komponen, API, dan pemakaian checkout tidak berubah. Dijaga `scripts/test-admin-editor.ts`.
+- **Harga per rentang hari** (`VisaTiersTable`): tabel Rentang · Biaya → HPP · Harga Jual · Untung + popup lihat/tambah/edit/hapus memakai `CostFields` (§10.1 `docs/arsitektur-komponen-biaya.md`) dengan isian khusus visa: Dari/Sampai hari ke- (`before`, tidak boleh tumpang tindih) dan Biaya BRN opsional (`afterCost`). Vendor + mata uang Visa dan BRN tetap SATU per produk (model `ProductCost` per komponen): dikunci di popup rentang bila rentang lain ada, diubah lewat popup "Vendor & mata uang" (termasuk "Hapus BRN dari semua rentang"). Simpan = PUT seluruh rentang ke `cost-tiers` (route mengganti semuanya), lalu harga manual per varian `days:<min>-<max>` lewat `syncManualSell({ variantKey })`. Rentang terakhir tak bisa dihapus (route mewajibkan ≥ 1). GET `cost-tiers` kini juga mengembalikan `vendorName` (superadmin-only).

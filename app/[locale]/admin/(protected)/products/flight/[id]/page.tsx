@@ -2,14 +2,12 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Save, Wallet } from 'lucide-react'
+import { ArrowLeft, Save } from 'lucide-react'
 import { formatRupiah } from '@/lib/utils'
-import { VendorPicker } from '@/components/admin/vendor/VendorPicker'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
-import { CurrencySelect } from '@/components/shared/CurrencySelect'
-import { RecommendationNote } from '@/components/admin/pricing/RecommendationNote'
+import { SingleCostForm } from '@/components/admin/pricing/SingleCostForm'
 import { adminHref } from '@/lib/admin/href'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
@@ -20,7 +18,6 @@ type Schedule = {
   price: number; totalSeats: number; pendingSeats: number; bookedSeats: number; isActive: boolean
   route: FlightRoute
 }
-type Preview = { hppRupiah: number; sellPrice: number }
 
 type Props = { params: Promise<{ locale: string; id: string }> }
 
@@ -39,38 +36,10 @@ export default function FlightEditPage({ params }: Props) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
-  const [vendorId, setVendorId] = useState('')
-  const [currency, setCurrency] = useState('USD')
-  const [hargaTiket, setHargaTiket] = useState('')
-  const [preview, setPreview] = useState<Preview | null>(null)
-  const [savingCost, setSavingCost] = useState(false)
-  const [costSaved, setCostSaved] = useState(false)
-  const [costError, setCostError] = useState<string | null>(null)
-  const [priceTick, setPriceTick] = useState(0) // naik setiap biaya tersimpan → PriceCard memuat ulang
+  const [priceTick, setPriceTick] = useState(0) // naik setiap harga berubah → PriceCard dan formulir biaya memuat ulang
 
-  // Live preview harga jual — debounce 500ms, sama pola docs/arsitektur-visa.md tapi hanya
-  // 1 komponen HPP ("tiket") karena flight tidak punya BRN-equivalent (arsitektur-tiket-pesawat.md §4).
-  useEffect(() => {
-    const cost = Number(hargaTiket)
-    if (!cost || cost <= 0) { setPreview(null); return }
-    const timer = setTimeout(async () => {
-      const params = new URLSearchParams({ hargaTiket: String(cost), currency })
-      const r = await fetch(`/api/v1/admin/products/flight/simulate?${params}`)
-      const j = await r.json()
-      setPreview(j.data ? { hppRupiah: j.data.hppRupiah, sellPrice: j.data.sellPrice } : null)
-    }, 500)
-    return () => clearTimeout(timer)
-  }, [hargaTiket, currency])
-
-  async function loadCost(scheduleId: string) {
-    const r = await fetch(`/api/v1/admin/products/flight/schedules/${scheduleId}/cost`)
-    const j = await r.json()
-    if (j.data) {
-      setVendorId(j.data.vendorId ?? '')
-      setCurrency(j.data.currency ?? 'USD')
-      setHargaTiket(j.data.hargaTiket ? String(j.data.hargaTiket) : '')
-    }
-    // FlightSchedule.price adalah cache turunan komponen HPP — refresh juga setelah cost berubah.
+  async function reloadSchedule(scheduleId: string) {
+    // Harga jual jadwal dibaca dari titik harga — muat ulang setelah biaya/harga berubah.
     const sr = await fetch(`/api/v1/admin/products/flight/schedules/${scheduleId}`)
     const sj = await sr.json()
     if (sj.data) setSchedule(sj.data)
@@ -95,7 +64,6 @@ export default function FlightEditPage({ params }: Props) {
       const rr = await fetch('/api/v1/admin/products/flight/routes')
       const rj = await rr.json()
       setRoutes(rj.data ?? [])
-      await loadCost(p.id)
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params])
@@ -114,27 +82,6 @@ export default function FlightEditPage({ params }: Props) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  const canSaveCost = !!vendorId && Number(hargaTiket) > 0
-
-  async function handleSaveCost() {
-    setSavingCost(true)
-    setCostError(null)
-    const r = await fetch(`/api/v1/admin/products/flight/schedules/${id}/cost`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ vendorId, currency, hargaTiket: Number(hargaTiket) }),
-    })
-    if (!r.ok) {
-      const j = await r.json().catch(() => null)
-      setCostError(j?.error ?? 'Harga tiket gagal disimpan.')
-      setSavingCost(false)
-      return
-    }
-    await loadCost(id)
-    setPriceTick(t => t + 1)
-    setSavingCost(false); setCostSaved(true)
-    setTimeout(() => setCostSaved(false), 2000)
-  }
 
   async function handleDelete() {
     if (!schedule) return
@@ -214,55 +161,15 @@ export default function FlightEditPage({ params }: Props) {
         </div>
       </div>
 
-      {/* HPP */}
-      <div className="admin-form-panel space-y-4">
-        <div>
-          <p className="text-sm font-semibold text-admin-ink flex items-center gap-1.5"><Wallet className="h-4 w-4" /> HPP &amp; Harga Tiket</p>
-          <p className="text-[11px] text-admin-muted/70 mt-0.5">
-            Satu komponen: Harga Tiket dari maskapai, dikonversi ke Rupiah pakai kurs, ditambah margin jadi Harga Jual — lihat docs/arsitektur-tiket-pesawat.md §4
-          </p>
-        </div>
+      <SingleCostForm
+        title="HPP & Harga Tiket" ownerType="flight" ownerId={id} reloadKey={priceTick}
+        hint="Harga tiket dari maskapai dikonversi ke Rupiah (HPP), ditambah margin jadi harga jual rekomendasi."
+        costUrl={`/api/v1/admin/products/flight/schedules/${id}/cost`} simulateUrl="/api/v1/admin/products/flight/simulate" costKey="hargaTiket"
+        costLabel="Harga Tiket" currencies={CURRENCIES} defaultCurrency="USD" vendor={{ context: 'flight', label: 'Maskapai' }} unitHint="per kursi"
+        onSaved={async () => { await reloadSchedule(id); setPriceTick(t => t + 1) }}
+      />
 
-        <div className="border border-admin-line rounded-xl p-3 space-y-2">
-          <p className="text-xs font-semibold text-admin-ink">Maskapai &amp; Mata Uang</p>
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <VendorPicker value={vendorId} onChange={setVendorId} context="flight" label="Maskapai" />
-            </div>
-            <CurrencySelect value={currency} onChange={setCurrency} currencies={CURRENCIES} />
-          </div>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-3 items-end">
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Harga Tiket ({currency})</p>
-            <input type="number" className="admin-inp" value={hargaTiket} onChange={e => setHargaTiket(e.target.value)} placeholder="0" />
-          </div>
-          <div>
-            <p className="text-xs text-admin-muted mb-1">HPP (Rupiah)</p>
-            <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(Math.round(preview.hppRupiah)) : '—'}</p>
-          </div>
-          <div>
-            <p className="text-xs text-admin-muted mb-1">Harga Jual Rekomendasi</p>
-            <p className="admin-inp bg-admin-spot/50 font-semibold text-admin-ink">{preview ? formatRupiah(preview.sellPrice) : '—'}</p>
-          </div>
-        </div>
-        <RecommendationNote />
-
-        <div className="flex gap-2 pt-1">
-          <button
-            onClick={handleSaveCost}
-            disabled={savingCost || !canSaveCost}
-            className="admin-btn-sm disabled:opacity-50 flex items-center gap-1.5"
-          >
-            <Save className="h-3.5 w-3.5" />
-            {savingCost ? 'Menyimpan...' : costSaved ? 'Tersimpan ✓' : 'Simpan Harga Tiket'}
-          </button>
-        {costError && <p role="alert" className="text-[12px] font-medium text-admin-danger">{costError}</p>}
-        </div>
-      </div>
-
-      <PriceCard ownerType="flight" ownerId={id} reloadKey={priceTick} onChanged={() => { void loadCost(id) }} />
+      <PriceCard ownerType="flight" ownerId={id} reloadKey={priceTick} onChanged={() => { void reloadSchedule(id); setPriceTick(t => t + 1) }} />
 
       {/* Danger zone */}
       <div className="admin-form-panel border-admin-danger/20 space-y-3">

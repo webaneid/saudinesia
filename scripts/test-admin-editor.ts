@@ -1,6 +1,6 @@
 // Penjaga tata letak editor ala WordPress (docs/arsitektur-admin-editor.md). Tanpa database.
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -12,7 +12,7 @@ const ADMIN = 'app/[locale]/admin/(protected)/'
 // Halaman edit bespoke yang memakai EditorShell langsung (halaman dengan banyak kotak komponen yang tersimpan sendiri-sendiri).
 const SHELL_PAGES = ['products/packages/[id]', 'products/hotels/[id]', 'products/tour-packages/[id]', 'bookings/[id]/edit']
 // Halaman edit berbasis EditPage (yang sendirinya EditorShell) + useEditEntity: formulir tunggal + Foto + Hapus.
-const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/transport/vehicles/[id]', 'products/haji/[id]', 'system/site-content/[page]/SiteContentEditor.tsx']
+const EDITPAGE_PAGES = ['products/catering/[id]', 'products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/transport/vehicles/[id]', 'products/haji/[id]', 'products/visa/[id]', 'system/site-content/[page]/SiteContentEditor.tsx']
 /** Entri berakhiran .tsx = berkas editor di folder halaman (page.tsx hanya penjaga peran server); selain itu `<entri>/page.tsx`. */
 const fileOf = (e: string) => ADMIN + (e.endsWith('.tsx') ? e : e + '/page.tsx')
 // EditPage tanpa foto (entitas tak bergambar — dokumen jamaah menyusul Fase 4 jamaah sebagai kotak sendiri).
@@ -87,15 +87,15 @@ await t('halaman bespoke: simpan memeriksa respons dan galat tampil; muat-ulang 
   assert.match(read(ADMIN + 'products/hotels/[id]/page.tsx'), /markClean\(\{ form: f, address: a \}\)/, 'Hotel: baseline harus bergeser setelah muat')
 })
 
-await t('Visa: Foto Unggulan di kolom kanan (sidebar), bukan di atas formulir', () => {
-  const src = read(ADMIN + 'products/visa/[id]/ProductInfoTab.tsx')
-  const sidebarAt = src.indexOf('<div className="min-w-0 space-y-4">')
-  const mediaAt = src.indexOf('<MediaField')
-  assert.ok(sidebarAt > 0 && mediaAt > sidebarAt, 'MediaField harus berada setelah pembuka kolom kanan')
+await t('Visa: data jamaah disembunyikan, bukan dihapus — halaman edit tidak memuat editor kolom dan tidak mengirim manifestFields', () => {
+  const src = read(ADMIN + 'products/visa/[id]/page.tsx')
+  assert.doesNotMatch(src, /ManifestFieldsEditor|manifestFields:/, 'Visa: editor data jamaah tampil atau kolom ikut dikirim (menimpa data tersimpan)')
+  assert.ok(existsSync('components/admin/manifest/ManifestFieldsEditor.tsx'), 'Visa: editor data jamaah dihapus — arahan pemilik: hanya disembunyikan')
+  assert.match(read('app/api/v1/admin/products/visa/[id]/route.ts'), /manifestFields/, 'API visa harus tetap menerima manifestFields')
 })
 
 await t('hapus di halaman edit: semua entitas produk punya kotak Hapus (EditPage.remove / DeleteBox) dan memakai satu pemeriksa respons', () => {
-  for (const e of ['products/muthowif/[id]', 'products/tourism-sites/[id]']) {
+  for (const e of ['products/muthowif/[id]', 'products/tourism-sites/[id]', 'products/visa/[id]']) {
     const src = read(fileOf(e))
     assert.match(src, /remove=\{\{/, `${e}: tidak punya remove`); assert.match(src, /e\.remove\(\)/, `${e}: tidak memakai useEditEntity.remove`)
     assert.match(src, /patchClean\(\{ isActive: false \}\)/, `${e}: nonaktif karena dirujuk harus menggeser baseline`)
@@ -105,8 +105,6 @@ await t('hapus di halaman edit: semua entitas produk punya kotak Hapus (EditPage
     assert.match(src, /<DeleteBox\b/, `${e}: tidak punya <DeleteBox>`); assert.match(src, /useDeleteEntity\(/, `${e}: tidak memakai useDeleteEntity`)
     assert.match(src, /=== 'deactivated'/, `${e}: hasil nonaktif tidak ditangani`)
   }
-  const visa = read(ADMIN + 'products/visa/[id]/page.tsx')
-  assert.match(visa, /j\.data\.deleted/, 'Visa: hasil hapus (terhapus/nonaktif) tidak dibedakan'); assert.match(visa, /!j\?\.data/, 'Visa: respons hapus tidak diperiksa')
   const hook = read('components/admin/editor/useDeleteEntity.ts')
   assert.match(hook, /!res\.ok \|\| !json\?\.data/, 'useDeleteEntity harus memeriksa respons'); assert.match(hook, /json\.data\.deleted/)
 })

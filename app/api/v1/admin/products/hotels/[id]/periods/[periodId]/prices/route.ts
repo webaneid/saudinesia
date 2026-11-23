@@ -27,6 +27,7 @@ export async function GET(_req: Request, { params }: Ctx) {
     const costs = scheduleIds.length > 0
       ? await prisma.productCost.findMany({
           where: { productType: 'hotel', productId: { in: scheduleIds }, costComponent: COMPONENT_KAMAR, isActive: true },
+          include: { vendor: { select: { name: true } } },
         })
       : []
     const costByScheduleId = new Map(costs.map(c => [c.productId, c]))
@@ -45,6 +46,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
     return NextResponse.json(ok({
       vendorId: first?.vendorId ?? null,
+      vendorName: first?.vendor.name ?? null,
       currency: first?.currency ?? null,
       rooms,
     }))
