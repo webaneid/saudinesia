@@ -1,10 +1,8 @@
 import { z } from 'zod'
 import { groupLabelSchema } from '@/lib/validators/groupLabel'
 import { prisma } from '@/lib/db'
-import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '@/lib/manifest/constants'
 import { addDays, daysBetween, todayInApp } from '@/lib/time'
 import { MAX_PRICE_IDR } from '@/lib/pricing/engine/manual'
-import { isEmptyValue } from '@/lib/manifest/values'
 
 // docs/arsitektur-booking.md §6 Step 5 — items[] generik menggantikan field tetap
 // (hotelMakkah/hotelMadinah/transports/muthowif/catering/tourPackages). Satu keranjang campur
@@ -171,38 +169,9 @@ export const createBookingSchema = z.object({
   // Aturan ketergantungan visa TIDAK di sini lagi: dievaluasi lib/booking/rules.ts dari route (422 + daftar pelanggaran, bisa
   // dilonggarkan per pelanggan, dan dipenuhi isi Paket) — docs/arsitektur-booking-engine-v2.md §10.2.
 
-  // docs/arsitektur-manifest.md §3 — field wajib ditentukan ManifestFieldRequirement produk yang
-  // relevan (visa per pilgrim YANG PILIH visa; "core" — lib/manifest/constants.ts — untuk pilgrim
-  // yang tidak), bukan hardcode zod per fieldKey — validasi tetap server-side.
-  const requirementsByProduct = new Map<string, { fieldKey: string; label: string; required: boolean }[]>()
-  for (const id of idsWithVisa) {
-    requirementsByProduct.set(id, await prisma.manifestFieldRequirement.findMany({
-      where: { productType: 'visa', productId: id },
-      select: { fieldKey: true, label: true, required: true },
-    }))
-  }
-  const needsCoreFields = data.pilgrims.some(p => !p.visaProductId)
-  const coreFields = needsCoreFields
-    ? await prisma.manifestFieldRequirement.findMany({
-        where: { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID },
-        select: { fieldKey: true, label: true, required: true },
-      })
-    : []
-
-  data.pilgrims.forEach((p, i) => {
-    const requirements = p.visaProductId ? (requirementsByProduct.get(p.visaProductId) ?? []) : coreFields
-    for (const req of requirements) {
-      if (!req.required) continue
-      // Satu aturan "kosong" dengan formulir/admin (lib/manifest/values.ts) — termasuk alamat tanpa baris jalan.
-      if (isEmptyValue(p.fieldValues[req.fieldKey])) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: `${req.label} wajib diisi`,
-          path: ['pilgrims', i, 'fieldValues', req.fieldKey],
-        })
-      }
-    }
-  })
+  // Kolom data jamaah TIDAK divalidasi di sini lagi: daftarnya = katalog Data Jamaah + saklar produk (docs/arsitektur-data-jamaah.md §3.3),
+  // dinilai per jamaah booking oleh lib/pilgrim-data/forPilgrims.ts (kelengkapan, gerbang "Ajukan"). Isian yang dikirim saat pesan tetap
+  // dibekukan (alamat) dan disegel (NIK/paspor) oleh sealNewPilgrim (lib/pilgrims/bookingLink.ts).
 })
 
 

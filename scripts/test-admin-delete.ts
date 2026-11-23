@@ -33,11 +33,13 @@ const poly = async (productType: string, productId: string) => {
   await prisma.preferredVendor.create({ data: { productType, productId, costComponent: 'X', vendorId: vendor.id } })
   await prisma.documentRequirement.create({ data: { productType, productId, documentTypeId: (await prisma.documentType.findUniqueOrThrow({ where: { key: 'ktp' } })).id, label: 'KTP' } })
   await prisma.manifestFieldRequirement.create({ data: { productType, productId, fieldKey: 'nama', label: 'Nama', fieldType: 'text' } })
+  await prisma.productPilgrimData.create({ data: { productType, productId, enabled: true } }) // saklar data jamaah (docs/arsitektur-data-jamaah.md)
 }
 const polyCount = async (productType: string, productId: string) =>
   (await Promise.all([
     prisma.productCost.count({ where: { productType, productId } }), prisma.preferredVendor.count({ where: { productType, productId } }),
     prisma.documentRequirement.count({ where: { productType, productId } }), prisma.manifestFieldRequirement.count({ where: { productType, productId } }),
+    prisma.productPilgrimData.count({ where: { productType, productId } }),
   ])).reduce((a, b) => a + b, 0)
 const imgCount = (productType: string, productId: string) => prisma.productImage.count({ where: { productType, productId } })
 const bystander = await prisma.package.create({ data: { name: `${tag} penonton` } }) // data milik produk LAIN harus tak tersentuh
@@ -109,7 +111,7 @@ await t('Paket Ziarah: tanpa booking → dihapus beserta situs/biaya/foto; perna
   await prisma.bookingTourPackage.create({ data: { bookingId: bk, tourPackageId: p2.id, tourDate: new Date('2027-06-03'), numPeople: 1, totalPrice: 1 } })
   assert.equal((await deleteTourPackage(p2.id)).deleted, false)
   assert.equal((await prisma.tourPackage.findUniqueOrThrow({ where: { id: p2.id } })).isActive, false)
-  assert.equal(await polyCount('tour_package', p2.id), 4, 'biaya paket yang dipesan tak boleh hilang')
+  assert.equal(await polyCount('tour_package', p2.id), 5, 'biaya paket yang dipesan tak boleh hilang')
   await prisma.tourismSite.delete({ where: { id: site.id } })
 })
 
@@ -124,7 +126,7 @@ await t('Paket Umroh: dihapus beserta opsi (CASCADE), biaya & foto polimorfik; m
   assert.equal(await prisma.packageVisaOption.count({ where: { packageId: p.id } }), 0)
   assert.equal(await prisma.packageDeparture.count({ where: { packageId: p.id } }), 0)
   assert.equal(await polyCount('package', p.id), 0); assert.equal(await imgCount('package', p.id), 0)
-  assert.equal(await polyCount('package', bystander.id), 4, 'baris milik produk lain harus utuh')
+  assert.equal(await polyCount('package', bystander.id), 5, 'baris milik produk lain harus utuh')
   assert.equal((await deleteVisaProduct(v.id)).deleted, true, 'visa bebas setelah opsi paket hilang')
 })
 
@@ -223,8 +225,8 @@ await t('penyidik FK: rujukan masuk ke setiap entitas yang bisa dihapus = daftar
 })
 await t('penyidik tabel polimorfik: set tabel ber-productType = yang dibersihkan dropPolymorphic', async () => {
   const rows = await prisma.$queryRaw<{ t: string }[]>`select table_name as t from information_schema.columns where column_name = 'productType' and table_schema = 'public' order by 1`
-  // pricing_rules = aturan margin per TIPE produk (tanpa productId); product_images dibersihkan purgeProductMedia; empat lainnya oleh dropPolymorphic.
-  assert.deepEqual(rows.map(r => r.t), ['document_requirements', 'manifest_field_requirements', 'preferred_vendors', 'pricing_rules', 'product_costs', 'product_images'])
+  // pricing_rules = aturan margin per TIPE produk (tanpa productId); product_images dibersihkan purgeProductMedia; lima lainnya (termasuk saklar data jamaah product_pilgrim_data) oleh dropPolymorphic.
+  assert.deepEqual(rows.map(r => r.t), ['document_requirements', 'manifest_field_requirements', 'preferred_vendors', 'pricing_rules', 'product_costs', 'product_images', 'product_pilgrim_data'])
 })
 
 // ── penjaga sumber ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -256,6 +258,7 @@ await prisma.productCost.deleteMany({ where: { vendorId: vendor.id } })
 await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } })
 await prisma.documentRequirement.deleteMany({ where: { productType: { in: ['package', 'visa', 'hotel', 'tour_package'] }, productId: bystander.id } })
 await prisma.manifestFieldRequirement.deleteMany({ where: { productType: 'package', productId: bystander.id } })
+await prisma.productPilgrimData.deleteMany({ where: { productType: 'package', productId: bystander.id } })
 await prisma.booking.deleteMany({ where: { id: { in: bookings } } }) // item booking ikut (CASCADE)
 await prisma.package.deleteMany({ where: { name: { startsWith: tag } } })
 await prisma.tourPackage.deleteMany({ where: { name: { startsWith: tag } } })

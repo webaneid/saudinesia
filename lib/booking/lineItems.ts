@@ -248,7 +248,7 @@ export async function writeBookingItems(
     // Revisi: jamaah yang sudah ada hanya mendapat visa baru (data pribadinya tak disentuh). Jamaah baru: NIK/paspor disegel (docs/arsitektur-jamaah.md §5.3).
     const pilgrim = p.pilgrimId
       ? { id: p.pilgrimId }
-      : await createPilgrim(tx, bookingId, p.visaProductId ?? fromPackage ?? null, p.fieldValues ?? {}, { bookingPackageId: member?.package ?? null, bookingHajiId: member?.haji ?? null, groupId: gid(p) })
+      : await createPilgrim(tx, bookingId, p.fieldValues ?? {}, { bookingPackageId: member?.package ?? null, bookingHajiId: member?.haji ?? null, groupId: gid(p) })
     if (!p.visaProductId) {
       if (fromPackage) {
         const vp = await tx.visaProduct.findUnique({ where: { id: fromPackage }, select: { visaType: true } })
@@ -299,10 +299,10 @@ function assignByGroup(
 
 /** Jamaah booking baru: NIK/paspor (peran `nik`/`passport_number`) DISEGEL — `fieldValues` hanya menyimpan samaran. Isian tak valid → 422. */
 async function createPilgrim(
-  tx: Prisma.TransactionClient, bookingId: string, visaProductId: string | null, values: Record<string, unknown>,
+  tx: Prisma.TransactionClient, bookingId: string, values: Record<string, unknown>,
   links: { bookingPackageId: string | null; bookingHajiId: string | null; groupId: string | null },
 ) {
-  const sealed = await sealNewPilgrim(tx, visaProductId, values)
+  const sealed = await sealNewPilgrim(tx, values)
   if (!sealed.ok) {
     // Isian jamaah tak sah: label kolom (data admin) untuk pelanggan, rincian Indonesia untuk admin (pola `fieldInvalid` I6a).
     const [key, detail] = Object.entries(sealed.errors)[0] ?? []

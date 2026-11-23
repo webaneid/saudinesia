@@ -2,7 +2,7 @@ import Link from 'next/link'
 import type { Prisma, VisaStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { VISA_STATUS, VISA_TYPE_LABEL } from '@/lib/constants/booking'
-import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
+import { pilgrimCatalog, valueByRole } from '@/lib/pilgrim-data/catalog'
 import { VISA_TONE } from '@/lib/admin/statusTone'
 import { buildListHref, paginate, parseListParams } from '@/lib/admin/pagination'
 import { PageHeader } from '@/components/admin/shell/PageHeader'
@@ -59,15 +59,10 @@ export default async function AdminVisa({ params, searchParams }: Props) {
     }),
   )
 
-  // docs/arsitektur-manifest.md §4 — getFieldByRole() menggantikan a.pilgrim.fullName (kolom
-  // baku sudah dihapus). Dicache per visaProductId, bukan per aplikasi, biar tidak fetch dobel.
-  const fieldsByProduct = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
-  for (const productId of new Set(applications.map(a => a.visaProductId).filter((v): v is string => !!v))) {
-    fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId))
-  }
+  // Nama jamaah lewat peran `display_name` katalog Data Jamaah (docs/arsitektur-data-jamaah.md) — satu katalog, dimuat sekali.
+  const catalog = await pilgrimCatalog()
   function displayName(a: VisaRow): string {
-    const fields = a.visaProductId ? fieldsByProduct.get(a.visaProductId) ?? [] : []
-    const name = getFieldByRole(fields, a.pilgrim.fieldValues as Record<string, unknown>, 'display_name')
+    const name = valueByRole(catalog, a.pilgrim.fieldValues as Record<string, unknown>, 'display_name')
     return typeof name === 'string' && name ? name : 'Jamaah'
   }
 

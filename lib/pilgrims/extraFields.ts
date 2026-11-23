@@ -1,7 +1,6 @@
 import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
-import { getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
-import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
+import { pilgrimFieldSet } from '@/lib/pilgrim-data/forPilgrims'
 import { completeness, validateFieldValues, type Completeness } from '@/lib/manifest/values'
 import { cardBoundKeys } from '@/lib/manifest/roles'
 import { resolveAddressValues } from '@/lib/manifest/address'
@@ -31,14 +30,13 @@ const invalidField = (fields: readonly { fieldKey: string; label: string }[], ke
 export async function saveExtraFields(userId: string, bookingId: string, pilgrimId: string, input: Record<string, unknown>): Promise<ExtraFieldsResult> {
   const pilgrim = await prisma.bookingPilgrim.findFirst({
     where: { id: pilgrimId, bookingId, booking: { userId, status: { not: 'draft' } } },
-    select: { visaApplication: { select: { visaProductId: true } }, booking: { select: { status: true } } },
+    select: { booking: { select: { status: true } } },
   })
   if (!pilgrim) return fail(404, 'pilgrimNotFound')
   if (pilgrim.booking.status !== 'active') return fail(409, 'bookingNotActive')
 
-  const fields = pilgrim.visaApplication?.visaProductId
-    ? await getManifestFieldRequirements('visa', pilgrim.visaApplication.visaProductId)
-    : await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID)
+  // Kolom yang diminta dari jamaah ini (katalog Data Jamaah + saklar produk, docs/arsitektur-data-jamaah.md §3.3).
+  const fields = (await pilgrimFieldSet(prisma, pilgrimId)).demanded
   const bound = new Set(cardBoundKeys(fields))
   const known = new Set(fields.map(f => f.fieldKey))
   for (const key of Object.keys(input)) {

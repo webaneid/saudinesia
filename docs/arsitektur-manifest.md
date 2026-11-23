@@ -157,6 +157,11 @@ Komponen `<ManifestRepeater productType productId onChange>` — pola:
 
 ## 9. Pengatur Kolom Data Jamaah di Admin (SELESAI & TERVERIFIKASI 2026-11-04, Visa)
 
+> **DIGANTIKAN `docs/arsitektur-data-jamaah.md` (D1, 2026-11-24).** Kolom yang diminta dari jamaah kini dibaca dari katalog global
+> `pilgrim_fields` + saklar per produk (`lib/pilgrim-data/`), bukan dari `manifest_field_requirements`. Tab "Data jamaah" di editor visa
+> (butir 5) tidak ditampilkan lagi sejak 2026-11-24; `lib/manifest/fields.ts`, route `manifestFields`, dan `ManifestFieldsEditor` masih ada
+> tapi tidak dibaca oleh jalur jamaah mana pun — dihapus di D5 (keputusan K3). Sentinel `core` tidak dipakai lagi. Bagian di bawah = riwayat.
+
 **Pemicu:** uji input produk lewat admin (pemilik: "kamu saya tugaskan mencoba mesin kita") — produk visa baru punya 0 field manifest (form jamaah kosong, termasuk nama), dan kolom teks khusus produk (Nomor HP Host, Short Address) tidak bisa diinput sama sekali.
 
 **Drift yang ditemukan saat recheck:** §3/§4 menyebut 5 peran, kode punya 13 (`MANIFEST_ROLES`, `lib/manifest/roles.ts`, CHECK DB + unik per produk); "fallback ke field pertama" di §4 tidak ada di kode (`getFieldByRole` → `null`); §5 gabungan field antar produk tidak dibangun (field jamaah = visa-nya atau `core`).

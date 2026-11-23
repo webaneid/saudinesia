@@ -76,7 +76,7 @@ const card = await (async () => {
 
 // Satu booking: p1 anggota paket + visa paket, p2 anggota haji, p3 visa sendiri saja, p4 tanpa produk bersyarat.
 const bk = await prisma.booking.create({
-  data: { bookingCode: `BK-${tag}`, userId: owner.userId, status: 'active', season: 'regular', totalAmount: 1, pilgrims: { create: [0, 1, 2, 3].map(i => ({ isLeader: i === 0, fieldValues: {} })) } },
+  data: { bookingCode: `BK-${tag}`, userId: owner.userId, status: 'active', season: 'regular', totalAmount: 1, pilgrims: { create: [0, 1, 2, 3].map(i => ({ isLeader: i === 0, fieldValues: { fullName: `Jamaah ${i}`, gender: 'male' } })) } },
   select: { id: true, pilgrims: { select: { id: true }, orderBy: { id: 'asc' } } },
 })
 const [p1, p2, p3, p4] = bk.pilgrims.map(p => p.id) as [string, string, string, string]

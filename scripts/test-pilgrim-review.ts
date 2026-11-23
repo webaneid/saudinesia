@@ -17,6 +17,7 @@ import type { DocumentStorage } from '@/lib/documents/storage'
 import { writeRequirements } from '@/lib/documents/requirements'
 import { savedPilgrimInputSchema } from '@/lib/validators/pilgrims'
 import { assertThrowawayDb } from './lib/testDb'
+import { useTestCatalog } from './lib/pilgrimCatalog'
 
 await assertThrowawayDb()
 
@@ -55,11 +56,8 @@ const owner = await makeUser()
 const stranger = await makeUser()
 
 const visa = await prisma.visaProduct.create({ data: { name: `${tag} visa`, visaType: 'Umroh' } })
-const F = (fieldKey: string, fieldType: string, role: string | null, order: number, required = true) => ({ productType: 'visa', productId: visa.id, fieldKey, label: fieldKey, fieldType, role, order, required })
-await prisma.manifestFieldRequirement.createMany({ data: [
-  F('fullName', 'text', 'display_name', 0), F('gender', 'select', 'gender', 1), F('dateOfBirth', 'date', 'birth_date', 2), F('birthPlace', 'text', 'birth_place', 3),
-  F('nik', 'text', 'nik', 4), F('mahram', 'text', null, 5, false),
-] })
+// Katalog global Data Jamaah (visa = saklar nyala bawaan): kolom berperan wajib + satu kolom bebas opsional.
+const restoreCatalog = await useTestCatalog(['gender', 'dateOfBirth', 'birthPlace', 'nik'], [{ key: 'mahram', fieldType: 'text' }], { gender: true, dateOfBirth: true, birthPlace: true, nik: true })
 const types = Object.fromEntries((await prisma.documentType.findMany()).map(x => [x.key, x]))
 await prisma.$transaction(tx => writeRequirements(tx, 'visa', visa.id, [
   { documentTypeId: types.passport!.id, label: null, description: '', required: true },
@@ -293,7 +291,7 @@ await prisma.booking.deleteMany({ where: { userId: { in: users } } })
 await prisma.savedPilgrim.deleteMany({ where: { ownerId: { in: users } } })
 await prisma.pilgrimIdentity.deleteMany({ where: { id: { in: identityIds } } })
 await prisma.documentRequirement.deleteMany({ where: { productId: visa.id } })
-await prisma.manifestFieldRequirement.deleteMany({ where: { productId: visa.id } })
+await restoreCatalog()
 await prisma.visaProduct.delete({ where: { id: visa.id } })
 await prisma.notificationLog.deleteMany({ where: { userId: { in: users } } })
 await prisma.user.deleteMany({ where: { id: { in: users } } })

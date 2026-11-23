@@ -4,8 +4,8 @@ import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { ok, err, boundedKeys } from '@/lib/validators'
 import { requireBookingManage } from '@/lib/booking/policy'
-import { getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
-import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
+import { activeFields } from '@/lib/pilgrim-data/catalog'
+import { pilgrimFieldSet } from '@/lib/pilgrim-data/forPilgrims'
 import { completeness, validateFieldValues } from '@/lib/manifest/values'
 import { dbDateOf } from '@/lib/time'
 import { recomputeBookingDates } from '@/lib/booking/dates'
@@ -25,7 +25,8 @@ const schema = z.object({
   plannedTravelDate: z.string().date().nullable().optional(),
 }).strict()
 
-// Isi data jamaah oleh admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): nilai divalidasi bentuknya per definisi field produk visa jamaah (atau `core`);
+// Isi data jamaah oleh admin (docs/arsitektur-booking-engine-v2.md §10.3, D3): nilai divalidasi bentuknya per kolom AKTIF katalog Data Jamaah
+// (docs/arsitektur-data-jamaah.md); kelengkapan dihitung atas kolom yang DIMINTA dari jamaah ini (saklar produk);
 // field kosong boleh (dilanjutkan nanti) — kelengkapan dikembalikan untuk indikator. Draf tak punya jamaah; booking lain (aktif/selesai/batal) boleh dikoreksi.
 export async function PUT(req: Request, { params }: Ctx) {
   try {
@@ -44,9 +45,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     if (!pilgrim) return NextResponse.json(err('Jamaah tidak ditemukan'), { status: 404 })
     // Akun yang sudah dihapus (UU PDP): data pribadi jamaah di booking-nya tak boleh diisi lagi.
     if (isDeletedAccount(pilgrim.booking.user.email)) return NextResponse.json(err('Akun pelanggan ini sudah dihapus'), { status: 409 })
-    const fields = pilgrim.visaApplication?.visaProductId
-      ? await getManifestFieldRequirements('visa', pilgrim.visaApplication.visaProductId)
-      : await getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID)
+    const set = await pilgrimFieldSet(prisma, pilgrimId)
+    const fields = activeFields(set.catalog)
     const checked = validateFieldValues(fields, parsed.data.fieldValues)
     if (!checked.ok) return NextResponse.json({ success: false, error: Object.values(checked.errors)[0], meta: { errors: checked.errors } }, { status: 400 })
     if (parsed.data.plannedTravelDate !== undefined && !pilgrim.visaApplication) return NextResponse.json(err('Jamaah ini tidak mengajukan visa'), { status: 400 })
@@ -80,7 +80,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       }
       return merged
     })
-    return NextResponse.json(ok({ completeness: completeness(fields, values) }))
+    return NextResponse.json(ok({ completeness: completeness(set.demanded, values) }))
   } catch (e) {
     if (e instanceof Refused) return NextResponse.json(err(e.message), { status: 409 })
     return authFailureResponse(e, 'admin/bookings/pilgrims/PUT')

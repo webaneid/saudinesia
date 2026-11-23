@@ -1000,3 +1000,10 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 **Harga jual manual per Komponen Biaya — C2 (UI) + C3 (penutup) SELESAI, rencana §22 TUNTAS (2026-11-19)**: baris komponen di panel Komponen Biaya (Haji, Paket Umroh, Paket Ziarah) menampilkan harga berlaku + rekomendasi + lencana Manual dan bisa diatur sebaris dengan catatan selisih margin; kartu harga komposit membandingkan dengan jumlah harga komponen. 1535 PASS, build hijau, diverifikasi di browser, review keamanan 0 temuan. CLAUDE.md dan `arsitektur-komponen-biaya.md` §9.6 diperbarui.
 
 **Redesain komponen harga admin (2026-11-24)**: syarat dokumen tabel + popup (#205); Komponen Biaya tabel + popup dengan kolom Untung; isian modal bersama `CostFields` di semua editor biaya — Pesawat/Muthowif (formulir), Transport (tabel kendaraan), Hotel (tabel kamar per periode), dan **Visa** (editor `EditPage` tanpa tab, data jamaah disembunyikan tanpa dihapus, tabel rentang hari + popup dengan Biaya BRN; `docs/arsitektur-visa.md` §10). Build hijau, guard statis lulus, uji browser. Berikutnya: komponen data jamaah universal.
+
+**Data jamaah universal — katalog global + saklar per produk (`docs/arsitektur-data-jamaah.md`, rencana disetujui 2026-11-24, K1–K3)**
+- [x] D1 — skema `pilgrim_fields` (13 kolom bawaan, CHECK bentuk) + `product_pilgrim_data` (tak ada baris = bawaan: Visa/Paket/Haji nyala) + `SavedPilgrim.extraValues`; pembaca `lib/pilgrim-data/` (`pilgrimFieldSets`: kolom aktif katalog bila produk jamaah ber-saklar nyala, selain itu tidak ada — K2; produk tingkat booking per rombongan); semua pembaca "visa atau core" diganti, `getRequirements.ts` dihapus; pembersih saklar di penghapus produk — selesai 2026-11-24 (`test-pilgrim-data` baru + uji lama di DB sekali pakai, suite penuh, build; as-built §8)
+- [ ] D2 — menu Produk → Data Jamaah (CRUD katalog, pola Jenis Dokumen)
+- [ ] D3 — saklar `PilgrimDataToggle` di semua halaman edit produk + API
+- [ ] D4 — front-end kartu/profil kolom buatan admin + validasi server checkout
+- [ ] D5 — kontraksi (`manifest_field_requirements`, editor lama, isian non-kartu) + dokumentasi akhir

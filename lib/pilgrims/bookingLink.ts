@@ -5,7 +5,7 @@ import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { codedError, type ApiErrorCode } from '@/lib/errors/api'
 import { formatAddressLine } from '@/lib/address/format'
-import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
+import { activeFields, pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
 import { isSealedRole, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
 import type { ManifestAddressValue } from '@/lib/manifest/addressValue'
 import { resolveAddressValues } from '@/lib/manifest/address'
@@ -60,15 +60,12 @@ function addressOf(a: CardRow['address']): ManifestAddressValue | null {
   }
 }
 
-/** Field manifest jamaah: produk visa-nya, atau `core` bila tanpa visa (aturan yang sama dengan route data jamaah). */
-export function manifestFieldsOf(db: Tx | typeof prisma, visaProductId: string | null | undefined) {
-  return db.manifestFieldRequirement.findMany({
-    where: visaProductId ? { productType: 'visa', productId: visaProductId } : { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID },
-    orderBy: [{ order: 'asc' }, { id: 'asc' }],
-  })
+/** Kolom AKTIF katalog Data Jamaah (docs/arsitektur-data-jamaah.md §3.1) — snapshot kartu dan penyegelan isian memakai daftar yang sama untuk semua produk. */
+export async function activeCatalog(db: Tx | typeof prisma) {
+  return activeFields(await pilgrimCatalog(db))
 }
 
-type Locked = { id: string; bookingId: string; ownerId: string; savedPilgrimId: string | null; fieldValues: Record<string, unknown>; visaProductId: string | null }
+type Locked = { id: string; bookingId: string; ownerId: string; savedPilgrimId: string | null; fieldValues: Record<string, unknown> }
 
 /** Kunci pemilik booking (FOR SHARE) lalu jamaah booking (FOR UPDATE). Jamaah harus milik `bookingId`, booking bukan draf. */
 async function lockBookingPilgrim(tx: Tx, actor: Actor, bookingId: string, bookingPilgrimId: string): Promise<Locked> {
@@ -88,8 +85,7 @@ async function lockBookingPilgrim(tx: Tx, actor: Actor, bookingId: string, booki
   if (!row) return notFound()
   // Diajukan/terverifikasi (Fase 6): ditolak SEBELUM mengunci kartu — urutan kunci layanan dokumen (kartu → jamaah booking) tetap aman.
   if (isReviewLocked(row.reviewStatus)) return fail(409, 'reviewLocked')
-  const visa = await tx.visaApplication.findUnique({ where: { bookingPilgrimId }, select: { visaProductId: true } })
-  return { id: bookingPilgrimId, bookingId, ownerId, savedPilgrimId: row.savedPilgrimId, fieldValues: (row.fieldValues ?? {}) as Record<string, unknown>, visaProductId: visa?.visaProductId ?? null }
+  return { id: bookingPilgrimId, bookingId, ownerId, savedPilgrimId: row.savedPilgrimId, fieldValues: (row.fieldValues ?? {}) as Record<string, unknown> }
 }
 
 async function rateLimited(actor: Actor): Promise<ServiceError | null> {
@@ -124,7 +120,7 @@ export function linkCard(actor: Actor, bookingId: string, bookingPilgrimId: stri
     if (card.archivedAt) return fail(409, 'pilgrimArchivedUse', 'cardId')
     const twin = await tx.bookingPilgrim.findFirst({ where: { bookingId, savedPilgrimId: cardId, id: { not: bookingPilgrimId } }, select: { id: true } })
     if (twin) return fail(409, 'cardUsedTwice', 'cardId')
-    const fields = await manifestFieldsOf(tx, bp.visaProductId)
+    const fields = await activeCatalog(tx) // snapshot = keadaan kartu untuk SEMUA kolom aktif katalog (satu sumber data jamaah)
     const fieldValues = { ...bp.fieldValues, ...snapshotFromCard(fields, forSnapshot(card)) }
     await tx.bookingPilgrim.update({
       where: { id: bookingPilgrimId },
@@ -230,8 +226,8 @@ export function passportCountryOf(fields: readonly FieldLite[], values: Record<s
 }
 
 /** Jamaah booking BARU (checkout/booking admin, lib/booking/lineItems.ts): alamat dibekukan, field `nik`/`passport_number` disegel sebelum ditulis. */
-export async function sealNewPilgrim(tx: Tx, visaProductId: string | null, values: Record<string, unknown>): Promise<ManualPii & { labels?: Record<string, string> }> {
-  const fields = await manifestFieldsOf(tx, visaProductId)
+export async function sealNewPilgrim(tx: Tx, values: Record<string, unknown>): Promise<ManualPii & { labels?: Record<string, string> }> {
+  const fields = await activeCatalog(tx)
   // Label kolom (data admin) menyertai galat — mesin pesan menjawab pelanggan dengan kode `fieldInvalid{label}` (I6b).
   const labels = () => Object.fromEntries(fields.map(f => [f.fieldKey, f.label]))
   const addressed = await resolveAddressValues(fields, values, tx) // alamat dibekukan dengan `text` dari DB (D1)

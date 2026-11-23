@@ -10,7 +10,8 @@ import { pilgrimRequirements } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { notify } from '@/lib/notifications/notify'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
-import { manifestFieldsOf } from './bookingLink'
+import { pilgrimFieldSet } from '@/lib/pilgrim-data/forPilgrims'
+import type { PilgrimFieldDef } from '@/lib/pilgrim-data/catalog'
 import { applyVerifiedSnapshot, lockCardOwner, type Actor, type ServiceError, type VerifiedCanonical } from './service'
 import { REVIEW_LABEL } from './reviewState'
 
@@ -76,12 +77,14 @@ async function lockForReview(tx: Tx, actor: Actor, bookingId: string, bookingPil
   }
 }
 
-type Assessment = { fields: Awaited<ReturnType<typeof manifestFieldsOf>>; missingFields: string[]; items: CompletenessItem[]; ready: boolean; verified: boolean; usedDocIds: string[] }
+type Assessment = { fields: PilgrimFieldDef[]; missingFields: string[]; items: CompletenessItem[]; ready: boolean; verified: boolean; usedDocIds: string[] }
 
 /** Nilai data + dokumen jamaah ini sekarang. Dokumen = milik orang di kartu tertaut + dokumen perjalanan booking ini, untuk jenis yang disyaratkan. */
 async function assess(tx: Tx, bp: Locked): Promise<Assessment> {
-  const fields = await manifestFieldsOf(tx, bp.visaProductId)
-  const data = completeness(fields, bp.fieldValues)
+  // Kelengkapan = kolom yang DIMINTA dari jamaah ini (katalog Data Jamaah + saklar produk, docs/arsitektur-data-jamaah.md §3.3);
+  // kanonik identitas dibaca dari seluruh katalog (pengikat peran), tak bergantung saklar.
+  const { demanded, catalog: fields } = await pilgrimFieldSet(tx, bp.id)
+  const data = completeness(demanded, bp.fieldValues)
   // Gabungan syarat semua produk yang memuat jamaah ini (Paket → Haji → Visa, docs/rencana-visa-produk.md §3.2).
   const requirements = (await pilgrimRequirements(tx, [bp.id])).get(bp.id) ?? []
   const typeIds = requirements.map(r => r.documentTypeId)

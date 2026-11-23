@@ -8,6 +8,7 @@ import { readFileSync } from 'node:fs'
 import { prisma } from '@/lib/db'
 import { saveExtraFields } from '@/lib/pilgrims/extraFields'
 import { assertThrowawayDb } from './lib/testDb'
+import { useTestCatalog } from './lib/pilgrimCatalog'
 
 await assertThrowawayDb()
 
@@ -31,11 +32,10 @@ const owner = await makeUser()
 const stranger = await makeUser()
 
 const visa = await prisma.visaProduct.create({ data: { name: `${tag} visa`, visaType: 'Umroh' } })
-const F = (fieldKey: string, fieldType: string, role: string | null, order: number, required = true) => ({ productType: 'visa', productId: visa.id, fieldKey, label: fieldKey, fieldType, role, order, required })
-await prisma.manifestFieldRequirement.createMany({ data: [
-  F('fullName', 'text', 'display_name', 0), F('nik', 'text', 'nik', 1),
-  F('hostPhone', 'phone', null, 2), F('shortAddress', 'text', null, 3), F('note', 'text', null, 4, false),
-] })
+// Katalog global Data Jamaah: nama + NIK (berperan, milik kartu) + kolom admin bebas. Visa = saklar nyala bawaan.
+const restoreCatalog = await useTestCatalog(['nik'], [
+  { key: 'hostPhone', fieldType: 'phone', required: true }, { key: 'shortAddress', fieldType: 'text', required: true }, { key: 'note', fieldType: 'text' },
+], { nik: true })
 
 async function makeBooking(status: 'active' | 'completed' = 'active', fieldValues: Record<string, unknown> = {}) {
   const b = await prisma.booking.create({
@@ -52,7 +52,7 @@ await t('pemilik mengisi kolom tambahan; isian lama (nama dari kartu) dipertahan
   const b = await makeBooking('active', { fullName: 'Budi' })
   const r = await saveExtraFields(owner, b.id, b.pilgrim, { hostPhone: { countryCode: 'SA', number: '501234567' }, shortAddress: 'RRRD2929' })
   assert.ok(r.ok, JSON.stringify(r))
-  assert.deepEqual(r.completeness.missing, ['nik'], 'nik (kartu) masih kosong — dihitung')
+  assert.deepEqual(r.completeness.missing, ['NIK'], 'NIK (kartu) masih kosong — dihitung (label katalog)')
   const v = await valuesOf(b.pilgrim)
   assert.equal(v.fullName, 'Budi')
   assert.equal(v.shortAddress, 'RRRD2929')
@@ -116,7 +116,7 @@ await t('PENJAGA route: sesi pemesan, gerbang onboarding, batas IP, skema strict
 // ── pembersihan (DB uji) ────────────────────────────────────────────────────────────────────────────────────────────
 await prisma.visaApplication.deleteMany({ where: { pilgrim: { booking: { userId: { in: users } } } } })
 await prisma.booking.deleteMany({ where: { userId: { in: users } } })
-await prisma.manifestFieldRequirement.deleteMany({ where: { productId: visa.id } })
+await restoreCatalog()
 await prisma.visaProduct.delete({ where: { id: visa.id } })
 await prisma.user.deleteMany({ where: { id: { in: users } } })
 await prisma.$disconnect()
