@@ -40,6 +40,7 @@ export async function dropPolymorphic(tx: Tx, productType: string, ids: string[]
   await tx.preferredVendor.deleteMany({ where: scope })
   await deleteRequirementsOf(tx, productType, ids)
   await tx.manifestFieldRequirement.deleteMany({ where: scope })
+  await tx.productPilgrimData.deleteMany({ where: scope }) // saklar data jamaah (docs/arsitektur-data-jamaah.md §3.2)
   await tx.pricePoint.deleteMany({ where: { ownerType: productType, ownerId: { in: ids } } }) // titik harga (mesin harga) milik produk ini
 }
 
@@ -108,6 +109,7 @@ export function deleteTransportTrip(id: string): Promise<DeleteOutcome> {
     drop: async tx => {
       const rows = await tx.transportPricing.findMany({ where: { tripId: id }, select: { id: true } })
       await dropPricing(tx, rows.map(r => r.id))
+      await tx.productPilgrimData.deleteMany({ where: { productType: 'transport', productId: id } }) // saklar data jamaah melekat ke TRIP
       await tx.transportTrip.delete({ where: { id } })
     },
     deactivate: () => prisma.transportTrip.update({ where: { id }, data: { isActive: false } }),

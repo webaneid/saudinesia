@@ -4,7 +4,7 @@ import { prisma } from '@/lib/db'
 import { requireAdmin } from '@/lib/auth/session'
 import { getObjectBuffer } from '@/lib/storage/minio'
 import { err } from '@/lib/validators'
-import { getManifestFieldRequirements, getFieldByRole } from '@/lib/manifest/getRequirements'
+import { pilgrimCatalog, valueByRole } from '@/lib/pilgrim-data/catalog'
 import { authFailureResponse } from '@/lib/admin/errors'
 import { groupView } from '@/lib/booking/groups'
 import { auditIp, recordStaffEvent } from '@/lib/audit/staff'
@@ -29,7 +29,7 @@ export async function GET(req: NextRequest, { params }: Params) {
     select: {
       bookingCode: true,
       status: true,
-      pilgrims: { select: { id: true, groupId: true, fieldValues: true, savedPilgrimId: true, visaApplication: { select: { visaProductId: true } } } },
+      pilgrims: { select: { id: true, groupId: true, fieldValues: true, savedPilgrimId: true } },
       groups:   { select: { id: true, label: true, position: true } },
     },
   })
@@ -45,15 +45,11 @@ export async function GET(req: NextRequest, { params }: Params) {
       })
     : []
 
-  // docs/arsitektur-manifest.md §4 — getFieldByRole() menggantikan p.fullName
-  const fieldsByProduct = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
-  for (const productId of new Set(booking.pilgrims.map(p => p.visaApplication?.visaProductId).filter((v): v is string => !!v))) {
-    fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId))
-  }
+  // Nama jamaah lewat peran `display_name` katalog Data Jamaah (docs/arsitektur-data-jamaah.md).
+  const catalog = await pilgrimCatalog()
   const allDocs = booking.pilgrims.flatMap(p => {
     if (!p.savedPilgrimId) return []
-    const fields = p.visaApplication?.visaProductId ? fieldsByProduct.get(p.visaApplication.visaProductId) ?? [] : []
-    const name = getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name')
+    const name = valueByRole(catalog, p.fieldValues as Record<string, unknown>, 'display_name')
     const pilgrimName = typeof name === 'string' && name ? name : p.id
     return cardDocs.filter(d => d.savedPilgrimId === p.savedPilgrimId).map(d => ({ ...d, pilgrimName, pilgrimId: p.id, groupId: p.groupId }))
   })

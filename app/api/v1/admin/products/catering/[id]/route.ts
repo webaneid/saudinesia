@@ -54,7 +54,7 @@ export async function DELETE(_req: Request, { params }: Ctx) {
         if (!row) throw Object.assign(new Error('not found'), { code: 'P2025' })
         return row._count.bookingCatering + row._count.includedInPackages + row._count.packageOptions
       },
-      remove: async () => { await prisma.$transaction([prisma.pricePoint.deleteMany({ where: { ownerType: 'catering', ownerId: id } }), prisma.cateringOption.delete({ where: { id } })]); await purgeProductMedia('catering', id) },
+      remove: async () => { await prisma.$transaction([prisma.pricePoint.deleteMany({ where: { ownerType: 'catering', ownerId: id } }), prisma.productPilgrimData.deleteMany({ where: { productType: 'catering', productId: id } }), prisma.cateringOption.delete({ where: { id } })]); await purgeProductMedia('catering', id) },
       deactivate: () => prisma.cateringOption.update({ where: { id }, data: { isActive: false } }),
       usedBy: n => `Paket katering dipakai di ${n} booking/paket`,
     })

@@ -12,8 +12,8 @@ import { cardIdSchema } from '@/lib/pilgrims/http'
 import { REVIEW_LABEL, isReviewLocked } from '@/lib/pilgrims/reviewState'
 import { cardBoundKeys } from '@/lib/manifest/roles'
 import { completeness } from '@/lib/manifest/values'
-import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
-import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
+import { activeFields, displayFields, valueByRole } from '@/lib/pilgrim-data/catalog'
+import { pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
 import { calendarDateOf } from '@/lib/time'
 import { PilgrimCardPanel } from './PilgrimCardPanel'
 import { PilgrimDataForm } from './PilgrimDataForm'
@@ -49,18 +49,20 @@ export default async function ManagePilgrimPage({ params }: Props) {
   const p = booking.pilgrims[index]
   if (!p) notFound()
 
-  const fieldsOf = (q: typeof p) => q.visaApplication?.visaProductId
-    ? getManifestFieldRequirements('visa', q.visaApplication.visaProductId)
-    : getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID)
-  const fieldsAll = await Promise.all(booking.pilgrims.map(fieldsOf))
+  // Katalog Data Jamaah + saklar produk (docs/arsitektur-data-jamaah.md §3.3): formulir = kolom yang diminta ditambah kolom lain yang sudah
+  // berisi; petugas boleh mengisi kolom aktif mana pun (route memvalidasi atas katalog aktif), kelengkapan hanya atas kolom yang diminta.
+  const sets = await pilgrimFieldSets(prisma, booking.pilgrims.map(q => q.id))
+  const set = sets.get(p.id) ?? { demanded: [], catalog: [] }
   const nameOf = (i: number) => {
     const q = booking.pilgrims[i]!
-    const n = getFieldByRole(fieldsAll[i] ?? [], (q.fieldValues ?? {}) as Record<string, unknown>, 'display_name')
+    const n = valueByRole(set.catalog, (q.fieldValues ?? {}) as Record<string, unknown>, 'display_name')
     return typeof n === 'string' && n ? n : `Jamaah ${i + 1}`
   }
-  const fields = [...(fieldsAll[index] ?? [])].sort((a, b) => a.order - b.order)
   const values = (p.fieldValues ?? {}) as Record<string, unknown>
-  const data = completeness(fields, values)
+  // Tanpa kewajiban data (saklar produk mati): kolom aktif tetap tersedia untuk petugas, tak satu pun wajib.
+  const asked = set.demanded.length > 0 ? set.demanded : activeFields(set.catalog).map(f => ({ ...f, required: false }))
+  const fields = displayFields(set.catalog, asked, values)
+  const data = completeness(set.demanded, values)
 
   const checks = await bookingChecklists(id, booking.departureDate ? calendarDateOf(booking.departureDate) : null, booking.pilgrims.map(q => ({
     id: q.id, savedPilgrimId: q.savedPilgrimId,

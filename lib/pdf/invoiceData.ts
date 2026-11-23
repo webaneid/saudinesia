@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { displayStatus, type DisplayStatus } from '@/lib/booking/lifecycle'
-import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
+import { pilgrimCatalog, valueByRole, type PilgrimFieldDef } from '@/lib/pilgrim-data/catalog'
 import { DATE_SHORT_MONTH_2D, calendarDateOf, dateInApp, formatCalendarDate, formatInstant, type CalendarDate } from '@/lib/time'
 import { formatAddressLine } from '@/lib/address/format'
 import { billOf, billRefunds } from '@/lib/invoice/bill'
@@ -112,7 +112,7 @@ const ITEM_ORDER = ['package', 'flight', 'hotel', 'transport', 'muthowif', 'cate
 const ITEMIZED = new Set(['package'])
 
 /** `db` = klien transaksi bila dipanggil di dalam transaksi (pratinjau draf/revisi, SEC-212): jangan mengambil koneksi pool kedua. */
-export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.TransactionClient, 'manifestFieldRequirement' | 'bankAccount'> = prisma): Promise<InvoiceData> {
+export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.TransactionClient, 'pilgrimField' | 'bankAccount'> = prisma): Promise<InvoiceData> {
   // Satu baris invoice per ITEM (paket berbaris-banyak — komponen, hotel, penyesuaian — tampil sebagai satu baris bagi pilgrim).
   const groups = new Map<string, { type: string; itemId: string; label: string; detail: string; qty: number; amountCents: number }>()
   for (const l of booking.priceSnapshots) {
@@ -138,18 +138,16 @@ export async function buildInvoiceData(booking: InvoiceBooking, db: Pick<Prisma.
   const rankOf = (type: string, itemId: string) => (!view ? 0 : type === 'booking' ? Number.MAX_SAFE_INTEGER : view.rank(groupOf(type, itemId)))
   const lineItems: InvoiceLineItem[] = []
   const ordered = [...groups.values()].sort((a, b) => rankOf(a.type, a.itemId) - rankOf(b.type, b.itemId) || ITEM_ORDER.indexOf(a.type) - ITEM_ORDER.indexOf(b.type))
-  // Definisi field dimuat SEKALI per produk visa (bukan per baris — booking bisa memuat ribuan jamaah; tautan publik bisa memicunya tanpa login).
-  const fieldsByProduct = new Map<string, Awaited<ReturnType<typeof getManifestFieldRequirements>>>()
+  // Katalog Data Jamaah dimuat SEKALI (bukan per baris — booking bisa memuat ribuan jamaah; tautan publik bisa memicunya tanpa login).
+  let catalog: PilgrimFieldDef[] | null = null
   for (const g of ordered) {
     let label = g.label
     let group: InvoiceLineItem['group']
     if (g.type === 'visa') {
       group = { label: g.label, unit: 'jamaah' }
       const p = pilgrimByVisa.get(g.itemId)
-      const productId = p?.visaApplication?.visaProductId
-      if (productId && !fieldsByProduct.has(productId)) fieldsByProduct.set(productId, await getManifestFieldRequirements('visa', productId, db))
-      const fields = productId ? fieldsByProduct.get(productId)! : []
-      const rawName = p ? getFieldByRole(fields, p.fieldValues as Record<string, unknown>, 'display_name') : null
+      if (p && !catalog) catalog = await pilgrimCatalog(db)
+      const rawName = p && catalog ? valueByRole(catalog, p.fieldValues as Record<string, unknown>, 'display_name') : null
       label = `${g.label} — ${typeof rawName === 'string' && rawName ? rawName : 'Jamaah'}`
     }
     const amount = g.amountCents / 100

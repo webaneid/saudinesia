@@ -21,6 +21,7 @@ import { validateFieldValues } from '@/lib/manifest/values'
 import { NIK_MASK, openNik, openPassport } from '@/lib/pii'
 import { savedPilgrimInputSchema } from '@/lib/validators/pilgrims'
 import { assertThrowawayDb } from './lib/testDb'
+import { useTestCatalog } from './lib/pilgrimCatalog'
 
 await assertThrowawayDb()
 
@@ -67,11 +68,8 @@ const other = await makeUser()
 // Produk visa dengan field berperan + satu field bebas (tak boleh disentuh kartu).
 const visa = await prisma.visaProduct.create({ data: { name: `${tag} visa`, visaType: 'Umroh' } })
 visas.push(visa.id)
-const F = (fieldKey: string, fieldType: string, role: string | null, order: number) => ({ productType: 'visa', productId: visa.id, fieldKey, label: fieldKey, fieldType, role, order, required: role !== null })
-await prisma.manifestFieldRequirement.createMany({ data: [
-  F('fullName', 'text', 'display_name', 0), F('gender', 'select', 'gender', 1), F('dateOfBirth', 'date', 'birth_date', 2), F('nationality', 'text', 'nationality', 3),
-  F('phone', 'phone', 'phone', 4), F('nik', 'text', 'nik', 5), F('passportNumber', 'text', 'passport_number', 6), F('mahram', 'text', null, 7),
-] })
+// Katalog global Data Jamaah (docs/arsitektur-data-jamaah.md): kolom berperan + satu kolom bebas (tak boleh disentuh kartu). Visa = saklar nyala bawaan.
+const restoreCatalog = await useTestCatalog(['gender', 'dateOfBirth', 'nationality', 'phone', 'nik', 'passportNumber'], [{ key: 'mahram', fieldType: 'text' }], { gender: true, dateOfBirth: true, nationality: true, phone: true, nik: true, passportNumber: true })
 const types = Object.fromEntries((await prisma.documentType.findMany()).map(x => [x.key, x]))
 await prisma.$transaction(tx => writeRequirements(tx, 'visa', visa.id, [
   { documentTypeId: types.passport!.id, label: null, description: '', required: true },
@@ -212,7 +210,7 @@ await t('GANTI KARTU: kartu lama masih memegang dokumen perjalanan → 409 (sama
 })
 
 await t('JAMAAH BARU (checkout/booking admin): NIK/paspor disegel sebelum ditulis; negara paspor dari field kebangsaan ISO; galat bentuk dilaporkan', async () => {
-  const r = await prisma.$transaction(tx => sealNewPilgrim(tx, visa.id, { fullName: 'Checkout', nationality: 'SA', nik: NIK, passportNumber: 'k 1234567' }))
+  const r = await prisma.$transaction(tx => sealNewPilgrim(tx, { fullName: 'Checkout', nationality: 'SA', nik: NIK, passportNumber: 'k 1234567' }))
   assert.ok(r.ok, JSON.stringify(r))
   if (!r.ok) return
   assert.equal(r.values.nik, NIK_MASK); assert.equal(r.values.passportNumber, '••••4567')
@@ -222,9 +220,9 @@ await t('JAMAAH BARU (checkout/booking admin): NIK/paspor disegel sebelum dituli
   const saved = await row(id)
   assert.equal(openNik(saved.nikCipher!, saved.nikHash!), NIK)
   await prisma.bookingPilgrim.delete({ where: { id } })
-  const plain = await prisma.$transaction(tx => sealNewPilgrim(tx, visa.id, { fullName: 'WNI', nationality: 'Indonesia', passportNumber: 'B7654321' }))
+  const plain = await prisma.$transaction(tx => sealNewPilgrim(tx, { fullName: 'WNI', nationality: 'Indonesia', passportNumber: 'B7654321' }))
   assert.ok(plain.ok && plain.columns.passportCountry === 'ID', 'kebangsaan bukan kode ISO → ID')
-  const bad = await prisma.$transaction(tx => sealNewPilgrim(tx, visa.id, { nik: '123' }))
+  const bad = await prisma.$transaction(tx => sealNewPilgrim(tx, { nik: '123' }))
   assert.ok(!bad.ok && 'nik' in bad.errors)
 })
 
@@ -429,6 +427,10 @@ await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ le
   const check = sql.slice(sql.indexOf('manifest_field_requirements_role_chk'))
   const listed = [...check.slice(0, check.indexOf(';')).matchAll(/'([a-z_]+)'/g)].map(m => m[1])
   assert.deepEqual(listed, [...MANIFEST_ROLES])
+  // Katalog global Data Jamaah memakai daftar peran yang sama (pilgrim_fields_role_chk).
+  const cat = readFileSync(join(root, 'prisma/migrations/20261212090000_pilgrim_data_catalog/migration.sql'), 'utf8')
+  const roleChk = cat.slice(cat.indexOf('pilgrim_fields_role_chk'))
+  assert.deepEqual([...roleChk.slice(0, roleChk.indexOf('))')).matchAll(/'([a-z_]+)'/g)].map(m => m[1]), [...MANIFEST_ROLES])
 })
 
 // ── pembersihan (DB uji) ────────────────────────────────────────────────────────────────────────────────────────────
@@ -440,7 +442,7 @@ const identityIds = (await prisma.savedPilgrim.findMany({ where: { ownerId: { in
 await prisma.savedPilgrim.deleteMany({ where: { ownerId: { in: users } } })
 await prisma.pilgrimIdentity.deleteMany({ where: { id: { in: identityIds } } })
 await prisma.documentRequirement.deleteMany({ where: { productId: { in: visas } } })
-await prisma.manifestFieldRequirement.deleteMany({ where: { productId: { in: visas } } })
+await restoreCatalog()
 await prisma.visaProduct.deleteMany({ where: { id: { in: visas } } })
 await prisma.user.deleteMany({ where: { id: { in: users } } })
 await prisma.$disconnect()

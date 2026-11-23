@@ -1,6 +1,7 @@
 import type { PilgrimReviewStatus, Prisma, VisaStatus } from '@prisma/client'
-import { getFieldByRole, getManifestFieldRequirements } from '@/lib/manifest/getRequirements'
-import { CORE_MANIFEST_PRODUCT_ID, CORE_MANIFEST_PRODUCT_TYPE } from '@/lib/manifest/constants'
+import { prisma } from '@/lib/db'
+import { displayFields, valueByRole } from '@/lib/pilgrim-data/catalog'
+import { pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
 import { completeness, isEmptyValue } from '@/lib/manifest/values'
 import { fieldRows } from '@/lib/manifest/display'
 import type { PilgrimSlot } from './slotTypes'
@@ -24,16 +25,15 @@ export type { PilgrimSlot, SlotDocument } from './slotTypes'
 const DONE = new Set(['pending', 'accepted'])
 
 export async function bookingPilgrimSlots(bookingId: string, departureDate: Date | null, pilgrims: readonly PilgrimInput[], locale?: string) {
-  const [checklists, fieldsAll] = await Promise.all([
+  const [checklists, sets] = await Promise.all([
     bookingChecklists(bookingId, departureDate ? calendarDateOf(departureDate) : null, pilgrims.map(p => ({
       id: p.id, savedPilgrimId: p.savedPilgrimId,
       plannedTravelDate: p.visaApplication?.plannedTravelDate ? calendarDateOf(p.visaApplication.plannedTravelDate) : null,
     }))),
-    Promise.all(pilgrims.map(p => p.visaApplication?.visaProductId
-      ? getManifestFieldRequirements('visa', p.visaApplication.visaProductId)
-      : getManifestFieldRequirements(CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID))),
+    pilgrimFieldSets(prisma, pilgrims.map(p => p.id)),
   ])
-  const fieldsByPilgrim = new Map(pilgrims.map((p, i) => [p.id, [...(fieldsAll[i] ?? [])].sort((a, b) => a.order - b.order)]))
+  // Kolom yang DIMINTA dari tiap jamaah (katalog Data Jamaah + saklar produk, docs/arsitektur-data-jamaah.md §3.3).
+  const fieldsByPilgrim = new Map(pilgrims.map(p => [p.id, sets.get(p.id)?.demanded ?? []]))
 
   const slots: PilgrimSlot[] = pilgrims.map((p, i) => {
     const fields = fieldsByPilgrim.get(p.id) ?? []
@@ -42,7 +42,8 @@ export async function bookingPilgrimSlots(bookingId: string, departureDate: Date
     const items = check?.items ?? []
     const required = items.filter(x => x.required)
     const data = completeness(fields, values)
-    const name = getFieldByRole(fields, values, 'display_name')
+    const catalog = sets.get(p.id)?.catalog ?? []
+    const name = valueByRole(catalog, values, 'display_name')
     const docsDone = required.filter(x => DONE.has(x.state)).length
     return {
       id: p.id,
@@ -55,7 +56,7 @@ export async function bookingPilgrimSlots(bookingId: string, departureDate: Date
       ready: data.complete && docsDone === required.length,
       reviewStatus: p.reviewStatus,
       visa: p.visaApplication?.status ?? null,
-      rows: fieldRows(fields, values, locale),
+      rows: fieldRows(displayFields(catalog, fields, values), values, locale),
       documents: items.map(x => ({ key: x.key, label: x.label, required: x.required, state: x.state, reusable: x.reusable })),
     }
   })

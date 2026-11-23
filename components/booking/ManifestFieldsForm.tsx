@@ -7,8 +7,8 @@ import { AddressPicker } from '@/components/shared/AddressPicker'
 import { toPickerAddress } from '@/lib/manifest/addressValue'
 import { cn } from '@/lib/utils'
 
-// Bentuk field seperti dikembalikan getManifestFieldRequirements() (docs/arsitektur-manifest.md
-// §4) — dipakai render dinamis, bukan form hardcode per produk.
+// Bentuk kolom katalog Data Jamaah (lib/pilgrim-data/catalog.ts, docs/arsitektur-data-jamaah.md) — dipakai render dinamis,
+// bukan form hardcode per produk.
 export type ManifestField = {
   id: string
   fieldKey: string

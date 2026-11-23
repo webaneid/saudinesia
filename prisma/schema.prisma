@@ -510,6 +510,39 @@ model DocumentRequirement {
   @@map("document_requirements")
 }
 
+// ─── KATALOG DATA JAMAAH (docs/arsitektur-data-jamaah.md §3.1) ───────────────
+// SATU daftar kolom data jamaah untuk semua produk (menggantikan ManifestFieldRequirement per produk, dikontraksi di D5).
+// Semua kolom = data milik jamaah (kartu Jamaah Saya). Ditulis HANYA lib/pilgrim-data/. `key` = kunci di fieldValues, tak pernah berubah.
+model PilgrimField {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  label     String
+  fieldType String // katalog MANIFEST_FIELD_TYPES (lib/manifest/fieldDefs.ts) — CHECK di DB
+  options   Json? // pilihan untuk fieldType='select'
+  role      String?  @unique // pengikat ke kolom kartu (MANIFEST_ROLES, CHECK di DB); hanya kolom bawaan
+  required  Boolean  @default(false)
+  isSystem  Boolean  @default(false) // bawaan: tipe/peran terkunci, hanya bisa dinonaktifkan
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([isActive, order])
+  @@map("pilgrim_fields")
+}
+
+// Saklar "minta data jamaah" per produk (docs/arsitektur-data-jamaah.md §3.2) — polimorfik, registry PILGRIM_DATA_OWNERS (lib/pilgrim-data/owners.ts).
+// Tak ada baris = bawaan jenis produk. Dibersihkan saat produk dihapus.
+model ProductPilgrimData {
+  productType String
+  productId   String
+  enabled     Boolean
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  @@id([productType, productId])
+  @@map("product_pilgrim_data")
+}
+
 // ─── MANIFEST FIELD REQUIREMENT (universal, docs/arsitektur-manifest.md §3) ───
 // Definisi field form per-orang, per produk — polimorfik, pola SAMA PERSIS DocumentRequirement.
 // Menggantikan asumsi lama "semua booking pakai bentuk form BookingPilgrim yang sama" — admin
@@ -897,8 +930,8 @@ enum BookingStatus {
 
 // docs/arsitektur-manifest.md §3 — kolom baku lama (fullName, gender, email, phone/whatsapp
 // +countryCode, passportNumber, passportExpiry, nationality, dateOfBirth) DIHAPUS, diganti
-// fieldValues: Json — bentuk & isinya mengikuti ManifestFieldRequirement produk yang relevan
-// untuk orang ini (lib/manifest/getRequirements.ts). Field kontak (Kontak, docs/arsitektur-
+// fieldValues: Json — kunci = PilgrimField.key katalog Data Jamaah (docs/arsitektur-data-jamaah.md;
+// kolom yang diminta per jamaah: lib/pilgrim-data/forPilgrims.ts). Field kontak (Kontak, docs/arsitektur-
 // komponen-kontak.md) juga ikut masuk fieldValues (fieldType='phone', shape {countryCode,
 // number}) — komponen Kontak SEBELUMNYA punya kolom baku sendiri, sekarang bagian dari manifest
 // yang sama seperti field lain, tidak ada perlakuan khusus lagi.
@@ -1108,6 +1141,8 @@ model SavedPilgrim {
   matchConfirmedById  String?
   // Dilepas admin karena NIK tidak sesuai: pesan generik ke pemilik + tak ditautkan ulang otomatis sampai NIK diubah.
   nikCheckRequestedAt DateTime?          @db.Timestamptz(3)
+  // Kolom katalog Data Jamaah buatan admin (tanpa peran) — { [PilgrimField.key]: nilai } (docs/arsitektur-data-jamaah.md §3.4). Kolom bawaan tetap di kolom kartu.
+  extraValues         Json               @default("{}")
   createdAt           DateTime           @default(now()) @db.Timestamptz(3)
   updatedAt           DateTime           @updatedAt @db.Timestamptz(3)
 
