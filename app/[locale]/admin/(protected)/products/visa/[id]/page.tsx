@@ -10,7 +10,7 @@ import { Tabs, tabId, tabPanelId, type TabItem } from '@/components/admin/ui/Tab
 import { formatRupiah } from '@/lib/utils'
 import { CostTiersTab } from './CostTiersTab'
 import { ProductInfoTab } from './ProductInfoTab'
-import { RequirementsEditor } from '@/components/admin/documents/RequirementsEditor'
+import { RequirementsTable } from '@/components/admin/documents/RequirementsTable'
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import { ManifestFieldsEditor } from '@/components/admin/manifest/ManifestFieldsEditor'
 import { bodyFromManifestRows, rowFromField, type ManifestRow } from '@/components/admin/manifest/manifestRows'
@@ -184,7 +184,7 @@ export default function VisaEditPage({ params }: Props) {
         <ProductInfoTab productId={product.id} form={form} onChange={patchForm} price={price} locale={locale} productName={product.name} onShowPrice={() => setTab('price')} onDelete={remove} />
       </div>
       <div id={tabPanelId('docs')} role="tabpanel" aria-labelledby={tabId('docs')} hidden={tab !== 'docs'}>
-        <RequirementsEditor rows={reqs} onChange={setRequirements} productNoun="visa ini" />
+        <RequirementsTable rows={reqs} onChange={setRequirements} productNoun="visa ini" />
       </div>
       <div id={tabPanelId('fields')} role="tabpanel" aria-labelledby={tabId('fields')} hidden={tab !== 'fields'}>
         <ManifestFieldsEditor rows={fieldRows} onChange={setFieldList} used={product.manifestFieldsUsed} productNoun="visa ini" />

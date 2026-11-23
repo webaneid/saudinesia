@@ -5,8 +5,8 @@ import { useParams } from 'next/navigation'
 import { FileBadge } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
-import { DocumentTypeFields } from '../DocumentTypeFields'
-import { EMPTY_TYPE_FORM, bodyFromTypeForm, canSubmitType, type DocumentTypeForm } from '../documentTypeForm'
+import { DocumentTypeFields } from '@/components/admin/documents/DocumentTypeFields'
+import { EMPTY_TYPE_FORM, bodyFromTypeForm, canSubmitType, type DocumentTypeForm } from '@/components/admin/documents/documentTypeForm'
 import { adminHref } from '@/lib/admin/href'
 
 export default function NewDocumentTypePage() {
