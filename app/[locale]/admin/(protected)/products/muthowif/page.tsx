@@ -11,6 +11,7 @@ import { Badge } from '@/components/admin/ui/Badge'
 import { PriceCard } from '@/components/admin/pricing/PriceCard'
 import { SingleCostForm } from '@/components/admin/pricing/SingleCostForm'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 const CURRENCIES = ['IDR', 'SAR', 'USD', 'EUR']
 
@@ -58,6 +59,8 @@ export default function MuthowifPage() {
       />
 
       {serviceId && <PriceCard ownerType="muthowif" ownerId={serviceId} title="Harga layanan: modal, jual, untung" reloadKey={priceTick} onChanged={() => setPriceTick(t => t + 1)} />}
+
+      <PilgrimDataToggle productType="muthowif" productId={serviceId} />
 
       <CatalogList<Muthowif> endpoint="/api/v1/admin/products/muthowif" columns={columns} getRowId={m => m.id} status isActive={m => m.isActive} searchPlaceholder="Cari nama muthowif…" empty="Belum ada muthowif." />
     </div>

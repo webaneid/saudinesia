@@ -9,6 +9,7 @@ import { useConfirm } from '@/components/admin/ui/useConfirm'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { SingleCostForm } from '@/components/admin/pricing/SingleCostForm'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 const CURRENCIES = ['USD', 'SAR', 'EUR', 'IDR']
 
@@ -160,6 +161,8 @@ export default function FlightEditPage({ params }: Props) {
           </button>
         </div>
       </div>
+
+      <PilgrimDataToggle productType="flight" productId={id || null} />
 
       <SingleCostForm
         title="HPP & Harga Tiket" ownerType="flight" ownerId={id} reloadKey={priceTick}

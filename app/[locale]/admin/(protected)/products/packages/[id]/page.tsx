@@ -20,6 +20,7 @@ import type { RequirementView } from '@/lib/documents/completeness'
 import { DeparturesBox } from './DeparturesBox'
 import { TripPlanBox, type TripPlanForm } from './TripPlanBox'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 type Mode = 'included' | 'user_choice' | 'none'
 
@@ -460,6 +461,7 @@ export default function PackageBuilderPage({ params }: Props) {
               <p className="m-0 text-[11px] text-admin-muted">Rincian ada di kotak &quot;Rincian Harga&quot; di bawah.</p>
             </MetaBox>
           )}
+          <PilgrimDataToggle productType="package" productId={pkg.id} />
           <DeleteBox
             confirmText="Hapus paket umroh ini beserta komponen biayanya? Bila sudah dipakai, ia hanya dinonaktifkan (bisa diaktifkan kembali)."
             onDelete={handleDelete} deleting={del.deleting}

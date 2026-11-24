@@ -18,6 +18,7 @@ import { RequirementsTable } from '@/components/admin/documents/RequirementsTabl
 import { bodyFromRows, rowFromView, type RequirementRow } from '@/components/admin/documents/requirementRows'
 import type { RequirementView } from '@/lib/documents/completeness'
 import { adminHref } from '@/lib/admin/href'
+import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 type HajiDetail = {
   id: string; name: string; description: string | null; hajiType: string; year: number
@@ -74,6 +75,7 @@ export default function HajiEditPage() {
       saving={e.saving} canSubmit={!!form.name.trim()} error={e.error} notice={e.notice}
       media={<MediaField productType="haji" productId={haji.id} label="Foto Unggulan Haji" />}
       sidebar={
+        <>
         <MetaBox title="Harga Jual per Orang" icon={Wallet} collapsible={false}>
           {haji.price > 0 ? (
             <p className="m-0 text-xl font-bold text-admin-accent-strong">{formatRupiah(haji.price)}</p>
@@ -82,6 +84,8 @@ export default function HajiEditPage() {
           )}
           <p className="m-0 text-[11px] text-admin-muted">Otomatis = jumlah harga jual semua komponen (diperbarui saat komponen atau kurs berubah). Harga bisa diatur manual lewat kartu “Harga” di bawah.</p>
         </MetaBox>
+        <PilgrimDataToggle productType="haji" productId={haji.id} />
+        </>
       }
       remove={{
         label: hasBookings ? 'Nonaktifkan produk' : 'Hapus produk',
