@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { boundedKeys } from './index'
 import { getCountryName } from '@/lib/constants/countries'
 import { isCalendarDate } from '@/lib/time'
 import { addressSchema } from './address'
@@ -31,6 +32,9 @@ export const savedPilgrimInputSchema = z.object({
   whatsapp: e164Schema.nullish(),
   email: emailSchema.nullish(),
   isSelf: z.boolean().optional(), // "Saya sendiri" — satu per akun
+  // Kolom buatan admin di katalog Data Jamaah (docs/arsitektur-data-jamaah.md §3.4): { kunci: nilai }; tidak dikirim = tetap, nilai kosong = dihapus.
+  // Bentuk per kolom dinilai lib/pilgrims/service.ts atas katalog (kunci asing ditolak).
+  extra: boundedKeys(60, 'Terlalu banyak kolom', z.record(z.string().max(64), z.unknown())).optional(),
 }).strict()
 
 export type SavedPilgrimInput = z.infer<typeof savedPilgrimInputSchema>

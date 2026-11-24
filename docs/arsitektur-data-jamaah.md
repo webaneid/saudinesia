@@ -1,6 +1,6 @@
 # Arsitektur — Katalog Data Jamaah + Saklar per Produk
 
-> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8), D2 SELESAI (2026-11-24, as-built §9), D3 SELESAI (2026-11-24, as-built §10).** D4–D5 belum. Menggantikan
+> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8), D2 SELESAI (2026-11-24, as-built §9), D3 SELESAI (2026-11-24, as-built §10), D4 SELESAI (2026-11-24, as-built §11).** D5 belum. Menggantikan
 > pengatur kolom per produk di `docs/arsitektur-manifest.md` §9 (tab "Data jamaah" visa, sejak 2026-11-24 disembunyikan).
 
 ## 1. Permintaan pemilik (2026-11-24)
@@ -121,7 +121,7 @@ dokumen tetap per produk (`RequirementsTable`, `pilgrimRequirements`); status pe
 | **D2** | Menu **Produk → Data Jamaah**: daftar `CatalogList` (kolom: Kolom · Kode · Tipe · Sifat · Diminta untuk · Status · aksi), halaman `new` (`CreatePage`) dan `[id]` (`EditPage`), hapus aman — persis pola Jenis Dokumen | uji browser + penjaga `test-admin-editor`/`test-admin-create`/`test-table-consistency` |
 | **D3** | Saklar `PilgrimDataToggle` di semua halaman edit produk + API; kolom jamaah mengikuti §3.3 (mati = tak ada kewajiban) | uji: produk nyala/mati mengubah kolom jamaah; route menolak non-staf |
 | **D4** | Front-end: kartu Jamaah Saya + profil menampilkan kolom `person` buatan admin; snapshot kartu ikut mengisinya; `POST /bookings` & checkout memvalidasi kolom di server (menutup gap manifest §9) | uji browser /id /en, 375 px; penjaga i18n |
-| **D5** | Kontraksi §4 butir 5 + hapus isian non-kartu pemesan (`extraFields`) + dokumentasi akhir (`CLAUDE.md`, `arsitektur-manifest.md`, `arsitektur-jamaah.md`, `arsitektur-visa.md`) | migrasi fail-closed diuji; build; grep tak ada pembaca lama |
+| **D5** | Kontraksi §4 butir 5 (isian non-kartu pemesan sudah dihapus di D4, §11) + dokumentasi akhir (`CLAUDE.md`, `arsitektur-manifest.md`, `arsitektur-jamaah.md`, `arsitektur-visa.md`) | migrasi fail-closed diuji; build; grep tak ada pembaca lama |
 
 ## 6. Lampiran
 
@@ -219,3 +219,35 @@ di DB sekali pakai; `bun run test` penuh.
   "Bawaan", nyala tersimpan lalu dikembalikan, Visa menampilkan saklar; API menolak tipe asing (400), uuid hantu (404), bukan uuid (400),
   kunci tambahan (400), id tipe lain (404), tanpa sesi (403); `bun run build` hijau.
 - **Untuk D4:** halaman booking pelanggan masih menampilkan bagian jamaah walau tak ada kewajiban — disembunyikan/ditandai di D4.
+
+## 11. As-built D4 (2026-11-24) — kartu = satu-satunya sumber data jamaah pelanggan
+
+- **Kartu menyimpan kolom buatan admin.** `savedPilgrimInputSchema.extra` (`boundedKeys` 60, kunci ≤ 64) → `lib/pilgrims/service.ts`
+  (`nextExtraValues`, di transaksi tulis kartu): hanya kunci kolom buatan admin di katalog (kolom nonaktif tetap diterima supaya formulir bisa
+  mengirim balik nilai lamanya; kolom bawaan/berperan seperti `nik` dan kunci asing → 400 `field: extra.<kunci>`), bentuk dinilai
+  `validateFieldValues`, nilai kosong menghapus kunci, `extra` tidak dikirim = tetap. DTO kartu membawa `extra` (data pemilik sendiri).
+- **Formulir kartu** (`SavedPilgrimFields`, dipakai Jamaah Saya, dialog kartu di booking, dan admin atas nama pelanggan) menampilkan bagian
+  "Data tambahan" = kolom buatan admin AKTIF (`cardExtraFields`) dimuat lewat `useCardExtraFields` → `GET /api/v1/pilgrim-fields` (butuh sesi,
+  hanya definisi kolom). Wajib/tidaknya tidak ditegakkan di kartu — gerbangnya tetap "Ajukan" per booking (`completeness`). `ManifestFieldsForm`
+  kini menautkan label ke isian (`idPrefix`, sebelumnya isian tanpa nama aksesibel).
+- **Snapshot:** `snapshotFromCard` mengisi kolom tanpa peran dari `card.extra` (kartu kosong → dikosongkan; hanya properti milik sendiri);
+  `linkCard` membaca `extraValues` kartu. `cardBoundKeys` = semua kolom katalog (K1: semua data jamaah milik kartu).
+- **Jalur isian non-kartu pemesan DIHAPUS di fase ini (dimajukan dari D5):** route `PUT /api/v1/bookings/[id]/pilgrims/[pilgrimId]`,
+  `lib/pilgrims/extraFields.ts`, `PilgrimExtraFields`, `scripts/test-pilgrim-extra-fields.ts`, teks `pilgrimArea.extra` dan kode galat
+  `fieldFromCard`. Alasannya: begitu kolom buatan admin tersimpan di kartu, isian itu menjadi jalur kedua untuk data yang sama (dan sudah tak
+  punya kolom untuk diisi). `DELETE` (kosongkan slot) tetap. Petugas tetap bisa mengisi manual jamaah tanpa kartu di Kelola jamaah.
+- **Validasi isian booking baru (menutup gap `docs/arsitektur-manifest.md` §9):** `sealNewPilgrim` menilai `fieldValues` jamaah baru dengan
+  `validateFieldValues` atas katalog aktif (kunci asing / bentuk salah → `ItemNotBookableError` 422) sebelum alamat dibekukan dan NIK/paspor
+  disegel. Hari ini checkout pelanggan dan draf admin mengirim isian kosong, jadi ini lapis pertahanan untuk jalur mana pun yang kelak mengirim isian.
+- **Halaman booking pelanggan:** slot membawa `needed` (produk meminta kolom ATAU dokumen dari jamaah itu). Bila tak satu pun slot `needed`,
+  tabel jamaah diganti catatan `booking.pilgrimsNotNeeded` dan langkah "Isi data jamaah" pada kotak baru-dipesan disembunyikan; slot campuran
+  menampilkan "—" di kolom Data untuk jamaah tanpa kewajiban (juga di admin).
+- **Bukti:** `scripts/test-pilgrims.ts` (+1: simpan/tetap/hapus/kolom nonaktif/penolakan, kartu tak berubah saat ditolak, batas kunci),
+  `scripts/test-pilgrim-data.ts` (+4 D4: snapshot & `cardExtraFields`, validasi `sealNewPilgrim`, `needed`, penjaga sumber),
+  `scripts/test-booking-link.ts` (tautan mengisi kolom admin dari kartu; kartu dikosongkan → ikut kosong), suite penuh di DB sekali pakai baru;
+  browser (server dev terpisah): buat kolom "Catatan Kesehatan" lewat Produk → Data Jamaah, isi di kartu pelanggan (admin), tersimpan sesudah
+  muat ulang; API menolak kunci asing, `nik` lewat `extra`, nilai > batas (400); `GET /api/v1/pilgrim-fields` tanpa sesi 401; kolom uji
+  dihapus lewat UI (hapus sungguhan karena tak berisi data). Halaman pelanggan /id /en dan 375 px TIDAK diuji di browser (tak ada akun
+  pelanggan uji di seed) — dijaga `test-i18n-coverage` dan uji slot; `bun run build` hijau.
+- **Temuan sambil lalu:** SEC-312 (Low, pre-existing) — PUT kartu tanpa `birthPlace`/`gender` mengosongkannya.
+

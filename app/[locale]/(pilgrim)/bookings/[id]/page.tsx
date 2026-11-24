@@ -95,6 +95,9 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
   const open = booking.status === 'active'
   const jamaahHref = (pid: string) => `/${locale}/bookings/${booking.id}/jamaah/${pid}`
   const nextEmpty = slots.find(x => !x.filled)
+  // Tak satu pun produk pesanan meminta data/dokumen jamaah (saklar Data Jamaah mati, tanpa syarat dokumen — docs/arsitektur-data-jamaah.md §3.3):
+  // tabel jamaah tidak ditampilkan; daftar penumpang menjadi urusan pemesan (keputusan pemilik K2).
+  const pilgrimsNeeded = slots.some(x => x.needed)
 
   const day = (d: Date) => formatCalendarDate(d, DATE_NUMERIC, lang)
   const ppl = (count: number) => t('summary.people', { count })
@@ -160,9 +163,9 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
         <div className="rounded-2xl border border-brand/30 bg-brand-light p-5 space-y-3" role="status">
           <p className="flex items-center gap-2 font-bold text-brand-dark"><CheckCircle className="h-5 w-5 text-brand" aria-hidden /> {t('booking.issued')}</p>
           <p className="text-sm text-brand-dark">{t('booking.issuedInvoice')} {st === 'awaiting_payment' ? t('booking.twoSteps') : t('booking.nextStep')}</p>
-          <ol className={`grid gap-2 text-sm ${st === 'awaiting_payment' ? 'sm:grid-cols-2' : ''}`}>
-            <li><a href="#data-jamaah" className="flex h-full items-start gap-2 rounded-xl bg-white/80 p-3 font-medium text-brand-dark hover:bg-white"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">1</span> {t('booking.stepPilgrims')}</a></li>
-            {st === 'awaiting_payment' && <li><a href="#pembayaran" className="flex h-full items-start gap-2 rounded-xl bg-white/80 p-3 font-medium text-brand-dark hover:bg-white"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">2</span> {t('booking.stepPay')}</a></li>}
+          <ol className={`grid gap-2 text-sm ${st === 'awaiting_payment' && pilgrimsNeeded ? 'sm:grid-cols-2' : ''}`}>
+            {pilgrimsNeeded && <li><a href="#data-jamaah" className="flex h-full items-start gap-2 rounded-xl bg-white/80 p-3 font-medium text-brand-dark hover:bg-white"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">1</span> {t('booking.stepPilgrims')}</a></li>}
+            {st === 'awaiting_payment' && <li><a href="#pembayaran" className="flex h-full items-start gap-2 rounded-xl bg-white/80 p-3 font-medium text-brand-dark hover:bg-white"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand text-xs font-bold text-white">{pilgrimsNeeded ? 2 : 1}</span> {t('booking.stepPay')}</a></li>}
           </ol>
         </div>
       )}
@@ -243,13 +246,19 @@ export default async function BookingDetailPage({ params, searchParams }: Props)
         <h3 className="font-semibold flex items-center gap-2">
           <UserRound className="h-4 w-4 text-primary" /> {t('booking.pilgrimsTitle')}
         </h3>
-        <p className="text-sm text-muted-foreground">{t('booking.pilgrimsIntro')}</p>
-        <PilgrimSlotsTable
-          total={slots.length}
-          slots={slots.map(x => ({ ...x, ...(gv && { group: gv.name(pilgrimGroup.get(x.id)) }), editHref: jamaahHref(x.id) }))}
-          addHref={open && nextEmpty ? jamaahHref(nextEmpty.id) : null}
-          deleteEndpoint={open ? `/api/v1/bookings/${booking.id}/pilgrims/{id}` : null}
-        />
+        {pilgrimsNeeded ? (
+          <>
+            <p className="text-sm text-muted-foreground">{t('booking.pilgrimsIntro')}</p>
+            <PilgrimSlotsTable
+              total={slots.length}
+              slots={slots.map(x => ({ ...x, ...(gv && { group: gv.name(pilgrimGroup.get(x.id)) }), editHref: jamaahHref(x.id) }))}
+              addHref={open && nextEmpty ? jamaahHref(nextEmpty.id) : null}
+              deleteEndpoint={open ? `/api/v1/bookings/${booking.id}/pilgrims/{id}` : null}
+            />
+          </>
+        ) : (
+          <p className="rounded-xl border bg-card p-4 text-sm text-muted-foreground">{t('booking.pilgrimsNotNeeded', { count: slots.length })}</p>
+        )}
       </div>
 
     </div>

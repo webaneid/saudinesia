@@ -28,13 +28,15 @@ export type SavedPilgrimFormValue = {
   contact: ContactValue
   email: string
   isSelf: boolean
+  /** Nilai kolom buatan admin (katalog Data Jamaah) — dikirim utuh; nilai kosong = dihapus di server. */
+  extra: Record<string, unknown>
 }
 
 export const EMPTY_PILGRIM_FORM: SavedPilgrimFormValue = {
   fullName: '', gender: '', birthPlace: '', birthDate: '', nationality: 'ID',
   nik: '', hasNik: false, clearNik: false,
   passportNumber: '', passportMask: '', passportIssuedAt: '', passportExpiry: '', clearPassport: false,
-  address: EMPTY_ADDRESS, hadAddress: false, contact: EMPTY_CONTACT, email: '', isSelf: false,
+  address: EMPTY_ADDRESS, hadAddress: false, contact: EMPTY_CONTACT, email: '', isSelf: false, extra: {},
 }
 
 export function formFromCard(c: SavedPilgrimView): SavedPilgrimFormValue {
@@ -50,7 +52,7 @@ export function formFromCard(c: SavedPilgrimView): SavedPilgrimFormValue {
     } : EMPTY_ADDRESS,
     hadAddress: a !== null,
     contact: contactFromStored(c.phone ?? '', c.whatsapp ?? ''),
-    email: c.email ?? '', isSelf: c.isSelf,
+    email: c.email ?? '', isSelf: c.isSelf, extra: { ...c.extra },
   }
 }
 
@@ -81,6 +83,7 @@ export function bodyFromForm(v: SavedPilgrimFormValue): SavedPilgrimInput {
     phone, whatsapp,
     email: v.email.trim() || null,
     isSelf: v.isSelf,
+    extra: v.extra,
   }
 }
 

@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { isEmptyValue } from '@/lib/manifest/values'
 
-// Katalog Data Jamaah (docs/arsitektur-data-jamaah.md §3.1) — SATU daftar kolom untuk semua produk. Pembaca; penulis katalog menyusul di D2.
+// Katalog Data Jamaah (docs/arsitektur-data-jamaah.md §3.1) — SATU daftar kolom untuk semua produk. Pembaca; penulis katalog = `fields.ts`.
 // Bentuk `PilgrimFieldDef` sengaja sama dengan definisi kolom manifest lama (`fieldKey`/`label`/`fieldType`/`options`/`required`/`role`),
 // jadi helper `lib/manifest/*` (validasi, kelengkapan, tampilan, pengikat kartu) dipakai apa adanya.
 
@@ -31,6 +31,9 @@ export async function pilgrimCatalog(db: Db = prisma): Promise<PilgrimFieldDef[]
 }
 
 export const activeFields = (catalog: readonly PilgrimFieldDef[]): PilgrimFieldDef[] => catalog.filter(f => f.isActive)
+
+/** Kolom buatan admin yang AKTIF — diisi di kartu Jamaah Saya (`SavedPilgrim.extraValues`, docs/arsitektur-data-jamaah.md §3.4). */
+export const cardExtraFields = (catalog: readonly PilgrimFieldDef[]): PilgrimFieldDef[] => catalog.filter(f => f.isActive && !f.isSystem && f.role === null)
 
 /**
  * Kolom untuk DITAMPILKAN: kolom yang diminta dari jamaah ini, ditambah kolom katalog lain (termasuk nonaktif) yang sudah punya nilai —

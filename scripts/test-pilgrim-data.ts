@@ -15,6 +15,10 @@ import { pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
 import { pilgrimDataState, setPilgrimDataEnabled } from '@/lib/pilgrim-data/products'
 import { createPilgrimField, deletePilgrimField, fieldUsage, updatePilgrimField } from '@/lib/pilgrim-data/fields'
 import { pilgrimFieldCreateSchema, pilgrimFieldUpdateSchema } from '@/lib/validators/pilgrimFields'
+import { cardBoundKeys, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
+import { sealNewPilgrim } from '@/lib/pilgrims/bookingLink'
+import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
+import { cardExtraFields } from '@/lib/pilgrim-data/catalog'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -74,7 +78,7 @@ await t('penulis tunggal: pilgrim_fields/product_pilgrim_data ditulis hanya lib/
 
 await t('kode lama dihapus: getRequirements tak ada lagi; pembaca kolom jamaah tidak memakai set core/visa', () => {
   assert.throws(() => statSync(join(root, 'lib/manifest/getRequirements.ts')))
-  for (const f of ['lib/pilgrims/review.ts', 'lib/pilgrims/slots.ts', 'lib/pilgrims/extraFields.ts', 'lib/pilgrims/bookingLink.ts']) {
+  for (const f of ['lib/pilgrims/review.ts', 'lib/pilgrims/slots.ts', 'lib/pilgrims/bookingLink.ts']) {
     const src = readFileSync(join(root, f), 'utf8')
     assert.ok(!/CORE_MANIFEST|manifestFieldRequirement|getRequirements/.test(src), `${f} masih memakai kolom per-produk lama`)
   }
@@ -271,6 +275,45 @@ await t('D3 editor: setiap jenis pemilik saklar punya <PilgrimDataToggle product
   assert.equal(route.match(/await requireManager\(\)/g)?.length, 2)
   assert.equal(route.match(/\.strict\(\)/g)?.length, 2)
   assert.ok(route.includes('setPilgrimDataEnabled(') && route.includes('z.string().uuid()'))
+})
+
+await t('D4 snapshot: kolom buatan admin dari `extra` kartu (kosong → dikosongkan), kolom berperan tetap dari atribut; semua kolom katalog terikat kartu', () => {
+  const fields = [{ fieldKey: 'fullName', fieldType: 'text', role: 'display_name' }, { fieldKey: 'golDarah', fieldType: 'select', role: null }, { fieldKey: 'catatan', fieldType: 'text', role: null }]
+  const card: CardForSnapshot = { fullName: 'Budi', gender: null, birthPlace: null, birthDate: null, nationality: 'ID', hasNik: false, passportLast4: null, passportIssuedAt: null, passportExpiry: null, phone: null, whatsapp: null, email: null, address: null }
+  assert.deepEqual(snapshotFromCard(fields, { ...card, extra: { golDarah: 'a' } }), { fullName: 'Budi', golDarah: 'a', catatan: null })
+  assert.deepEqual(snapshotFromCard(fields, card), { fullName: 'Budi' }, 'tanpa extra: kolom tanpa peran tak disentuh')
+  assert.deepEqual(snapshotFromCard(fields, { ...card, extra: { __proto__: 'x', toString: 'y' } as Record<string, unknown> }), { fullName: 'Budi', golDarah: null, catatan: null }, 'hanya kunci milik sendiri')
+  assert.deepEqual(cardBoundKeys(fields), ['fullName', 'golDarah', 'catatan'])
+  const admin = { id: 'x', fieldKey: 'golDarah', label: 'G', fieldType: 'text', options: null, required: false, role: null, isSystem: false, isActive: true, order: 1 }
+  assert.deepEqual(cardExtraFields([...catalog, admin, { ...admin, fieldKey: 'mati', isActive: false }]).map(f => f.fieldKey), ['golDarah'], 'hanya kolom admin aktif')
+})
+
+await t('D4 booking baru: isian jamaah dinilai di server atas katalog — kunci asing / bentuk salah ditolak (gap manifest §9)', async () => {
+  const run = (values: Record<string, unknown>) => prisma.$transaction(async (tx) => sealNewPilgrim(tx, values))
+  const unknown = await run({ tidakAda: 'x' })
+  assert.ok(!unknown.ok && 'tidakAda' in unknown.errors)
+  const bad = await run({ dateOfBirth: 'kemarin' })
+  assert.ok(!bad.ok && 'dateOfBirth' in bad.errors && bad.labels?.dateOfBirth, JSON.stringify(bad))
+})
+
+await t('D4 slot: `needed` = produk meminta kolom atau dokumen; jamaah tanpa kewajiban tidak diminta apa pun; halaman pelanggan menyembunyikan tabel', async () => {
+  const rows = await prisma.bookingPilgrim.findMany({ where: { bookingId: booking.id }, orderBy: { id: 'asc' }, select: { id: true, savedPilgrimId: true, fieldValues: true, reviewStatus: true, visaApplication: { select: { status: true, plannedTravelDate: true, visaProductId: true } } } })
+  const { slots } = await bookingPilgrimSlots(booking.id, null, rows)
+  const byId = new Map(slots.map(x => [x.id, x.needed]))
+  assert.deepEqual([byId.get(withVisa.id), byId.get(inG1.id), byId.get(inG2.id)], [true, false, false])
+  const page = readFileSync(join(root, 'app/[locale]/(pilgrim)/bookings/[id]/page.tsx'), 'utf8')
+  assert.ok(page.includes('slots.some(x => x.needed)') && page.includes("t('booking.pilgrimsNotNeeded'"))
+})
+
+await t('D4 sumber: kartu = satu-satunya jalur isian pelanggan (route PUT isian tambahan & layanannya dihapus); formulir kartu memuat kolom tambahan; definisi butuh sesi', () => {
+  const exists = (f: string) => { try { statSync(join(root, f)); return true } catch { return false } }
+  assert.ok(!exists('lib/pilgrims/extraFields.ts') && !exists('app/[locale]/(pilgrim)/bookings/[id]/PilgrimExtraFields.tsx'))
+  assert.ok(!/export async function PUT/.test(readFileSync(join(root, 'app/api/v1/bookings/[id]/pilgrims/[pilgrimId]/route.ts'), 'utf8')))
+  const fieldsUi = readFileSync(join(root, 'components/shared/pilgrims/SavedPilgrimFields.tsx'), 'utf8')
+  assert.ok(fieldsUi.includes('useCardExtraFields()') && fieldsUi.includes('<ManifestFieldsForm'))
+  const route = readFileSync(join(root, 'app/api/v1/pilgrim-fields/route.ts'), 'utf8')
+  assert.ok(route.includes('await getSession()') && route.includes("'unauthorized', 401") && route.includes('cardExtraFields('))
+  assert.ok(readFileSync(join(root, 'lib/pilgrims/bookingLink.ts'), 'utf8').includes('extraValues: true'), 'snapshot membaca extraValues kartu')
 })
 
 // ── pembersihan (DB uji) ────────────────────────────────────────────────────────────────────────────────────────────

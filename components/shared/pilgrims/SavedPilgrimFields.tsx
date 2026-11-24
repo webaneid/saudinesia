@@ -7,6 +7,8 @@ import { AddressPicker } from '@/components/shared/AddressPicker'
 import { ContactPicker } from '@/components/shared/ContactPicker'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
+import { ManifestFieldsForm } from '@/components/booking/ManifestFieldsForm'
+import { useCardExtraFields } from './useCardExtraFields'
 import { NIK_MASK } from '@/lib/pii/mask'
 import type { SavedPilgrimFormValue } from './savedPilgrimForm'
 
@@ -24,6 +26,7 @@ type Props = {
 
 export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPrefix = 'sp' }: Props) {
   const t = useTranslations('shared.pilgrims.fields')
+  const extraFields = useCardExtraFields()
   const genderOptions = [{ id: 'male', label: t('male') }, { id: 'female', label: t('female') }]
   const set = <K extends keyof SavedPilgrimFormValue>(k: K, x: SavedPilgrimFormValue[K]) => onChange({ ...v, [k]: x })
   const wni = v.nationality === 'ID'
@@ -114,6 +117,16 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPref
         <AddressPicker value={v.address} onChange={a => set('address', a)} />
         {v.hadAddress && !v.address.fullAddress.trim() && <p className="text-xs text-muted-foreground">{t('addressCleared')}</p>}
       </section>
+
+      {extraFields.length > 0 && (
+        <section className="space-y-4 border-t pt-4">
+          <div>
+            <h2 className="text-sm font-semibold">{t('extra')}</h2>
+            <p className="text-xs text-muted-foreground">{t('extraHint')}</p>
+          </div>
+          <ManifestFieldsForm fields={extraFields} values={v.extra} onChange={x => set('extra', x)} idPrefix={`${idPrefix}-x`} />
+        </section>
+      )}
 
       {showSelf && (
         <label className="flex items-start gap-2 border-t pt-4 text-sm">

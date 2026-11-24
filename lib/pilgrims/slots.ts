@@ -53,6 +53,7 @@ export async function bookingPilgrimSlots(bookingId: string, departureDate: Date
       card: check?.card ?? null,
       data: { filled: data.filled, required: data.required, complete: data.complete },
       docs: { done: docsDone, required: required.length },
+      needed: fields.length > 0 || items.length > 0,
       ready: data.complete && docsDone === required.length,
       reviewStatus: p.reviewStatus,
       visa: p.visaApplication?.status ?? null,
