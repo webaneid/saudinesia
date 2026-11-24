@@ -36,6 +36,8 @@ export type CardForSnapshot = {
   email: string | null
   /** Alamat kartu sebagai objek beku (`text` = satu baris terformat dari nama wilayah). */
   address: ManifestAddressValue | null
+  /** Nilai kolom buatan admin di kartu (`SavedPilgrim.extraValues`, docs/arsitektur-data-jamaah.md §3.4). Tak diberikan = kolom tanpa peran dibiarkan. */
+  extra?: Record<string, unknown>
 }
 
 type Field = { fieldKey: string; fieldType: string; role: string | null }
@@ -66,20 +68,27 @@ function valueFor(role: ManifestRole, fieldType: string, c: CardForSnapshot): un
 }
 
 /**
- * Isian snapshot dari kartu: HANYA field berperan; field tanpa peran (data khusus produk) tidak disentuh. Kartu kosong pada suatu atribut
- * MENGOSONGKAN field berperan itu (snapshot = keadaan kartu saat ditautkan/diperbarui).
+ * Isian snapshot dari kartu: field berperan dari atribut kartu, field tanpa peran (kolom buatan admin di katalog Data Jamaah) dari
+ * `card.extra`. Kartu kosong pada suatu kolom MENGOSONGKAN kolom itu (snapshot = keadaan kartu saat ditautkan/diperbarui). Tanpa `extra`,
+ * kolom tanpa peran tidak disentuh.
  */
 export function snapshotFromCard(fields: readonly Field[], card: CardForSnapshot): Record<string, unknown> {
   const out: Record<string, unknown> = {}
   for (const f of fields) {
-    if (!isManifestRole(f.role)) continue
+    if (!isManifestRole(f.role)) {
+      if (card.extra && f.fieldType !== 'address') out[f.fieldKey] = Object.hasOwn(card.extra, f.fieldKey) ? (card.extra[f.fieldKey] ?? null) : null
+      continue
+    }
     const v = valueFor(f.role, f.fieldType, card)
     if (v !== undefined) out[f.fieldKey] = v ?? null
   }
   return out
 }
 
-/** Kunci field yang diisi dari kartu (untuk menandai di formulir). */
+/**
+ * Kunci field yang diisi dari kartu (untuk menandai di formulir). Sejak D4 (docs/arsitektur-data-jamaah.md §3.4) SEMUA kolom katalog Data Jamaah
+ * adalah data kartu — kolom berperan dari atribut kartu, kolom buatan admin dari `extraValues` kartu.
+ */
 export function cardBoundKeys(fields: readonly Field[]): string[] {
-  return fields.filter(f => isManifestRole(f.role)).map(f => f.fieldKey)
+  return fields.filter(f => isManifestRole(f.role) || f.fieldType !== 'address').map(f => f.fieldKey)
 }

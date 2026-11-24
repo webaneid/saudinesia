@@ -84,7 +84,9 @@ export function PilgrimSlotsTable({ total, slots, addHref, deleteEndpoint }: Pro
       ),
     },
     {
-      key: 'data', header: t('data'), cell: s => s.data.complete
+      key: 'data', header: t('data'), cell: s => !s.needed
+        ? <span className="text-muted-foreground">—</span>
+        : s.data.complete
         ? <Badge variant="success">{t('complete')}</Badge>
         : <Badge variant="warning">{t('requiredCount', { filled: s.data.filled, required: s.data.required })}</Badge>,
     },

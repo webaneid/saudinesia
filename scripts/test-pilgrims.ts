@@ -12,6 +12,7 @@ import { nameKeyOf } from '@/lib/pilgrims/nameKey'
 import { addDays, todayInApp } from '@/lib/time'
 import { savedPilgrimInputSchema, type SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import { assertThrowawayDb } from './lib/testDb'
+import { useTestCatalog } from './lib/pilgrimCatalog'
 
 await assertThrowawayDb()
 
@@ -453,6 +454,29 @@ await t('ALAMAT di DTO (Fase 3): kartu memuat alamatnya sendiri untuk AddressPic
   assert.equal(c.address?.fullAddress, address.fullAddress)
   const cleared = okCard(await updateSavedPilgrim(a, a.userId, c.id, base({ address: null })))
   assert.equal(cleared.address, null); assert.equal(cleared.nik !== null, true, 'NIK tetap bila tak dikirim')
+})
+
+await t('KOLOM TAMBAHAN (Data Jamaah D4): kartu menyimpan kolom buatan admin; asing/bentuk salah 400; kosong menghapus; tak dikirim = tetap; kolom nonaktif tetap diterima', async () => {
+  const restore = await useTestCatalog([], [{ key: 'golDarah', fieldType: 'select', required: true }, { key: 'catatanMedis', fieldType: 'text' }, { key: 'lamaNonaktif', fieldType: 'text' }])
+  try {
+    await prisma.pilgrimField.update({ where: { key: 'lamaNonaktif' }, data: { isActive: false } })
+    const a = await makeUser()
+    const c = okCard(await createSavedPilgrim(a, a.userId, base({ nik: nik(), extra: { golDarah: 'a', catatanMedis: ' Alergi ' } })))
+    assert.deepEqual(c.extra, { golDarah: 'a', catatanMedis: 'Alergi' })
+    const kept = okCard(await updateSavedPilgrim(a, a.userId, c.id, base({ fullName: 'Budi S' })))
+    assert.deepEqual(kept.extra, { golDarah: 'a', catatanMedis: 'Alergi' }, 'extra tak dikirim = tetap')
+    const cleared = okCard(await updateSavedPilgrim(a, a.userId, c.id, base({ extra: { catatanMedis: '', lamaNonaktif: 'x' } })))
+    assert.deepEqual(cleared.extra, { golDarah: 'a', lamaNonaktif: 'x' }, 'kosong menghapus kunci; kolom nonaktif diterima')
+    for (const [extra, field] of [[{ nik: '3201011507850001' }, 'extra.nik'], [{ tidakAda: 'x' }, 'extra.tidakAda'], [{ golDarah: 'z' }, 'extra.golDarah']] as const) {
+      const r = await updateSavedPilgrim(a, a.userId, c.id, base({ extra }))
+      assert.ok(!r.ok && r.status === 400 && r.field === field, `${JSON.stringify(extra)} → ${JSON.stringify(r)}`)
+    }
+    assert.deepEqual((await cardRow(c.id)).extraValues, { golDarah: 'a', lamaNonaktif: 'x' }, 'penolakan tak mengubah kartu')
+    assert.ok(!savedPilgrimInputSchema.safeParse({ ...base(), extra: Object.fromEntries(Array.from({ length: 61 }, (_, i) => [`k${i}`, 'x'])) }).success, 'jumlah kunci dibatasi')
+  } finally {
+    await prisma.savedPilgrim.updateMany({ where: { ownerId: { in: users } }, data: { extraValues: {} } }) // kunci dipakai kartu → katalog uji bisa dipulihkan
+    await restore()
+  }
 })
 
 // Bersihkan (DB uji): kartu → identitas → pengguna (ownerId Restrict).

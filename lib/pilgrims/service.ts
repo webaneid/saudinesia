@@ -11,6 +11,8 @@ import { paginate, type ListParams, type PageMeta } from '@/lib/table/pagination
 import { escapeLike } from '@/lib/utils/search'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import { nameKeyOf } from './nameKey'
+import { pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
+import { validateFieldValues } from '@/lib/manifest/values'
 import { deleteDocumentRowsOfCards, documentKeysOfCards } from '@/lib/documents/purge'
 import { cardDocPrefix, minioDocumentStorage, removeObjectsQuietly } from '@/lib/documents/storage'
 
@@ -44,6 +46,8 @@ export type SavedPilgrimView = {
   whatsapp: string | null
   email: string | null
   isSelf: boolean
+  /** Nilai kolom buatan admin (katalog Data Jamaah) di kartu ini — data pemilik sendiri. */
+  extra: Record<string, unknown>
   archived: boolean
   /** Petugas meminta pemilik memeriksa ulang NIK (Fase 8) — pesan generik, tak menyebut data akun lain; hilang setelah NIK diubah. */
   needsNikCheck: boolean
@@ -72,7 +76,7 @@ export type DeleteResult = { ok: true; result: 'deleted' | 'archived' } | Servic
 const viewSelect = {
   id: true, fullName: true, gender: true, birthPlace: true, birthDate: true, nationality: true, nikHash: true,
   passportLast4: true, passportIssuedAt: true, passportExpiry: true, addressId: true, phone: true, whatsapp: true, email: true,
-  selfOfUserId: true, archivedAt: true, nikCheckRequestedAt: true, createdAt: true, updatedAt: true,
+  selfOfUserId: true, archivedAt: true, nikCheckRequestedAt: true, createdAt: true, updatedAt: true, extraValues: true,
   address: { select: { type: true, fullAddress: true, postalCode: true, provinceId: true, regencyId: true, districtId: true, villageId: true, countryCode: true, city: true, stateRegion: true } },
 } satisfies Prisma.SavedPilgrimSelect
 
@@ -86,9 +90,32 @@ function toView(r: ViewRow): SavedPilgrimView {
     nik: r.nikHash ? NIK_MASK : null,
     passport: r.passportLast4 ? { number: maskPassport(r.passportLast4), issuedAt: cal(r.passportIssuedAt), expiry: cal(r.passportExpiry) } : null,
     addressId: r.addressId, address: r.address, phone: r.phone, whatsapp: r.whatsapp, email: r.email,
-    isSelf: r.selfOfUserId !== null, archived: r.archivedAt !== null, needsNikCheck: r.nikCheckRequestedAt !== null,
+    isSelf: r.selfOfUserId !== null, extra: jsonObject(r.extraValues), archived: r.archivedAt !== null, needsNikCheck: r.nikCheckRequestedAt !== null,
     createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
   }
+}
+
+const jsonObject = (v: unknown): Record<string, unknown> => (v && typeof v === 'object' && !Array.isArray(v) ? { ...(v as Record<string, unknown>) } : {})
+
+/**
+ * Nilai kolom buatan admin sesudah ubah (docs/arsitektur-data-jamaah.md §3.4): hanya kunci kolom buatan admin di katalog yang boleh dikirim
+ * (asing → 400; kolom nonaktif tetap diterima supaya formulir bisa mengirim balik nilai lamanya), bentuk dinilai `validateFieldValues`; nilai
+ * kosong menghapus kuncinya; kunci yang tidak dikirim dipertahankan.
+ */
+async function nextExtraValues(tx: Tx, current: unknown, input: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const fields = (await pilgrimCatalog(tx)).filter(f => !f.isSystem && f.role === null)
+  const checked = validateFieldValues(fields, input)
+  if (!checked.ok) {
+    const [key] = Object.keys(checked.errors)
+    const f = fields.find(x => x.fieldKey === key)
+    throw new Abort({ ok: false, status: 400, ...(f ? codedError('fieldInvalid', { label: f.label }) : codedError('unknownField')), field: `extra.${key ?? ''}` })
+  }
+  const out = jsonObject(current)
+  for (const [k, v] of Object.entries(checked.values)) {
+    if (v === null) delete out[k]
+    else out[k] = v
+  }
+  return out
 }
 
 class Abort extends Error {
@@ -308,7 +335,7 @@ function uniqueViolation(e: unknown): ServiceError | null {
 }
 
 const existingSelect = {
-  id: true, archivedAt: true, identityId: true, addressId: true, selfOfUserId: true, nameKey: true, birthDate: true, matchConfirmedAt: true, nikCheckRequestedAt: true,
+  id: true, archivedAt: true, identityId: true, addressId: true, selfOfUserId: true, nameKey: true, extraValues: true, birthDate: true, matchConfirmedAt: true, nikCheckRequestedAt: true,
   nikHash: true, nikCipher: true, nationality: true, passportKeyHash: true, passportCipher: true, passportLast4: true, passportIssuedAt: true, passportExpiry: true,
 } satisfies Prisma.SavedPilgrimSelect
 
@@ -413,6 +440,7 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
         phone: input.phone === undefined ? undefined : input.phone,
         whatsapp: input.whatsapp === undefined ? undefined : input.whatsapp,
         email: input.email === undefined ? undefined : input.email,
+        ...(input.extra !== undefined && { extraValues: (await nextExtraValues(tx, existing?.extraValues, input.extra)) as Prisma.InputJsonValue }),
       }
       const saved = cardId
         ? await tx.savedPilgrim.update({ where: { id: cardId }, data, select: { id: true } })

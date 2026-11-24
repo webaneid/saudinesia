@@ -104,12 +104,13 @@ const bk = await makeBooking(owner)
 const [p1, p2] = bk.pilgrims as [string, string]
 const randomUUIDLike = () => '00000000-0000-4000-8000-000000000000'
 
-await t('TAUTKAN: hanya field berperan diisi dari kartu (field bebas tetap), NIK/paspor tersamar di snapshot, segel disalin apa adanya', async () => {
+await t('TAUTKAN: semua kolom katalog diisi dari kartu (kolom buatan admin dari extraValues kartu, Data Jamaah D4), NIK/paspor tersamar di snapshot, segel disalin apa adanya', async () => {
+  await prisma.savedPilgrim.update({ where: { id: cardA }, data: { extraValues: { mahram: 'Paman' } } }) // (uji) setara isi "Data tambahan" kartu
   const r = await linkCard(staff, bk.id, p1, cardA)
   assert.ok(r.ok, JSON.stringify(r))
   const bp = await row(p1)
   const fv = bp.fieldValues as Record<string, unknown>
-  assert.equal(fv.mahram, 'Ayah', 'field tanpa peran tak disentuh')
+  assert.equal(fv.mahram, 'Paman', 'kolom buatan admin mengikuti kartu, bukan isian lama')
   assert.match(String(fv.fullName), /^Budi /)
   assert.deepEqual([fv.gender, fv.dateOfBirth, fv.nationality], ['male', '1985-07-15', 'Indonesia'])
   assert.deepEqual(fv.phone, { countryCode: 'ID', number: '81234567890' })
@@ -125,11 +126,11 @@ await t('TAUTKAN: hanya field berperan diisi dari kartu (field bebas tetap), NIK
 })
 
 await t('SNAPSHOT BEKU: kartu diedit → booking tetap; "perbarui dari kartu" (tautkan ulang) → mengikuti kartu', async () => {
-  await prisma.savedPilgrim.update({ where: { id: cardA }, data: { fullName: 'Budi Nama Baru', birthPlace: 'Garut' } }) // (uji) setara edit kartu
+  await prisma.savedPilgrim.update({ where: { id: cardA }, data: { fullName: 'Budi Nama Baru', birthPlace: 'Garut', extraValues: {} } }) // (uji) setara edit kartu
   assert.notEqual(((await row(p1)).fieldValues as Record<string, unknown>).fullName, 'Budi Nama Baru')
   assert.ok((await linkCard(staff, bk.id, p1, cardA)).ok)
   const fv = (await row(p1)).fieldValues as Record<string, unknown>
-  assert.equal(fv.fullName, 'Budi Nama Baru'); assert.equal(fv.mahram, 'Ayah')
+  assert.equal(fv.fullName, 'Budi Nama Baru'); assert.equal(fv.mahram, null, 'kolom admin dikosongkan di kartu → ikut kosong')
 })
 
 await t('DITOLAK: kartu akun lain → 404 (sama dengan tidak ada); kartu terarsip → 409; kartu sudah dipakai jamaah lain di booking sama → 409; draf → 404', async () => {

@@ -14,6 +14,8 @@ export type PilgrimSlot = {
   card: { id: string; name: string } | null
   data: { filled: number; required: number; complete: boolean }
   docs: { done: number; required: number }
+  /** Produk pesanan meminta sesuatu dari jamaah ini (kolom Data Jamaah atau dokumen). `false` = tak ada kewajiban (docs/arsitektur-data-jamaah.md §3.3). */
+  needed: boolean
   /** Data wajib lengkap DAN dokumen wajib siap — siap diajukan/diperiksa. */
   ready: boolean
   reviewStatus: PilgrimReviewStatus

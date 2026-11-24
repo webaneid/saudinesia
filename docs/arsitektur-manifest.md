@@ -186,7 +186,7 @@ Komponen `<ManifestRepeater productType productId onChange>` — pola:
 **Gap yang diketahui:**
 - Mengubah pilihan `select` pada produk yang sudah dipesan bisa membuat jawaban lama tidak ada di daftar pilihan.
 - Kolom wajib baru tidak membuka ulang jamaah yang sudah diajukan/terverifikasi (sama dengan keputusan syarat dokumen).
-- `POST /bookings` tidak memanggil `validateFieldValues`: kolom wajib di checkout jamaah ditegakkan di klien, dan di server baru pada gerbang pengajuan (`completeness`, `lib/pilgrims/review.ts`). Pre-existing, belum disentuh.
+- `POST /bookings` tidak memanggil `validateFieldValues`: kolom wajib di checkout jamaah ditegakkan di klien, dan di server baru pada gerbang pengajuan (`completeness`, `lib/pilgrims/review.ts`). Pre-existing. **DITUTUP 2026-11-24 (Data Jamaah D4):** `sealNewPilgrim` menilai bentuk isian atas katalog; wajib tetap di gerbang pengajuan (`docs/arsitektur-data-jamaah.md` §11).
 - Bug lama diperbaiki sekalian: checkout visa dari katalog tertahan di "Memuat formulir" karena kolom produk bawaan tidak pernah dimuat (`components/booking/VisaCheckoutForm.tsx`).
 
 **Di luar lingkup:** produk selain Visa, field `core`, gabungan field antar produk, membuka ulang pemeriksaan jamaah saat kolom berubah (sama dengan keputusan syarat dokumen, `docs/rencana-visa-produk.md` §3.5).

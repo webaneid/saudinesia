@@ -864,6 +864,8 @@
         "email": "Email",
         "address": "Address (optional)",
         "addressCleared": "The full address is empty — the saved address will be removed when you save.",
+        "extra": "Additional details",
+        "extraHint": "Fields marked * are needed for orders that ask for pilgrim details.",
         "isSelf": "This is my own data (account owner)"
       },
       "dialog": {
@@ -1512,6 +1514,7 @@
       },
       "pilgrimsTitle": "Pilgrim Data & Documents",
       "pilgrimsIntro": "Fill them in one at a time: each pilgrim's personal data and documents, then submit them for staff review.",
+      "pilgrimsNotNeeded": "This order ({count, plural, one {# person} other {# people}}) does not need pilgrim details — there is nothing to fill in.",
       "groupAll": "All pilgrims",
       "groupUnnamed": "Group {mark}",
       "qrisAvailable": "You can also pay with QRIS — choose QRIS as the destination in the form below."
@@ -1645,14 +1648,6 @@
       "save": "Save",
       "newIntro": "This data is also saved to My Pilgrims, so it can be reused for future orders. The passport and ID card are uploaded after saving.",
       "selfTitle": "Your data as a pilgrim"
-    },
-    "extra": {
-      "title": "Additional data",
-      "intro": "Requested by the products you ordered for this pilgrim.",
-      "saveFailed": "Could not save.",
-      "saved": "Additional data saved.",
-      "network": "Could not reach the server.",
-      "save": "Save additional data"
     },
     "jamaah": {
       "metaTitle": "My Pilgrims",
@@ -1862,7 +1857,6 @@
     "removeTripDocumentsFirst": "Delete this pilgrim’s trip documents before removing or replacing the saved pilgrim",
     "noSavedPilgrim": "This pilgrim isn’t using saved pilgrim data yet",
     "reviewLocked": "This pilgrim is being or has been reviewed — ask our staff to return it before making changes",
-    "fieldFromCard": "This field comes from My Pilgrims — change it via “Edit pilgrim data”",
     "fieldInvalid": "{label} is not valid",
     "submissionClosed": "This booking isn’t active — pilgrim data submission is closed",
     "alreadyVerified": "This pilgrim is already verified",

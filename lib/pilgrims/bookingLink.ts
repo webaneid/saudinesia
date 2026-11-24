@@ -9,6 +9,7 @@ import { activeFields, pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
 import { isSealedRole, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
 import type { ManifestAddressValue } from '@/lib/manifest/addressValue'
 import { resolveAddressValues } from '@/lib/manifest/address'
+import { validateFieldValues } from '@/lib/manifest/values'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikProblem, normalizeNik, normalizePassport, sealNik, sealPassport } from '@/lib/pii'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import { pilgrimRequirements } from '@/lib/documents/requirements'
@@ -39,7 +40,7 @@ const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 const cardSelect = {
   id: true, ownerId: true, identityId: true, archivedAt: true, fullName: true, gender: true, birthPlace: true, birthDate: true, nationality: true,
   nikHash: true, nikCipher: true, passportKeyHash: true, passportCipher: true, passportLast4: true, passportIssuedAt: true, passportExpiry: true,
-  phone: true, whatsapp: true, email: true,
+  phone: true, whatsapp: true, email: true, extraValues: true,
   address: { select: { type: true, fullAddress: true, postalCode: true, city: true, stateRegion: true, countryCode: true,
     provinceId: true, regencyId: true, districtId: true, villageId: true,
     village: { select: { name: true } }, district: { select: { name: true } }, regency: { select: { name: true } }, province: { select: { name: true } } } },
@@ -51,6 +52,7 @@ const forSnapshot = (c: CardRow): CardForSnapshot => ({
   fullName: c.fullName, gender: c.gender, birthPlace: c.birthPlace, birthDate: cal(c.birthDate), nationality: c.nationality,
   hasNik: c.nikHash !== null, passportLast4: c.passportLast4, passportIssuedAt: cal(c.passportIssuedAt), passportExpiry: cal(c.passportExpiry),
   phone: c.phone, whatsapp: c.whatsapp, email: c.email, address: addressOf(c.address),
+  extra: c.extraValues && typeof c.extraValues === 'object' && !Array.isArray(c.extraValues) ? (c.extraValues as Record<string, unknown>) : {},
 })
 function addressOf(a: CardRow['address']): ManifestAddressValue | null {
   if (!a) return null
@@ -230,7 +232,11 @@ export async function sealNewPilgrim(tx: Tx, values: Record<string, unknown>): P
   const fields = await activeCatalog(tx)
   // Label kolom (data admin) menyertai galat — mesin pesan menjawab pelanggan dengan kode `fieldInvalid{label}` (I6b).
   const labels = () => Object.fromEntries(fields.map(f => [f.fieldKey, f.label]))
-  const addressed = await resolveAddressValues(fields, values, tx) // alamat dibekukan dengan `text` dari DB (D1)
+  // Bentuk isian dinilai di server atas katalog (kunci asing ditolak) — menutup gap docs/arsitektur-manifest.md §9 (D4). Wajib/tidaknya tidak
+  // dinilai di sini: data jamaah dilengkapi sesudah pesan lewat kartu, gerbangnya "Ajukan" (`completeness`).
+  const checked = validateFieldValues(fields, values)
+  if (!checked.ok) return { ...checked, labels: labels() }
+  const addressed = await resolveAddressValues(fields, checked.values, tx) // alamat dibekukan dengan `text` dari DB (D1)
   if (!addressed.ok) return { ...addressed, labels: labels() }
   const sealed = await sealManualPii(fields, addressed.values, passportCountryOf(fields, addressed.values), tx)
   return sealed.ok ? sealed : { ...sealed, labels: labels() }

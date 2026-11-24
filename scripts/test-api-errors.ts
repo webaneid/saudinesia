@@ -47,7 +47,7 @@ const CODED_ROUTES = [...CODED_ROUTE_DIRS.flatMap(d => walk(d)).filter(f => f.en
 
 // Modul penghasil galat route di atas. Galat khusus staf di modul lain (gudang identitas, katalog jenis dokumen) tetap teks (admin).
 const CODED_MODULES = [
-  'lib/pilgrims/http.ts', 'lib/pilgrims/service.ts', 'lib/pilgrims/bookingLink.ts', 'lib/pilgrims/review.ts', 'lib/pilgrims/extraFields.ts',
+  'lib/pilgrims/http.ts', 'lib/pilgrims/service.ts', 'lib/pilgrims/bookingLink.ts', 'lib/pilgrims/review.ts',
   'lib/documents/http.ts', 'lib/documents/service.ts', 'lib/documents/file.ts', 'lib/address/prepare.ts', 'lib/auth/contact.ts', 'lib/auth/rateLimit.ts',
   'lib/checkout/dates.ts', 'lib/booking/simulate.ts',
 ]
