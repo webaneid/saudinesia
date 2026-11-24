@@ -446,6 +446,24 @@ jobs:
             if (img[0] !== 0x89 || img.toString('latin1', 1, 4) !== 'PNG') fail('QR bukan PNG')
             console.log('OK: GOWA terjangkau dari web, Basic auth wajib, QR PNG ' + img.length + ' byte')"
 
+      # Server reboot = semua kontainer start ULANG di atas volume yang sudah berisi. Start pertama yang lulus tidak membuktikan ini: Redis pernah
+      # mati terus sesudah reboot produksi karena entrypoint root tanpa hak membaca berkasnya sendiri (SEC-313).
+      - name: Smoke - semua layanan hidup lagi sesudah restart
+        run: |
+          C="docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy"
+          RPW="$(grep '^REDIS_PASSWORD=' .env.production | cut -d= -f2-)"
+          test "$($C exec -T -e REDISCLI_AUTH="$RPW" redis redis-cli set uji-restart hidup)" = "OK"
+          $C restart $($C ps --services --status running)
+          hidup() {
+            [ "$($C exec -T -e REDISCLI_AUTH="$RPW" redis redis-cli get uji-restart 2>/dev/null)" = "hidup" ] &&
+            $C exec -T postgres pg_isready -U saudinesia -d saudinesia >/dev/null 2>&1 &&
+            $C exec -T web bun -e "fetch('http://localhost:3000/api/v1/health').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))" 2>/dev/null &&
+            [ -z "$($C ps --services --status restarting)" ] && [ -z "$(docker ps -q --filter health=unhealthy --filter health=starting)" ]
+          }
+          for i in $(seq 1 40); do hidup && break; [ "$i" = 40 ] && { echo "ada layanan yang tidak hidup lagi"; $C ps -a; $C logs --tail 30 redis; exit 1; }; sleep 3; done
+          $C exec -T redis id -un | grep -qx redis || { echo "Redis tidak berjalan sebagai user redis"; exit 1; }
+          $C ps
+
       - name: Log layanan (hanya bila gagal)
         if: failure()
         run: docker compose -f docker-compose.prod.yml --env-file .env.production --env-file .env.deploy logs --no-color --tail=120
