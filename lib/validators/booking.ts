@@ -110,17 +110,8 @@ export const createBookingSchema = z.object({
 
   items: z.array(bookingItemSchema).max(50, 'Maksimal 50 item per booking').default([]),
 
-  // docs/arsitektur-manifest.md §3 — fieldValues generik menggantikan kolom baku (fullName,
-  // gender, email, phone/whatsapp+countryCode, dst.) — bentuk & wajib-tidaknya field ditentukan
-  // ManifestFieldRequirement produk yang relevan (divalidasi di superRefine di bawah), bukan
-  // zod schema statis per field seperti sebelumnya.
-  //
-  // docs/arsitektur-booking.md §6 Step 6a — visaProductId JADI OPSIONAL (menggantikan keputusan
-  // Step 5 yang mewajibkannya). Perubahan ini eksplisit diminta user: "tidak ada satupun product
-  // mewajibkan product lain ketika checkout .. semua berdasarkan product checkout sesuai dengan
-  // standard onlineshop" — checkout Transport-only tidak boleh memaksa pilih Visa. Pilgrim TANPA
-  // visaProductId divalidasi terhadap field manifest "core" (lib/manifest/constants.ts) di
-  // superRefine di bawah — bukan dibiarkan tanpa field manifest sama sekali.
+  // `fieldValues` bebas bentuk di sini; kunci dan bentuknya dinilai terhadap katalog Data Jamaah oleh sealNewPilgrim (lib/pilgrims/bookingLink.ts).
+  // visaProductId OPSIONAL (docs/arsitektur-booking.md §6 Step 6a): checkout tanpa visa sah; aturan bundel visa = lib/booking/rules.ts.
   pilgrims: z.array(z.object({
     fieldValues: z.record(z.string(), z.unknown()).default({}),
     visaProductId: z.string().uuid('Pilih jenis visa yang valid').optional(),
@@ -137,12 +128,6 @@ export const createBookingSchema = z.object({
 }).superRefine(async (data, ctx) => {
   checkItemQuantities(data.items, ctx)
 
-  // docs/arsitektur-booking.md §6 Step 6a — visaProductId opsional per pilgrim. Query VisaProduct/
-  // ManifestFieldRequirement HANYA untuk pilgrim yang benar-benar pilih visa; pilgrim tanpa visa
-  // divalidasi terhadap field manifest "core" di bawah. PENTING: early-return lama
-  // (`if (ids.length === 0) return`) DIHAPUS — kalau dibiarkan, booking 100% tanpa visa akan
-  // skip SEMUA validasi di bawah termasuk field manifest core yang wajib, bug tersembunyi yang
-  // baru relevan sekarang visa bisa benar-benar kosong.
   const idsWithVisa = [...new Set(data.pilgrims.filter(p => p.visaProductId).map(p => p.visaProductId!))]
 
   // Validasi visaProductId terhadap VisaProduct aktif di database — menutup Gap #3

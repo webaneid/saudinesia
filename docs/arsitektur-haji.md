@@ -48,7 +48,7 @@ model BookingHaji {                       // schema.prisma:1044
 }
 ```
 
-Tabel polimorfik (tanpa FK; `productType = 'haji'`): `ProductCost` (`schema.prisma:1187` — Komponen Biaya), `PreferredVendor` (`:1231`), `DocumentRequirement` (`:482`), `ManifestFieldRequirement` (`:500`). Margin: `PricingRule` (`:1203`) dengan `productType = 'haji'`, jatuh ke aturan global (default 20 %, pembulatan 50.000). **Tidak ada baris `DocumentRequirement`/`ManifestFieldRequirement` untuk Haji** hari ini.
+Tabel polimorfik (tanpa FK; `productType = 'haji'`): `ProductCost` (`schema.prisma:1187` — Komponen Biaya), `PreferredVendor` (`:1231`), `DocumentRequirement` (`:482`), `ProductPilgrimData` (saklar data jamaah, bawaan Haji nyala — `docs/arsitektur-data-jamaah.md`). Margin: `PricingRule` (`:1203`) dengan `productType = 'haji'`, jatuh ke aturan global (default 20 %, pembulatan 50.000). Syarat dokumen Haji milik produk Haji sejak Visa V4b (2026-11-04).
 
 ---
 
@@ -105,7 +105,7 @@ Semua route admin: peran dicek di awal handler; galat dibedakan (`authFailureRes
 **Terbuka (sengaja belum dikerjakan):**
 1. **Tidak ada checkout/wizard di browser untuk Haji** — API dan skema sudah menerima `itemType='haji'` (dibuktikan end-to-end via HTTP), tetapi tidak ada UI yang mengirimnya (`grep` `hajiProductId` di `app/`+`components/` kosong). Jamaah belum bisa memesan Haji lewat browser; CTA di `/haji` menuju `/register`.
 2. **"Visa Haji" belum ada sebagai konsep tersendiri** — keputusan pemilik: visa haji berbeda sama sekali dari `VisaProduct` umroh; jangan memakai pola `pilgrims[].visaProductId` untuk Haji. Hari ini komponen biaya "Visa Haji" hanya baris biaya bebas.
-3. **Dokumen dan manifest Haji** — belum ada `DocumentRequirement`/`ManifestFieldRequirement` bertipe `haji`; pilgrim Haji akan memakai field manifest "core" (`lib/manifest/constants.ts`) sampai dirancang.
+3. **Dokumen dan manifest Haji** — syarat dokumen sudah milik produk Haji (V4b, 2026-11-04); data jamaah = katalog global + saklar produk (bawaan Haji nyala, `docs/arsitektur-data-jamaah.md`). Manifest khusus Haji di luar itu belum dirancang.
 4. **Galeri gambar** — kolom `images` ada tetapi tidak ada jalur unggah/tampil (hotel dan kendaraan punya; Haji belum).
 5. **Halaman detail publik per produk** — katalog hanya kartu daftar; belum ada halaman detail/SEO per produk.
 6. **Margin per tipe** — aturan `haji` di `PricingRule` hanya lewat data (belum ada UI Pengaturan per tipe); tanpa itu memakai margin global.

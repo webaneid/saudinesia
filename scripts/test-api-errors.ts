@@ -42,7 +42,7 @@ const EN = JSON.parse(read('i18n/messages/en.json')).apiErrors as Record<string,
 const KEYS = new Set(Object.keys(ID))
 
 // Route pelanggan berkode: I6a (auth, akun, alamat, manifest, booking milik pemesan) + I6b (checkout/keranjang: `bookings/route.ts`, `bookings/preview`).
-const CODED_ROUTE_DIRS = ['app/api/v1/auth', 'app/api/v1/account', 'app/api/v1/address', 'app/api/v1/manifest', 'app/api/v1/bookings/[id]', 'app/api/v1/bookings/preview']
+const CODED_ROUTE_DIRS = ['app/api/v1/auth', 'app/api/v1/account', 'app/api/v1/address', 'app/api/v1/pilgrim-fields', 'app/api/v1/bookings/[id]', 'app/api/v1/bookings/preview']
 const CODED_ROUTES = [...CODED_ROUTE_DIRS.flatMap(d => walk(d)).filter(f => f.endsWith('/route.ts')), 'app/api/v1/bookings/route.ts']
 
 // Modul penghasil galat route di atas. Galat khusus staf di modul lain (gudang identitas, katalog jenis dokumen) tetap teks (admin).

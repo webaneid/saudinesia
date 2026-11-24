@@ -1,6 +1,5 @@
 import { PrismaClient } from '@prisma/client'
 import { hash } from 'bcryptjs'
-import { CORE_MANIFEST_PRODUCT_TYPE, CORE_MANIFEST_PRODUCT_ID } from '../lib/manifest/constants'
 import { isLoopbackDb, seedDataProblem, seedEnvProblem, seedTarget } from './seedGuard'
 
 const prisma = new PrismaClient()
@@ -374,24 +373,6 @@ async function main() {
     ],
   })
   console.log('✓ Ziarah: ', sites.length, 'situs wisata,', tourPackages.length, 'paket (harga & komponen biaya diisi lewat admin UI)')
-
-  // ── Manifest "core" — field generik lepas dari produk apa pun (docs/arsitektur-booking.md
-  // §6 Step 6a) — dipakai checkout pendek yang tidak mewajibkan produk lain (mis. Transport-only).
-  // Scoped delete, BUKAN prisma.manifestFieldRequirement.deleteMany() polos — 9 baris visa dari
-  // Step 4 (productType='visa') tidak boleh ikut terhapus.
-  await prisma.manifestFieldRequirement.deleteMany({
-    where: { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID },
-  })
-  await prisma.manifestFieldRequirement.createMany({
-    data: [
-      { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID, fieldKey: 'fullName', label: 'Nama Lengkap', fieldType: 'text', required: true, order: 0, role: 'display_name' },
-      { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID, fieldKey: 'gender', label: 'Jenis Kelamin', fieldType: 'select', options: [{ value: 'male', label: 'Laki-laki' }, { value: 'female', label: 'Perempuan' }], required: true, order: 1, role: null },
-      { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID, fieldKey: 'email', label: 'Email', fieldType: 'email', required: false, order: 2, role: 'email' },
-      { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID, fieldKey: 'phone', label: 'Nomor HP', fieldType: 'phone', required: true, order: 3, role: 'phone' },
-      { productType: CORE_MANIFEST_PRODUCT_TYPE, productId: CORE_MANIFEST_PRODUCT_ID, fieldKey: 'whatsapp', label: 'Nomor WhatsApp', fieldType: 'phone', required: false, order: 4, role: 'whatsapp' },
-    ],
-  })
-  console.log('✓ Manifest core: 5 field generik (checkout pendek non-visa)')
 
   // ── Room Types (Hotel) — docs/arsitektur-hotel.md §10.2 ────────
   for (const rt of [

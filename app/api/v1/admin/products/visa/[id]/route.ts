@@ -10,8 +10,6 @@ import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteVisaProduct } from '@/lib/admin/productDelete'
 import { visaFeeRules, visaPriceSummary } from '@/lib/pricing/engine/read'
 import { visaRequiredComponentsSchema } from '@/lib/validators/visa'
-import { manifestFieldListSchema } from '@/lib/validators/manifest'
-import { manifestFieldsForEditor, writeManifestFields } from '@/lib/manifest/fields'
 import { logError } from '@/lib/log'
 
 // price TIDAK ada di sini secara sengaja — VisaProduct.price cuma boleh diisi oleh
@@ -23,7 +21,6 @@ const updateSchema = z.object({
   // Teks kaya (docs/arsitektur-editor-teks.md): divalidasi daftar putih & dibersihkan; '' / tanpa teks bermakna → null.
   description:  richTextField().nullish(),
   requirements: documentRequirementListSchema.optional(), // ganti-semua syarat dokumen (lib/documents/requirements.ts)
-  manifestFields: manifestFieldListSchema.optional(), // ganti-semua kolom data jamaah (lib/manifest/fields.ts)
   priceLabel:   z.string().nullable().optional(),
   processDays:  z.coerce.number().int().positive().optional(),
   isActive:     z.boolean().optional(),
@@ -40,8 +37,8 @@ export async function GET(_req: Request, { params }: Ctx) {
     const product = await prisma.visaProduct.findUnique({ where: { id } })
     if (!product) return NextResponse.json(err('Tidak ditemukan'), { status: 404 })
     const documentRequirements = await requirementsOf('visa', id)
-    const [summary, rules, manifest] = await Promise.all([visaPriceSummary([id]), visaFeeRules([id]), manifestFieldsForEditor('visa', id)])
-    return NextResponse.json(ok({ ...product, price: summary.get(id)?.from ?? 0, durationFeeRules: rules.get(id) ?? [], documentRequirements, manifestFields: manifest.fields, manifestFieldsUsed: manifest.used }))
+    const [summary, rules] = await Promise.all([visaPriceSummary([id]), visaFeeRules([id])])
+    return NextResponse.json(ok({ ...product, price: summary.get(id)?.from ?? 0, durationFeeRules: rules.get(id) ?? [], documentRequirements }))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {
       return NextResponse.json(err('Forbidden'), { status: 403 })
@@ -59,8 +56,8 @@ export async function PUT(req: Request, { params }: Ctx) {
     const parsed = updateSchema.safeParse(body)
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
 
-    const { description, requirements, manifestFields, ...fields } = parsed.data
-    // Produk + syarat dokumen + kolom data jamaah dalam SATU transaksi — tak pernah setengah tersimpan.
+    const { description, requirements, ...fields } = parsed.data
+    // Produk + syarat dokumen dalam SATU transaksi — tak pernah setengah tersimpan.
     const result = await prisma.$transaction(async (tx) => {
       const product = await tx.visaProduct.update({
         where: { id },
@@ -70,7 +67,6 @@ export async function PUT(req: Request, { params }: Ctx) {
         const written = await writeRequirements(tx, 'visa', id, requirements)
         if (!written.ok) throw new RequirementRejected(written.error, written.field)
       }
-      if (manifestFields) await writeManifestFields(tx, 'visa', id, manifestFields)
       return product
     }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
     if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })

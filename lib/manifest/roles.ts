@@ -4,8 +4,8 @@ import { maskPassport, NIK_MASK } from '@/lib/pii/mask'
 import type { CalendarDate } from '@/lib/time'
 import type { ManifestAddressValue } from './addressValue'
 
-// Peran field manifest = PENGIKAT ke atribut kartu jamaah (docs/arsitektur-jamaah.md §5.3 butir 2). Daftar TUNGGAL — CHECK DB di migrasi
-// `20261115090000_booking_pilgrim_cards` memakai daftar yang sama (dijaga scripts/test-booking-link.ts). Satu peran paling banyak satu field per produk.
+// Peran field manifest = PENGIKAT ke atribut kartu jamaah (docs/arsitektur-jamaah.md §5.3 butir 2). Daftar TUNGGAL — CHECK `pilgrim_fields_role_chk`
+// memakai daftar yang sama (dijaga scripts/test-booking-link.ts). Satu peran tepat satu kolom katalog (UNIQUE).
 // Murni (tanpa DB/kunci PII) — aman di klien; NIK/paspor di snapshot hanya samaran, nilai utuh disegel di kolom `booking_pilgrims.*Cipher`.
 
 export const MANIFEST_ROLES = [

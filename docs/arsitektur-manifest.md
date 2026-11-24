@@ -1,6 +1,8 @@
 # Arsitektur — Komponen Manifest (Form Orang) Universal (SELESAI & TERVERIFIKASI untuk Visa)
 
-> **Status: SELESAI & TERVERIFIKASI (2026-07-24)** — `ManifestFieldRequirement` dieksekusi, `BookingPilgrim` kolom baku (fullName/gender/email/phone.../passportNumber/dst.) DIHAPUS diganti `fieldValues: Json`, seluruh 11 file konsumen dipindah, komponen frontend `<ManifestFieldsForm>` (render dinamis) dibangun dan diwire ke wizard menggantikan form hardcode. Lihat §8 untuk bukti verifikasi end-to-end. **Baru Visa yang benar-benar punya baris `ManifestFieldRequirement`** — produk lain (Paket Umroh, Transport, Haji) belum, menyusul begitu masing-masing diintegrasikan ke booking engine baru (di luar scope putaran ini). Perluasan dari `docs/arsitektur-booking.md` §1.6.2 (Manifest tak terbatas jumlah) — user menegaskan lebih lanjut: **field form per-orang (Nama, Paspor, dst.) juga harus 100% bisa diatur admin (custom, bisa diedit & ditambah), termasuk field paling dasar seperti nama/kontak** — bukan cuma field spesifik-produk. Dokumen ini, `docs/arsitektur-dokumen.md` (syarat file), dan `docs/arsitektur-booking.md` (booking engine) adalah **tiga komponen universal yang saling melengkapi**, mengikuti pola yang sama seperti infrastruktur harga (`docs/arsitektur-harga.md`) — baca ketiganya berdampingan.
+> **DIGANTIKAN `docs/arsitektur-data-jamaah.md` (D1–D5, 2026-11-24):** model `ManifestFieldRequirement`, tabelnya, `getRequirements`, sentinel `core`, dan editor per produk sudah dihapus. Yang masih berlaku dari dokumen ini: `BookingPilgrim.fieldValues` generik, katalog `fieldType` (§3.1), gagasan peran (§4; 13 peran di `lib/manifest/roles.ts`), dan `ManifestFieldsForm`. Selebihnya riwayat.
+>
+> **Status lama: SELESAI & TERVERIFIKASI (2026-07-24)** — `ManifestFieldRequirement` dieksekusi, `BookingPilgrim` kolom baku (fullName/gender/email/phone.../passportNumber/dst.) DIHAPUS diganti `fieldValues: Json`, seluruh 11 file konsumen dipindah, komponen frontend `<ManifestFieldsForm>` (render dinamis) dibangun dan diwire ke wizard menggantikan form hardcode. Lihat §8 untuk bukti verifikasi end-to-end. **Baru Visa yang benar-benar punya baris `ManifestFieldRequirement`** — produk lain (Paket Umroh, Transport, Haji) belum, menyusul begitu masing-masing diintegrasikan ke booking engine baru (di luar scope putaran ini). Perluasan dari `docs/arsitektur-booking.md` §1.6.2 (Manifest tak terbatas jumlah) — user menegaskan lebih lanjut: **field form per-orang (Nama, Paspor, dst.) juga harus 100% bisa diatur admin (custom, bisa diedit & ditambah), termasuk field paling dasar seperti nama/kontak** — bukan cuma field spesifik-produk. Dokumen ini, `docs/arsitektur-dokumen.md` (syarat file), dan `docs/arsitektur-booking.md` (booking engine) adalah **tiga komponen universal yang saling melengkapi**, mengikuti pola yang sama seperti infrastruktur harga (`docs/arsitektur-harga.md`) — baca ketiganya berdampingan.
 
 ---
 
@@ -159,8 +161,8 @@ Komponen `<ManifestRepeater productType productId onChange>` — pola:
 
 > **DIGANTIKAN `docs/arsitektur-data-jamaah.md` (D1, 2026-11-24).** Kolom yang diminta dari jamaah kini dibaca dari katalog global
 > `pilgrim_fields` + saklar per produk (`lib/pilgrim-data/`), bukan dari `manifest_field_requirements`. Tab "Data jamaah" di editor visa
-> (butir 5) tidak ditampilkan lagi sejak 2026-11-24; `lib/manifest/fields.ts`, route `manifestFields`, dan `ManifestFieldsEditor` masih ada
-> tapi tidak dibaca oleh jalur jamaah mana pun — dihapus di D5 (keputusan K3). Sentinel `core` tidak dipakai lagi. Bagian di bawah = riwayat.
+> (butir 5), `lib/manifest/fields.ts`, route `manifestFields`, `ManifestFieldsEditor`, sentinel `core`, dan tabelnya **SUDAH DIHAPUS di D5
+> (2026-11-24, keputusan K3; `docs/arsitektur-data-jamaah.md` §12)**. Bagian di bawah = riwayat.
 
 **Pemicu:** uji input produk lewat admin (pemilik: "kamu saya tugaskan mencoba mesin kita") — produk visa baru punya 0 field manifest (form jamaah kosong, termasuk nama), dan kolom teks khusus produk (Nomor HP Host, Short Address) tidak bisa diinput sama sekali.
 

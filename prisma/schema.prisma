@@ -511,7 +511,7 @@ model DocumentRequirement {
 }
 
 // ─── KATALOG DATA JAMAAH (docs/arsitektur-data-jamaah.md §3.1) ───────────────
-// SATU daftar kolom data jamaah untuk semua produk (menggantikan ManifestFieldRequirement per produk, dikontraksi di D5).
+// SATU daftar kolom data jamaah untuk semua produk (menggantikan kolom per produk lama, dikontraksi di D5).
 // Semua kolom = data milik jamaah (kartu Jamaah Saya). Ditulis HANYA lib/pilgrim-data/. `key` = kunci di fieldValues, tak pernah berubah.
 model PilgrimField {
   id        String   @id @default(uuid())
@@ -541,31 +541,6 @@ model ProductPilgrimData {
 
   @@id([productType, productId])
   @@map("product_pilgrim_data")
-}
-
-// ─── MANIFEST FIELD REQUIREMENT (universal, docs/arsitektur-manifest.md §3) ───
-// Definisi field form per-orang, per produk — polimorfik, pola SAMA PERSIS DocumentRequirement.
-// Menggantikan asumsi lama "semua booking pakai bentuk form BookingPilgrim yang sama" — admin
-// bebas atur field apa saja per productType+productId tanpa migrasi schema.
-model ManifestFieldRequirement {
-  id          String  @id @default(uuid())
-  productType String // 'visa' | 'package' | 'transport' | 'haji' | dst — bebas teks
-  productId   String // FK ke produk spesifik, TIDAK di-enforce di DB
-  fieldKey    String // key mesin: 'fullName' | 'passportNumber' | 'bloodType' | dst — bebas admin
-  label       String // nama tampilan: "Nomor Paspor"
-  fieldType   String // 'text' | 'textarea' | 'phone' | 'email' | 'date' | 'select' | 'number' | 'address' — §3.1
-  options     Json? // untuk fieldType='select' — daftar pilihan
-  required    Boolean @default(true)
-  order       Int     @default(0)
-
-  // Peran sistem — OPSIONAL. Beberapa fitur (dashboard admin, pencocokan dokumen) tetap butuh
-  // tahu field mana yang berperan "nama"/"nomor HP" TANPA hardcode fieldKey (yang bebas admin
-  // atur) — lihat docs/arsitektur-manifest.md §4.
-  role String? // pengikat ke atribut kartu jamaah — daftar tunggal MANIFEST_ROLES di lib/manifest/roles.ts (CHECK di DB); null = field bebas
-
-  @@unique([productType, productId, role], map: "manifest_field_requirements_role_key")
-  @@index([productType, productId])
-  @@map("manifest_field_requirements")
 }
 
 // ─── PACKAGE / BUNDLE ─────────────────────────────────────────
@@ -2018,7 +1993,7 @@ enum AddressType {
 }
 
 // ─── MEDIA PRODUK UNIVERSAL (docs/arsitektur-media.md) ─────────────
-// Satu tabel polimorfik untuk foto semua produk (pola ProductCost/ManifestFieldRequirement). `productType` = kunci registry
+// Satu tabel polimorfik untuk foto semua produk (pola ProductCost/DocumentRequirement). `productType` = kunci registry
 // lib/media/owners.ts. Mode (featured = tepat satu foto / gallery = banyak) ditegakkan LAYANAN, bukan indeks: Prisma tak mengekspresikan
 // indeks unik parsial, dan indeks tak dikenal skema membuat `migrate diff` menandai drift. Kolom foto lama per-model sudah dibuang
 // (migrasi kontraksi media F4) — JANGAN menambah kolom foto per-model baru; produk bergambar didaftarkan di lib/media/owners.ts.

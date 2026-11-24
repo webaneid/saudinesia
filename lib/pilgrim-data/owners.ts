@@ -16,7 +16,6 @@ export const PILGRIM_DATA_OWNERS = {
 
 export type PilgrimDataOwner = keyof typeof PILGRIM_DATA_OWNERS
 export const PILGRIM_DATA_OWNER_TYPES = Object.keys(PILGRIM_DATA_OWNERS) as PilgrimDataOwner[]
-export const isPilgrimDataOwner = (t: string): t is PilgrimDataOwner => Object.hasOwn(PILGRIM_DATA_OWNERS, t)
 
 export type ProductRef = { productType: PilgrimDataOwner; productId: string }
 export const productRefKey = (r: { productType: string; productId: string }) => `${r.productType}:${r.productId}`

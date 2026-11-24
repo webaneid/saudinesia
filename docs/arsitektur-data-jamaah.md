@@ -1,7 +1,8 @@
 # Arsitektur — Katalog Data Jamaah + Saklar per Produk
 
-> **Status: RENCANA DISETUJUI (2026-11-24, keputusan K1–K3 di §7); D1 SELESAI (2026-11-24, as-built §8), D2 SELESAI (2026-11-24, as-built §9), D3 SELESAI (2026-11-24, as-built §10), D4 SELESAI (2026-11-24, as-built §11).** D5 belum. Menggantikan
-> pengatur kolom per produk di `docs/arsitektur-manifest.md` §9 (tab "Data jamaah" visa, sejak 2026-11-24 disembunyikan).
+> **Status: SELESAI — rencana D1–D5 TUNTAS (2026-11-24; keputusan K1–K3 di §7, as-built §8–§12). SOURCE OF TRUTH data jamaah.** Menggantikan
+> pengatur kolom per produk di `docs/arsitektur-manifest.md` §9 (tabel, kode, dan editornya sudah dihapus di D5). §1–§6 = rencana awal; bila
+> berbeda, as-built §8–§12 yang berlaku. Belum dirilis ke produksi.
 
 ## 1. Permintaan pemilik (2026-11-24)
 
@@ -168,7 +169,8 @@ snapshot kartu dan penyegel jamaah baru (`bookingLink.ts`: `linkCard` + `sealNew
 **Penyimpangan dari rencana (sadar):**
 - Baris rencana D1 "perilaku SAMA dengan hari ini" tidak berlaku lagi sesudah K2: jamaah tanpa produk ber-saklar nyala kini **tidak diminta
   apa pun** (dulu set `core` 5 kolom), dan jamaah ber-visa diminta kolom aktif KATALOG (dulu kolom visa-nya). Kolom visa lama di dev sama
-  dengan kolom bawaan kecuali dua kolom bebas yang dihapus K1 — nilai lamanya tetap di snapshot dan tetap TAMPIL (`displayFields`).
+  dengan kolom bawaan kecuali dua kolom bebas yang dihapus K1 — nilai lamanya tetap di snapshot (tidak ditampilkan; `displayFields` hanya menampilkan
+  kolom yang ada di katalog — kalimat lama di sini menyebut "tetap TAMPIL", keliru).
 - §3.3 "produk tingkat booking → semua jamaah": dipersempit ke **rombongan item** (item tanpa rombongan = semua jamaah), sejalan
   rombongan booking §10.8.
 - Selama D2/D3 belum ada, katalog dan saklar hanya bisa diubah lewat migrasi; perilaku bawaan sudah aktif.
@@ -251,3 +253,27 @@ di DB sekali pakai; `bun run test` penuh.
   pelanggan uji di seed) — dijaga `test-i18n-coverage` dan uji slot; `bun run build` hijau.
 - **Temuan sambil lalu:** SEC-312 (Low, pre-existing) — PUT kartu tanpa `birthPlace`/`gender` mengosongkannya.
 
+
+
+## 12. As-built D5 (2026-11-24) — kontraksi kolom per produk lama
+
+- **Migrasi** `20261213090000_manifest_field_contraction`: `DROP TABLE manifest_field_requirements` (termasuk baris sentinel `core`), tabel dikunci
+  dulu, FAIL-CLOSED. Isian jamaah (`booking_pilgrims.fieldValues`) tidak disentuh; yang hilang hanya definisi (label/tipe) per produk. BERHENTI
+  (tabel utuh, transaksi batal) bila:
+  1. ada kolom berperan dengan kunci bukan kunci katalog (diperiksa ulang sejak D1);
+  2. ada kolom yang SUDAH BERISI data jamaah tanpa padanan berkunci dan bertipe sama di `pilgrim_fields`. Kosong = tak ada/null/`""`/telepon tanpa
+     nomor. Pengecualian hanya dua kolom K1 (`nomorHpHost`, `shortAddressUnwanWathoni`, boleh bersufiks acak `_xxxxxx`).
+  Pra-cek sebelum rilis + cara menangani bila berhenti: `docs/deployment.md` "Catatan operasional: kontraksi kolom data jamaah".
+- **Kode yang dihapus:** model `ManifestFieldRequirement`, `lib/manifest/{fields,constants}.ts`, `lib/validators/manifest.ts`,
+  `components/admin/manifest/*` (K3), `manifestFields`/`manifestFieldsUsed` di `admin/products/visa[/id]` (kini 400 karena `.strict()`), pengisi
+  kolom bawaan produk visa baru, pembersih di `dropPolymorphic`/`lib/haji/delete.ts`, seed `core`, `scripts/test-manifest-fields.ts`. Ikut dihapus
+  karena tak punya pemanggil: rute publik `GET /api/v1/manifest/requirements` dan `isPilgrimDataOwner`, serta `STANDARD_FIELDS`/`allowedTypesForRole`/
+  `uniqueFieldKey` (kolom bawaan = baris katalog dari migrasi D1, bukan daftar di kode). `lib/manifest/` yang tersisa: `fieldDefs` (tipe kolom, larangan
+  label rahasia, usulan kode), `roles`, `values`, `display`, `address*`.
+- **Bukti:** `scripts/test-manifest-contraction-migration.ts` (8 skenario: kosong, keadaan dev, 4 penolakan, 2 kontrol) di DB sementara; salinan DB
+  dev (25 baris kolom) dimigrasi — hash seluruh `fieldValues` sama sebelum/sesudah; `prisma migrate diff` tanpa selisih; penjaga D5 di
+  `test-pilgrim-data` (berkas, sebutan di app/lib/components/schema/seed, dan tabel tak ada); suite penuh 1688 PASS di DB sekali pakai; browser + API pada server dev terpisah di atas
+  salinan dev TERMIGRASI (editor visa, buat + hapus produk visa, saklar, Kelola jamaah, Manajemen Visa; `manifestFields` → 400; rute lama → 404);
+  `bun run build` hijau.
+- **Diketahui:** isian lama dua kolom K1 (bila ada) tersimpan tanpa label dan tidak tampil di mana pun. Rollback ke image sebelum D5 sesudah migrasi
+  ini tidak bisa (editor/pembuatan produk visa dan penghapus produk versi lama membaca tabel itu) — pulihkan dari cadangan.

@@ -424,10 +424,6 @@ await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ le
     if (/['"]use client['"]/.test(src) && /from ['"]@\/lib\/pilgrims\/bookingLink['"]/.test(src.replace(/import type [^;]+;?/g, ''))) bad.push(`${rel}: komponen klien mengimpor layanan server`)
   }
   assert.deepEqual(bad, [])
-  const sql = readFileSync(join(root, 'prisma/migrations/20261115090000_booking_pilgrim_cards/migration.sql'), 'utf8')
-  const check = sql.slice(sql.indexOf('manifest_field_requirements_role_chk'))
-  const listed = [...check.slice(0, check.indexOf(';')).matchAll(/'([a-z_]+)'/g)].map(m => m[1])
-  assert.deepEqual(listed, [...MANIFEST_ROLES])
   // Katalog global Data Jamaah memakai daftar peran yang sama (pilgrim_fields_role_chk).
   const cat = readFileSync(join(root, 'prisma/migrations/20261212090000_pilgrim_data_catalog/migration.sql'), 'utf8')
   const roleChk = cat.slice(cat.indexOf('pilgrim_fields_role_chk'))

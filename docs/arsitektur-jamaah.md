@@ -385,7 +385,7 @@ Catatan desain:
 - **Data kanonik disalin, bukan dirujuk** — harga privasi (§4). Yang menjamin "satu orang" adalah `nikHash @unique`.
 - **Satu tabel dokumen** untuk semua jenis, selalu per jamaah (K7). Pembedanya `DocumentType.reusable`: paspor/KTP/KK/vaksin disimpan di kartu dan dipakai ulang; tiket/reservasi membawa `bookingId` karena hanya berlaku untuk perjalanan itu.
 - **`Restrict`** pada pemilik kartu/dokumen: penghapusan akun = anonimisasi eksplisit (`lib/account/deletion.ts`), bukan cascade diam-diam. Rujukan `SET NULL` dihitung eksplisit di jalur hapus.
-- `ManifestFieldRequirement.role` diperluas jadi **pengikat ke atribut kartu** (`nik`, `birth_place`, `birth_date`, `gender`, `nationality`, `passport_expiry`, `address`, ditambah yang lama `display_name`, `phone`, `whatsapp`, `email`, `passport_number`) — satu konsep, dipakai mengisi snapshot dari kartu (F7).
+- *(sejak D5 2026-11-24 peran hidup di katalog `pilgrim_fields`, `docs/arsitektur-data-jamaah.md`)* `ManifestFieldRequirement.role` diperluas jadi **pengikat ke atribut kartu** (`nik`, `birth_place`, `birth_date`, `gender`, `nationality`, `passport_expiry`, `address`, ditambah yang lama `display_name`, `phone`, `whatsapp`, `email`, `passport_number`) — satu konsep, dipakai mengisi snapshot dari kartu (F7).
 
 
 ### 5.1 As-built Fase 2 (2026-11-02)

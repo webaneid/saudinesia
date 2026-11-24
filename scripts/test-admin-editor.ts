@@ -1,6 +1,6 @@
 // Penjaga tata letak editor ala WordPress (docs/arsitektur-admin-editor.md). Tanpa database.
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 
 let failed = 0
 async function t(name: string, fn: () => Promise<void> | void) {
@@ -85,13 +85,6 @@ await t('halaman bespoke: simpan memeriksa respons dan galat tampil; muat-ulang 
     assert.match(src, /resetInfo/, `${e}: loadPackage harus menjaga isian lewat resetInfo`)
   }
   assert.match(read(ADMIN + 'products/hotels/[id]/page.tsx'), /markClean\(\{ form: f, address: a \}\)/, 'Hotel: baseline harus bergeser setelah muat')
-})
-
-await t('Visa: data jamaah disembunyikan, bukan dihapus — halaman edit tidak memuat editor kolom dan tidak mengirim manifestFields', () => {
-  const src = read(ADMIN + 'products/visa/[id]/page.tsx')
-  assert.doesNotMatch(src, /ManifestFieldsEditor|manifestFields:/, 'Visa: editor data jamaah tampil atau kolom ikut dikirim (menimpa data tersimpan)')
-  assert.ok(existsSync('components/admin/manifest/ManifestFieldsEditor.tsx'), 'Visa: editor data jamaah dihapus — arahan pemilik: hanya disembunyikan')
-  assert.match(read('app/api/v1/admin/products/visa/[id]/route.ts'), /manifestFields/, 'API visa harus tetap menerima manifestFields')
 })
 
 await t('hapus di halaman edit: semua entitas produk punya kotak Hapus (EditPage.remove / DeleteBox) dan memakai satu pemeriksa respons', () => {

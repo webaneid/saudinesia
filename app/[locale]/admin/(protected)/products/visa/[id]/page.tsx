@@ -21,8 +21,7 @@ import type { ProductDetail } from './types'
 import { PilgrimDataToggle } from '@/components/admin/pilgrim-data/PilgrimDataToggle'
 
 // Editor produk visa — tata letak sama dengan Haji/Paket (EditPage: konten kiri, Terbitkan/Foto/Harga/Hapus kanan), bagian tersusun ke bawah tanpa tab.
-// Data jamaah = saklar `PilgrimDataToggle` di kanan (katalog global Produk → Data Jamaah, docs/arsitektur-data-jamaah.md). Kolom manifest per
-// produk lama (`manifestFields` di API) tidak dikirim halaman ini dan tidak dibaca jalur jamaah mana pun — dihapus di D5.
+// Data jamaah = saklar `PilgrimDataToggle` di kanan (katalog global Produk → Data Jamaah, docs/arsitektur-data-jamaah.md).
 
 type Form = VisaInfo & { isActive: boolean; reqs: RequirementRow[]; rules: RequiredComponent[] }
 
