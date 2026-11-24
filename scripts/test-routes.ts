@@ -183,9 +183,12 @@ await t('SEC-10: compose produksi — semua service no-new-privileges, web tanpa
   // Sisa SEC-10 (2026-11-21): SEMUA service cap_drop ALL (cap_add hanya yang dicatat), web read-only, image pihak ketiga dipin digest.
   assert.equal((compose.match(/^    cap_drop: \[ALL\]$/gm) ?? []).length, services, 'setiap service harus cap_drop: [ALL]')
   assert.deepEqual((compose.match(/^    cap_add: .*$/gm) ?? []).map(l => l.trim()), [
-    'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [CHOWN, SETGID, SETUID]',
+    'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]',
     'cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]', 'cap_add: [NET_BIND_SERVICE]',
-  ], 'cap_add hanya postgres, redis, gowa (entrypoint root → turun hak) dan caddy (bind 80/443)')
+  ], 'cap_add hanya postgres, gowa (entrypoint root → turun hak) dan caddy (bind 80/443)')
+  // SEC-313: Redis langsung sebagai user `redis` — sebagai root tanpa DAC_OVERRIDE ia mati di setiap start ulang (reboot server).
+  const redis = compose.slice(compose.indexOf('\n  redis:'), compose.indexOf('\n  minio:'))
+  assert.match(redis, /\n    user: redis\n    cap_drop: \[ALL\]\n/, 'redis wajib berjalan sebagai user redis')
   // GOWA (docs/rencana-gowa-self-host.md): internal saja — tanpa ports, read-only, tanpa env_file (tak menerima rahasia web).
   const gowa = compose.slice(compose.indexOf('\n  gowa:'), compose.indexOf('\n  caddy:'))
   assert.ok(gowa.length > 100, 'service gowa tak terbaca')
