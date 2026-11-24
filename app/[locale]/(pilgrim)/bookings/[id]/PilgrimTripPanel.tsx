@@ -30,7 +30,7 @@ type Props = {
   /** Pemeriksaan petugas (Fase 6): `ready` = dokumen wajib siap (server); `note` = catatan perbaikan terakhir. */
   review: { status: PilgrimReviewStatus; open: boolean; ready: boolean; note: string | null }
   /** Pemesan sebagai jamaah: kartu "Saya sendiri" (bila ada), sudah dipakai di booking ini, dan data akun untuk mengisi kartu baru. */
-  self: { cardId: string | null; usedHere: boolean; fullName: string; email: string; phone: string | null; whatsapp: string | null; address: AddressValue | null }
+  self: { cardId: string | null; incomplete: boolean; whatsappVerified: boolean; usedHere: boolean; fullName: string; email: string; phone: string | null; whatsapp: string | null; address: AddressValue | null }
   /** Kolom data wajib yang masih kosong (`fromCard` = bisa diisi lewat Ubah data jamaah). */
   missingFields: { label: string; fromCard: boolean }[]
 }
@@ -85,9 +85,10 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
   // Kartu baru dari formulir sebaris → langsung dipakai untuk jamaah ini.
   const linkNew = (id: string, warnings: PilgrimWarning[]) =>
     call('PUT', { cardId: id }, [t('linkedNew'), ...warnings.map(w => tw(w))].join(' '))
-  // "Jadikan saya jamaah": kartu "Saya sendiri" yang sudah ada langsung dipakai; belum ada → formulir terisi dari data akun.
+  // "Jadikan saya jamaah": kartu "Saya sendiri" yang sudah lengkap langsung dipakai; belum ada (formulir terisi dari data akun) atau belum
+  // lengkap (formulir kartunya) → popup, kolom wajib dan alamat harus terisi.
   function pickSelf() {
-    if (self.cardId) { void call('PUT', { cardId: self.cardId }, t('selfDone')); return }
+    if (self.cardId && !self.incomplete) { void call('PUT', { cardId: self.cardId }, t('selfDone')); return }
     setNotice(null); setCreating('self')
   }
   const selfForm = (): SavedPilgrimFormValue => ({
@@ -175,7 +176,14 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
       {(creating === 'new' || creating === 'self') && (
         <PilgrimCardDialog
           endpoint="/api/v1/account/pilgrims"
-          intro={t('newIntro')}
+          cardId={creating === 'self' ? self.cardId ?? undefined : undefined}
+          intro={creating === 'self' ? t('selfIntro') : t('newIntro')}
+          notice={creating === 'self' && !self.whatsappVerified && (
+            <p className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+              {t('waNotVerified')} <Link href={`/${locale}/profile#verifikasi-whatsapp`} className="font-semibold underline">{t('waVerify')}</Link>
+            </p>
+          )}
+          requireComplete={creating === 'self'}
           idPrefix={`sp-${pilgrimId}`}
           title={creating === 'self' ? t('selfTitle') : t('addNew')}
           initial={creating === 'self' ? selfForm() : EMPTY_PILGRIM_FORM}

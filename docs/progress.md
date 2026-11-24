@@ -1006,4 +1006,9 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] D2 — menu Produk → Data Jamaah (CRUD katalog, pola Jenis Dokumen; penulis tunggal `lib/pilgrim-data/fields.ts`, hapus aman, Nama Lengkap terkunci) — selesai 2026-11-24 (uji skrip + browser, build; as-built §9)
 - [x] D3 — saklar `PilgrimDataToggle` di semua halaman edit produk + API (penulis tunggal `setPilgrimDataEnabled`) — selesai 2026-11-24 (uji skrip + browser, build; as-built §10)
 - [x] D4 — kartu menyimpan kolom buatan admin (`extra`), snapshot ikut mengisinya, isian non-kartu pemesan dihapus, validasi isian jamaah booking baru di server, tabel jamaah disembunyikan bila tak diminta — selesai 2026-11-24 (uji skrip + browser admin, build; as-built §11)
-- [x] D5 — kontraksi: tabel `manifest_field_requirements` + sentinel `core` + editor/route/penulis kolom per produk dihapus (migrasi fail-closed, isian jamaah utuh), dokumentasi akhir — selesai 2026-11-24, **rencana data jamaah TUNTAS** (uji migrasi 8 skenario + salinan DB dev, browser, build; as-built §12). Belum dirilis: pra-cek di `docs/deployment.md`
+- [x] D5 — kontraksi: tabel `manifest_field_requirements` + sentinel `core` + editor/route/penulis kolom per produk dihapus (migrasi fail-closed, isian jamaah utuh), dokumentasi akhir — selesai 2026-11-24, **rencana data jamaah TUNTAS** (uji migrasi 8 skenario + salinan DB dev, browser, build; as-built §12). Dirilis 2026-11-25
+
+**Profil jamaah mengikuti Data Jamaah + verifikasi WhatsApp yang jelas (`docs/rencana-profil-jamaah.md`, 2026-11-25)**
+- [x] P1 — nomor verifikasi = nomor hasil scan (`linkedWhatsappNumber`), kartu verifikasi baru: "Verifikasi Sekarang", kirim manual + salin (as-built `docs/arsitektur-whatsapp-verifikasi.md` §11)
+- [x] P2 — kolom semua kartu jamaah mengikuti katalog; kewajiban NIK/paspor mengikuti katalog (ADR-0006 Proposed, menunggu persetujuan pemilik); SEC-312 ditutup
+- [x] P3 — Profil satu formulir (akun + kartu Saya sendiri, wajib nama + alamat) + popup kelengkapan saat menjadi jamaah (as-built `docs/arsitektur-data-jamaah.md` §13)

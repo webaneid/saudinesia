@@ -18,7 +18,7 @@ import { pilgrimFieldCreateSchema, pilgrimFieldUpdateSchema } from '@/lib/valida
 import { cardBoundKeys, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
 import { sealNewPilgrim } from '@/lib/pilgrims/bookingLink'
 import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
-import { cardExtraFields } from '@/lib/pilgrim-data/catalog'
+import { cardLayout, orderedRoles, withRequiredAddress } from '@/components/shared/pilgrims/cardFields'
 import { assertThrowawayDb } from './lib/testDb'
 
 await assertThrowawayDb()
@@ -296,7 +296,7 @@ await t('D4 snapshot: kolom buatan admin dari `extra` kartu (kosong → dikosong
   assert.deepEqual(snapshotFromCard(fields, { ...card, extra: { __proto__: 'x', toString: 'y' } as Record<string, unknown> }), { fullName: 'Budi', golDarah: null, catatan: null }, 'hanya kunci milik sendiri')
   assert.deepEqual(cardBoundKeys(fields), ['fullName', 'golDarah', 'catatan'])
   const admin = { id: 'x', fieldKey: 'golDarah', label: 'G', fieldType: 'text', options: null, required: false, role: null, isSystem: false, isActive: true, order: 1 }
-  assert.deepEqual(cardExtraFields([...catalog, admin, { ...admin, fieldKey: 'mati', isActive: false }]).map(f => f.fieldKey), ['golDarah'], 'hanya kolom admin aktif')
+  assert.deepEqual(cardLayout(activeFields([...catalog, admin, { ...admin, fieldKey: 'mati', isActive: false }])).extras.map(f => f.fieldKey), ['golDarah'], 'hanya kolom admin aktif')
 })
 
 await t('D4 booking baru: isian jamaah dinilai di server atas katalog — kunci asing / bentuk salah ditolak (gap manifest §9)', async () => {
@@ -321,10 +321,25 @@ await t('D4 sumber: kartu = satu-satunya jalur isian pelanggan (route PUT isian 
   assert.ok(!exists('lib/pilgrims/extraFields.ts') && !exists('app/[locale]/(pilgrim)/bookings/[id]/PilgrimExtraFields.tsx'))
   assert.ok(!/export async function PUT/.test(readFileSync(join(root, 'app/api/v1/bookings/[id]/pilgrims/[pilgrimId]/route.ts'), 'utf8')))
   const fieldsUi = readFileSync(join(root, 'components/shared/pilgrims/SavedPilgrimFields.tsx'), 'utf8')
-  assert.ok(fieldsUi.includes('useCardExtraFields()') && fieldsUi.includes('<ManifestFieldsForm'))
+  assert.ok(fieldsUi.includes('usePilgrimFields(') && fieldsUi.includes('cardLayout(') && fieldsUi.includes('<ManifestFieldsForm'))
   const route = readFileSync(join(root, 'app/api/v1/pilgrim-fields/route.ts'), 'utf8')
-  assert.ok(route.includes('await getSession()') && route.includes("'unauthorized', 401") && route.includes('cardExtraFields('))
+  assert.ok(route.includes('await getSession()') && route.includes("'unauthorized', 401") && route.includes('activeFields('))
   assert.ok(readFileSync(join(root, 'lib/pilgrims/bookingLink.ts'), 'utf8').includes('extraValues: true'), 'snapshot membaca extraValues kartu')
+})
+
+await t('Profil jamaah (2026-11-25): formulir kartu = kolom AKTIF katalog — nonaktif tersembunyi, nama & tanggal lahir selalu tampil, urutan katalog, gagal muat = semua kolom', () => {
+  const f = (key: string, role: string | null, order: number, isActive = true) => ({ id: key, fieldKey: key, label: key, fieldType: 'text', options: null, required: false, role, isSystem: role !== null, isActive, order })
+  const cat = [f('fullName', 'display_name', 0), f('gender', 'gender', 5), f('nationality', 'nationality', 2), f('nik', 'nik', 3, false), f('address', 'address', 4, false)]
+  const l = cardLayout(activeFields(cat))
+  assert.deepEqual([...l.roles.keys()], ['display_name', 'nationality', 'gender', 'birth_date'])
+  assert.deepEqual(orderedRoles(l, ['gender', 'nationality']), ['nationality', 'gender'])
+  assert.ok(!cardLayout(activeFields(cat), ['display_name']).roles.has('display_name'))
+  assert.equal(cardLayout(null).roles.size, 13)
+  const req = withRequiredAddress(activeFields(cat), 'Alamat')
+  assert.deepEqual(req.filter(x => x.required).map(x => x.role), ['address'])
+  assert.deepEqual(withRequiredAddress([f('address', 'address', 1)], 'Alamat').map(x => [x.fieldKey, x.required]), [['address', true]])
+  const page = readFileSync(join(root, 'app/[locale]/(pilgrim)/profile/page.tsx'), 'utf8')
+  assert.ok(page.includes('activeFields(catalog)') && page.includes('getSavedPilgrim('), 'Profil memakai katalog dan kartu tersamar dari layanan')
 })
 
 // ── pembersihan (DB uji) ────────────────────────────────────────────────────────────────────────────────────────────

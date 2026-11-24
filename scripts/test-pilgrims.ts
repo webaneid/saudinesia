@@ -38,6 +38,9 @@ __resetForTests()
 await prisma.piiKeyCheck.deleteMany() // kunci acak per jalan; nilai cek jalan sebelumnya tak berlaku lagi
 
 const tag = `pg${Date.now()}`
+// NIK dan paspor aktif (aturan penuh ADR-0005); uji ADR-0006 mengatur kataloknya sendiri.
+const restoreCatalog = await useTestCatalog(['nik', 'passportNumber', 'gender'])
+
 let n = 0
 const users: string[] = []
 async function makeUser(role: 'pilgrim' | 'admin' = 'pilgrim', isActive = true): Promise<Actor> {
@@ -191,6 +194,40 @@ await t('NIK wajib bagi WNI kecuali bayi < 2 tahun (batas tepat di hari ulang ta
   assert.ok(!future.ok && future.field === 'birthDate')
   const badNik = await createSavedPilgrim(a, a.userId, base({ nik: '1234' }))
   assert.ok(!badNik.ok && badNik.status === 400 && badNik.field === 'nik')
+})
+
+await t('ADR-0006: NIK/paspor wajib hanya bila kolomnya AKTIF di katalog; kartu "Saya sendiri" boleh belum lengkap; nonaktif → tersimpan tanpa identitas', async () => {
+  const a = await makeUser()
+  const noNik = base({ birthDate: '2000-01-01' }), noPass = base({ nationality: 'MY' })
+  const restore = await useTestCatalog(['gender'])
+  try {
+    const c = okCard(await createSavedPilgrim(a, a.userId, noNik))
+    const row = await cardRow(c.id)
+    assert.deepEqual([row.identityId, row.matchStatus, row.nikHash], [null, 'unmatched', null])
+    okCard(await createSavedPilgrim(a, a.userId, noPass))
+  } finally { await restore() }
+  const on = await useTestCatalog(['nik', 'passportNumber'])
+  try {
+    const b = await makeUser()
+    const r = await createSavedPilgrim(b, b.userId, noNik)
+    assert.ok(!r.ok && r.field === 'nik')
+    const w = await createSavedPilgrim(b, b.userId, noPass)
+    assert.ok(!w.ok && w.field === 'passport.number')
+    const self = okCard(await createSavedPilgrim(b, b.userId, { ...noNik, isSelf: true }))
+    okCard(await updateSavedPilgrim(b, b.userId, self.id, { ...noNik, gender: 'female' })) // isSelf tak dikirim = tetap
+    const off = await updateSavedPilgrim(b, b.userId, self.id, { ...noNik, isSelf: false })
+    assert.ok(!off.ok && off.field === 'nik', 'bukan diri sendiri lagi → aturan penuh')
+  } finally { await on() }
+})
+
+await t('SEC-312: ubah tanpa gender/tempat lahir = tetap; null = dikosongkan', async () => {
+  const a = await makeUser()
+  const c = okCard(await createSavedPilgrim(a, a.userId, base({ nik: nik(), birthPlace: 'Jakarta' })))
+  const { gender, birthPlace, ...rest } = base(); void gender; void birthPlace
+  const kept = okCard(await updateSavedPilgrim(a, a.userId, c.id, rest))
+  assert.deepEqual([kept.gender, kept.birthPlace], ['male', 'Jakarta'])
+  const cleared = okCard(await updateSavedPilgrim(a, a.userId, c.id, { ...rest, gender: null, birthPlace: null }))
+  assert.deepEqual([cleared.gender, cleared.birthPlace], [null, null])
 })
 
 await t('WNA: kunci identitas = negara + nomor paspor; nomor sama negara lain = orang lain; NIK untuk WNA ditolak; paspor tersamar', async () => {
@@ -484,6 +521,7 @@ await prisma.booking.deleteMany({ where: { userId: { in: users } } })
 await prisma.savedPilgrim.deleteMany({ where: { ownerId: { in: users } } })
 await prisma.pilgrimIdentity.deleteMany({ where: { cards: { none: {} }, bookingPilgrims: { none: {} } } })
 await prisma.user.deleteMany({ where: { id: { in: users } } })
+await restoreCatalog()
 await prisma.$disconnect()
 
 if (failed > 0) { console.log(`\n${failed} uji GAGAL`); process.exit(1) }

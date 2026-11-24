@@ -24,7 +24,7 @@
 | # | Keputusan | Dampak rancangan |
 |---|---|---|
 | K1 | **NIK wajib** untuk setiap jamaah. | Formulir selalu meminta NIK; dedup murni oleh NIK (§4). |
-| K2 | Tanpa NIK hanya **keadaan khusus: bayi**. | Kartu boleh tanpa NIK bila usia **< 2 tahun** menurut tanggal lahir (C1); kartu itu `unmatched`, dicocokkan admin. WNA didukung dengan kunci negara + nomor paspor (C2). |
+| K2 | Tanpa NIK hanya **keadaan khusus: bayi**. _(Sejak 2026-11-25, ADR-0006 (Proposed): K1/K2 berlaku hanya bila kolom NIK aktif di Data Jamaah dan bukan kartu "Saya sendiri".)_ | Kartu boleh tanpa NIK bila usia **< 2 tahun** menurut tanggal lahir (C1); kartu itu `unmatched`, dicocokkan admin. WNA didukung dengan kunci negara + nomor paspor (C2). |
 | K3 | Data gudang boleh diisi dari input pertama; **tidak perlu verifikasi langsung di gudang** — verifikasi terjadi **saat pengguna mengajukan nama-nama jamaah** (untuk booking). | Tidak ada antrean verifikasi gudang. Pengajuan data jamaah per booking diverifikasi admin (§8); data yang lolos verifikasi memperbarui data kanonik identitas. |
 | K4 | Membuka NIK/paspor utuh dan menggabungkan identitas: **admin dan manager boleh** (superadmin juga). | Semua peran staf, setiap pembukaan tercatat. |
 | K5 | **Alur verifikasi dokumen oleh admin** seperti smart-ai: ditolak bila tidak sesuai atau kedaluwarsa. | Status per dokumen + alasan tolak + pengajuan ulang (§8). Paspor < 6 bulan diberi tanda otomatis untuk admin dan pengguna. |

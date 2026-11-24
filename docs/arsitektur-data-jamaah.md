@@ -2,7 +2,7 @@
 
 > **Status: SELESAI — rencana D1–D5 TUNTAS (2026-11-24; keputusan K1–K3 di §7, as-built §8–§12). SOURCE OF TRUTH data jamaah.** Menggantikan
 > pengatur kolom per produk di `docs/arsitektur-manifest.md` §9 (tabel, kode, dan editornya sudah dihapus di D5). §1–§6 = rencana awal; bila
-> berbeda, as-built §8–§12 yang berlaku. Belum dirilis ke produksi.
+> berbeda, as-built §8–§12 yang berlaku. Dirilis ke produksi 2026-11-25 (D1–D5). §13 = kolom kartu dan Profil mengikuti katalog.
 
 ## 1. Permintaan pemilik (2026-11-24)
 
@@ -277,3 +277,17 @@ di DB sekali pakai; `bun run test` penuh.
   `bun run build` hijau.
 - **Diketahui:** isian lama dua kolom K1 (bila ada) tersimpan tanpa label dan tidak tampil di mana pun. Rollback ke image sebelum D5 sesudah migrasi
   ini tidak bisa (editor/pembuatan produk visa dan penghapus produk versi lama membaca tabel itu) — pulihkan dari cadangan.
+
+## 13. As-built (2026-11-25) — kartu jamaah dan Profil mengikuti katalog (`docs/rencana-profil-jamaah.md`, ADR-0006)
+
+- `GET /api/v1/pilgrim-fields` mengembalikan SEMUA kolom aktif (bukan hanya kolom buatan admin). Klien: `usePilgrimFields` (dimuat sekali per
+  formulir) → `cardLayout`/`orderedRoles` (`components/shared/pilgrims/cardFields.ts`, murni) → `SavedPilgrimFields`. Kolom bawaan nonaktif tidak
+  tampil; nama dan tanggal lahir selalu tampil (`ALWAYS_SHOWN`); label = label katalog (diterjemahkan `useFieldLabel` bila masih label bawaan);
+  katalog gagal dimuat → semua kolom. Dipakai Jamaah Saya, Profil, popup booking, dan admin atas nama pelanggan.
+- Server: kewajiban NIK/paspor = `piiDemand` (`lib/pilgrims/service.ts`), ADR-0006. Kolom tersembunyi tak pernah dikosongkan (SEC-312 ditutup:
+  `gender`/`birthPlace` tak dikirim = tetap, `null` = dikosongkan).
+- Profil: satu formulir → kartu "Saya sendiri" + akun + kontak. Wajib hanya nama dan alamat (`profileSchema.address`); tanpa data jamaah, kartu tidak
+  dibuat. Saran "yang belum diisi" di atas formulir, tanpa memblokir.
+- Booking: "Jadikan saya jamaah" membuka popup kelengkapan bila kartu belum ada atau `cardIncomplete` (`lib/pilgrims/bookingLink.ts`); popup
+  mewajibkan kolom wajib katalog + alamat, dan menampilkan pengingat bila WhatsApp belum terverifikasi (tidak memblokir, ADR-0002).
+- Uji: `test-pilgrims` (ADR-0006, SEC-312), `test-pilgrim-data`, `test-pilgrim-form`; browser di DB sekali pakai (desktop + 375px, id + en).

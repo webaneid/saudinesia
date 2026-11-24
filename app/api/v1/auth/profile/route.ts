@@ -40,18 +40,13 @@ export async function PUT(request: Request) {
     }
 
     const { fullName, address } = parsed.data
-    const data: Record<string, unknown> = { fullName }
-
-    if (address) {
-      const existing = await prisma.user.findUniqueOrThrow({ where: { id: session.userId }, select: { addressId: true } })
-      const result = await upsertAddress(existing.addressId, address)
-      if (!result.ok) return apiErrorJson(result.code, 400, { field: 'address' })
-      data.addressId = result.id
-    }
+    const existing = await prisma.user.findUniqueOrThrow({ where: { id: session.userId }, select: { addressId: true } })
+    const result = await upsertAddress(existing.addressId, address)
+    if (!result.ok) return apiErrorJson(result.code, 400, { field: 'address' })
 
     const user = await prisma.user.update({
       where: { id: session.userId },
-      data,
+      data: { fullName, addressId: result.id },
       select: { id: true, phone: true, fullName: true, email: true, role: true },
     })
 

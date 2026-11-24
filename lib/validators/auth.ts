@@ -87,7 +87,7 @@ export const resetPasswordSchema = z.object({ token: tokenSchema, newPassword: p
 export const profileSchema = z
   .object({
     fullName: z.string().min(2, 'Nama minimal 2 karakter').max(100),
-    address: addressSchema.optional(), // docs/arsitektur-alamat.md §9 — alamat rumah jamaah
+    address: addressSchema, // wajib sejak 2026-11-25 (docs/rencana-profil-jamaah.md P3) — alamat rumah jamaah, docs/arsitektur-alamat.md §9
   })
   .strict()
 

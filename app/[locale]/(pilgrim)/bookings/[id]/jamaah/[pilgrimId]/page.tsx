@@ -7,7 +7,7 @@ import { prisma } from '@/lib/db'
 import { getSession } from '@/lib/auth/session'
 import { safeLocale } from '@/lib/utils/locale'
 import { Badge } from '@/components/ui/badge'
-import { BOOKING_PILGRIM_SAFE_SELECT } from '@/lib/pilgrims/bookingLink'
+import { BOOKING_PILGRIM_SAFE_SELECT, cardIncomplete } from '@/lib/pilgrims/bookingLink'
 import { bookingPilgrimSlots } from '@/lib/pilgrims/slots'
 import { reviewHistoryOf } from '@/lib/pilgrims/review'
 import { cardIdSchema } from '@/lib/pilgrims/http'
@@ -63,11 +63,14 @@ export default async function BookingPilgrimPage({ params }: Props) {
 
   // Pemesan sebagai jamaah: kartu "Saya sendiri" (dibaca saja — kartu ditulis hanya lib/pilgrims/service.ts) + data akun untuk mengisi kartu baru.
   const [account, selfCard] = await Promise.all([
-    prisma.user.findUnique({ where: { id: session.userId }, select: { fullName: true, email: true, phone: true, whatsapp: true, address: { select: { type: true, fullAddress: true, postalCode: true, provinceId: true, regencyId: true, districtId: true, villageId: true, countryCode: true, city: true, stateRegion: true } } } }),
+    prisma.user.findUnique({ where: { id: session.userId }, select: { fullName: true, email: true, phone: true, whatsapp: true, whatsappVerifiedAt: true, verifiedWhatsapp: true, address: { select: { type: true, fullAddress: true, postalCode: true, provinceId: true, regencyId: true, districtId: true, villageId: true, countryCode: true, city: true, stateRegion: true } } } }),
     prisma.savedPilgrim.findFirst({ where: { selfOfUserId: session.userId, archivedAt: null }, select: { id: true } }),
   ])
   const self = {
     cardId: selfCard?.id ?? null,
+    // Produk meminta data jamaah dan kartu pemesan belum lengkap → "Jadikan saya jamaah" membuka popup kelengkapan (docs/rencana-profil-jamaah.md P3).
+    incomplete: !!selfCard && fields.length > 0 && (await cardIncomplete(session.userId, selfCard.id, fields)),
+    whatsappVerified: Boolean(account?.whatsappVerifiedAt && account.verifiedWhatsapp === account.whatsapp),
     usedHere: !!selfCard && booking.pilgrims.some(q => q.savedPilgrimId === selfCard.id),
     fullName: account?.fullName ?? '', email: account?.email ?? '', phone: account?.phone ?? null, whatsapp: account?.whatsapp ?? null,
     address: account?.address ? { ...account.address, postalCode: account.address.postalCode ?? '', city: account.address.city ?? '', stateRegion: account.address.stateRegion ?? '' } : null,

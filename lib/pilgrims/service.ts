@@ -11,7 +11,7 @@ import { paginate, type ListParams, type PageMeta } from '@/lib/table/pagination
 import { escapeLike } from '@/lib/utils/search'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import { nameKeyOf } from './nameKey'
-import { pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
+import { activeFields, pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
 import { validateFieldValues } from '@/lib/manifest/values'
 import { deleteDocumentRowsOfCards, documentKeysOfCards } from '@/lib/documents/purge'
 import { cardDocPrefix, minioDocumentStorage, removeObjectsQuietly } from '@/lib/documents/storage'
@@ -184,8 +184,21 @@ type Resolved = {
 
 type Existing = { nikHash: string | null; nikCipher: string | null; nationality: string; passportKeyHash: string | null; passportCipher: string | null; passportLast4: string | null; passportIssuedAt: Date | null; passportExpiry: Date | null }
 
+/** Kolom identitas yang wajib diisi untuk kartu ini (ADR-0006). */
+type PiiDemand = { nik: boolean; passport: boolean }
+
+/**
+ * ADR-0006: NIK (WNI) dan paspor (WNA) wajib hanya bila kolomnya AKTIF di katalog Data Jamaah; kartu "Saya sendiri" boleh belum lengkap
+ * (diisi bertahap dari Profil) — kelengkapannya dinilai saat dipakai di booking (kolom wajib kosong menahan pengajuan).
+ */
+async function piiDemand(tx: Tx, self: boolean): Promise<PiiDemand> {
+  if (self) return { nik: false, passport: false }
+  const roles = new Set(activeFields(await pilgrimCatalog(tx)).map(f => f.role))
+  return { nik: roles.has('nik'), passport: roles.has('passport_number') }
+}
+
 /** Gabungkan masukan dengan isi lama (undefined = tetap) lalu terapkan aturan kewarganegaraan. Melempar Abort bila tak sah. */
-function resolvePii(input: SavedPilgrimInput, existing: Existing | null): Resolved {
+function resolvePii(input: SavedPilgrimInput, existing: Existing | null, demand: PiiDemand): Resolved {
   let nik: Resolved['nik'] = existing?.nikHash && existing.nikCipher ? { hash: existing.nikHash, cipher: existing.nikCipher } : null
   let newNik: Resolved['newNik'] = null
   if (input.nik === null || input.nik?.trim() === '') nik = null
@@ -218,10 +231,10 @@ function resolvePii(input: SavedPilgrimInput, existing: Existing | null): Resolv
 
   if (input.birthDate > todayInApp()) fail(400, 'birthDateFuture', 'birthDate')
   if (nationality === 'ID') {
-    if (!nik && !isBaby(input.birthDate)) fail(400, 'nikRequired', 'nik')
+    if (demand.nik && !nik && !isBaby(input.birthDate)) fail(400, 'nikRequired', 'nik')
   } else {
     if (nik) fail(400, 'nikOnlyIndonesian', 'nik')
-    if (!passport) fail(400, 'passportRequiredForeign', 'passport.number')
+    if (demand.passport && !passport) fail(400, 'passportRequiredForeign', 'passport.number')
   }
   return { nik, passport, newNik }
 }
@@ -335,7 +348,7 @@ function uniqueViolation(e: unknown): ServiceError | null {
 }
 
 const existingSelect = {
-  id: true, archivedAt: true, identityId: true, addressId: true, selfOfUserId: true, nameKey: true, extraValues: true, birthDate: true, matchConfirmedAt: true, nikCheckRequestedAt: true,
+  id: true, archivedAt: true, identityId: true, addressId: true, selfOfUserId: true, nameKey: true, extraValues: true, gender: true, birthPlace: true, birthDate: true, matchConfirmedAt: true, nikCheckRequestedAt: true,
   nikHash: true, nikCipher: true, nationality: true, passportKeyHash: true, passportCipher: true, passportLast4: true, passportIssuedAt: true, passportExpiry: true,
 } satisfies Prisma.SavedPilgrimSelect
 
@@ -358,7 +371,8 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
         if (!existing) fail(404, 'pilgrimNotFound')
       }
 
-      const resolved = resolvePii(input, existing)
+      const self = input.isSelf ?? (existing?.selfOfUserId != null)
+      const resolved = resolvePii(input, existing, await piiDemand(tx, self))
       const nationality = input.nationality
       const key = identityKeyOf(nationality, resolved)
 
@@ -409,7 +423,10 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
 
       const fullName = input.fullName
       const canonical: Canonical = {
-        fullName, nameKey: nameKeyOf(fullName), gender: input.gender ?? null, birthPlace: input.birthPlace ?? null,
+        fullName, nameKey: nameKeyOf(fullName),
+        // Tidak dikirim = tetap, sama dengan kolom lain (SEC-312): kolom yang disembunyikan katalog tak boleh terkosongkan.
+        gender: input.gender === undefined ? (existing?.gender ?? null) : input.gender,
+        birthPlace: input.birthPlace === undefined ? (existing?.birthPlace ?? null) : input.birthPlace,
         birthDate: dbDateOf(input.birthDate), nationality,
       }
       const identity = wantKey ? await findOrCreateIdentity(tx, wantKey, canonical) : adminLink ? { id: adminLink, created: false } : null
