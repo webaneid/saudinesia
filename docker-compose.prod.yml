@@ -129,9 +129,10 @@ services:
     volumes:
       - redis_data:/data
     <<: *hardening
-    # Entrypoint resmi: root → perbaiki kepemilikan /data → turun ke user `redis`.
+    # Langsung sebagai user `redis` (pemilik /data di image dan volume), tanpa capability. Sebagai root tanpa DAC_OVERRIDE, entrypoint resmi
+    # gagal membaca `appendonlydir` (0700) pada START KEDUA dan seterusnya → Redis mati tiap server reboot (SEC-313; diuji CI "restart").
+    user: redis
     cap_drop: [ALL]
-    cap_add: [CHOWN, SETGID, SETUID]
     networks: [internal]
     mem_limit: 192m
     cpus: 0.25

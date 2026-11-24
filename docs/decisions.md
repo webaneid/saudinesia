@@ -3949,3 +3949,9 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Rationale:** K3 pemilik; tak ada pembaca lagi sejak D1. Ukuran "data hilang" = isian jamaah yang kehilangan satu-satunya definisi/labelnya, bukan sekadar adanya baris — kolom yang tak pernah terisi boleh hilang (K1: hanya data yang direncanakan).
 **Alternatives considered:** berhenti bila ada kolom bebas apa pun (ditolak — dua kolom K1 memang diputuskan dihapus dan akan selalu memblokir); memindahkan kolom bebas ke katalog otomatis (ditolak K1); menghapus juga nilai K1 dari snapshot (ditolak — snapshot booking tidak diubah).
 **Security check:** skill security-review atas berkas fase ini (mayoritas penghapusan) — 0 Critical/High/Medium/Low. Permukaan berkurang: satu rute publik tanpa sesi hilang; body visa tetap `.strict()` sehingga `manifestFields` → 400 (diuji); pesan galat migrasi hanya memuat kunci/label/tipe kolom, bukan nilai jamaah; tidak ada SQL dari masukan. `bun audit` critical bersih.
+
+## 2026-11-25 — Redis produksi berjalan langsung sebagai user `redis` (SEC-313)
+**Decision:** Layanan `redis` memakai `user: redis` dengan `cap_drop: [ALL]` tanpa `cap_add`; CI `docker` menambah langkah restart semua layanan.
+**Rationale:** Entrypoint root tanpa DAC_OVERRIDE tak bisa membaca `appendonlydir` (0700) saat start ulang, jadi Redis mati sesudah server reboot. Volume lama sudah milik uid redis, jadi tak perlu pindah kepemilikan.
+**Alternatives considered:** menambah `DAC_OVERRIDE`/`DAC_READ_SEARCH` (ditolak — hak lebih besar untuk tujuan yang sama); mematikan AOF (ditolak — tidak menyentuh sebabnya dan menghapus hitungan tiap restart).
+**Security check:** hak kontainer berkurang (bukan root, tanpa capability); tanpa rahasia, port, atau dependency baru.
