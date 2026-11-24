@@ -31,8 +31,8 @@ type Props = {
   idPrefix?: string
 }
 
-// Render generik berdasarkan konfigurasi ManifestFieldRequirement — admin atur field apa saja
-// tanpa perubahan kode (docs/arsitektur-manifest.md §1/§5). Field fieldType='phone' TIDAK
+// Render generik berdasarkan katalog Data Jamaah (`pilgrim_fields`) — admin atur kolom apa saja
+// tanpa perubahan kode (docs/arsitektur-data-jamaah.md §3.1). Field fieldType='phone' TIDAK
 // memakai ContactPicker (itu widget majemuk khusus pasangan HP+WA dengan checkbox sinkron) —
 // di sini tiap field phone berdiri sendiri dengan kode negara + nomor, sesuai render generik.
 export function ManifestFieldsForm({ fields, values, onChange, errors, idPrefix = 'mf' }: Props) {

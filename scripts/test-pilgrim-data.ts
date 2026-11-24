@@ -7,7 +7,7 @@ import assert from 'node:assert/strict'
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { prisma } from '@/lib/db'
-import { MANIFEST_FIELD_TYPES } from '@/lib/manifest/fieldDefs'
+import { fieldKeyFromLabel, MANIFEST_FIELD_TYPES } from '@/lib/manifest/fieldDefs'
 import { MANIFEST_ROLES } from '@/lib/manifest/roles'
 import { PILGRIM_DATA_OWNERS, PILGRIM_DATA_OWNER_TYPES } from '@/lib/pilgrim-data/owners'
 import { activeFields, displayFields, pilgrimCatalog, valueByRole } from '@/lib/pilgrim-data/catalog'
@@ -76,12 +76,23 @@ await t('penulis tunggal: pilgrim_fields/product_pilgrim_data ditulis hanya lib/
   for (const c of CLEANERS) assert.match(readFileSync(join(root, c), 'utf8'), /productPilgrimData\.deleteMany/, `${c}: pembersih saklar hilang`)
 })
 
-await t('kode lama dihapus: getRequirements tak ada lagi; pembaca kolom jamaah tidak memakai set core/visa', () => {
-  assert.throws(() => statSync(join(root, 'lib/manifest/getRequirements.ts')))
-  for (const f of ['lib/pilgrims/review.ts', 'lib/pilgrims/slots.ts', 'lib/pilgrims/bookingLink.ts']) {
-    const src = readFileSync(join(root, f), 'utf8')
-    assert.ok(!/CORE_MANIFEST|manifestFieldRequirement|getRequirements/.test(src), `${f} masih memakai kolom per-produk lama`)
+await t('D5: kolom per produk lama sudah dikontraksi — tabel, kode, dan rute tak ada lagi di mana pun', async () => {
+  for (const f of ['lib/manifest/getRequirements.ts', 'lib/manifest/fields.ts', 'lib/manifest/constants.ts', 'lib/validators/manifest.ts', 'components/admin/manifest', 'app/api/v1/manifest'])
+    assert.throws(() => statSync(join(root, f)), `${f} harus sudah dihapus`)
+  const files: string[] = [join(root, 'prisma/schema.prisma'), join(root, 'prisma/seed.ts')]
+  const walk = (dir: string) => {
+    for (const name of readdirSync(dir)) {
+      const p = join(dir, name)
+      if (statSync(p).isDirectory()) walk(p)
+      else if (/\.(ts|tsx)$/.test(name)) files.push(p)
+    }
   }
+  for (const d of ['app', 'lib', 'components']) walk(join(root, d))
+  const old = /manifestFieldRequirement|manifest_field_requirements|CORE_MANIFEST|ManifestFieldsEditor|writeManifestFields|manifestFieldListSchema/i
+  assert.deepEqual(files.filter(f => old.test(readFileSync(f, 'utf8'))).map(f => relative(root, f)), [])
+  const [row] = await prisma.$queryRaw<{ t: string | null }[]>`SELECT to_regclass('public.manifest_field_requirements')::text AS t`
+  assert.equal(row!.t, null, 'tabel lama harus sudah dihapus migrasi')
+  assert.equal(fieldKeyFromLabel('٣٤'), 'kolom'); assert.equal(fieldKeyFromLabel('Golongan Darah'), 'golonganDarah')
 })
 
 // ── DB: katalog bawaan + CHECK ───────────────────────────────────────────────────────────────────────────────────────

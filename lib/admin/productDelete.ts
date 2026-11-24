@@ -39,7 +39,6 @@ export async function dropPolymorphic(tx: Tx, productType: string, ids: string[]
   await tx.productCost.deleteMany({ where: scope })
   await tx.preferredVendor.deleteMany({ where: scope })
   await deleteRequirementsOf(tx, productType, ids)
-  await tx.manifestFieldRequirement.deleteMany({ where: scope })
   await tx.productPilgrimData.deleteMany({ where: scope }) // saklar data jamaah (docs/arsitektur-data-jamaah.md §3.2)
   await tx.pricePoint.deleteMany({ where: { ownerType: productType, ownerId: { in: ids } } }) // titik harga (mesin harga) milik produk ini
 }

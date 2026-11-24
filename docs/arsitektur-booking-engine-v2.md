@@ -81,7 +81,7 @@ Mengikuti `bantuanku/docs/arsitektur-buku-kas.md` §3 disesuaikan: `CashAccount`
 
 ### 3.6 Pelanggan, jamaah, pengaturan
 - ~~`User.allowVisaWithoutBundle Boolean @default(false)` (D5)~~ — dihapus Visa V3 (2026-11-04; migrasi `20261118090000_visa_required_components_v3`).
-- Jamaah: `BookingPilgrim` ada (manifes `fieldValues`); indikator kelengkapan dihitung dari `ManifestFieldRequirement` produk terkait; admin atau pelanggan (tautan) mengisi. Konfirmasi booking diperingatkan bila data belum lengkap (bukan diblokir — D2 prinsip 2).
+- Jamaah: `BookingPilgrim` ada (manifes `fieldValues`); indikator kelengkapan dihitung dari kolom katalog Data Jamaah yang diminta (`pilgrimFieldSets`, `docs/arsitektur-data-jamaah.md`); admin atau pelanggan (tautan) mengisi. Konfirmasi booking diperingatkan bila data belum lengkap (bukan diblokir — D2 prinsip 2).
 - **Pengaturan Invoice** (satu halaman, §6): model `InvoiceSettings` (satu baris, kunci `'global'`), `BankAccount[]`, `QrisAccount[]`, `TaxRule[]`, urutan nomor `InvoiceSequence`.
 
 ## 4. Aturan

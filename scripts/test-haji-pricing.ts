@@ -138,19 +138,18 @@ await t('kuota habis = QuotaExhaustedError (→ 409, bukan 422) dan transaksi ro
 
 console.log('== CRUD: hapus aman ==')
 
-await t('belum pernah dipesan → HAPUS SUNGGUHAN beserta komponen/vendor pilihan/syarat dokumen/field manifest miliknya; baris milik produk lain tak tersentuh', async () => {
+await t('belum pernah dipesan → HAPUS SUNGGUHAN beserta komponen/vendor pilihan/syarat dokumen/saklar data jamaah miliknya; baris milik produk lain tak tersentuh', async () => {
   const h = await haji(), other = await haji()
   const mine = { productType: 'haji', productId: h.id }, theirs = { productType: 'haji', productId: other.id }
   for (const scope of [mine, theirs]) {
     await prisma.productCost.create({ data: { ...scope, vendorId: vendor.id, costComponent: 'K', currency: 'IDR', costTiers: flat(1000) } })
     await prisma.preferredVendor.create({ data: { ...scope, costComponent: 'K', vendorId: vendor.id } })
     await prisma.documentRequirement.create({ data: { ...scope, documentTypeId: (await prisma.documentType.findUniqueOrThrow({ where: { key: 'passport' } })).id, label: 'Paspor' } })
-    await prisma.manifestFieldRequirement.create({ data: { ...scope, fieldKey: `f_${randomUUID().slice(0, 6)}`, label: 'F', fieldType: 'text' } })
     await prisma.productPilgrimData.create({ data: { ...scope, enabled: false } })
   }
   assert.deepEqual(await deleteOrDeactivateHaji(h.id), { found: true, deleted: true })
   assert.equal(await prisma.hajiProduct.count({ where: { id: h.id } }), 0)
-  for (const m of ['productCost', 'preferredVendor', 'documentRequirement', 'manifestFieldRequirement', 'productPilgrimData'] as const) {
+  for (const m of ['productCost', 'preferredVendor', 'documentRequirement', 'productPilgrimData'] as const) {
     assert.equal(await (prisma[m] as unknown as { count: (a: unknown) => Promise<number> }).count({ where: mine }), 0, `${m} milik produk harus ikut terhapus`)
     assert.equal(await (prisma[m] as unknown as { count: (a: unknown) => Promise<number> }).count({ where: theirs }), 1, `${m} milik produk lain harus tetap`)
   }
@@ -235,7 +234,6 @@ await t('UI Haji (Fase 4): halaman edit memakai panel Komponen Biaya Haji, punya
 await prisma.pricePoint.deleteMany({ where: { ownerType: 'haji', ownerId: { in: created } } })
 await prisma.productCost.deleteMany({ where: { productType: 'haji', productId: { in: created } } })
 await prisma.documentRequirement.deleteMany({ where: { productType: 'haji', productId: { in: created } } }) // syarat/field milik produk pembanding (uji hapus aman)
-await prisma.manifestFieldRequirement.deleteMany({ where: { productType: 'haji', productId: { in: created } } })
 await prisma.productPilgrimData.deleteMany({ where: { productType: 'haji', productId: { in: created } } })
 await prisma.preferredVendor.deleteMany({ where: { vendorId: vendor.id } }) // FK Restrict (ADR-0003): vendor pilihan harus hilang sebelum vendor
 await prisma.hajiProduct.deleteMany({ where: { id: { in: created } } })
