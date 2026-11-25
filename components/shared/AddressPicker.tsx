@@ -1,11 +1,13 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { AutocompleteSelect, type AutocompleteOption } from './AutocompleteSelect'
+import { useMemo } from 'react'
+import { AutocompleteSelect } from './AutocompleteSelect'
+import { useWilayah } from './useWilayah'
+import { PROVINCE_ALIASES } from '@/lib/address/aliases'
 import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
-import { ExternalLink, MapPin, Search } from 'lucide-react'
+import { ExternalLink, MapPin, RefreshCw, Search } from 'lucide-react'
 import { mapsSearchUrl, parseMapsUrl } from '@/lib/address/maps'
 import { useTranslations } from 'next-intl'
 
@@ -30,9 +32,6 @@ export const EMPTY_ADDRESS: AddressValue = {
   countryCode: null, city: '', stateRegion: '',
 }
 
-type WilayahRow = { id: string; name: string }
-
-
 type Props = {
   value: AddressValue
   onChange: (value: AddressValue) => void
@@ -40,62 +39,22 @@ type Props = {
   withMap?: boolean
   /** Kata kunci tombol "Cari di Google Maps" (mis. nama hotel + kota); bawaan = alamat lengkap. */
   mapsQuery?: string
+  /** Sudah ada alamat tersimpan: mengosongkan Alamat Lengkap = menghapusnya (`addressForBody`), dan pengguna diberi tahu. */
+  saved?: boolean
 }
 
 // Komponen alamat reusable — 2 tab (Indonesia/Luar Negeri), combobox berjenjang untuk wilayah
 // resmi. docs/arsitektur-alamat.md §3.1-§3.2. Murni controlled form (tidak memanggil POST/PUT
 // /api/v1/address sendiri) — form pemanggil yang memutuskan kapan menyimpan.
-export function AddressPicker({ value, onChange, withMap = false, mapsQuery }: Props) {
+export function AddressPicker({ value, onChange, withMap = false, mapsQuery, saved = false }: Props) {
   const t = useTranslations('shared.address')
-  const [provinces, setProvinces] = useState<AutocompleteOption[]>([])
-  const [regencies, setRegencies] = useState<AutocompleteOption[]>([])
-  const [districts, setDistricts] = useState<AutocompleteOption[]>([])
-  const [villages, setVillages] = useState<AutocompleteOption[]>([])
-  const [villagesLoading, setVillagesLoading] = useState(false)
-  const villageSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    fetch('/api/v1/address/wilayah/provinces')
-      .then(r => r.json())
-      .then(j => setProvinces((j.data as WilayahRow[] ?? []).map(p => ({ id: p.id, label: p.name }))))
-  }, [])
-
-  useEffect(() => {
-    if (!value.provinceId) { setRegencies([]); return }
-    fetch(`/api/v1/address/wilayah/regencies?provinceId=${value.provinceId}`)
-      .then(r => r.json())
-      .then(j => setRegencies((j.data as WilayahRow[] ?? []).map(r => ({ id: r.id, label: r.name }))))
-  }, [value.provinceId])
-
-  useEffect(() => {
-    if (!value.regencyId) { setDistricts([]); return }
-    fetch(`/api/v1/address/wilayah/districts?regencyId=${value.regencyId}`)
-      .then(r => r.json())
-      .then(j => setDistricts((j.data as WilayahRow[] ?? []).map(d => ({ id: d.id, label: d.name }))))
-  }, [value.regencyId])
-
-  const loadVillages = useCallback((districtId: string, q?: string) => {
-    setVillagesLoading(true)
-    const params = new URLSearchParams({ districtId, ...(q ? { q } : {}) })
-    fetch(`/api/v1/address/wilayah/villages?${params}`)
-      .then(r => r.json())
-      .then(j => setVillages((j.data as WilayahRow[] ?? []).map(v => ({ id: v.id, label: v.name }))))
-      .finally(() => setVillagesLoading(false))
-  }, [])
-
-  useEffect(() => {
-    if (!value.districtId) { setVillages([]); return }
-    loadVillages(value.districtId)
-  }, [value.districtId, loadVillages])
-
-  // Kecamatan tertentu bisa punya banyak desa (endpoint dibatasi 200 baris + dukung `q`) —
-  // pencarian didorong ke server, bukan filter lokal (docs/arsitektur-alamat.md, pola
-  // AutocompleteSelect `onSearch`, komponen reusable ke mana pun butuh mode ini).
-  function handleVillageSearch(q: string) {
-    if (!value.districtId) return
-    if (villageSearchTimer.current) clearTimeout(villageSearchTimer.current)
-    villageSearchTimer.current = setTimeout(() => loadVillages(value.districtId!, q), 300)
-  }
+  const provinces = useWilayah('provinces')
+  const regencies = useWilayah(value.provinceId ? `regencies?provinceId=${encodeURIComponent(value.provinceId)}` : null)
+  const districts = useWilayah(value.regencyId ? `districts?regencyId=${encodeURIComponent(value.regencyId)}` : null)
+  // Desa dicari lokal: kecamatan terbesar 108 desa (di bawah batas 200 endpoint); pencarian server membuat pilihan terpilih hilang dari daftar.
+  const villages = useWilayah(value.districtId ? `villages?districtId=${encodeURIComponent(value.districtId)}` : null)
+  const provinceOptions = useMemo(() => provinces.options.map(o => ({ ...o, keywords: PROVINCE_ALIASES[o.id] })), [provinces.options])
+  const failed = [provinces, regencies, districts, villages].filter(l => l.status === 'failed')
 
   function set(patch: Partial<AddressValue>) {
     onChange({ ...value, ...patch })
@@ -132,25 +91,33 @@ export function AddressPicker({ value, onChange, withMap = false, mapsQuery }: P
         <div className="grid md:grid-cols-2 gap-2">
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('province')}</p>
-            <AutocompleteSelect options={provinces} value={value.provinceId} placeholder={t('pickProvince')}
+            <AutocompleteSelect options={provinceOptions} loading={provinces.status === 'loading'} value={value.provinceId} placeholder={t('pickProvince')}
               onChange={id => set({ provinceId: id, regencyId: null, districtId: null, villageId: null })} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('regency')}</p>
-            <AutocompleteSelect options={regencies} value={value.regencyId} placeholder={t('pickRegency')} disabled={!value.provinceId}
+            <AutocompleteSelect options={regencies.options} loading={regencies.status === 'loading'} value={value.regencyId} placeholder={t('pickRegency')} disabled={!value.provinceId}
               onChange={id => set({ regencyId: id, districtId: null, villageId: null })} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('district')}</p>
-            <AutocompleteSelect options={districts} value={value.districtId} placeholder={t('pickDistrict')} disabled={!value.regencyId}
+            <AutocompleteSelect options={districts.options} loading={districts.status === 'loading'} value={value.districtId} placeholder={t('pickDistrict')} disabled={!value.regencyId}
               onChange={id => set({ districtId: id, villageId: null })} />
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1">{t('village')}</p>
-            <AutocompleteSelect options={villages} value={value.villageId} placeholder={t('pickVillage')} disabled={!value.districtId}
-              loading={villagesLoading} onSearch={handleVillageSearch}
+            <AutocompleteSelect options={villages.options} value={value.villageId} placeholder={t('pickVillage')} disabled={!value.districtId}
+              loading={villages.status === 'loading'}
               onChange={id => set({ villageId: id })} />
           </div>
+          {failed.length > 0 && (
+            <div role="alert" className="flex flex-wrap items-center gap-2 text-xs text-destructive md:col-span-2">
+              <span>{t('loadFailed')}</span>
+              <button type="button" onClick={() => failed.forEach(l => l.retry())} className="inline-flex items-center gap-1 font-medium underline underline-offset-2">
+                <RefreshCw className="h-3 w-3" aria-hidden /> {t('retry')}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div className="grid md:grid-cols-2 gap-2">
@@ -174,6 +141,7 @@ export function AddressPicker({ value, onChange, withMap = false, mapsQuery }: P
         <p className="text-xs text-muted-foreground mb-1">{t('full')}</p>
         <Textarea rows={2} value={value.fullAddress} onChange={e => set({ fullAddress: e.target.value })}
           placeholder={t('fullPlaceholder')} />
+        {saved && !value.fullAddress.trim() && <p className="mt-1 text-xs text-muted-foreground">{t('cleared')}</p>}
       </div>
       <div>
         <p className="text-xs text-muted-foreground mb-1">{t('postal')}</p>

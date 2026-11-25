@@ -120,6 +120,13 @@ await t('PUT: ubah nama → nameKey ikut; ubah kategori (set); alamat diperbarui
   let r = await put({ name: `${tag} Ubah Baru`, categoryIds: [BUS, OTHER], address: { type: 'international', fullAddress: 'Alamat 2', countryCode: 'SA', city: 'Jeddah' } })
   assert.equal(r.status, 200, JSON.stringify(r.body)); assert.deepEqual(r.body.data.categories.map((c: any) => c.slug).sort(), ['other', 'transport']); assert.equal(r.body.data.address.city, 'Jeddah')
   assert.equal((await rawVendor(a.id))!.nameKey, `${tag} ubah baru`); assert.equal(await prisma.address.count(), before, 'alamat diperbarui, bukan dibuat ganda')
+  const addrId = (await rawVendor(a.id))!.addressId!
+  r = await put({ address: { type: 'domestic', fullAddress: '', provinceId: '31' } }); assert.equal(r.status, 400); assert.equal(r.body.error, 'Alamat lengkap wajib diisi')
+  r = await put({ notes: 'x' }); assert.equal((await rawVendor(a.id))!.addressId, addrId, 'tak dikirim = tetap')
+  r = await put({ address: null }); assert.equal(r.status, 200, JSON.stringify(r.body)); assert.equal(r.body.data.address, null, 'null = hapus')
+  assert.equal(await prisma.address.count({ where: { id: addrId } }), 0, 'baris alamat tak yatim')
+  r = await put({ address: null }); assert.equal(r.status, 200, 'hapus dua kali aman')
+  r = await put({ address: { type: 'international', fullAddress: 'Alamat 3', countryCode: 'SA' } }); assert.equal(r.status, 200); assert.equal(r.body.data.address.fullAddress, 'Alamat 3')
   const other = await mk('Penabrak')
   r = await put({ name: `${tag} ubah baru` }, other.id); assert.equal(r.status, 409)
   assert.equal((await put({})).status, 400); assert.equal((await put({ systemKey: 'x' })).status, 400); assert.equal((await put({ categoryIds: [] })).status, 400); assert.equal((await put({ nameKey: 'x' })).status, 400)

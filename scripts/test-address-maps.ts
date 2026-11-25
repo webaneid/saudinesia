@@ -70,7 +70,7 @@ await t('PENJAGA SUMBER: hanya route hotel memakai addressWithMapSchema; Address
   const users = ['app/api/v1/auth/profile/route.ts', 'lib/validators/vendor.ts', 'lib/validators/invoiceSettings.ts', 'lib/validators/auth.ts']
   for (const f of users) assert.doesNotMatch(read(f), /addressWithMapSchema/, `${f}: alamat bukan hotel tak boleh menyimpan lokasi`)
   const hotelRoute = read('app/api/v1/admin/products/hotels/[id]/route.ts')
-  assert.match(hotelRoute, /address:\s+addressWithMapSchema\.optional\(\),[^\n]*\n\}\)\.strict\(\)/, 'route hotel: skema ubah .strict() (SEC-162)')
+  assert.match(hotelRoute, /address:\s+addressWithMapSchema\.nullish\(\),[^\n]*\n\}\)\.strict\(\)/, 'route hotel: skema ubah .strict() (SEC-162)')
   assert.match(read('app/[locale]/admin/(protected)/products/hotels/[id]/page.tsx'), /<AddressPicker [^>]*withMap/)
   const pub = read('app/[locale]/(public)/hotels/[id]/page.tsx')
   assert.match(pub, /parseMapsUrl\(hotelRaw\.address\.mapsUrl\)/)

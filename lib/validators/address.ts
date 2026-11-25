@@ -5,7 +5,7 @@ import { MAPS_URL_MAX, parseMapsUrl } from '@/lib/address/maps'
 // provinceId..villageId, internasional pakai countryCode/city/stateRegion).
 const addressFields = z.object({
   type:        z.enum(['domestic', 'international']),
-  fullAddress: z.string().min(1, 'Alamat lengkap wajib diisi').max(500, 'Alamat terlalu panjang'),
+  fullAddress: z.string().trim().min(1, 'Alamat lengkap wajib diisi').max(500, 'Alamat terlalu panjang'),
   postalCode:  z.string().max(20, 'Kode pos terlalu panjang').nullish(),
 
   // AddressPicker (form terkontrol) selalu mengirim null untuk field yang belum dipilih,

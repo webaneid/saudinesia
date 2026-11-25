@@ -62,7 +62,8 @@ COPY package.json ./
 COPY prisma ./prisma
 USER bun
 # Sesudah migrasi: peran aplikasi `saudinesia_app` (DML saja) dibuat/diperbarui — web tak pernah memakai peran pemilik (SEC-303).
-CMD ["sh", "-c", "bunx prisma migrate deploy && bun prisma/apply-app-role.ts"]
+# Lalu data wilayah Indonesia (docs/arsitektur-alamat.md §10): idempoten, gagal = deploy berhenti — tanpa itu alamat Indonesia tak bisa dipilih.
+CMD ["sh", "-c", "bunx prisma migrate deploy && bun prisma/apply-app-role.ts && bun prisma/apply-wilayah.ts"]
 
 # ── Production runtime ──────────────────────────────────────────
 FROM base AS runner

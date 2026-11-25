@@ -848,7 +848,10 @@
       "mapsLink": "Google Maps link",
       "mapsSearch": "Search on Google Maps",
       "mapsOpen": "Open link",
-      "mapsCoords": "Coordinates {lat}, {lng}"
+      "mapsCoords": "Coordinates {lat}, {lng}",
+      "loadFailed": "The list of regions could not be loaded.",
+      "retry": "Try again",
+      "cleared": "The full address is empty — the saved address will be removed when you save."
     },
     "pilgrims": {
       "fields": {
@@ -876,7 +879,6 @@
         "contact": "Contact",
         "email": "Email",
         "address": "Address",
-        "addressCleared": "The full address is empty — the saved address will be removed when you save.",
         "extra": "Additional details",
         "extraHint": "Fields marked * are needed for orders that ask for pilgrim details.",
         "isSelf": "This is my own data (account owner)",

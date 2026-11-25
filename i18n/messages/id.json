@@ -848,7 +848,10 @@
       "mapsLink": "Tautan Google Maps",
       "mapsSearch": "Cari di Google Maps",
       "mapsOpen": "Buka tautan",
-      "mapsCoords": "Koordinat {lat}, {lng}"
+      "mapsCoords": "Koordinat {lat}, {lng}",
+      "loadFailed": "Daftar wilayah gagal dimuat.",
+      "retry": "Coba lagi",
+      "cleared": "Alamat lengkap dikosongkan — alamat tersimpan akan dihapus saat disimpan."
     },
     "pilgrims": {
       "fields": {
@@ -876,7 +879,6 @@
         "contact": "Kontak",
         "email": "Email",
         "address": "Alamat",
-        "addressCleared": "Alamat lengkap dikosongkan — alamat tersimpan akan dihapus saat disimpan.",
         "extra": "Data tambahan",
         "extraHint": "Kolom bertanda * dibutuhkan untuk pesanan yang meminta data jamaah.",
         "isSelf": "Ini data saya sendiri (pemilik akun)",

@@ -64,7 +64,7 @@ export function VendorForm({ vendor, categories, initialName, initialCategoryIds
       const res = await fetch(vendor ? `/api/v1/admin/system/vendors/${vendor.id}` : '/api/v1/admin/system/vendors', {
         method: vendor ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formStateToBody(form)),
+        body: JSON.stringify(formStateToBody(form, !!vendor?.address)),
       })
       const json = await res.json().catch(() => null)
       if (!res.ok || !json?.success) {
@@ -134,7 +134,7 @@ export function VendorForm({ vendor, categories, initialName, initialCategoryIds
 
       <section className="grid gap-3 rounded-2xl border border-admin-line p-4">
         <h3 className="m-0 text-sm font-bold text-admin-ink">Alamat</h3>
-        <AddressPicker value={form.address} onChange={v => set('address', v)} />
+        <AddressPicker value={form.address} onChange={v => set('address', v)} saved={!!vendor?.address} />
       </section>
 
       <FormField label="Catatan" htmlFor="vendor-notes">

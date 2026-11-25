@@ -149,6 +149,8 @@ await t('formStateToBody: kode negara hanya dikirim bila nomornya ada; alamat ko
   assert.equal(filled.phoneCountryCode, 'SA')
   assert.equal(filled.whatsappCountryCode, null, 'WhatsApp kosong tidak boleh membawa kode negara')
   assert.ok('address' in filled)
+  assert.equal(formStateToBody({ ...EMPTY_VENDOR_FORM, name: 'H', countryCode: 'ID', categoryIds: ['c1'] }, true).address, null, 'alamat tersimpan dikosongkan = hapus')
+  assert.ok('address' in formStateToBody({ ...EMPTY_VENDOR_FORM, name: 'H', countryCode: 'ID', categoryIds: ['c1'], address: { ...EMPTY_VENDOR_FORM.address, provinceId: '31' } }), 'isian sebagian tetap dikirim, server yang menolak')
 })
 
 await t('vendorToFormState: vendor tanpa kategori tidak membuat formulir rusak', () => {

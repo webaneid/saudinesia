@@ -5,6 +5,7 @@ import type { SavedPilgrimView } from '@/lib/pilgrims/service'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import type { ManifestRole } from '@/lib/manifest/roles'
 import { isEmptyValue } from '@/lib/manifest/values'
+import { addressForBody } from '@/lib/address/input'
 import { isBaby } from '@/lib/pilgrims/age'
 import { isCalendarDate } from '@/lib/time'
 import type { CardField } from './cardFields'
@@ -75,7 +76,7 @@ export function bodyFromForm(v: SavedPilgrimFormValue): SavedPilgrimInput {
     : v.passportMask && !v.clearPassport ? dates
     : dates.issuedAt || dates.expiry ? dates // nomor wajib — server menjawab "Nomor paspor wajib diisi"
     : null
-  const address = v.address.fullAddress.trim() ? v.address : v.hadAddress ? null : undefined
+  const address = addressForBody(v.address, v.hadAddress)
   const phone = e164FromCountry(v.contact.phoneCountryCode, v.contact.phone) || null
   const whatsapp = e164FromCountry(v.contact.whatsappCountryCode, v.contact.whatsapp) || null
   return {

@@ -6,6 +6,7 @@ import { UserPlus } from 'lucide-react'
 import { CreatePage } from '@/components/admin/shell/CreatePage'
 import { useCreateEntity } from '@/components/admin/shell/useCreateEntity'
 import { ContactPicker, EMPTY_CONTACT, type ContactValue } from '@/components/shared/ContactPicker'
+import { addressForBody } from '@/lib/address/input'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { e164FromCountry } from '@/lib/utils/phone'
 import { adminHref } from '@/lib/admin/href'
@@ -28,10 +29,11 @@ export default function NewCustomerPage() {
   function onSubmit() {
     const phone = e164FromCountry(contact.phoneCountryCode, contact.phone)
     const whatsapp = e164FromCountry(contact.whatsappCountryCode, contact.whatsapp)
+    const addressBody = addressForBody(address, false)
     return submit({
       fullName: fullName.trim(), email: email.trim(), sendInvite,
       ...(phone ? { phone } : {}), ...(whatsapp ? { whatsapp } : {}),
-      ...(address.fullAddress.trim() ? { address } : {}),
+      ...(addressBody ? { address: addressBody } : {}),
     })
   }
 

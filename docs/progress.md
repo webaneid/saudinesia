@@ -1016,4 +1016,9 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 **Data dan dokumen jamaah sinkron dari produk ke halaman jamaah (`docs/arsitektur-data-jamaah.md` §14, 2026-11-25)**
 - [x] Delapan ketidaksinkronan ditutup: jenis nonaktif, popup unggah, kartu → booking, NIK WNA/bayi, petunjuk syarat, syarat paket + visa, buka ulang saat syarat bertambah, isian petugas aman
 - [x] Kewajiban NIK/paspor di kartu mengikuti tanda Wajib di Data Jamaah (§14.4)
+- [x] Rilis produksi 2026-11-25 (`sha-ff6312e56e05`)
+
+**Data wilayah ikut deploy + audit formulir alamat (`docs/arsitektur-alamat.md` §10, 2026-11-25)**
+- [x] Data 38/514/7.285/83.762 wilayah diisi image `migrate` setiap deploy, gagal-tertutup; smoke CI memeriksa 38 provinsi
+- [x] Formulir alamat: pesan + "Coba lagi" bila daftar gagal, singkatan provinsi, isian sebagian tidak dibuang diam-diam, alamat vendor/hotel bisa dihapus
 - [ ] Rilis produksi

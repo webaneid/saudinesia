@@ -11,6 +11,7 @@ import { useUnsavedGuard } from '@/components/admin/editor/useUnsavedGuard'
 import { MediaField } from '@/components/admin/media/MediaField'
 import { Switch } from '@/components/admin/ui/Switch'
 import { FormField } from '@/components/admin/ui/FormField'
+import { addressForBody } from '@/lib/address/input'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
@@ -49,7 +50,7 @@ function toState(d: InvoiceSettingsDto): State {
 
 const num = (s: string): number => (s.trim() === '' ? Number.NaN : Number(s.replace(',', '.')))
 function toBody(f: Form, address: AddressValue, hadAddress: boolean, expectedUpdatedAt: string) {
-  const hasAddress = address.fullAddress.trim() !== ''
+  const addressBody = addressForBody(address, hadAddress)
   return {
     numberPrefix: f.numberPrefix, numberPattern: f.numberPattern, numberPadding: num(f.numberPadding), numberResetYearly: f.numberResetYearly,
     appTimezone: f.appTimezone, defaultDueDays: num(f.defaultDueDays), expireDaysBeforeReference: num(f.expireDaysBeforeReference), minimumFirstPaymentPercent: num(f.minimumFirstPaymentPercent),
@@ -57,7 +58,7 @@ function toBody(f: Form, address: AddressValue, hadAddress: boolean, expectedUpd
     methodBankTransfer: f.methodBankTransfer, methodQris: f.methodQris, methodIpaymu: f.methodIpaymu, methodXendit: f.methodXendit, gatewaySandbox: f.gatewaySandbox,
     companyName: f.companyName, companyTaxId: f.companyTaxId, companyPhone: f.companyPhone, companyEmail: f.companyEmail, companyWebsite: f.companyWebsite,
     termsDoc: f.termsDoc, footerNoteDoc: f.footerNoteDoc, expectedUpdatedAt,
-    ...(hasAddress ? { address } : hadAddress ? { address: null } : {}),
+    ...(addressBody !== undefined ? { address: addressBody } : {}),
   }
 }
 
@@ -193,7 +194,7 @@ export function InvoiceSettingsEditor({ ipaymuKeys, sandboxAllowed }: { ipaymuKe
               <FormField label="Email" htmlFor="co-email"><input id="co-email" className={inp} type="email" maxLength={160} value={form.companyEmail} onChange={e => patch({ companyEmail: e.target.value })} /></FormField>
               <FormField label="Situs web" htmlFor="co-web"><input id="co-web" className={inp} placeholder="https://" maxLength={200} value={form.companyWebsite} onChange={e => patch({ companyWebsite: e.target.value })} /></FormField>
             </div>
-            <div className="border-t border-admin-line pt-3"><p className="mb-2 text-sm font-semibold text-admin-ink">Alamat</p><AddressPicker value={address} onChange={a => { setSaved(false); setAddress(a) }} /></div>
+            <div className="border-t border-admin-line pt-3"><p className="mb-2 text-sm font-semibold text-admin-ink">Alamat</p><AddressPicker value={address} saved={loaded?.hadAddress ?? false} onChange={a => { setSaved(false); setAddress(a) }} /></div>
             <div className="border-t border-admin-line pt-3"><MediaField productType="invoice_settings" productId="global" label="Logo perusahaan" /></div>
           </MetaBox>
 

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { hasAddressInput } from '@/lib/address/input'
 import { addressSchema } from '@/lib/validators/address'
 
 // Nilai field manifest `fieldType='address'` (docs/arsitektur-jamaah.md §5.5 butir 3, D1): objek alamat BEKU di snapshot jamaah booking — kode wilayah
@@ -23,9 +24,9 @@ export type ManifestAddressValue = {
 /** Bentuk masukan dari formulir: alamat (aturan `addressSchema`) + `text` lama yang DIBUANG (diturunkan ulang di server). */
 export const manifestAddressInputSchema = addressSchema
 
-/** Kosong = belum ada baris jalan (nilai bawaan `AddressPicker`). */
+/** Kosong = objek alamat tanpa isian apa pun (nilai bawaan `AddressPicker`). Isian sebagian TIDAK kosong: ditolak, bukan dibuang diam-diam. */
 export const isEmptyAddress = (v: unknown): boolean =>
-  !!v && typeof v === 'object' && 'fullAddress' in v && !(v as { fullAddress?: unknown }).fullAddress
+  !!v && typeof v === 'object' && 'fullAddress' in v && !hasAddressInput(toPickerAddress(v))
 
 /** Objek snapshot → nilai `AddressPicker` (string kosong untuk yang belum diisi). */
 export function toPickerAddress(v: unknown) {
