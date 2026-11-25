@@ -81,7 +81,7 @@ async function nameConflict(name: string, countryCode: string, exceptId?: string
 
 const isUniqueViolation = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002'
 
-async function prepareAddress(input: AddressInput | undefined): Promise<{ ok: true; data: Prisma.AddressCreateInput | null } | ServiceError> {
+async function prepareAddress(input: AddressInput | null | undefined): Promise<{ ok: true; data: Prisma.AddressCreateInput | null } | ServiceError> {
   if (!input) return { ok: true, data: null }
   const prepared = await prepareAddressData(input)
   return prepared.ok ? { ok: true, data: prepared.data } : fail(400, prepared.message)
@@ -126,16 +126,19 @@ export async function updateVendor(id: string, input: VendorUpdate): Promise<{ o
     const vendor = await prisma.$transaction(async (tx) => {
       let addressId = existing.addressId
       if (addr.data) addressId = existing.addressId ? (await tx.address.update({ where: { id: existing.addressId }, data: addr.data })).id : (await tx.address.create({ data: addr.data })).id
-      return tx.vendor.update({
+      const dropAddress = address === null && existing.addressId
+      const updated = await tx.vendor.update({
         where: { id },
         data: {
           ...fields,
           ...(fields.name !== undefined ? { nameKey: vendorNameKey(fields.name) } : {}),
-          ...(addr.data ? { addressId } : {}),
+          ...(addr.data ? { addressId } : dropAddress ? { addressId: null } : {}),
           ...(categoryIds ? { categories: { set: categoryIds.map(cid => ({ id: cid })) } } : {}),
         },
         include: vendorInclude,
       })
+      if (dropAddress) await tx.address.deleteMany({ where: { id: dropAddress } }) // alamat yang dilepas tak dibiarkan yatim
+      return updated
     })
     return { ok: true, vendor }
   } catch (e) {

@@ -373,7 +373,9 @@ await t('ALAMAT (D1): bentuk + hierarki wilayah diperiksa server; `text` diturun
     assert.ok(!wrong.ok && /Kecamatan/.test(wrong.errors.alamat ?? ''), 'hierarki salah ditolak')
     const shape = await resolveAddressValues(fields, { alamat: { type: 'mars', fullAddress: 'x' } })
     assert.ok(!shape.ok, 'bentuk liar ditolak')
-    const empty = await resolveAddressValues(fields, { alamat: { ...good, fullAddress: '' } })
+    const partial = await resolveAddressValues(fields, { alamat: { ...good, fullAddress: '' } })
+    assert.ok(!partial.ok && /Alamat lengkap wajib diisi/.test(partial.errors.alamat ?? ''), 'wilayah dipilih tanpa alamat lengkap ditolak, bukan dibuang (docs/arsitektur-alamat.md §10 E)')
+    const empty = await resolveAddressValues(fields, { alamat: { type: 'domestic', fullAddress: '', postalCode: '', provinceId: null, regencyId: null, districtId: null, villageId: null, countryCode: null, city: '', stateRegion: '' } })
     assert.ok(empty.ok && empty.values.alamat === null, 'alamat kosong (bawaan formulir) = null')
     assert.ok(validateFieldValues([{ fieldKey: 'alamat', label: 'Alamat', fieldType: 'address', required: true, options: null }], { alamat: 'teks bebas' }).ok === false, 'teks bebas tak lagi diterima field alamat')
     const card = { fullName: 'A', gender: null, birthPlace: null, birthDate: null, nationality: 'ID', hasNik: false, passportLast4: null, passportIssuedAt: null, passportExpiry: null, phone: null, whatsapp: null, email: null,

@@ -161,6 +161,8 @@ User eksplisit: alamat ini publik (dipakai jamaah WNI yang tinggal di Indonesia 
 
 ## 4. Strategi Seed (BUKAN migrasi biasa)
 
+> **Digantikan §10 (2026-11-25):** data wilayah ikut image `migrate` dan diisi setiap deploy; `scripts/import-wilayah.ts` sudah dihapus.
+
 ~83.762 baris di level desa/kelurahan **tidak ditulis sebagai `migration.sql` manual** (konvensi migrasi di `CLAUDE.md` untuk perubahan skema kecil) — datanya terlalu besar untuk ditulis tangan atau ditinjau baris demi baris. Alurnya:
 
 1. Migrasi SKEMA (4 tabel kosong) — lewat workflow shadow-DB non-interaktif seperti biasa (`bun prisma migrate deploy`, ukuran migrasi kecil, cuma `CREATE TABLE`).
@@ -235,7 +237,30 @@ User: "semua yang membutuhkan alamat ... pakai komponen tersebut" — dikonfirma
 
 ---
 
-## 10. Referensi Silang
+## 10. Data wilayah ikut deploy + audit seluruh formulir alamat (as-built 2026-11-25)
+
+Laporan client: provinsi tak bisa dipilih di Tambah Vendor produksi. Sebab: data wilayah hanya diisi skrip manual `scripts/import-wilayah.ts` yang
+tak ikut image mana pun, jadi tabel wilayah produksi kosong dan SEMUA alamat Indonesia (profil, kartu jamaah, vendor, hotel, pelanggan, Pengaturan
+Invoice, data jamaah booking) tertahan "Provinsi wajib diisi". Menggantikan §4 butir 2–3.
+
+| # | Temuan audit | Perbaikan |
+|---|---|---|
+| A | Data wilayah tak pernah masuk produksi | `prisma/data/wilayah.sql` + `prisma/apply-wilayah.ts` (aturan murni `prisma/wilayah.ts`) di image `migrate`, dijalankan sesudah `migrate deploy` dan peran aplikasi. Idempoten (insert/ubah yang beda, tak pernah menghapus), satu transaksi berkunci, diperiksa di DB sesudahnya; kurang satu baris pun = keluar 1 = deploy gagal |
+| B | Daftar gagal dimuat/kosong tampil "Tidak ada hasil" | `AddressPicker` menampilkan pesan + "Coba lagi" |
+| C | "DKI"/"DIY"/"Jatim" tak menemukan provinsinya (nama resmi panjang) | kata kunci singkatan `lib/address/aliases.ts` |
+| D | Ganti provinsi cepat: jawaban lama bisa menimpa daftar baru | permintaan lama dibatalkan, daftar lama langsung dikosongkan |
+| E | Wilayah dipilih tetapi Alamat Lengkap kosong → alamat dibuang diam-diam padahal "tersimpan" (vendor, pelanggan, hotel, invoice, kartu, jamaah booking) | `addressForBody` (`lib/address/input.ts`) satu aturan; isian sebagian dikirim dan server menolak "Alamat lengkap wajib diisi" |
+| F | Alamat vendor dan hotel yang sudah tersimpan tak bisa dihapus (dikosongkan → alamat lama tetap) | `address: null` = hapus, sama dengan kartu dan Pengaturan Invoice |
+| G | Alamat Lengkap berisi spasi saja lolos | dipangkas sebelum diperiksa |
+
+Uji: `scripts/test-wilayah.ts` (data, idempoten, revisi nama, fail-closed, penjaga Dockerfile), smoke CI image produksi (38 provinsi lewat API),
+browser di DB sekali pakai: Profil, Tambah Jamaah (HP; Indonesia dan Inggris), popup jamaah di halaman booking, vendor, hotel, pelanggan baru,
+Pengaturan Invoice — pilih sampai desa/kelurahan, isian sebagian ditolak, simpan dan muat ulang, hapus alamat.
+
+Memperbarui data (Kepmendagri baru): ganti `prisma/data/wilayah.sql`, sesuaikan `EXPECTED_COUNTS` di `prisma/wilayah.ts`, jalankan `test-wilayah`; terisi
+saat deploy. Wilayah yang hilang dari berkas baru TIDAK dihapus (alamat tersimpan merujuknya). Mesin dev: `bun run db:wilayah`.
+
+## 11. Referensi Silang
 
 - Sumber data: [cahyadsn/wilayah](https://github.com/cahyadsn/wilayah) (MIT, Kepmendagri No 300.2.2-2430 Tahun 2025)
 - Prasyarat/pasangan: `docs/arsitektur-manifest.md` §3.1 (katalog `fieldType`, akan ditambah `'address'` saat Manifest dieksekusi)

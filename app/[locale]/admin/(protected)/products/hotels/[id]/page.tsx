@@ -13,6 +13,7 @@ import { DeleteBox } from '@/components/admin/editor/DeleteBox'
 import { useDeleteEntity } from '@/components/admin/editor/useDeleteEntity'
 import { useDirtyForm } from '@/components/admin/editor/useDirtyForm'
 import { HOTEL_FACILITIES } from '@/lib/constants/hotelFacilities'
+import { addressForBody } from '@/lib/address/input'
 import { AddressPicker, EMPTY_ADDRESS, type AddressValue } from '@/components/shared/AddressPicker'
 import { RichTextEditor } from '@/components/shared/rich-text/RichTextEditor'
 import { useConfirm } from '@/components/admin/ui/useConfirm'
@@ -127,6 +128,7 @@ export default function HotelDetailPage() {
   }
 
   async function handleSave() {
+    const addressBody = addressForBody(address, !!hotel?.address)
     if (address.mapsUrl?.trim() && !address.fullAddress.trim()) { setError('Isi Alamat Lengkap hotel dulu — lokasi Google Maps disimpan bersama alamat.'); return }
     setSaving(true); setError(null)
     try {
@@ -135,7 +137,7 @@ export default function HotelDetailPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...form, stars: +form.stars, distanceToHaramM: +form.distanceToHaramM,
-          ...(address.fullAddress.trim() ? { address } : {}),
+          ...(addressBody !== undefined ? { address: addressBody } : {}),
         }),
       })
       if (!res.ok) {
@@ -268,7 +270,7 @@ export default function HotelDetailPage() {
       </MetaBox>
 
       <MetaBox title="Alamat" icon={MapPin} description="docs/arsitektur-alamat.md" defaultOpen={!!address.fullAddress.trim()}>
-        <AddressPicker value={address} onChange={setAddress} withMap mapsQuery={[form.name, form.city === 'makkah' ? 'Makkah' : 'Madinah'].filter(Boolean).join(' ')} />
+        <AddressPicker value={address} onChange={setAddress} saved={!!hotel?.address} withMap mapsQuery={[form.name, form.city === 'makkah' ? 'Makkah' : 'Madinah'].filter(Boolean).join(' ')} />
       </MetaBox>
 
       {/* Periode & Harga Kamar */}

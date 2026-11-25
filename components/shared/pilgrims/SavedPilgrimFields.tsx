@@ -176,8 +176,7 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPref
       {has('address') && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold">{label('address')}{star(required('address'))}</h2>
-          <AddressPicker value={v.address} onChange={a => set('address', a)} />
-          {v.hadAddress && !v.address.fullAddress.trim() && <p className="text-xs text-muted-foreground">{t('addressCleared')}</p>}
+          <AddressPicker value={v.address} onChange={a => set('address', a)} saved={v.hadAddress} />
         </section>
       )}
 

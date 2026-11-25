@@ -18,7 +18,7 @@ const updateSchema = z.object({
   description:      richTextField().nullish(), // teks kaya, docs/arsitektur-editor-teks.md
   facilities:       z.array(z.string()).max(100).optional(),
   isActive:         z.boolean().optional(),
-  address:          addressWithMapSchema.optional(), // docs/arsitektur-alamat.md §9 + lokasi Google Maps (docs/arsitektur-hotel.md §12.5)
+  address:          addressWithMapSchema.nullish(), // docs/arsitektur-alamat.md §9 + lokasi Google Maps (docs/arsitektur-hotel.md §12.5)
 }).strict()
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -61,7 +61,13 @@ export async function PUT(req: Request, { params }: Ctx) {
       data.addressId = result.id
     }
 
-    const hotel = await prisma.hotel.update({ where: { id }, data })
+    const hotel = await prisma.$transaction(async (tx) => {
+      // null = hapus alamat tersimpan (docs/arsitektur-alamat.md §10 F); barisnya ikut dihapus supaya tak yatim.
+      const old = address === null ? (await tx.hotel.findUniqueOrThrow({ where: { id }, select: { addressId: true } })).addressId : null
+      const updated = await tx.hotel.update({ where: { id }, data: { ...data, ...(address === null ? { addressId: null } : {}) } })
+      if (old) await tx.address.deleteMany({ where: { id: old } })
+      return updated
+    })
     return NextResponse.json(ok(hotel))
   } catch (e) {
     if (e instanceof Error && (e.message === 'Unauthorized' || e.message === 'Forbidden')) {

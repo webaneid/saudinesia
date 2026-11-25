@@ -35,7 +35,7 @@ const vendorFields = {
   email:               optionalEmail,
   website:             optionalWebsite,
   notes:               optionalText(2000),
-  address:             addressSchema.optional(), // docs/arsitektur-alamat.md §9 (upsertAddress)
+  address:             addressSchema.nullish(), // docs/arsitektur-alamat.md §9; null = hapus alamat tersimpan (§10 F)
   isActive:            z.boolean(),
 }
 

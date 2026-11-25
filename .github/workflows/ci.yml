@@ -214,6 +214,8 @@ jobs:
             path=${check%%:*}; want=${check##*:}
             $C exec -T web bun -e "fetch('http://localhost:3000$path').then((r) => { console.log('$path', r.status, 'harap $want'); process.exit(r.status === $want ? 0 : 1) })"
           done
+          # Data wilayah diisi image migrate (docs/arsitektur-alamat.md §10): tanpa itu alamat Indonesia tak bisa dipilih di produksi.
+          $C exec -T web bun -e "fetch('http://localhost:3000/api/v1/address/wilayah/provinces').then(async (r) => { const n = (await r.json()).data?.length; console.log('provinsi', r.status, n); process.exit(n === 38 ? 0 : 1) })"
           # Log tidak boleh memuat kegagalan klasik image: engine Prisma/openssl, modul hilang
           if $C logs web | grep -E "PrismaClientInitializationError|libssl|Cannot find module|Unable to require"; then
             echo "log web memuat error fatal"; exit 1

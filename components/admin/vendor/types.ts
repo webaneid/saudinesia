@@ -1,4 +1,5 @@
 import type { AddressValue } from '@/components/shared/AddressPicker'
+import { addressForBody } from '@/lib/address/input'
 import { EMPTY_ADDRESS } from '@/components/shared/AddressPicker'
 import { EMPTY_CONTACT, type ContactValue } from '@/components/shared/ContactPicker'
 
@@ -74,9 +75,10 @@ export function vendorToFormState(v: VendorRecord): VendorFormState {
 
 /**
  * Isi formulir → body API. Kode negara hanya dikirim bila nomornya ada (ContactPicker selalu membawa default 'ID'; nomor kosong + kode = data
- * yatim yang ditolak server). Alamat kosong tidak dikirim.
+ * yatim yang ditolak server). Alamat: `addressForBody` (kosong tak dikirim, dikosongkan = hapus).
  */
-export function formStateToBody(f: VendorFormState): Record<string, unknown> {
+export function formStateToBody(f: VendorFormState, hadAddress = false): Record<string, unknown> {
+  const address = addressForBody(f.address, hadAddress)
   const phone = f.contact.phone.trim()
   const whatsapp = f.contact.whatsapp.trim()
   return {
@@ -91,6 +93,6 @@ export function formStateToBody(f: VendorFormState): Record<string, unknown> {
     email: f.contact.email.trim(),
     website: f.website.trim(),
     notes: f.notes.trim(),
-    ...(f.address.fullAddress.trim() ? { address: f.address } : {}),
+    ...(address !== undefined ? { address } : {}),
   }
 }
