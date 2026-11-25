@@ -12,7 +12,7 @@ ARG IMAGE_REV=3
 RUN CGO_ENABLED=0 go install github.com/minio/minio@${MINIO_VERSION}
 RUN CGO_ENABLED=0 go install github.com/minio/mc@${MC_VERSION}
 
-FROM alpine:3.22@sha256:49340b346798875b5592e5d420241f2f9cfba5f47e62ebb1446a1b34734e898f
+FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk add --no-cache ca-certificates && adduser -D -u 1000 minio && mkdir /data && chown minio:minio /data
 COPY --from=build /go/bin/minio /usr/bin/minio
 COPY --from=build /go/bin/mc /usr/bin/mc
