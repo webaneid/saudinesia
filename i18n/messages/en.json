@@ -1019,7 +1019,8 @@
     },
     "requiredDocs": {
       "title": "Required Documents",
-      "optional": "Optional / Conditional:"
+      "optional": "Optional / Conditional:",
+      "visaChoice": "Additional documents depend on the visa you choose when ordering."
     },
     "hotelFacilities": {
       "wifi": "Free WiFi",
@@ -1671,13 +1672,14 @@
       "updated": "Pilgrim data updated.",
       "saveFailed": "Could not save.",
       "network": "Could not reach the server.",
-      "editIntro": "Changes are saved to My Pilgrims and used for this booking right away.",
+      "editIntro": "Changes are saved to My Pilgrims and also update your active bookings that have not been submitted yet.",
       "save": "Save",
       "newIntro": "This data is also saved to My Pilgrims, so it can be reused for future orders. The passport and ID card are uploaded after saving.",
       "selfTitle": "Your data as a pilgrim",
       "selfIntro": "Complete your details to be registered as a pilgrim. They are kept in your profile and reused for future orders.",
       "waNotVerified": "Your WhatsApp number is not verified yet.",
-      "waVerify": "Verify in Profile"
+      "waVerify": "Verify in Profile",
+      "missingDocs": "Required documents still missing: {documents}. Upload them below so our team can continue the review."
     },
     "jamaah": {
       "metaTitle": "My Pilgrims",

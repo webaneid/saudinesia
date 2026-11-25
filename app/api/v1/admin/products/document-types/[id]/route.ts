@@ -26,7 +26,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
-    await requireManager()
+    const session = await requireManager()
     const id = idSchema.safeParse((await params).id)
     if (!id.success) return notFound()
     const parsed = documentTypeUpdateSchema.safeParse(await req.json().catch(() => null))
@@ -34,7 +34,7 @@ export async function PUT(req: Request, { params }: Ctx) {
       const issue = parsed.error.issues[0]
       return NextResponse.json({ ...err(issue?.message ?? 'Data tidak valid'), ...(issue?.path.length ? { meta: { field: issue.path.join('.') } } : {}) }, { status: 400 })
     }
-    const r = await updateDocumentType(id.data, parsed.data)
+    const r = await updateDocumentType(id.data, parsed.data, session.userId)
     if (!r.ok) return NextResponse.json({ ...err(r.error), ...(r.field ? { meta: { field: r.field } } : {}) }, { status: r.status })
     const row = await prisma.documentType.findUnique({ where: { id: id.data }, include: { _count: { select: { documents: true } } } })
     return row ? NextResponse.json(ok(row)) : notFound()

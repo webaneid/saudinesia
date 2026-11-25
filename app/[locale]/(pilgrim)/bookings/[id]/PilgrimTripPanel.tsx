@@ -19,7 +19,7 @@ import { DocumentChecklist, type ChecklistItemView } from '@/components/shared/d
 import { useApiError } from '@/components/shared/useApiError'
 
 // Data & dokumen satu jamaah di booking milik jamaah (docs/arsitektur-jamaah.md §5.5 butir 2): pilih dari Jamaah Saya (snapshot); "Ubah data jamaah"
-// = popup kartu yang sama dengan "Tambah", sesudah disimpan kartu langsung disalin ulang ke booking ini (tak perlu keluar halaman), kelengkapan dokumen (DocumentChecklist: progres + unggah dalam popup, dokumen pribadi ke kartu, dokumen perjalanan ke booking ini).
+// = popup kartu yang sama dengan "Tambah", sesudah disimpan layanan kartu memperbarui booking ini (bookingSync), kelengkapan dokumen (DocumentChecklist: progres + unggah dalam popup, dokumen pribadi ke kartu, dokumen perjalanan ke booking ini).
 
 type Props = {
   locale: string
@@ -97,6 +97,8 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
   })
 
   const locked = isReviewLocked(review.status)
+  // Sesudah diajukan dokumen masih bisa kurang: syarat produk bertambah, dokumen ditolak/dihapus.
+  const missingDocs = checklist.filter(i => i.required && i.state !== 'pending' && i.state !== 'accepted').map(i => i.label)
   return (
     <div className="space-y-4">
       <div className="space-y-2 rounded-md border bg-muted/30 p-3">
@@ -124,6 +126,12 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
             {missingFields.some(f => !f.fromCard) && <p className="text-xs">{t('extraHint')}</p>}
           </div>
         </div>
+      )}
+
+      {linked && review.open && review.status === 'submitted' && missingDocs.length > 0 && (
+        <p className="flex gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden /> {t('missingDocs', { documents: missingDocs.join(', ') })}
+        </p>
       )}
 
       {linked ? (
@@ -170,7 +178,12 @@ export function PilgrimTripPanel({ locale, bookingId, pilgrimId, linked, checkli
           showSelf={!self.cardId || self.cardId === linked.id}
           saveLabel={t('save')}
           onClose={() => setCreating(null)}
-          onSaved={(id, warnings) => call('PUT', { cardId: id }, [t('updated'), ...warnings.map(w => tw(w))].join(' '))}
+          onSaved={async (_id, warnings) => { // layanan kartu sudah memperbarui booking ini (bookingSync)
+            setNotice({ text: [t('updated'), ...warnings.map(w => tw(w))].join(' '), error: false })
+            setCreating(null)
+            router.refresh()
+            return null
+          }}
         />
       )}
       {(creating === 'new' || creating === 'self') && (

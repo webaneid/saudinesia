@@ -10,13 +10,14 @@ import { join, relative } from 'node:path'
 import type { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { __resetForTests } from '@/lib/auth/rateLimit'
-import { createSavedPilgrim, type Actor } from '@/lib/pilgrims/service'
+import { createSavedPilgrim, updateSavedPilgrim, type Actor } from '@/lib/pilgrims/service'
 import { bookingChecklists, clearSlot, linkCard, pilgrimBookingState, sealManualPii, sealNewPilgrim, tripScopeOf, unlinkCard } from '@/lib/pilgrims/bookingLink'
 import { createDocumentService, listCardDocuments, tripUploadableTypes } from '@/lib/documents/service'
 import type { DocumentStorage } from '@/lib/documents/storage'
 import { writeRequirements } from '@/lib/documents/requirements'
 import { MANIFEST_ROLES, snapshotFromCard } from '@/lib/manifest/roles'
 import { resolveAddressValues } from '@/lib/manifest/address'
+import { mergeCardChange } from '@/lib/pilgrims/bookingSync'
 import { validateFieldValues } from '@/lib/manifest/values'
 import { NIK_MASK, openNik, openPassport } from '@/lib/pii'
 import { savedPilgrimInputSchema } from '@/lib/validators/pilgrims'
@@ -54,6 +55,9 @@ async function makeUser(role: 'pilgrim' | 'admin' = 'pilgrim'): Promise<Actor> {
 }
 const serial = Number(String(Date.now()).slice(-3))
 const NIK = `3201011507850${String(serial).padStart(3, '1')}`
+const NIK_B = `3201014106900${String((serial + 1) % 1000).padStart(3, '1')}`
+const NIK_C = `3201014106900${String((serial + 2) % 1000).padStart(3, '1')}`
+const PASSPORT_B = `D${String(Date.now()).slice(-7)}`
 const PASSPORT = `C${String(Date.now()).slice(-7)}`
 async function makeCard(owner: Actor, by: Actor, over: Record<string, unknown> = {}): Promise<string> {
   const r = await createSavedPilgrim(by, owner.userId, savedPilgrimInputSchema.parse({ fullName: `Budi ${++n}`, gender: 'male', birthPlace: 'Bandung', birthDate: '2025-06-01', nationality: 'ID', phone: '6281234567890', ...over }))
@@ -125,12 +129,51 @@ await t('TAUTKAN: semua kolom katalog diisi dari kartu (kolom buatan admin dari 
   assert.ok(!raw.includes(NIK) && !raw.includes(PASSPORT), 'NIK/paspor tak pernah polos di booking_pilgrims')
 })
 
-await t('SNAPSHOT BEKU: kartu diedit → booking tetap; "perbarui dari kartu" (tautkan ulang) → mengikuti kartu', async () => {
+await t('SALIN ULANG: kartu yang sama → kolom berisi menimpa, kolom kosong membiarkan; "perbarui dari kartu" (tautkan ulang) → mengikuti kartu', async () => {
   await prisma.savedPilgrim.update({ where: { id: cardA }, data: { fullName: 'Budi Nama Baru', birthPlace: 'Garut', extraValues: {} } }) // (uji) setara edit kartu
   assert.notEqual(((await row(p1)).fieldValues as Record<string, unknown>).fullName, 'Budi Nama Baru')
   assert.ok((await linkCard(staff, bk.id, p1, cardA)).ok)
   const fv = (await row(p1)).fieldValues as Record<string, unknown>
-  assert.equal(fv.fullName, 'Budi Nama Baru'); assert.equal(fv.mahram, null, 'kolom admin dikosongkan di kartu → ikut kosong')
+  assert.equal(fv.fullName, 'Budi Nama Baru'); assert.equal(fv.mahram, 'Paman', 'kolom kosong di kartu yang sama tak menghapus isian booking')
+})
+
+await t('KARTU → BOOKING (bookingSync): edit kartu memperbarui booking aktif yang belum diajukan; isian petugas, booking diajukan/terverifikasi/tak aktif tetap', async () => {
+  const base = { fullName: 'Rina Lama', gender: 'female', birthPlace: 'Solo', birthDate: '2025-06-01', nationality: 'ID', phone: '6281234567890' }
+  const c = await makeCard(owner, staff, base)
+  const mk = async () => { const b = await makeBooking(owner, 1); assert.ok((await linkCard(staff, b.id, b.pilgrims[0]!, c)).ok); return { b: b.id, p: b.pilgrims[0]! } }
+  const [open, revise, submitted, verified, closed] = [await mk(), await mk(), await mk(), await mk(), await mk()]
+  await prisma.bookingPilgrim.update({ where: { id: revise.p }, data: { reviewStatus: 'needs_revision', submittedAt: new Date() }, select: { id: true } })
+  await prisma.bookingPilgrim.update({ where: { id: submitted.p }, data: { reviewStatus: 'submitted', submittedAt: new Date() }, select: { id: true } })
+  await prisma.bookingPilgrim.update({ where: { id: verified.p }, data: { reviewStatus: 'verified', submittedAt: new Date(), verifiedAt: new Date() }, select: { id: true } })
+  await prisma.booking.update({ where: { id: closed.b }, data: { status: 'cancelled' } })
+  // Isian petugas di booking: kolom kosong di kartu (mahram) dan kolom yang berbeda dari kartu (tempat lahir).
+  const staffFilled = { ...((await row(open.p)).fieldValues as Record<string, unknown>), mahram: 'Ayah', email: 'petugas@example.test' }
+  await prisma.bookingPilgrim.update({ where: { id: open.p }, data: { fieldValues: staffFilled as never }, select: { id: true } })
+  const twin = await makeCard(owner, staff)
+  const edit = await updateSavedPilgrim(owner, owner.userId, c, savedPilgrimInputSchema.parse({ ...base, fullName: 'Rina Baru', birthDate: '1990-06-01', phone: null, nik: NIK_B, passport: { number: PASSPORT_B } }))
+  assert.ok(edit.ok, JSON.stringify(edit))
+  const names = await Promise.all([open, revise, submitted, verified, closed].map(async x => ((await row(x.p)).fieldValues as Record<string, unknown>).fullName))
+  assert.deepEqual(names, ['Rina Baru', 'Rina Baru', 'Rina Lama', 'Rina Lama', 'Rina Lama'])
+  const o = await row(open.p)
+  const fv = o.fieldValues as Record<string, unknown>
+  assert.deepEqual([fv.mahram, fv.email, fv.phone, fv.dateOfBirth], ['Ayah', 'petugas@example.test', null, '1990-06-01'], 'kosong di kartu & tak berubah → isian petugas tetap; dihapus di kartu → ikut kosong')
+  assert.equal(fv.nik, NIK_MASK)
+  assert.equal(openNik(o.nikCipher!, o.nikHash!), NIK_B)
+  const card = await prisma.savedPilgrim.findUniqueOrThrow({ where: { id: c } })
+  assert.deepEqual([o.identityId, o.passportCipher, o.passportLast4, o.passportCountry], [card.identityId, card.passportCipher, card.passportLast4, 'ID'])
+  assert.equal((await row(submitted.p)).nikHash, null, 'yang diajukan tak menerima segel baru')
+  // NIK diganti: samaran sama, segel ikut berganti.
+  const again = await updateSavedPilgrim(owner, owner.userId, c, savedPilgrimInputSchema.parse({ ...base, fullName: 'Rina Baru', birthDate: '1990-06-01', nik: NIK_C }))
+  assert.ok(again.ok, JSON.stringify(again))
+  const o2 = await row(open.p)
+  assert.equal(openNik(o2.nikCipher!, o2.nikHash!), NIK_C)
+  assert.notEqual(twin, c)
+})
+
+await t('GABUNG (murni): berubah → menimpa; tak berubah → hanya mengisi yang kosong; tersegel dihapus di kartu → dihapus, tak pernah ada → dibiarkan', () => {
+  const f = [{ fieldKey: 'a', role: null }, { fieldKey: 'b', role: null }, { fieldKey: 'n', role: 'nik' }]
+  assert.deepEqual(mergeCardChange(f, { a: 'x', b: 'y', n: null }, { a: 'z', b: 'y', n: null }, { a: 'petugas', b: 'petugas', n: '•', lain: 1 }), { a: 'z', b: 'petugas', n: '•', lain: 1 })
+  assert.deepEqual(mergeCardChange(f, { a: 'x', b: 'y', n: '•' }, { a: null, b: 'y', n: null }, { a: 'x', b: '', n: '•' }), { a: null, b: 'y', n: null })
 })
 
 await t('DITOLAK: kartu akun lain → 404 (sama dengan tidak ada); kartu terarsip → 409; kartu sudah dipakai jamaah lain di booking sama → 409; draf → 404', async () => {
@@ -412,7 +455,7 @@ await t('PENJAGA: penulis tunggal kolom tautan/segel; relasi pilgrims di app/ le
   const bad: string[] = []
   // lib/pilgrims/warehouse.ts: gudang identitas staf (Fase 8) — membuka NIK/paspor untuk staf (berjejak) dan mencari lewat indeks; tak menulis segel
   // booking_pilgrims (dijaga scripts/test-identity-warehouse.ts).
-  const SEAL_OK = new Set(['lib/pilgrims/bookingLink.ts', 'lib/pilgrims/service.ts', 'lib/account/erasureSweep.ts', 'lib/validators/pilgrims.ts', 'lib/pilgrims/warehouse.ts'])
+  const SEAL_OK = new Set(['lib/pilgrims/bookingLink.ts', 'lib/pilgrims/cardSnapshot.ts', 'lib/pilgrims/bookingSync.ts', 'lib/pilgrims/service.ts', 'lib/account/erasureSweep.ts', 'lib/validators/pilgrims.ts', 'lib/pilgrims/warehouse.ts'])
   for (const f of files) {
     const rel = relative(root, f)
     const src = readFileSync(f, 'utf8')

@@ -11,7 +11,8 @@ import { fieldKeyFromLabel, MANIFEST_FIELD_TYPES } from '@/lib/manifest/fieldDef
 import { MANIFEST_ROLES } from '@/lib/manifest/roles'
 import { PILGRIM_DATA_OWNERS, PILGRIM_DATA_OWNER_TYPES } from '@/lib/pilgrim-data/owners'
 import { activeFields, displayFields, pilgrimCatalog, valueByRole } from '@/lib/pilgrim-data/catalog'
-import { pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
+import { nikOptional, pilgrimFieldSets } from '@/lib/pilgrim-data/forPilgrims'
+import { addDays, dbDateOf, todayInApp } from '@/lib/time'
 import { pilgrimDataState, setPilgrimDataEnabled } from '@/lib/pilgrim-data/products'
 import { createPilgrimField, deletePilgrimField, fieldUsage, updatePilgrimField } from '@/lib/pilgrim-data/fields'
 import { pilgrimFieldCreateSchema, pilgrimFieldUpdateSchema } from '@/lib/validators/pilgrimFields'
@@ -147,6 +148,19 @@ await prisma.visaApplication.create({ data: { bookingPilgrimId: withVisa.id, vis
 const inG1 = await pilgrim(g1!.id)
 const inG2 = await pilgrim(g2!.id)
 const active = activeFields(catalog).map(f => f.fieldKey)
+await t('NIK wajib tak menahan WNA dan bayi: WNA/bayi (snapshot, lalu kartu) → opsional; WNI dewasa, tanpa data, atau kewarganegaraan tak dikenali → tetap wajib', () => {
+  const f = [['nat', 'nationality'], ['born', 'birth_date'], ['nik', 'nik']].map(([fieldKey, role]) => ({ fieldKey, role })) as unknown as Parameters<typeof nikOptional>[0]
+  const adult = { nationality: 'ID', birthDate: new Date('1990-01-01') }
+  assert.equal(nikOptional(f, { nat: 'Malaysia' }, null), true)
+  assert.equal(nikOptional(f, { nat: 'MY' }, adult), true, 'snapshot menang atas kartu')
+  assert.equal(nikOptional(f, {}, { nationality: 'SA', birthDate: null }), true)
+  assert.equal(nikOptional(f, { nat: 'Indonesia', born: addDays(todayInApp(), -300) }, null), true)
+  assert.equal(nikOptional(f, {}, { nationality: 'ID', birthDate: dbDateOf(addDays(todayInApp(), -300)) }), true)
+  assert.equal(nikOptional(f, { nat: 'Indonesia', born: '1990-01-01' }, null), false)
+  assert.equal(nikOptional(f, { nat: 'WNI' }, adult), false)
+  assert.equal(nikOptional(f, {}, null), false)
+})
+
 const demandedOf = async () => {
   const m = await pilgrimFieldSets(prisma, [withVisa.id, inG1.id, inG2.id])
   return { visa: m.get(withVisa.id)!.demanded.map(f => f.fieldKey), g1: m.get(inG1.id)!.demanded.map(f => f.fieldKey), g2: m.get(inG2.id)!.demanded.map(f => f.fieldKey) }
@@ -324,7 +338,7 @@ await t('D4 sumber: kartu = satu-satunya jalur isian pelanggan (route PUT isian 
   assert.ok(fieldsUi.includes('usePilgrimFields(') && fieldsUi.includes('cardLayout(') && fieldsUi.includes('<ManifestFieldsForm'))
   const route = readFileSync(join(root, 'app/api/v1/pilgrim-fields/route.ts'), 'utf8')
   assert.ok(route.includes('await getSession()') && route.includes("'unauthorized', 401") && route.includes('activeFields('))
-  assert.ok(readFileSync(join(root, 'lib/pilgrims/bookingLink.ts'), 'utf8').includes('extraValues: true'), 'snapshot membaca extraValues kartu')
+  assert.ok(readFileSync(join(root, 'lib/pilgrims/cardSnapshot.ts'), 'utf8').includes('extraValues: true'), 'snapshot membaca extraValues kartu')
 })
 
 await t('Profil jamaah (2026-11-25): formulir kartu = kolom AKTIF katalog — nonaktif tersembunyi, nama & tanggal lahir selalu tampil, urutan katalog, gagal muat = semua kolom', () => {

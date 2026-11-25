@@ -130,7 +130,7 @@ export function RequirementsTable({ rows, onChange, productNoun = 'produk ini' }
             <div className="min-w-0">
               <p className="m-0 font-semibold text-admin-ink">{r.label.trim() || r.typeLabel}</p>
               {r.description && <p className="m-0 mt-0.5 text-xs text-admin-muted">{r.description}</p>}
-              {type && !type.isActive && <Badge tone="warning">Jenis nonaktif</Badge>}
+              {type && !type.isActive && <Badge tone="warning">Jenis nonaktif — tidak diminta</Badge>}
             </div>
           </div>
         )

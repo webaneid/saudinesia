@@ -8,7 +8,7 @@ import { prisma } from '@/lib/db'
 import { requireCatalog } from '@/lib/catalog/availability'
 import { loadCheckoutProduct } from '@/lib/checkout/options'
 import { checkoutPath } from '@/lib/checkout/kinds'
-import { requirementsOf } from '@/lib/documents/requirements'
+import { packageCatalogRequirements } from '@/lib/documents/requirements'
 import { getPageText } from '@/lib/public-content/content'
 import { localizedAlternates } from '@/lib/seo/site'
 import { plainText } from '@/lib/rich-text/doc'
@@ -42,7 +42,7 @@ export default async function PackageDetailPage({ params }: Props) {
   const [product, extra, reqs, t] = await Promise.all([
     loadCheckoutProduct('package', id),
     prisma.package.findUnique({ where: { id, isActive: true }, select: { itinerary: true, exclusions: true } }),
-    requirementsOf('package', id),
+    packageCatalogRequirements([id]),
     getPageText(locale, 'packages', 'detail'),
   ])
   if (!product || product.kind !== 'package' || !extra) notFound()
@@ -150,7 +150,7 @@ export default async function PackageDetailPage({ params }: Props) {
         )}
       </section>
 
-      <RequiredDocuments requirements={reqs} />
+      <RequiredDocuments requirements={reqs.get(id)?.requirements ?? []} visaChoice={reqs.get(id)?.visaChoice} />
     </div>
   )
 }

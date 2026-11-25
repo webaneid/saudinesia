@@ -1,4 +1,4 @@
-import { Prisma, type PilgrimReviewStatus } from '@prisma/client'
+import { Prisma, type PilgrimReviewStatus, type VisaStatus } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
@@ -6,7 +6,8 @@ import { consume, policy } from '@/lib/auth/rateLimit'
 import { codedError, type ApiErrorCode } from '@/lib/errors/api'
 import type { ApiErrorParams } from '@/lib/errors/params'
 import { completeness } from '@/lib/manifest/values'
-import { pilgrimRequirements } from '@/lib/documents/requirements'
+import { pilgrimRequirements, REQUIREMENT_OWNERS, writeRequirements, type ProductRef, type RequirementOwner, type RequirementWriteResult } from '@/lib/documents/requirements'
+import type { DocumentRequirementInput } from '@/lib/validators/documents'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { notify } from '@/lib/notifications/notify'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
@@ -243,6 +244,53 @@ export async function reopenForChangedRequirements(tx: Tx, bookingPilgrimId: str
   await tx.bookingPilgrim.update({ where: { id: r.id }, data: { reviewStatus: 'submitted', verifiedAt: null, verifiedById: null }, select: { id: true } })
   await tx.pilgrimReviewEvent.create({ data: { bookingPilgrimId: r.id, fromStatus: r.reviewStatus, toStatus: 'submitted', actorId, note: reason } })
   return true
+}
+
+/** Visa sudah di Syarikah (atau terbit) — berkasnya sudah dikirim, verifikasi lama tak dibuka lagi. */
+const VISA_SENT: readonly VisaStatus[] = ['submitted_to_syarikah', 'in_review', 'issued']
+
+/**
+ * Jalankan `change` (perubahan syarat/jenis dokumen atas `products`) lalu buka ulang jamaah TERVERIFIKASI pada booking aktif yang syarat WAJIB-nya
+ * bertambah karenanya — dihitung dari gabungan syarat sebelum/sesudah, jadi dokumen yang sudah diwajibkan produk lain tidak membuka ulang.
+ * Urutan kunci: produk/jenis (pemanggil) → jamaah booking; yang `submitted` ikut dikunci supaya keputusan serentak menunggu syarat baru.
+ */
+export async function reopenAfterRequirementChange<T>(tx: Tx, products: readonly ProductRef[], actorId: string, change: () => Promise<T>): Promise<T> {
+  const ids = (type: string) => products.filter(p => p.productType === type).map(p => p.productId)
+  const seen = products.length === 0 ? [] : await tx.bookingPilgrim.findMany({
+    where: {
+      reviewStatus: { in: ['submitted', 'verified'] }, booking: { status: 'active' },
+      OR: [
+        { bookingPackage: { packageId: { in: ids('package') } } },
+        { bookingHaji: { hajiProductId: { in: ids('haji') } } },
+        { visaApplication: { visaProductId: { in: ids('visa') } } },
+      ],
+    },
+    select: { id: true, visaApplication: { select: { status: true } } },
+  })
+  const open = seen.filter(p => !p.visaApplication || !VISA_SENT.includes(p.visaApplication.status)).map(p => p.id)
+  if (open.length === 0) return change()
+  // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE. Status dibaca dari baris terkunci (keputusan serentak selesai dulu).
+  const rows = await tx.$queryRaw<{ id: string; reviewStatus: PilgrimReviewStatus }[]>`
+    SELECT bp."id", bp."reviewStatus" FROM "booking_pilgrims" bp JOIN "bookings" b ON b."id" = bp."bookingId"
+    WHERE bp."id" IN (${Prisma.join(open)}) AND b."status" = 'active' ORDER BY bp."id" FOR UPDATE OF bp`
+  const verified = rows.filter(r => r.reviewStatus === 'verified').map(r => r.id)
+  const before = await pilgrimRequirements(tx, verified)
+  const result = await change()
+  const after = await pilgrimRequirements(tx, verified)
+  for (const id of verified) {
+    const had = new Set((before.get(id) ?? []).filter(r => r.required).map(r => r.documentTypeId))
+    const added = (after.get(id) ?? []).filter(r => r.required && !had.has(r.documentTypeId))
+    if (added.length === 0) continue
+    await tx.bookingPilgrim.update({ where: { id }, data: { reviewStatus: 'submitted', verifiedAt: null, verifiedById: null }, select: { id: true } })
+    await tx.pilgrimReviewEvent.create({ data: { bookingPilgrimId: id, fromStatus: 'verified', toStatus: 'submitted', actorId, note: `Syarat dokumen bertambah: ${added.slice(0, 5).map(r => r.label).join(', ')}` } })
+  }
+  return result
+}
+
+/** Simpan syarat produk yang SUDAH ADA (dipanggil rute PUT produk di transaksinya): ganti-semua + buka ulang jamaah terverifikasi yang syaratnya bertambah. */
+export async function saveRequirements(tx: Tx, productType: RequirementOwner, productId: string, items: readonly DocumentRequirementInput[], actorId: string): Promise<RequirementWriteResult> {
+  await REQUIREMENT_OWNERS[productType].lock(tx, productId) // produk tak ada → writeRequirements menjawab 404
+  return reopenAfterRequirementChange(tx, [{ productType, productId }], actorId, () => writeRequirements(tx, productType, productId, items))
 }
 
 // ── Bacaan ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -4,10 +4,8 @@ import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { ADMIN_ROLES } from '@/lib/auth/roles'
 import { consume, policy } from '@/lib/auth/rateLimit'
 import { codedError, type ApiErrorCode } from '@/lib/errors/api'
-import { formatAddressLine } from '@/lib/address/format'
 import { activeFields, pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
-import { isSealedRole, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
-import type { ManifestAddressValue } from '@/lib/manifest/addressValue'
+import { isSealedRole, snapshotFromCard } from '@/lib/manifest/roles'
 import { resolveAddressValues } from '@/lib/manifest/address'
 import { isEmptyValue, validateFieldValues } from '@/lib/manifest/values'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikProblem, normalizeNik, normalizePassport, sealNik, sealPassport } from '@/lib/pii'
@@ -16,12 +14,15 @@ import { pilgrimRequirements } from '@/lib/documents/requirements'
 import { evaluateCompleteness, type CompletenessItem } from '@/lib/documents/completeness'
 import { lockCardOwner, type Actor, type ServiceError } from './service'
 import { isReviewLocked } from './reviewState'
+import { isBaby } from './age'
+import { cardSelect, forSnapshot, sealedColumns } from './cardSnapshot'
 
-// Tautan kartu jamaah tersimpan → jamaah booking (docs/arsitektur-jamaah.md §5.3, Fase 7a) — SATU-SATUNYA penulis `booking_pilgrims.savedPilgrimId`,
-// `identityId`, dan kolom NIK/paspor tersegel. Aturan:
+// Tautan kartu jamaah tersimpan → jamaah booking (docs/arsitektur-jamaah.md §5.3, Fase 7a) — SATU-SATUNYA penulis `booking_pilgrims.savedPilgrimId`;
+// `identityId` dan kolom NIK/paspor tersegel hanya ditulis di sini dan di bookingSync.ts. Aturan:
 // - Kartu WAJIB milik pemilik booking (bukan akun lain; 404 sama dengan "tidak ada"), tidak terarsip; booking bukan draf; akun pemilik aktif.
 // - Urutan kunci sama dengan layanan kartu/dokumen: baris `users` pemilik FOR SHARE → baris jamaah booking FOR UPDATE.
-// - Snapshot = isi kartu SAAT ditautkan/diperbarui lewat pengikat peran (lib/manifest/roles.ts); mengedit kartu sesudahnya TIDAK mengubah booking.
+// - Snapshot = isi kartu SAAT ditautkan/diperbarui lewat pengikat peran (lib/manifest/roles.ts); kartu diedit → jamaah
+//   booking AKTIF yang belum diajukan ikut diperbarui (bookingSync.ts); yang diajukan/terverifikasi dan booking lain tetap beku.
 // - NIK/paspor tak pernah polos di `booking_pilgrims`: ciphertext + indeks disalin apa adanya dari baris kartu (tanpa membuka), isian manual
 //   disegel `sealNik`/`sealPassport`; `fieldValues` hanya menyimpan samaran.
 
@@ -37,31 +38,6 @@ const fail = (status: ServiceError['status'], code: ApiErrorCode, field?: string
 const notFound = () => fail(404, 'bookingPilgrimNotFound')
 const isStaff = (actor: Actor) => ADMIN_ROLES.includes(actor.role)
 
-const cardSelect = {
-  id: true, ownerId: true, identityId: true, archivedAt: true, fullName: true, gender: true, birthPlace: true, birthDate: true, nationality: true,
-  nikHash: true, nikCipher: true, passportKeyHash: true, passportCipher: true, passportLast4: true, passportIssuedAt: true, passportExpiry: true,
-  phone: true, whatsapp: true, email: true, extraValues: true,
-  address: { select: { type: true, fullAddress: true, postalCode: true, city: true, stateRegion: true, countryCode: true,
-    provinceId: true, regencyId: true, districtId: true, villageId: true,
-    village: { select: { name: true } }, district: { select: { name: true } }, regency: { select: { name: true } }, province: { select: { name: true } } } },
-} satisfies Prisma.SavedPilgrimSelect
-type CardRow = Prisma.SavedPilgrimGetPayload<{ select: typeof cardSelect }>
-
-const cal = (d: Date | null) => (d ? calendarDateOf(d) : null)
-const forSnapshot = (c: CardRow): CardForSnapshot => ({
-  fullName: c.fullName, gender: c.gender, birthPlace: c.birthPlace, birthDate: cal(c.birthDate), nationality: c.nationality,
-  hasNik: c.nikHash !== null, passportLast4: c.passportLast4, passportIssuedAt: cal(c.passportIssuedAt), passportExpiry: cal(c.passportExpiry),
-  phone: c.phone, whatsapp: c.whatsapp, email: c.email, address: addressOf(c.address),
-  extra: c.extraValues && typeof c.extraValues === 'object' && !Array.isArray(c.extraValues) ? (c.extraValues as Record<string, unknown>) : {},
-})
-function addressOf(a: CardRow['address']): ManifestAddressValue | null {
-  if (!a) return null
-  return {
-    type: a.type, fullAddress: a.fullAddress, postalCode: a.postalCode, provinceId: a.provinceId, regencyId: a.regencyId, districtId: a.districtId,
-    villageId: a.villageId, countryCode: a.countryCode, city: a.city, stateRegion: a.stateRegion, text: formatAddressLine(a),
-  }
-}
-
 /** Kolom AKTIF katalog Data Jamaah (docs/arsitektur-data-jamaah.md §3.1) — snapshot kartu dan penyegelan isian memakai daftar yang sama untuk semua produk. */
 export async function activeCatalog(db: Tx | typeof prisma) {
   return activeFields(await pilgrimCatalog(db))
@@ -72,7 +48,7 @@ export async function cardIncomplete(ownerId: string, cardId: string, fields: re
   const card = await prisma.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: cardSelect })
   if (!card || !card.address) return true
   const values = snapshotFromCard(fields, forSnapshot(card))
-  return fields.some(f => f.required && isEmptyValue(values[f.fieldKey]) && !(f.role === 'nik' && card.nationality !== 'ID'))
+  return fields.some(f => f.required && isEmptyValue(values[f.fieldKey]) && !(f.role === 'nik' && (card.nationality !== 'ID' || (card.birthDate !== null && isBaby(calendarDateOf(card.birthDate))))))
 }
 
 type Locked = { id: string; bookingId: string; ownerId: string; savedPilgrimId: string | null; fieldValues: Record<string, unknown> }
@@ -131,14 +107,18 @@ export function linkCard(actor: Actor, bookingId: string, bookingPilgrimId: stri
     const twin = await tx.bookingPilgrim.findFirst({ where: { bookingId, savedPilgrimId: cardId, id: { not: bookingPilgrimId } }, select: { id: true } })
     if (twin) return fail(409, 'cardUsedTwice', 'cardId')
     const fields = await activeCatalog(tx) // snapshot = keadaan kartu untuk SEMUA kolom aktif katalog (satu sumber data jamaah)
-    const fieldValues = { ...bp.fieldValues, ...snapshotFromCard(fields, forSnapshot(card)) }
+    const snapshot = snapshotFromCard(fields, forSnapshot(card))
+    // Kartu yang SAMA disalin ulang: kolom kosong di kartu tak menghapus isian petugas di booking; kartu lain/baru → seluruh snapshot (tak mencampur orang).
+    const same = bp.savedPilgrimId === cardId
+    if (same) {
+      for (const f of fields) if (isEmptyValue(snapshot[f.fieldKey])) delete snapshot[f.fieldKey]
+    }
+    const fieldValues = { ...bp.fieldValues, ...snapshot }
     await tx.bookingPilgrim.update({
       where: { id: bookingPilgrimId },
       data: {
         savedPilgrimId: card.id, identityId: card.identityId, fieldValues: fieldValues as Prisma.InputJsonValue,
-        nikHash: card.nikHash, nikCipher: card.nikCipher,
-        passportCountry: card.passportCipher ? card.nationality : null, passportKeyHash: card.passportKeyHash,
-        passportCipher: card.passportCipher, passportLast4: card.passportLast4,
+        ...sealedColumns(card, { nik: same, passport: same }),
       },
       select: { id: true },
     })

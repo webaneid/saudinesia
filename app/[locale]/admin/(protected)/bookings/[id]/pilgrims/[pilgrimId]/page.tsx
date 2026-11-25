@@ -18,6 +18,7 @@ import { calendarDateOf } from '@/lib/time'
 import { PilgrimCardPanel } from './PilgrimCardPanel'
 import { PilgrimDataForm } from './PilgrimDataForm'
 import { DocumentsBox } from './DocumentsBox'
+import { requirementInfo } from '@/components/shared/documents/documentRows'
 import { adminHref } from '@/lib/admin/href'
 
 // Kelola SATU jamaah booking (permintaan pemilik 2026-11-10): halaman booking hanya untuk MEMERIKSA, mengubah data/dokumen di halaman ini —
@@ -134,12 +135,12 @@ export default async function ManagePilgrimPage({ params }: Props) {
           </ManageBox>
           {personal.length > 0 && (
             <ManageBox title="Dokumen pribadi" icon="personal" description="Yang diminta produk booking ini. Tersimpan di kartu jamaah." aside={<span className="text-[11px] text-admin-muted">{docsHint(personal)}</span>}>
-              {linked ? <DocumentsBox endpoint={`/api/v1/admin/customers/${booking.userId}/pilgrims/${linked.id}/documents`} onlyTypeIds={personal.map(i => i.documentTypeId)} readOnly={readOnly} /> : noCard}
+              {linked ? <DocumentsBox endpoint={`/api/v1/admin/customers/${booking.userId}/pilgrims/${linked.id}/documents`} onlyTypeIds={personal.map(i => i.documentTypeId)} typeInfo={requirementInfo(personal)} readOnly={readOnly} /> : noCard}
             </ManageBox>
           )}
           {trip.length > 0 && (
             <ManageBox title="Dokumen perjalanan" icon="trip" description="Yang diminta produk booking ini — hanya untuk booking ini." aside={<span className="text-[11px] text-admin-muted">{docsHint(trip)}</span>}>
-              {linked ? <DocumentsBox endpoint={`${base}/documents`} readOnly={readOnly} /> : noCard}
+              {linked ? <DocumentsBox endpoint={`${base}/documents`} typeInfo={requirementInfo(trip)} readOnly={readOnly} /> : noCard}
             </ManageBox>
           )}
         </>

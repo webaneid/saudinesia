@@ -107,7 +107,7 @@ export default async function BookingPilgrimPage({ params }: Props) {
         <PilgrimTripPanel
           locale={lang} bookingId={booking.id} pilgrimId={p.id}
           linked={check?.card ?? null}
-          checklist={(check?.items ?? []).map(i => ({ key: i.key, documentTypeId: i.documentTypeId, label: i.label, required: i.required, state: i.state, sources: i.sources ?? [], reusable: i.reusable, validUntilNeeded: i.validUntilNeeded }))}
+          checklist={(check?.items ?? []).map(i => ({ key: i.key, documentTypeId: i.documentTypeId, label: i.label, description: i.description, required: i.required, state: i.state, sources: i.sources ?? [], reusable: i.reusable, validUntilNeeded: i.validUntilNeeded }))}
           review={{
             status: p.reviewStatus,
             open: booking.status === 'active',

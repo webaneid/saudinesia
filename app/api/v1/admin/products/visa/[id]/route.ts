@@ -4,7 +4,9 @@ import { requireManager } from '@/lib/auth/session'
 import { ok, err } from '@/lib/validators'
 import { isRecordNotFound } from '@/lib/admin/errors'
 import { z } from 'zod'
-import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
+import { RequirementRejected, requirementsOf } from '@/lib/documents/requirements'
+import { retryConflict } from '@/lib/booking/serializable'
+import { saveRequirements } from '@/lib/pilgrims/review'
 import { documentRequirementListSchema } from '@/lib/validators/documents'
 import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deleteVisaProduct } from '@/lib/admin/productDelete'
@@ -50,7 +52,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
-    await requireManager()
+    const session = await requireManager()
     const { id } = await params
     const body = await req.json().catch(() => null)
     const parsed = updateSchema.safeParse(body)
@@ -58,17 +60,17 @@ export async function PUT(req: Request, { params }: Ctx) {
 
     const { description, requirements, ...fields } = parsed.data
     // Produk + syarat dokumen dalam SATU transaksi — tak pernah setengah tersimpan.
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await retryConflict(() => prisma.$transaction(async (tx) => { // deadlock dengan revisi booking serentak → ulang
       const product = await tx.visaProduct.update({
         where: { id },
         data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
       })
       if (requirements) {
-        const written = await writeRequirements(tx, 'visa', id, requirements)
+        const written = await saveRequirements(tx, 'visa', id, requirements, session.userId)
         if (!written.ok) throw new RequirementRejected(written.error, written.field)
       }
       return product
-    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    })).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
     if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
     const product = result
     return NextResponse.json(ok({ ...product, price: (await visaPriceSummary([id])).get(id)?.from ?? 0, durationFeeRules: (await visaFeeRules([id])).get(id) ?? [] }))

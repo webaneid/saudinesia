@@ -11,6 +11,10 @@ import { paginate, type ListParams, type PageMeta } from '@/lib/table/pagination
 import { escapeLike } from '@/lib/utils/search'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import { nameKeyOf } from './nameKey'
+import { isBaby } from './age'
+import { cardSelect, type CardRow } from './cardSnapshot'
+import { syncLinkedPilgrims } from './bookingSync'
+import { isRetryableConflict, retryConflict } from '@/lib/booking/serializable'
 import { activeFields, pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
 import { validateFieldValues } from '@/lib/manifest/values'
 import { deleteDocumentRowsOfCards, documentKeysOfCards } from '@/lib/documents/purge'
@@ -153,14 +157,6 @@ export async function lockIdentityKeys(tx: Tx, keys: (string | null | undefined)
     // $executeRaw: advisory lock transaksi tidak bisa dinyatakan lewat Prisma ORM.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`pilgrim-identity:${k}`}, 0))`
   }
-}
-
-/** Umur < 2 tahun pada hari ini (zona aplikasi) — satu-satunya pengecualian NIK wajib bagi WNI (K2). */
-function isBaby(birthDate: CalendarDate, today: CalendarDate = todayInApp()): boolean {
-  const [y, m, d] = today.split('-')
-  const back = `${Number(y) - 2}-${m}-${d}`
-  const cutoff = m === '02' && d === '29' ? `${Number(y) - 2}-03-01` : back // 29 Feb tak ada 2 tahun lalu
-  return birthDate > cutoff
 }
 
 type IdentityKey = { kind: 'nik'; hash: string; cipher: string } | { kind: 'passport'; hash: string }
@@ -360,7 +356,7 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
   await ensurePiiKeysMatch() // kunci salah → lempar (500 di route), bukan menulis indeks yang tak cocok dengan data lama
 
   try {
-    const { card, newNik } = await prisma.$transaction(async (tx) => {
+    const { card, newNik } = await retryConflict(() => prisma.$transaction(async (tx) => { // deadlock dengan tautan/verifikasi serentak → ulang
       await lockOwner(tx, actor, ownerId)
       // Urutan kunci (SEC-174): kunci identitas SEBELUM kunci baris kartu — settleIdentity mengubah kartu akun LAIN yang menaut identitas yang
       // sama, jadi setiap pemegang kunci baris kartu harus sudah memegang kunci identitasnya (kalau tidak: deadlock antar-akun). Baca dulu tanpa
@@ -409,6 +405,8 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
         if (now.archivedAt) fail(409, 'pilgrimArchivedEdit')
         existing = now
       }
+      // Isi kartu SEBELUM diubah — pembanding untuk jamaah booking tertaut (syncLinkedPilgrims).
+      const before: CardRow | null = cardId ? await tx.savedPilgrim.findUnique({ where: { id: cardId }, select: cardSelect }) : null
 
       // NIK/paspor ganda di daftar AKUN INI SENDIRI — satu-satunya penolakan terkait NIK (data miliknya, bukan orakel).
       const dupWhere = (w: Prisma.SavedPilgrimWhereInput) => tx.savedPilgrim.findFirst({ where: { ownerId, ...w, ...(cardId ? { id: { not: cardId } } : {}) }, select: { archivedAt: true } })
@@ -463,6 +461,8 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
         ? await tx.savedPilgrim.update({ where: { id: cardId }, data, select: { id: true } })
         : await tx.savedPilgrim.create({ data: { ...data, ownerId, createdById: actor.userId === ownerId ? null : actor.userId }, select: { id: true } })
       if (dropAddress) await tx.address.delete({ where: { id: addressId! } })
+      // Booking aktif yang belum diajukan mengikuti kartu (sebelum identitas lama dirapikan: jamaahnya pindah ke identitas baru kartu).
+      if (before) await syncLinkedPilgrims(tx, saved.id, before)
 
       const actorId = actor.userId
       if (oldIdentity && oldIdentity.id !== identity?.id) {
@@ -479,12 +479,13 @@ async function write(actor: Actor, ownerId: string, cardId: string | null, input
       }
       const card = await tx.savedPilgrim.findUniqueOrThrow({ where: { id: saved.id }, select: viewSelect })
       return { card, newNik: resolved.newNik }
-    }, { timeout: 15_000 })
+    }, { timeout: 15_000 }))
     return { ok: true, card: toView(card), warnings: await warningsFor(newNik, input) }
   } catch (e) {
     if (e instanceof Abort) return e.result
     const unique = uniqueViolation(e)
     if (unique) return unique
+    if (isRetryableConflict(e)) return { ok: false, status: 409, ...codedError('pilgrimConcurrent') }
     throw e
   }
 }

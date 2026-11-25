@@ -2,11 +2,11 @@ import { FileText, Info, ShieldCheck } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import type { RequirementView } from '@/lib/documents/completeness'
 
-// Daftar "Persyaratan Dokumen" di kartu katalog publik (Visa, Paket Umroh, Haji) — dibaca lewat `requirementsOfMany` (lib/documents/requirements.ts).
+// Daftar "Persyaratan Dokumen" di kartu katalog publik (Visa, Paket Umroh, Haji) — dibaca lewat `requirementsOfMany`/`packageCatalogRequirements` (lib/documents/requirements.ts).
 // Hanya label publik + petunjuk; wajib dan opsional dipisah. Label/petunjuk syarat = data admin (tetap seperti diisi); judul lewat `shared.requiredDocs`.
-export function RequiredDocuments({ requirements }: { requirements: readonly RequirementView[] }) {
+export function RequiredDocuments({ requirements, visaChoice = false }: { requirements: readonly RequirementView[]; visaChoice?: boolean }) {
   const t = useTranslations('shared.requiredDocs')
-  if (requirements.length === 0) return null
+  if (requirements.length === 0 && !visaChoice) return null
   const required = requirements.filter(r => r.required)
   const optional = requirements.filter(r => !r.required)
   return (
@@ -46,6 +46,8 @@ export function RequiredDocuments({ requirements }: { requirements: readonly Req
           </ul>
         </div>
       )}
+
+      {visaChoice && <p className="text-xs text-muted-foreground">{t('visaChoice')}</p>}
     </div>
   )
 }

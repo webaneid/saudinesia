@@ -12,7 +12,7 @@ import { documentIcon } from '@/lib/documents/icons'
 import { FileViewerDialog } from './FileViewerDialog'
 import { formatCalendarDate } from '@/lib/time'
 import type { DocumentTypeOption, PilgrimDocumentView } from '@/lib/documents/service'
-import { EMPTY_DRAFT, canUpload, documentRows, formatBytes, uploadFields, type DocumentRow, type UploadDraft } from './documentRows'
+import { EMPTY_DRAFT, canUpload, documentRows, formatBytes, openFormFor, uploadFields, withRequirementLabels, type DocumentRow, type RequirementInfo, type UploadDraft } from './documentRows'
 import { useApiError } from '@/components/shared/useApiError'
 
 // Dokumen satu jamaah (docs/arsitektur-jamaah.md §7.4) — satu komponen untuk "Jamaah Saya" dan admin atas nama pelanggan (tanpa impor admin).
@@ -29,12 +29,14 @@ type Props = {
   /** Hanya jenis ini yang tampil (dokumen pribadi di halaman booking = syarat produk saja; kartu tetap menyimpan jenis lain untuk booking lain,
    *  jadi berkas jenis lain disembunyikan, bukan ditandai "tidak diperlukan"). Tanpa ini = semua jenis dari server. */
   onlyTypeIds?: readonly string[]
+  /** Label & petunjuk syarat produk (halaman booking) menggantikan label katalog. */
+  typeInfo?: RequirementInfo
 }
 type Loaded = { documents: PilgrimDocumentView[]; types: DocumentTypeOption[] }
 
 const STATUS_VARIANT = { pending: 'muted', accepted: 'success', rejected: 'destructive' } as const
 
-export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onChange, onlyTypeIds }: Props) {
+export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onChange, onlyTypeIds, typeInfo }: Props) {
   const t = useTranslations('shared.documents')
   const errorText = useApiError()
   const [data, setData] = useState<Loaded | null>(null)
@@ -42,7 +44,7 @@ export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onCha
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null) // id baris yang sedang diproses
-  const [openFor, setOpenFor] = useState<string | null>(readOnly ? null : openTypeId ?? null) // id jenis yang formulir unggahnya terbuka
+  const [openFor, setOpenFor] = useState<string | null | undefined>(readOnly ? null : undefined) // id jenis yang formulir unggahnya terbuka; undefined = ikuti openTypeId (jenisnya baru diketahui sesudah dimuat)
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [viewing, setViewing] = useState<PilgrimDocumentView | null>(null) // berkas yang sedang dilihat di popup
 
@@ -78,22 +80,25 @@ export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onCha
   if (!data) return <p className="text-sm text-muted-foreground">{t('loading')}</p>
 
   const only = onlyTypeIds ? new Set(onlyTypeIds) : null
-  const types = only ? data.types.filter(t => only.has(t.id)) : data.types
+  const types = withRequirementLabels(only ? data.types.filter(t => only.has(t.id)) : data.types, typeInfo)
   const rows = documentRows(types, only ? data.documents.filter(d => only.has(d.documentTypeId)) : data.documents)
   const multiTypes = types.filter(t => t.allowMultiple)
+  const initial = openFormFor(types, openTypeId)
+  const formFor = openFor === undefined ? initial.openFor : openFor
+  const hintOf = (id: string) => typeInfo?.[id]?.description || null
 
   return (
     <div className="space-y-3">
       {error && <p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">{error}</p>}
       {notice && <p role="status" className="rounded-lg border bg-muted px-3 py-2 text-sm">{notice}</p>}
 
-      {rows.length === 0 && <p className="text-sm text-muted-foreground">{t('none')}</p>}
+      {rows.length === 0 && (readOnly || multiTypes.length === 0) && <p className="text-sm text-muted-foreground">{t('none')}</p>}
       <ul className="divide-y rounded-xl border empty:hidden">
         {rows.map(row => (
           <RowItem
             key={row.document?.id ?? row.type.id} row={row} readOnly={readOnly} busy={busy === row.document?.id}
             confirming={!!row.document && confirmDelete === row.document.id}
-            formOpen={row.kind === 'single' && openFor === row.type.id}
+            formOpen={row.kind === 'single' && formFor === row.type.id}
             onOpenForm={() => { setOpenFor(row.type.id); setNotice(null) }}
             onCloseForm={() => setOpenFor(null)}
             onUploaded={async () => { setOpenFor(null); setNotice(t('saved')); await load(); onChange?.() }}
@@ -102,12 +107,13 @@ export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onCha
             onCancelDelete={() => setConfirmDelete(null)}
             onDelete={() => row.document && void remove(row.document)}
             endpoint={endpoint}
+            hint={row.kind === 'single' ? hintOf(row.type.id) : null}
           />
         ))}
       </ul>
 
       {!readOnly && multiTypes.length > 0 && (
-        <AddExtra types={multiTypes} endpoint={endpoint} open={openFor === 'extra'} onOpen={() => { setOpenFor('extra'); setNotice(null) }} onClose={() => setOpenFor(null)}
+        <AddExtra types={multiTypes} initialTypeId={initial.extraTypeId} hintOf={hintOf} endpoint={endpoint} open={formFor === 'extra'} onOpen={() => { setOpenFor('extra'); setNotice(null) }} onClose={() => setOpenFor(null)}
           onUploaded={async () => { setOpenFor(null); setNotice(t('saved')); await load(); onChange?.() }} />
       )}
       {viewing && <FileViewerDialog title={viewing.label} endpoint={`${endpoint}/${viewing.id}`} onClose={() => setViewing(null)} />}
@@ -117,12 +123,12 @@ export function DocumentRepeater({ endpoint, readOnly = false, openTypeId, onCha
 }
 
 type RowProps = {
-  row: DocumentRow; readOnly: boolean; busy: boolean; confirming: boolean; formOpen: boolean; endpoint: string
+  row: DocumentRow; readOnly: boolean; busy: boolean; confirming: boolean; formOpen: boolean; endpoint: string; hint: string | null
   onOpenForm: () => void; onCloseForm: () => void; onUploaded: () => Promise<void>
   onPreview: () => void; onAskDelete: () => void; onCancelDelete: () => void; onDelete: () => void
 }
 
-function RowItem({ row, readOnly, busy, confirming, formOpen, endpoint, onOpenForm, onCloseForm, onUploaded, onPreview, onAskDelete, onCancelDelete, onDelete }: RowProps) {
+function RowItem({ row, readOnly, busy, confirming, formOpen, endpoint, hint, onOpenForm, onCloseForm, onUploaded, onPreview, onAskDelete, onCancelDelete, onDelete }: RowProps) {
   const t = useTranslations('shared.documents')
   const locale = useLocale()
   const Icon = documentIcon(row.type.icon)
@@ -133,6 +139,7 @@ function RowItem({ row, readOnly, busy, confirming, formOpen, endpoint, onOpenFo
         <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-muted text-muted-foreground"><Icon className="h-4 w-4" aria-hidden /></span>
         <div className="min-w-0 flex-1 space-y-1">
           <p className="text-sm font-semibold">{doc?.label ?? row.type.label}</p>
+          {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
           {doc ? (
             <>
               <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -179,9 +186,9 @@ function RowItem({ row, readOnly, busy, confirming, formOpen, endpoint, onOpenFo
   )
 }
 
-function AddExtra({ types, endpoint, open, onOpen, onClose, onUploaded }: { types: DocumentTypeOption[]; endpoint: string; open: boolean; onOpen: () => void; onClose: () => void; onUploaded: () => Promise<void> }) {
+function AddExtra({ types, initialTypeId, hintOf, endpoint, open, onOpen, onClose, onUploaded }: { types: DocumentTypeOption[]; initialTypeId?: string; hintOf: (typeId: string) => string | null; endpoint: string; open: boolean; onOpen: () => void; onClose: () => void; onUploaded: () => Promise<void> }) {
   const t = useTranslations('shared.documents')
-  const [typeId, setTypeId] = useState(types[0]?.id ?? '')
+  const [typeId, setTypeId] = useState(initialTypeId ?? types[0]?.id ?? '')
   const type = types.find(t => t.id === typeId) ?? types[0]
   if (!open || !type) return <Button type="button" variant="outline" size="sm" onClick={onOpen}><Plus className="mr-1.5 h-3.5 w-3.5" />{types.length === 1 && types[0] ? t('addOne', { label: types[0].label }) : t('addOther')}</Button>
   return (
@@ -192,6 +199,8 @@ function AddExtra({ types, endpoint, open, onOpen, onClose, onUploaded }: { type
           <ChoiceSelect options={types.map(t => ({ id: t.id, label: t.label }))} value={type.id} onChange={v => setTypeId(v)} clearable={false} ariaLabel={t('type')} />
         </div>
       )}
+      {types.length === 1 && <p className="text-sm font-semibold">{type.label}</p>}
+      {hintOf(type.id) && <p className="text-xs text-muted-foreground">{hintOf(type.id)}</p>}
       <UploadForm key={type.id} type={type} endpoint={endpoint} replacing={false} onCancel={onClose} onUploaded={onUploaded} />
     </div>
   )

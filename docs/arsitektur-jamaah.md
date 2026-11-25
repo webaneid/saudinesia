@@ -510,6 +510,8 @@ Admin menambah/mengubah/menonaktifkan jenis di **Sistem → Jenis Dokumen** (CRU
 ### 7.2 Syarat per produk (K7)
 Di editor produk (Visa lebih dulu, lalu Paket Umroh, Tiket, dst.) admin memilih jenis dokumen dari katalog, menandai wajib/opsional, dan memberi petunjuk. Produk baru diisi **daftar bawaan** yang bisa diubah (mis. visa umroh: paspor, KTP, KK, tiket PP). Kapan bukti reservasi hotel/transport dibutuhkan (urusan BRN internal) diputuskan admin lewat jenis visa yang ia buat — sistem tidak menebak dari isi keranjang. Satu evaluator kelengkapan: `lib/documents/completeness.ts` (syarat = gabungan syarat semua produk yang dipakai jamaah itu di booking).
 
+> **Sejak 2026-11-25** (`docs/arsitektur-data-jamaah.md` §14): jenis dokumen nonaktif tidak diminta; syarat produk yang sudah ada disimpan lewat `saveRequirements` (buka ulang jamaah terverifikasi); snapshot booking mengikuti kartu selama belum diajukan.
+
 ### 7.3 Berkas (MinIO, K12)
 - Kunci objek: `saved-pilgrims/{savedPilgrimId}/{typeKey}/{unix_ms}-{nama}`. Disimpan kunci, URL presigned saat dibaca (15 menit pratinjau, 60 menit ZIP). Bucket privat.
 - Validasi dari **isi berkas** (magic bytes — menutup D3), maks 5 MB masukan. **Gambar (JPG/PNG/WebP) dienkode ulang ke WebP** (EXIF/GPS dibuang; resolusi cukup untuk membaca baris MRZ paspor — angka pasti diuji di F4, usul sisi terpanjang 2000 px, kualitas ~85). PDF diterima apa adanya (header `%PDF-` diperiksa, maks 5 MB, tidak dikonversi — C3). `sha256` dicatat.
