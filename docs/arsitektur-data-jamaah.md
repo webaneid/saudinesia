@@ -291,3 +291,41 @@ di DB sekali pakai; `bun run test` penuh.
 - Booking: "Jadikan saya jamaah" membuka popup kelengkapan bila kartu belum ada atau `cardIncomplete` (`lib/pilgrims/bookingLink.ts`); popup
   mewajibkan kolom wajib katalog + alamat, dan menampilkan pengingat bila WhatsApp belum terverifikasi (tidak memblokir, ADR-0002).
 - Uji: `test-pilgrims` (ADR-0006, SEC-312), `test-pilgrim-data`, `test-pilgrim-form`; browser di DB sekali pakai (desktop + 375px, id + en).
+
+## 14. As-built (2026-11-25) — data dan dokumen sinkron dari produk sampai jamaah
+
+Audit alur produk → halaman jamaah menemukan delapan ketidaksinkronan; semuanya diperbaiki dalam satu PR (arahan pemilik "Ya, perbaiki semua").
+
+| # | Sebelumnya | Sekarang |
+|---|---|---|
+| 1 | Jenis dokumen nonaktif tetap ditagih tetapi tak bisa diunggah | Nonaktif = tidak diminta: `requirementsOfMany`/`pilgrimRequirements` hanya jenis aktif; editor admin (`requirementsOf`) tetap menampilkan baris "Jenis nonaktif — tidak diminta" |
+| 2 | Tombol Unggah tiket/reservasi hotel tak membuka formulir jenis itu | `openFormFor` (`documentRows.ts`): jenis `allowMultiple` membuka formulir tambah berisi jenis itu |
+| 3 | Kartu diubah → booking tertinggal | `lib/pilgrims/bookingSync.ts` `syncLinkedPilgrims`, dipanggil `service.write()` di transaksi yang sama |
+| 4 | NIK wajib menahan WNA dan bayi | `nikOptional` (`forPilgrims.ts`): tidak wajib untuk WNA dan < 2 tahun; `isBaby` pindah ke `lib/pilgrims/age.ts` |
+| 5 | Petunjuk/label syarat produk hilang di halaman jamaah | `description` di checklist; `typeInfo` di `DocumentRepeater` (jamaah dan admin) |
+| 6 | Halaman Paket hanya menampilkan syarat paket | `packageCatalogRequirements`: + syarat visa yang termasuk paket; visa pilihan pemesan = catatan |
+| 7 | Syarat wajib ditambah, jamaah tetap terverifikasi | `saveRequirements` (`lib/pilgrims/review.ts`) dan pengaktifan kembali jenis dokumen membuka ulang ke `submitted` |
+| 8 | Isian petugas di booking terhapus oleh kartu kosong | Kolom kosong di kartu yang sama tidak menghapus; popup "Ubah data jamaah" tak lagi menyalin ulang |
+
+### 14.1 Kartu → booking (menggantikan "snapshot beku sejak ditautkan", §3.4)
+
+- Yang ikut: jamaah booking tertaut, booking `active`, status `draft`/`needs_revision`. `submitted`/`verified`, booking selesai/batal/hangus tetap beku.
+- Per kolom (`mergeCardChange`, murni): **berubah** di kartu → menimpa (termasuk dikosongkan); **tak berubah** → hanya mengisi kolom booking yang kosong.
+- NIK/paspor: kartu punya → segel disalin apa adanya (tanpa membuka); dihapus di kartu → dihapus; tak pernah ada di kartu → segel booking dibiarkan.
+- `identityId` ikut kartu, sebelum identitas lama dirapikan. Transaksi kartu dibungkus `retryConflict` (tautan mengunci jamaah booking → kartu, kartu sebaliknya); bentrok tersisa → 409.
+- `cardSnapshot.ts` = satu bentuk kartu untuk tautan dan penyelarasan. Penulis kolom tersegel `booking_pilgrims`: `bookingLink.ts` dan `bookingSync.ts` (SEAL_OK di `scripts/test-booking-link.ts`).
+
+### 14.2 Syarat bertambah → buka ulang
+
+- `reopenAfterRequirementChange(tx, produk, actorId, change)` membandingkan gabungan syarat WAJIB per jamaah sebelum/sesudah. Yang sudah diwajibkan produk lain tidak membuka ulang; syarat berkurang atau opsional juga tidak.
+- Tidak menyentuh booking tak aktif dan visa `submitted_to_syarikah`/`in_review`/`issued`. Jamaah `submitted` ikut dikunci supaya keputusan serentak memakai syarat baru.
+- Jamaah melihat peringatan berisi dokumen yang kurang (`pilgrimArea.trip.missingDocs`). Belum ada email untuk kejadian ini.
+
+### 14.3 Batas yang diketahui
+
+- Booking yang sudah tertinggal sebelum rilis ini ikut pada perubahan kartu berikutnya (hanya kolom yang berubah atau kosong); untuk memaksa: "Lepas" lalu pilih ulang.
+- Jamaah yang sudah terverifikasi sebelum rilis ini tidak dinilai ulang mundur.
+- Halaman checkout tidak menampilkan daftar dokumen (hanya halaman produk).
+- Pengaturan yang menunggu pemilik: kolom Alamat aktif/tidak, nomor + masa berlaku paspor wajib/tidak, KTP hanya untuk WNI ≥ 17 tahun.
+
+Bukti: `test-booking-link` (edit kartu nyata terhadap lima booking berstatus beda, segel dibuka), `test-pilgrim-requirements` (buka ulang, kunci deterministik, jenis nonaktif, katalog paket, penjaga rute), `test-pilgrim-data` (`nikOptional`), `test-pilgrim-documents` (formulir unggah); browser di DB sekali pakai untuk alur jamaah dan halaman paket.

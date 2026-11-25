@@ -7,6 +7,7 @@ import { AlertCircle, CheckCircle2, Circle, Clock, FileText, FolderOpen, Plane, 
 import { Button } from '@/components/ui/button'
 import { Modal } from '@/components/shared/Modal'
 import { DocumentRepeater } from '@/components/shared/documents/DocumentRepeater'
+import { requirementInfo } from './documentRows'
 import { DATE_LONG, formatCalendarDate } from '@/lib/time'
 
 // Kelengkapan dokumen satu jamaah di booking (docs/arsitektur-jamaah.md §5.5 butir 2) — SATU komponen untuk halaman jamaah dan admin
@@ -18,6 +19,8 @@ export type ChecklistItemView = {
   key: string
   documentTypeId: string
   label: string
+  /** Petunjuk syarat dari produk (data admin, boleh kosong). */
+  description: string
   required: boolean
   state: string
   sources: string[]
@@ -109,6 +112,7 @@ export function DocumentChecklist({ items, card, endpoints, emptyHint }: Props) 
                   <StatusIcon state={i.state} />
                   <div className="min-w-0 flex-1 text-sm">
                     <p className="font-medium">{i.label}{i.required ? '' : <span className="font-normal text-muted-foreground"> {td('optional')}</span>}</p>
+                    {i.description && <p className="text-xs text-muted-foreground">{i.description}</p>}
                     <p className={`text-xs ${PROBLEM.has(i.state) ? 'text-destructive' : 'text-muted-foreground'}`}>{statusText(i, t, locale)}</p>
                     {!oneSource && i.sources.length > 0 && <p className="text-xs text-muted-foreground">{t('requestedBy', { sources: i.sources.join(', ') })}</p>}
                   </div>
@@ -141,6 +145,7 @@ export function DocumentChecklist({ items, card, endpoints, emptyHint }: Props) 
               // Dokumen pribadi: hanya syarat produk (jenis lain tetap di kartu untuk booking lain — dikelola di Jamaah Saya). Perjalanan disaring
               // server (tripUploadableTypes) — tanpa saringan klien supaya berkas lama yang tak diminta tampil bertanda "Tidak diperlukan".
               onlyTypeIds={open.personal ? items.filter(i => i.reusable).map(i => i.documentTypeId) : undefined}
+              typeInfo={requirementInfo(items.filter(i => i.reusable === open.personal))}
               onChange={() => router.refresh()}
             />
           </div>

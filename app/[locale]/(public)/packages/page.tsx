@@ -6,7 +6,7 @@ import { requireCatalog } from '@/lib/catalog/availability'
 import { getFeaturedCards } from '@/lib/media/urls'
 import { withSellPrice } from '@/lib/pricing/engine/read'
 import { checkoutPath } from '@/lib/checkout/kinds'
-import { requirementsOfMany } from '@/lib/documents/requirements'
+import { packageCatalogRequirements } from '@/lib/documents/requirements'
 import { getPageContent, getPageText } from '@/lib/public-content/content'
 import { catalogMetadata } from '@/lib/public-content/metadata'
 import { formatRupiah } from '@/lib/utils'
@@ -41,7 +41,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
   const ids = packages.map(p => p.id)
   const [covers, reqs, departures] = await Promise.all([
     getFeaturedCards('package', ids),
-    requirementsOfMany(ids.map(id => ({ productType: 'package', productId: id }))),
+    packageCatalogRequirements(ids),
     bookableDepartures(ids),
   ])
   // Keberangkatan terdekat yang masih punya kursi (K1 F5) — hanya tanggal, tanpa catatan internal.
@@ -101,7 +101,7 @@ export default async function PackagesCatalogPage({ params }: Props) {
                     </ul>
                   )}
 
-                  <RequiredDocuments requirements={reqs.get(`package:${pkg.id}`) ?? []} />
+                  <RequiredDocuments requirements={reqs.get(pkg.id)?.requirements ?? []} visaChoice={reqs.get(pkg.id)?.visaChoice} />
 
                   <div className="mt-auto space-y-3 border-t pt-4">
                     <PriceTag

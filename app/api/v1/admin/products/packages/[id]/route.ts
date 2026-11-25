@@ -9,7 +9,9 @@ import { emptyToNull, richTextField } from '@/lib/validators/richText'
 import { deletePackage } from '@/lib/admin/productDelete'
 import { cateringSeasonPrices, sellPrice, sellPrices, visaPriceSummary } from '@/lib/pricing/engine/read'
 import { documentRequirementListSchema } from '@/lib/validators/documents'
-import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
+import { RequirementRejected, requirementsOf } from '@/lib/documents/requirements'
+import { retryConflict } from '@/lib/booking/serializable'
+import { saveRequirements } from '@/lib/pilgrims/review'
 import { packageDetailFields, readExclusions, readItinerary } from '@/lib/validators/package'
 import { logError } from '@/lib/log'
 
@@ -131,7 +133,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
-    await requireManager()
+    const session = await requireManager()
     const { id } = await params
     const parsed = updateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
@@ -227,14 +229,14 @@ export async function PUT(req: Request, { params }: Ctx) {
     }
 
     // Produk + syarat dokumen dalam SATU transaksi — syarat tak pernah setengah tersimpan.
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await retryConflict(() => prisma.$transaction(async (tx) => { // deadlock dengan revisi booking serentak → ulang
       const updated = await tx.package.update({ where: { id }, data })
       if (requirements) {
-        const written = await writeRequirements(tx, 'package', id, requirements)
+        const written = await saveRequirements(tx, 'package', id, requirements, session.userId)
         if (!written.ok) throw new RequirementRejected(written.error, written.field)
       }
       return updated
-    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    })).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
     if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
     const pkg = result
 

@@ -7,7 +7,9 @@ import { emptyToNull } from '@/lib/validators/richText'
 import { authFailureResponse, isRecordNotFound } from '@/lib/admin/errors'
 import { deleteOrDeactivateHaji } from '@/lib/haji/delete'
 import { sellPrice } from '@/lib/pricing/engine/read'
-import { RequirementRejected, requirementsOf, writeRequirements } from '@/lib/documents/requirements'
+import { RequirementRejected, requirementsOf } from '@/lib/documents/requirements'
+import { retryConflict } from '@/lib/booking/serializable'
+import { saveRequirements } from '@/lib/pilgrims/review'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -29,7 +31,7 @@ export async function GET(_req: Request, { params }: Ctx) {
 
 export async function PUT(req: Request, { params }: Ctx) {
   try {
-    await requireManager()
+    const session = await requireManager()
     const { id } = await params
     const parsed = hajiProductUpdateSchema.safeParse(await req.json().catch(() => null))
     if (!parsed.success) return NextResponse.json(err(parsed.error.issues[0]?.message ?? 'Data tidak valid'), { status: 400 })
@@ -45,17 +47,17 @@ export async function PUT(req: Request, { params }: Ctx) {
 
     const { description, requirements, ...fields } = parsed.data
     // Produk + syarat dokumen dalam SATU transaksi — syarat tak pernah setengah tersimpan.
-    const result = await prisma.$transaction(async (tx) => {
+    const result = await retryConflict(() => prisma.$transaction(async (tx) => { // deadlock dengan revisi booking serentak → ulang
       const updated = await tx.hajiProduct.update({
         where: { id },
         data: { ...fields, ...(description !== undefined && { description: emptyToNull(description) }) },
       })
       if (requirements) {
-        const written = await writeRequirements(tx, 'haji', id, requirements)
+        const written = await saveRequirements(tx, 'haji', id, requirements, session.userId)
         if (!written.ok) throw new RequirementRejected(written.error, written.field)
       }
       return updated
-    }).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
+    })).catch((e: unknown) => (e instanceof RequirementRejected ? e : Promise.reject(e)))
     if (result instanceof RequirementRejected) return NextResponse.json({ ...err(result.message), ...(result.field && { meta: { field: result.field } }) }, { status: 400 })
     return NextResponse.json(ok({ ...result, price: await sellPrice('haji', id) }))
   } catch (e) {

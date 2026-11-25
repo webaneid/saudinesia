@@ -1,11 +1,15 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/lib/db'
 import { deleteOrDeactivate, type DeleteOutcome } from '@/lib/admin/safeDelete'
+import { retryConflict } from '@/lib/booking/serializable'
+import { reopenAfterRequirementChange } from '@/lib/pilgrims/review'
+import { productsRequiring } from './requirements'
 import type { DocumentTypeCreate, DocumentTypeUpdate } from '@/lib/validators/documents'
 
 // Katalog jenis dokumen (docs/arsitektur-jamaah.md §7.1) — SATU-SATUNYA penulis `document_types`. Jenis bawaan (`isSystem`, diisi migrasi) dipakai
 // kode lewat `key`-nya: tidak bisa dihapus dan perilakunya (`reusable`/`hasExpiry`/`allowMultiple`) tetap; label, ikon, urutan, aturan masa
-// berlaku, kode referensi, dan status aktif boleh diubah. Kunci tak pernah berubah.
+// berlaku, kode referensi, dan status aktif boleh diubah. Kunci tak pernah berubah. Jenis NONAKTIF tidak diminta dari jamaah dan tak tampil di
+// katalog (walau masih tercatat di syarat produk); berkas lama tetap tersimpan.
 
 export type TypeResult<T> = { ok: true; value: T } | { ok: false; status: 400 | 404 | 409; error: string; field?: string }
 
@@ -21,10 +25,11 @@ export async function createDocumentType(input: DocumentTypeCreate): Promise<Typ
   }
 }
 
-export async function updateDocumentType(id: string, input: DocumentTypeUpdate): Promise<TypeResult<{ id: string }>> {
-  return prisma.$transaction(async (tx) => {
+export async function updateDocumentType(id: string, input: DocumentTypeUpdate, actorId: string): Promise<TypeResult<{ id: string }>> {
+  // Jenis → jamaah booking di sini, jamaah booking → jenis (FK) saat produk disimpan: deadlock serentak → ulang.
+  return retryConflict(() => prisma.$transaction(async (tx) => {
     // $queryRaw: Prisma ORM tidak punya SELECT ... FOR UPDATE.
-    const rows = await tx.$queryRaw<{ isSystem: boolean; hasExpiry: boolean; referenceLabel: string | null }[]>`SELECT "isSystem", "hasExpiry", "referenceLabel" FROM "document_types" WHERE "id" = ${id} FOR UPDATE`
+    const rows = await tx.$queryRaw<{ isSystem: boolean; isActive: boolean; hasExpiry: boolean; referenceLabel: string | null }[]>`SELECT "isSystem", "isActive", "hasExpiry", "referenceLabel" FROM "document_types" WHERE "id" = ${id} FOR UPDATE`
     const cur = rows[0]
     if (!cur) return { ok: false as const, status: 404 as const, error: 'Jenis dokumen tidak ditemukan' }
     if (cur.isSystem) {
@@ -39,9 +44,11 @@ export async function updateDocumentType(id: string, input: DocumentTypeUpdate):
     const data: Prisma.DocumentTypeUpdateInput = { ...input }
     if (input.hasExpiry === false) data.minValidityMonths = null
     if (input.referenceLabel === null) data.referencePattern = null
-    await tx.documentType.update({ where: { id }, data })
+    // Nonaktif = tidak diminta; diaktifkan kembali = syarat wajibnya kembali ditagih → jamaah terverifikasi yang terdampak dibuka ulang.
+    const activating = input.isActive === true && !cur.isActive
+    await reopenAfterRequirementChange(tx, activating ? await productsRequiring(id, tx) : [], actorId, () => tx.documentType.update({ where: { id }, data }))
     return { ok: true as const, value: { id } }
-  })
+  }))
 }
 
 /** Hapus-aman: bawaan atau yang sudah dipakai dokumen jamaah → nonaktif; selain itu dihapus sungguhan. */

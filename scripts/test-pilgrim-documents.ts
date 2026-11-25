@@ -16,7 +16,7 @@ import { createDocumentService, checkUploadFields, listCardDocuments, MAX_DOCUME
 import type { DocumentStorage } from '@/lib/documents/storage'
 import { createDocumentType, deleteDocumentType, updateDocumentType } from '@/lib/documents/types'
 import { documentTypeCreateSchema, referencePatternProblem } from '@/lib/validators/documents'
-import { documentRows, uploadFields, canUpload, EMPTY_DRAFT } from '@/components/shared/documents/documentRows'
+import { documentRows, openFormFor, requirementInfo, uploadFields, withRequirementLabels, canUpload, EMPTY_DRAFT } from '@/components/shared/documents/documentRows'
 import { savedPilgrimInputSchema } from '@/lib/validators/pilgrims'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -242,15 +242,24 @@ await t('HAPUS KARTU: kartu tanpa booking dihapus sungguhan beserta baris dokume
   assert.equal(await prisma.pilgrimDocument.count({ where: { savedPilgrimId: c } }), 0)
 })
 
+await t('FORMULIR UNGGAH: tombol Unggah jenis boleh-banyak membuka formulir tambah berisi jenis itu; jenis tunggal membuka barisnya; label syarat menggantikan label katalog', () => {
+  const opt = (id: string, allowMultiple: boolean) => ({ id, key: id, label: id, icon: 'FileText', hasExpiry: false, minValidityMonths: null, referenceLabel: null, referencePattern: null, allowMultiple })
+  const list = [opt('hotel', true), opt('tiket', true), opt('paspor', false)]
+  assert.deepEqual(openFormFor(list, 'tiket'), { openFor: 'extra', extraTypeId: 'tiket' })
+  assert.deepEqual(openFormFor(list, 'paspor'), { openFor: 'paspor' })
+  assert.deepEqual(openFormFor(list, 'lain'), { openFor: null }); assert.deepEqual(openFormFor(list, undefined), { openFor: null })
+  assert.deepEqual(withRequirementLabels(list, requirementInfo([{ documentTypeId: 'tiket', label: 'Tiket PP', description: 'Wajib pulang-pergi' }])).map(x => x.label), ['hotel', 'Tiket PP', 'paspor'])
+})
+
 await t('KATALOG JENIS: buat, kunci ganda 409, bawaan terkunci sifatnya, hapus-aman (bawaan/terpakai → nonaktif, kosong → hapus)', async () => {
   const key = `uji_${Date.now() % 100000}`
   const made = await createDocumentType(documentTypeCreateSchema.parse({ key, label: 'Surat Uji', icon: 'ScrollText', reusable: true }))
   assert.ok(made.ok)
   const dup = await createDocumentType(documentTypeCreateSchema.parse({ key, label: 'Lagi', icon: 'FileText', reusable: true }))
   assert.equal(dup.ok ? 0 : dup.status, 409)
-  const locked = await updateDocumentType(T('passport'), { allowMultiple: true })
+  const locked = await updateDocumentType(T('passport'), { allowMultiple: true }, a.userId)
   assert.equal(locked.ok ? '' : locked.field, 'allowMultiple')
-  assert.ok((await updateDocumentType(T('passport'), { label: 'Foto Paspor' })).ok, 'label bawaan boleh diubah')
+  assert.ok((await updateDocumentType(T('passport'), { label: 'Foto Paspor' }, a.userId)).ok, 'label bawaan boleh diubah')
   const sys = await deleteDocumentType(T('kk'))
   assert.equal(sys.deleted, false); assert.equal((await prisma.documentType.findUniqueOrThrow({ where: { id: T('kk') } })).isActive, false)
   await prisma.documentType.update({ where: { id: T('kk') }, data: { isActive: true } })

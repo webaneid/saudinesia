@@ -144,7 +144,7 @@ await t('PENJAGA V4b: rute buat/ubah Paket & Haji menulis syarat lewat writeRequ
     ['app/api/v1/admin/products/haji/[id]/route.ts', 'haji', false],
   ] as const) {
     const s = src(f)
-    assert.match(s, new RegExp(`\\$transaction\\([\\s\\S]*writeRequirements\\(tx, '${owner}'`), f)
+    assert.match(s, new RegExp(`\\$transaction\\([\\s\\S]*${isCreate ? 'write' : 'save'}Requirements\\(tx, '${owner}'`), f)
     if (isCreate) assert.match(s, new RegExp(`writeDefaultRequirements\\(tx, '${owner}'`), f)
     else assert.match(s, new RegExp(`requirementsOf\\('${owner}', id\\)`), f)
   }
@@ -152,7 +152,7 @@ await t('PENJAGA V4b: rute buat/ubah Paket & Haji menulis syarat lewat writeRequ
   for (const [f, owner] of [['app/[locale]/(public)/packages/page.tsx', 'package'], ['app/[locale]/(public)/haji/page.tsx', 'haji'], ['app/[locale]/(public)/visa/page.tsx', 'visa']] as const) {
     const s = src(f)
     assert.match(s, /<RequiredDocuments requirements=/, f)
-    assert.match(s, new RegExp(`productType: '${owner}'`), f)
+    assert.match(s, owner === 'package' ? /packageCatalogRequirements\(/ : new RegExp(`productType: '${owner}'`), f)
   }
   for (const f of ['app/[locale]/admin/(protected)/products/packages/[id]/page.tsx', 'app/[locale]/admin/(protected)/products/haji/[id]/page.tsx']) {
     assert.match(src(f), /<RequirementsTable /, f)

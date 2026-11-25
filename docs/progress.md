@@ -1012,3 +1012,7 @@ Rencana: `docs/arsitektur-booking-engine-v2.md` (keputusan pemilik D1–D19, §0
 - [x] P1 — nomor verifikasi = nomor hasil scan (`linkedWhatsappNumber`), kartu verifikasi baru: "Verifikasi Sekarang", kirim manual + salin (as-built `docs/arsitektur-whatsapp-verifikasi.md` §11)
 - [x] P2 — kolom semua kartu jamaah mengikuti katalog; kewajiban NIK/paspor mengikuti katalog (ADR-0006 Proposed, menunggu persetujuan pemilik); SEC-312 ditutup
 - [x] P3 — Profil satu formulir (akun + kartu Saya sendiri, wajib nama + alamat) + popup kelengkapan saat menjadi jamaah (as-built `docs/arsitektur-data-jamaah.md` §13)
+
+**Data dan dokumen jamaah sinkron dari produk ke halaman jamaah (`docs/arsitektur-data-jamaah.md` §14, 2026-11-25)**
+- [x] Delapan ketidaksinkronan ditutup: jenis nonaktif, popup unggah, kartu → booking, NIK WNA/bayi, petunjuk syarat, syarat paket + visa, buka ulang saat syarat bertambah, isian petugas aman
+- [ ] Keputusan pemilik: kolom Alamat, paspor wajib, KTP hanya WNI ≥ 17 tahun; rilis produksi

@@ -3,6 +3,9 @@ import { prisma } from '@/lib/db'
 import { activeFields, pilgrimCatalog, type PilgrimFieldDef } from './catalog'
 import { enabledProducts } from './products'
 import { productRefKey, type ProductRef } from './owners'
+import { isBaby } from '@/lib/pilgrims/age'
+import { COUNTRIES } from '@/lib/constants/countries'
+import { calendarDateOf, isCalendarDate } from '@/lib/time'
 
 // Kolom data jamaah yang DIMINTA dari tiap jamaah booking (docs/arsitektur-data-jamaah.md §3.3) — SATU aturan untuk halaman jamaah,
 // admin, kelengkapan, dan gerbang "Ajukan" (menggantikan pilihan lama "kolom visa-nya atau set core"):
@@ -45,6 +48,20 @@ async function bookingItemProducts(db: Db, bookingIds: readonly string[]): Promi
   return out
 }
 
+/**
+ * NIK tak pernah WAJIB untuk WNA dan bayi (< 2 tahun) — aturan yang sama dengan kartu (`piiDemand`, lib/pilgrims/service.ts); tanpa ini mereka
+ * tak bisa "Ajukan" begitu kolom NIK diwajibkan. Dibaca dari snapshot booking, lalu kartu tertaut. Kewarganegaraan yang tak dikenali (teks bebas)
+ * = dianggap WNI (fail-closed). Murni.
+ */
+export function nikOptional(fields: readonly PilgrimFieldDef[], values: Record<string, unknown>, card: { nationality: string; birthDate: Date | null } | null): boolean {
+  const value = (role: string) => { const f = fields.find(x => x.role === role); const v = f ? values[f.fieldKey] : null; return typeof v === 'string' ? v.trim() : '' }
+  const nat = value('nationality')
+  const code = nat ? COUNTRIES.find(c => c.code === nat.toUpperCase() || c.name.toLowerCase() === nat.toLowerCase())?.code : card?.nationality
+  if (code && code !== 'ID') return true
+  const birth = value('birth_date') || (card?.birthDate ? calendarDateOf(card.birthDate) : '')
+  return isCalendarDate(birth) && isBaby(birth)
+}
+
 /** Kolom yang diminta + katalog untuk setiap jamaah booking di `pilgrimIds`. Jamaah yang tak ditemukan tidak ada di peta. */
 export async function pilgrimFieldSets(db: Db, pilgrimIds: readonly string[]): Promise<Map<string, PilgrimFieldSet>> {
   if (pilgrimIds.length === 0) return new Map()
@@ -53,7 +70,8 @@ export async function pilgrimFieldSets(db: Db, pilgrimIds: readonly string[]): P
     db.bookingPilgrim.findMany({
       where: { id: { in: [...pilgrimIds] } },
       select: {
-        id: true, bookingId: true, groupId: true,
+        id: true, bookingId: true, groupId: true, fieldValues: true,
+        savedPilgrim: { select: { nationality: true, birthDate: true } },
         bookingPackage: { select: { packageId: true } },
         bookingHaji: { select: { hajiProductId: true } },
         visaApplication: { select: { visaProductId: true } },
@@ -71,7 +89,9 @@ export async function pilgrimFieldSets(db: Db, pilgrimIds: readonly string[]): P
   const enabled = await enabledProducts(db, [...new Map([...refsByPilgrim.values()].flat().map(r => [productRefKey(r), { productType: r.productType, productId: r.productId }])).values()])
   const active = activeFields(catalog)
   return new Map(pilgrims.map(p => [p.id, {
-    demanded: (refsByPilgrim.get(p.id) ?? []).some(r => enabled.has(productRefKey(r))) ? active : [],
+    demanded: (refsByPilgrim.get(p.id) ?? []).some(r => enabled.has(productRefKey(r)))
+      ? nikOptional(active, (p.fieldValues ?? {}) as Record<string, unknown>, p.savedPilgrim) ? active.map(f => (f.role === 'nik' ? { ...f, required: false } : f)) : active
+      : [],
     catalog,
   }]))
 }

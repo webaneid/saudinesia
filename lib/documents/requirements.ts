@@ -62,23 +62,53 @@ const toView = (r: ViewRow): RequirementView => ({
   minValidityMonths: r.documentType.minValidityMonths,
 })
 
-/** Syarat satu produk, urut tampil. */
+/** Syarat satu produk untuk EDITOR admin, urut tampil — termasuk jenis nonaktif (ditandai di editor). Jangan dipakai halaman publik/jamaah. */
 export async function requirementsOf(productType: string, productId: string, db: Tx | typeof prisma = prisma): Promise<RequirementView[]> {
   const rows = await db.documentRequirement.findMany({ where: { productType, productId }, orderBy: [{ order: 'asc' }, { id: 'asc' }], select: viewSelect })
   return rows.map(toView)
 }
 
-/** Syarat banyak produk sekaligus (satu kueri) — kunci peta `${productType}:${productId}`; produk tanpa syarat → []. */
+/** Syarat yang BERLAKU (jenis dokumen aktif — jenis nonaktif tidak diminta) banyak produk sekaligus (satu kueri) — kunci peta `${productType}:${productId}`; produk tanpa syarat → []. */
 export async function requirementsOfMany(refs: readonly ProductRef[], db: Tx | typeof prisma = prisma): Promise<Map<string, RequirementView[]>> {
   const out = new Map<string, RequirementView[]>(refs.map(r => [`${r.productType}:${r.productId}`, []]))
   if (refs.length === 0) return out
   const rows = await db.documentRequirement.findMany({
-    where: { OR: refs.map(r => ({ productType: r.productType, productId: r.productId })) },
+    where: { documentType: { isActive: true }, OR: refs.map(r => ({ productType: r.productType, productId: r.productId })) },
     orderBy: [{ order: 'asc' }, { id: 'asc' }],
     select: { ...viewSelect, productType: true, productId: true },
   })
   for (const r of rows) out.get(`${r.productType}:${r.productId}`)?.push(toView(r))
   return out
+}
+
+/** Syarat Paket Umroh di halaman publik = syarat paket + syarat visa yang TERMASUK paket (sama dengan gabungan yang ditagih ke jamaahnya);
+ *  `visaChoice` = visa dipilih pemesan, syaratnya menyusul menurut visa pilihan. */
+export async function packageCatalogRequirements(packageIds: readonly string[]): Promise<Map<string, { requirements: RequirementView[]; visaChoice: boolean }>> {
+  if (packageIds.length === 0) return new Map()
+  const packages = await prisma.package.findMany({
+    where: { id: { in: [...packageIds] } },
+    select: { id: true, name: true, visaMode: true, includedVisaProduct: { select: { id: true, name: true } }, _count: { select: { visaOptions: true } } },
+  })
+  const visaOf = (p: (typeof packages)[number]) => (p.visaMode === 'included' ? p.includedVisaProduct : null)
+  const reqs = await requirementsOfMany(packages.flatMap(p => {
+    const visa = visaOf(p)
+    return [{ productType: 'package', productId: p.id }, ...(visa ? [{ productType: 'visa', productId: visa.id }] : [])]
+  }))
+  return new Map(packages.map(p => {
+    const visa = visaOf(p)
+    return [p.id, {
+      requirements: mergeRequirements([
+        { source: p.name, requirements: reqs.get(`package:${p.id}`) ?? [] },
+        ...(visa ? [{ source: visa.name, requirements: reqs.get(`visa:${visa.id}`) ?? [] }] : []),
+      ]),
+      visaChoice: p.visaMode === 'user_choice' && p._count.visaOptions > 0,
+    }]
+  }))
+}
+
+/** Produk yang MEWAJIBKAN satu jenis dokumen (dipakai saat jenis itu diaktifkan kembali). */
+export async function productsRequiring(documentTypeId: string, db: Tx | typeof prisma): Promise<ProductRef[]> {
+  return db.documentRequirement.findMany({ where: { documentTypeId, required: true }, select: { productType: true, productId: true } })
 }
 
 /**
@@ -107,7 +137,8 @@ export async function pilgrimRequirements(db: Tx | typeof prisma, bookingPilgrim
   return new Map(rows.map(r => [r.id, mergeRequirements(productsOf(r).map(p => ({ source: p.name, requirements: byProduct.get(`${p.productType}:${p.productId}`) ?? [] })))]))
 }
 
-/** Ganti seluruh syarat satu produk (urutan = urutan daftar) di dalam transaksi pemanggil. Jenis harus ada; jenis NONAKTIF hanya boleh
+/** JANGAN dipanggil langsung untuk produk yang sudah ada — pakai `saveRequirements` (lib/pilgrims/review.ts) supaya jamaah terverifikasi dibuka ulang.
+ *  Ganti seluruh syarat satu produk (urutan = urutan daftar) di dalam transaksi pemanggil. Jenis harus ada; jenis NONAKTIF hanya boleh
  *  bila sudah menjadi syarat produk ini (supaya menyimpan ulang tak gagal sesudah admin menonaktifkan jenis). */
 export async function writeRequirements(tx: Tx, productType: RequirementOwner, productId: string, items: readonly DocumentRequirementInput[]): Promise<RequirementWriteResult> {
   if (!(await REQUIREMENT_OWNERS[productType].lock(tx, productId))) return { ok: false, status: 404, error: 'Produk tidak ditemukan' }

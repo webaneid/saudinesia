@@ -135,7 +135,12 @@ export function PilgrimCardPanel({ locale, bookingId, pilgrimId, customerId, lin
           showSelf={!self.cardId || self.cardId === linked.id}
           saveLabel="Simpan"
           onClose={() => setCreating(null)}
-          onSaved={(id, warnings) => call('PUT', { cardId: id }, ['Data jamaah diperbarui.', ...warnings.map(w => WARNING_TEXT[w])].join(' '))}
+          onSaved={async (_id, warnings) => { // layanan kartu sudah memperbarui booking ini (bookingSync)
+            setNotice({ text: ['Data jamaah diperbarui.', ...warnings.map(w => WARNING_TEXT[w])].join(' '), error: false })
+            setCreating(null)
+            router.refresh()
+            return null
+          }}
         />
       )}
       {(creating === 'new' || creating === 'self') && (

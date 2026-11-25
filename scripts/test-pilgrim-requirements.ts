@@ -11,8 +11,9 @@ import { prisma } from '@/lib/db'
 import { __resetForTests } from '@/lib/auth/rateLimit'
 import { createSavedPilgrim, type Actor } from '@/lib/pilgrims/service'
 import { bookingChecklists } from '@/lib/pilgrims/bookingLink'
-import { reopenForChangedDocument, submitPilgrim } from '@/lib/pilgrims/review'
-import { pilgrimRequirements, writeRequirements } from '@/lib/documents/requirements'
+import { reopenForChangedDocument, saveRequirements, submitPilgrim } from '@/lib/pilgrims/review'
+import { updateDocumentType } from '@/lib/documents/types'
+import { packageCatalogRequirements, pilgrimRequirements, requirementsOf, requirementsOfMany, writeRequirements } from '@/lib/documents/requirements'
 import { savedPilgrimInputSchema } from '@/lib/validators/pilgrims'
 import { assertThrowawayDb } from './lib/testDb'
 
@@ -120,6 +121,101 @@ await t('BUKA ULANG: dokumen kartu berubah → jamaah terverifikasi dibuka ulang
   const byPkg = await prisma.$transaction(tx => reopenForChangedDocument(tx, { savedPilgrimId: card, bookingId: null, documentTypeId: T('vaccine') }, staff.userId, 'uji'))
   assert.equal(byPkg, 1, 'vaksin hanya diminta paket — dulu (visa saja) tidak dibuka ulang')
   assert.equal((await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id: p1 }, select: { reviewStatus: true } })).reviewStatus, 'submitted')
+})
+
+const statusOf = async (id: string) => (await prisma.bookingPilgrim.findUniqueOrThrow({ where: { id }, select: { reviewStatus: true } })).reviewStatus
+const verifyRow = (id: string) => prisma.bookingPilgrim.update({ where: { id }, data: { reviewStatus: 'verified', submittedAt: new Date(), verifiedAt: new Date(), verifiedById: staff.userId }, select: { id: true } })
+const save = (items: { k: string; required: boolean }[]) => prisma.$transaction(tx => saveRequirements(tx, 'visa', visaOther.id, items.map(i => ({ documentTypeId: T(i.k), label: null, description: '', required: i.required })), staff.userId))
+
+await t('SYARAT BERTAMBAH (saveRequirements): wajib baru / opsional→wajib membuka ulang jamaah terverifikasi; tanpa tambahan, opsional baru, atau visa sudah di Syarikah → tetap', async () => {
+  await verifyRow(p3); await verifyRow(p2)
+  assert.deepEqual(await save([{ k: 'flight_ticket', required: true }]), { ok: true })
+  assert.equal(await statusOf(p3), 'verified', 'disimpan ulang tanpa perubahan')
+  await save([{ k: 'flight_ticket', required: true }, { k: 'kk', required: false }])
+  assert.equal(await statusOf(p3), 'verified', 'opsional baru')
+  await save([{ k: 'flight_ticket', required: true }, { k: 'kk', required: true }])
+  assert.equal(await statusOf(p3), 'submitted', 'opsional → wajib')
+  assert.equal(await statusOf(p2), 'verified', 'produk lain tak terpengaruh')
+  const ev = await prisma.pilgrimReviewEvent.findFirstOrThrow({ where: { bookingPilgrimId: p3 }, orderBy: { createdAt: 'desc' } })
+  assert.deepEqual([ev.fromStatus, ev.toStatus, ev.actorId], ['verified', 'submitted', staff.userId])
+  assert.ok(ev.note?.includes(types.kk!.label))
+  await verifyRow(p3)
+  await save([{ k: 'flight_ticket', required: true }])
+  assert.equal(await statusOf(p3), 'verified', 'syarat berkurang')
+  await prisma.visaApplication.update({ where: { bookingPilgrimId: p3 }, data: { status: 'submitted_to_syarikah' } })
+  await save([{ k: 'flight_ticket', required: true }, { k: 'ktp', required: true }])
+  assert.equal(await statusOf(p3), 'verified', 'berkas sudah di Syarikah')
+  await prisma.visaApplication.update({ where: { bookingPilgrimId: p3 }, data: { status: 'pending_documents' } })
+  await prisma.booking.update({ where: { id: bk.id }, data: { status: 'cancelled' } })
+  await save([{ k: 'flight_ticket', required: true }, { k: 'ktp', required: true }, { k: 'kk', required: true }])
+  assert.equal(await statusOf(p3), 'verified', 'booking tak aktif')
+  await prisma.booking.update({ where: { id: bk.id }, data: { status: 'active' } })
+  const bad = await prisma.$transaction(tx => saveRequirements(tx, 'visa', '00000000-0000-4000-8000-000000000000', [], staff.userId))
+  assert.equal(!bad.ok && bad.status, 404)
+})
+
+await t('SYARAT BERTAMBAH: dokumen yang sudah diwajibkan produk lain jamaah itu tak membuka ulang', async () => {
+  await verifyRow(p1)
+  await prisma.$transaction(tx => saveRequirements(tx, 'package', pkg.id, [
+    { documentTypeId: T('kk'), label: 'KK (paket)', description: 'Terbaru', required: true }, { documentTypeId: T('vaccine'), label: null, description: '', required: true },
+  ], staff.userId))
+  assert.equal(await statusOf(p1), 'verified', 'KK sudah wajib lewat visa')
+})
+
+await t('KUNCI: keputusan serentak menunggu — jamaah "submitted" yang sedang diputus ikut dinilai sesudah kunci lepas', async () => {
+  await save([{ k: 'flight_ticket', required: true }])
+  await prisma.bookingPilgrim.update({ where: { id: p3 }, data: { reviewStatus: 'submitted', verifiedAt: null, verifiedById: null }, select: { id: true } })
+  let release = () => {}
+  const gate = new Promise<void>(r => { release = r })
+  let locked = () => {}
+  const ready = new Promise<void>(r => { locked = r })
+  const decide = prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT "id" FROM "booking_pilgrims" WHERE "id" = ${p3} FOR UPDATE`
+    locked(); await gate
+    await tx.bookingPilgrim.update({ where: { id: p3 }, data: { reviewStatus: 'verified', verifiedAt: new Date(), verifiedById: staff.userId }, select: { id: true } })
+  }, { timeout: 15_000 })
+  await ready
+  const saving = save([{ k: 'flight_ticket', required: true }, { k: 'kk', required: true }])
+  await new Promise(r => setTimeout(r, 300))
+  release()
+  await decide; await saving
+  assert.equal(await statusOf(p3), 'submitted', 'verifikasi yang baru saja terjadi ikut dibuka ulang')
+})
+
+await t('JENIS NONAKTIF: tidak diminta (jamaah & katalog), tetap ada di editor; diaktifkan kembali → jamaah terverifikasi dibuka ulang', async () => {
+  const made = await prisma.documentType.create({ data: { key: `uji_${tag}`, label: 'Surat Nonaktif', icon: 'FileText', reusable: true } })
+  await prisma.$transaction(tx => saveRequirements(tx, 'visa', visaOther.id, [{ documentTypeId: T('flight_ticket'), label: null, description: '', required: true }, { documentTypeId: made.id, label: null, description: '', required: true }], staff.userId))
+  await prisma.documentType.update({ where: { id: made.id }, data: { isActive: false } })
+  assert.deepEqual((await pilgrimRequirements(prisma, [p3])).get(p3)!.map(r => r.key), ['flight_ticket'])
+  assert.deepEqual((await requirementsOfMany([{ productType: 'visa', productId: visaOther.id }])).get(`visa:${visaOther.id}`)!.map(r => r.key), ['flight_ticket'])
+  assert.deepEqual((await requirementsOf('visa', visaOther.id)).map(r => r.key), ['flight_ticket', made.key])
+  await verifyRow(p3)
+  assert.ok((await updateDocumentType(made.id, { label: 'Surat' }, staff.userId)).ok)
+  assert.equal(await statusOf(p3), 'verified', 'ubah label tak membuka ulang')
+  assert.ok((await updateDocumentType(made.id, { isActive: true }, staff.userId)).ok)
+  assert.equal(await statusOf(p3), 'submitted')
+  await prisma.documentRequirement.deleteMany({ where: { documentTypeId: made.id } })
+  await prisma.documentType.delete({ where: { id: made.id } })
+})
+
+await t('KATALOG PAKET: syarat paket + visa yang termasuk paket; visa pilihan pemesan → catatan, tanpa syarat visa; tanpa visa → paket saja', async () => {
+  const get = async () => (await packageCatalogRequirements([pkg.id])).get(pkg.id)!
+  await prisma.package.update({ where: { id: pkg.id }, data: { visaMode: 'included', includedVisaProductId: visa.id } })
+  const inc = await get()
+  assert.deepEqual(inc.requirements.map(r => r.key), ['kk', 'vaccine', 'passport']); assert.equal(inc.visaChoice, false)
+  await prisma.package.update({ where: { id: pkg.id }, data: { visaMode: 'user_choice', includedVisaProductId: null, visaOptions: { create: { visaProductId: visa.id } } } })
+  const pick = await get()
+  assert.deepEqual(pick.requirements.map(r => r.key), ['kk', 'vaccine']); assert.equal(pick.visaChoice, true)
+  await prisma.package.update({ where: { id: pkg.id }, data: { visaMode: 'none', visaOptions: { deleteMany: {} } } })
+  assert.equal((await get()).visaChoice, false)
+})
+
+await t('PENJAGA: rute PUT produk menyimpan syarat lewat saveRequirements (bukan writeRequirements langsung); halaman paket publik memakai packageCatalogRequirements', () => {
+  for (const f of ['visa', 'packages', 'haji']) {
+    const s = readFileSync(`app/api/v1/admin/products/${f}/[id]/route.ts`, 'utf8')
+    assert.match(s, /saveRequirements\(tx, '/, f); assert.ok(!/writeRequirements/.test(s), f)
+  }
+  for (const f of ['app/[locale]/(public)/packages/page.tsx', 'app/[locale]/(public)/packages/[id]/page.tsx']) assert.match(readFileSync(f, 'utf8'), /packageCatalogRequirements\(/, f)
 })
 
 await t('PENJAGA: jalur jamaah membaca syarat HANYA lewat pilgrimRequirements — tak ada requirementsOf/requirementsOfMany/documentRequirement per visa', () => {

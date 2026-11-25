@@ -51,3 +51,18 @@ export function canUpload(type: DocumentTypeOption, d: UploadDraft, file: File |
 export function formatBytes(n: number): string {
   return n < 1024 * 1024 ? `${Math.max(1, Math.round(n / 1024))} KB` : `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
+
+/** Label dan petunjuk syarat produk per jenis dokumen — menggantikan label katalog di pengunggah supaya sama dengan daftar kelengkapan. */
+export type RequirementInfo = Record<string, { label: string; description: string }>
+export const requirementInfo = (items: readonly { documentTypeId: string; label: string; description: string }[]): RequirementInfo =>
+  Object.fromEntries(items.map(i => [i.documentTypeId, { label: i.label, description: i.description }]))
+
+export const withRequirementLabels = (types: DocumentTypeOption[], info: RequirementInfo | undefined): DocumentTypeOption[] =>
+  info ? types.map(t => ({ ...t, label: info[t.id]?.label ?? t.label })) : types
+
+/** Formulir unggah yang langsung terbuka untuk satu jenis: jenis boleh-banyak tak punya baris kosong → formulir "Tambah dokumen lain" berisi jenis itu. */
+export function openFormFor(types: readonly DocumentTypeOption[], typeId: string | undefined): { openFor: string | null; extraTypeId?: string } {
+  const type = types.find(t => t.id === typeId)
+  if (!type) return { openFor: null }
+  return type.allowMultiple ? { openFor: 'extra', extraTypeId: type.id } : { openFor: type.id }
+}

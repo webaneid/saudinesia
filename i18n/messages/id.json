@@ -1019,7 +1019,8 @@
     },
     "requiredDocs": {
       "title": "Persyaratan Dokumen",
-      "optional": "Opsional / Kondisional:"
+      "optional": "Opsional / Kondisional:",
+      "visaChoice": "Dokumen tambahan mengikuti visa yang dipilih saat memesan."
     },
     "hotelFacilities": {
       "wifi": "WiFi Gratis",
@@ -1671,13 +1672,14 @@
       "updated": "Data jamaah diperbarui.",
       "saveFailed": "Gagal menyimpan.",
       "network": "Tidak dapat menghubungi server.",
-      "editIntro": "Perubahan tersimpan di Jamaah Saya dan langsung dipakai untuk booking ini.",
+      "editIntro": "Perubahan tersimpan di Jamaah Saya dan ikut memperbarui booking aktif Anda yang belum diajukan.",
       "save": "Simpan",
       "newIntro": "Data ini juga tersimpan di Jamaah Saya, jadi bisa dipakai lagi untuk pesanan berikutnya. Paspor dan KTP diunggah sesudah disimpan.",
       "selfTitle": "Data Anda sebagai jamaah",
       "selfIntro": "Lengkapi data Anda untuk didaftarkan sebagai jamaah. Data ini tersimpan di profil dan dipakai lagi untuk pesanan berikutnya.",
       "waNotVerified": "Nomor WhatsApp Anda belum diverifikasi.",
-      "waVerify": "Verifikasi di Profil"
+      "waVerify": "Verifikasi di Profil",
+      "missingDocs": "Dokumen wajib belum lengkap: {documents}. Unggah di bawah supaya petugas bisa melanjutkan pemeriksaan."
     },
     "jamaah": {
       "metaTitle": "Jamaah Saya",
