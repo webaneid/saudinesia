@@ -184,12 +184,12 @@ type Existing = { nikHash: string | null; nikCipher: string | null; nationality:
 type PiiDemand = { nik: boolean; passport: boolean }
 
 /**
- * ADR-0006: NIK (WNI) dan paspor (WNA) wajib hanya bila kolomnya AKTIF di katalog Data Jamaah; kartu "Saya sendiri" boleh belum lengkap
+ * ADR-0006: NIK (WNI) dan paspor (WNA) wajib hanya bila kolomnya AKTIF dan bertanda WAJIB di katalog Data Jamaah; kartu "Saya sendiri" boleh belum lengkap
  * (diisi bertahap dari Profil) — kelengkapannya dinilai saat dipakai di booking (kolom wajib kosong menahan pengajuan).
  */
 async function piiDemand(tx: Tx, self: boolean): Promise<PiiDemand> {
   if (self) return { nik: false, passport: false }
-  const roles = new Set(activeFields(await pilgrimCatalog(tx)).map(f => f.role))
+  const roles = new Set(activeFields(await pilgrimCatalog(tx)).filter(f => f.required).map(f => f.role))
   return { nik: roles.has('nik'), passport: roles.has('passport_number') }
 }
 

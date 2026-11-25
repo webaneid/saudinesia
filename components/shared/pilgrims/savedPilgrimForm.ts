@@ -5,6 +5,8 @@ import type { SavedPilgrimView } from '@/lib/pilgrims/service'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
 import type { ManifestRole } from '@/lib/manifest/roles'
 import { isEmptyValue } from '@/lib/manifest/values'
+import { isBaby } from '@/lib/pilgrims/age'
+import { isCalendarDate } from '@/lib/time'
 import type { CardField } from './cardFields'
 
 // Nilai formulir kartu jamaah (docs/arsitektur-jamaah.md §5.1) — murni, dipakai halaman jamaah dan admin.
@@ -102,7 +104,7 @@ function roleFilled(v: SavedPilgrimFormValue, role: ManifestRole): boolean {
     case 'birth_place': return v.birthPlace.trim() !== ''
     case 'birth_date': return v.birthDate !== ''
     case 'nationality': return v.nationality !== ''
-    case 'nik': return v.nationality !== 'ID' || v.nik.trim() !== '' || (v.hasNik && !v.clearNik) // WNA tak punya NIK
+    case 'nik': return v.nationality !== 'ID' || (isCalendarDate(v.birthDate) && isBaby(v.birthDate)) || v.nik.trim() !== '' || (v.hasNik && !v.clearNik) // WNA dan bayi tak ditagih NIK
     case 'passport_number': return v.passportNumber.trim() !== '' || (v.passportMask !== '' && !v.clearPassport)
     case 'passport_issued': return v.passportIssuedAt !== ''
     case 'passport_expiry': return v.passportExpiry !== ''

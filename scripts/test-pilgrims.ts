@@ -38,8 +38,8 @@ __resetForTests()
 await prisma.piiKeyCheck.deleteMany() // kunci acak per jalan; nilai cek jalan sebelumnya tak berlaku lagi
 
 const tag = `pg${Date.now()}`
-// NIK dan paspor aktif (aturan penuh ADR-0005); uji ADR-0006 mengatur kataloknya sendiri.
-const restoreCatalog = await useTestCatalog(['nik', 'passportNumber', 'gender'])
+// NIK dan paspor aktif dan wajib (aturan penuh ADR-0005); uji ADR-0006 mengatur kataloknya sendiri.
+const restoreCatalog = await useTestCatalog(['nik', 'passportNumber', 'gender'], [], { nik: true, passportNumber: true })
 
 let n = 0
 const users: string[] = []
@@ -196,7 +196,7 @@ await t('NIK wajib bagi WNI kecuali bayi < 2 tahun (batas tepat di hari ulang ta
   assert.ok(!badNik.ok && badNik.status === 400 && badNik.field === 'nik')
 })
 
-await t('ADR-0006: NIK/paspor wajib hanya bila kolomnya AKTIF di katalog; kartu "Saya sendiri" boleh belum lengkap; nonaktif → tersimpan tanpa identitas', async () => {
+await t('ADR-0006: NIK/paspor wajib hanya bila kolomnya AKTIF dan bertanda WAJIB di katalog; kartu "Saya sendiri" boleh belum lengkap; nonaktif → tersimpan tanpa identitas', async () => {
   const a = await makeUser()
   const noNik = base({ birthDate: '2000-01-01' }), noPass = base({ nationality: 'MY' })
   const restore = await useTestCatalog(['gender'])
@@ -206,7 +206,18 @@ await t('ADR-0006: NIK/paspor wajib hanya bila kolomnya AKTIF di katalog; kartu 
     assert.deepEqual([row.identityId, row.matchStatus, row.nikHash], [null, 'unmatched', null])
     okCard(await createSavedPilgrim(a, a.userId, noPass))
   } finally { await restore() }
-  const on = await useTestCatalog(['nik', 'passportNumber'])
+  // Aktif tanpa tanda Wajib = boleh kosong (dan yang diisi tetap dipakai untuk identitas).
+  const optional = await useTestCatalog(['nik', 'passportNumber'], [], { nik: false, passportNumber: false })
+  try {
+    const o = await makeUser()
+    okCard(await createSavedPilgrim(o, o.userId, noNik))
+    okCard(await createSavedPilgrim(o, o.userId, noPass))
+    const filled = okCard(await createSavedPilgrim(o, o.userId, base({ nik: nik() })))
+    assert.ok((await cardRow(filled.id)).identityId)
+    const bad = await createSavedPilgrim(o, o.userId, base({ nik: '1234' }))
+    assert.ok(!bad.ok && bad.field === 'nik', 'bentuk NIK tetap diperiksa')
+  } finally { await optional() }
+  const on = await useTestCatalog(['nik', 'passportNumber'], [], { nik: true, passportNumber: true })
   try {
     const b = await makeUser()
     const r = await createSavedPilgrim(b, b.userId, noNik)

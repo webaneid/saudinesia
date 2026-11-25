@@ -1,6 +1,7 @@
 // Formulir kartu jamaah (docs/arsitektur-jamaah.md §5.2) — murni, tanpa database: badan permintaan dari nilai formulir.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
+import { addDays, todayInApp } from '@/lib/time'
 import { EMPTY_PILGRIM_FORM, bodyFromForm, hasCardOnlyData, missingRequired } from '@/components/shared/pilgrims/savedPilgrimForm'
 
 let failed = 0
@@ -33,6 +34,8 @@ t('Kolom wajib katalog: kosong/terisi per peran dan kolom admin; NIK WNA tak dit
   assert.deepEqual(miss({ ...base, gender: 'male', hasNik: true, passportMask: '••••1', extra: { gol: 'A' } }, f('gender'), f('nik'), f('passport_number'), f(null)), [])
   assert.deepEqual(miss({ ...base, hasNik: true, clearNik: true }, f('nik')), ['nik'])
   assert.deepEqual(miss({ ...base, nationality: 'MY' }, f('nik')), [])
+  assert.deepEqual(miss({ ...base, birthDate: addDays(todayInApp(), -300) }, f('nik')), [], 'bayi tak ditagih NIK')
+  assert.deepEqual(miss(base, f('nik', 'nik', false), f('passport_number', 'p', false)), [], 'aktif tanpa tanda Wajib = boleh kosong')
   assert.deepEqual(miss({ ...base, extra: { gol: '' } }, f(null)), ['gol'])
 })
 t('Profil: kartu "Saya sendiri" dibuat hanya bila ada data jamaah (bukan sekadar nama, kontak, email, alamat akun)', () => {

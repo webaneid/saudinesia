@@ -38,7 +38,7 @@
   bagiannya, tanda wajib dari katalog) + kolom buatan admin. Nama dan tanggal lahir selalu tampil (sistem membutuhkannya). Katalog gagal dimuat →
   semua kolom (perilaku lama).
 - Kolom tersembunyi tak pernah dikosongkan: formulir mengirim balik nilai kartu, dan server (SEC-312) menganggap tak dikirim = tetap.
-- NIK wajib (WNI) dan paspor wajib (WNA) hanya bila kolomnya aktif, dan tidak untuk kartu "Saya sendiri" (ADR-0006); tanpa NIK kartu tak punya
+- NIK wajib (WNI) dan paspor wajib (WNA) hanya bila kolomnya aktif dan bertanda Wajib, dan tidak untuk kartu "Saya sendiri" (ADR-0006); tanpa NIK kartu tak punya
   identitas gudang (`unmatched`, sama dengan bayi).
 
 ### P3 — Profil
