@@ -32,8 +32,8 @@ export async function pilgrimCatalog(db: Db = prisma): Promise<PilgrimFieldDef[]
 
 export const activeFields = (catalog: readonly PilgrimFieldDef[]): PilgrimFieldDef[] => catalog.filter(f => f.isActive)
 
-/** Kolom buatan admin yang AKTIF — diisi di kartu Jamaah Saya (`SavedPilgrim.extraValues`, docs/arsitektur-data-jamaah.md §3.4). */
-export const cardExtraFields = (catalog: readonly PilgrimFieldDef[]): PilgrimFieldDef[] => catalog.filter(f => f.isActive && !f.isSystem && f.role === null)
+/** Bentuk kolom yang dikirim ke formulir kartu (Jamaah Saya, Profil, popup booking, admin) — tanpa penanda internal katalog. */
+export const cardFieldDef = ({ id, fieldKey, label, fieldType, options, required, role, order }: PilgrimFieldDef) => ({ id, fieldKey, label, fieldType, options, required, role, order })
 
 /**
  * Kolom untuk DITAMPILKAN: kolom yang diminta dari jamaah ini, ditambah kolom katalog lain (termasuk nonaktif) yang sudah punya nilai —

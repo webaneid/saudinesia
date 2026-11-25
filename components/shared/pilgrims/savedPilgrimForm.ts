@@ -3,6 +3,9 @@ import { EMPTY_CONTACT, contactFromStored, type ContactValue } from '@/component
 import { e164FromCountry } from '@/lib/utils/phone'
 import type { SavedPilgrimView } from '@/lib/pilgrims/service'
 import type { SavedPilgrimInput } from '@/lib/validators/pilgrims'
+import type { ManifestRole } from '@/lib/manifest/roles'
+import { isEmptyValue } from '@/lib/manifest/values'
+import type { CardField } from './cardFields'
 
 // Nilai formulir kartu jamaah (docs/arsitektur-jamaah.md §5.1) — murni, dipakai halaman jamaah dan admin.
 // NIK dan nomor paspor tak pernah dikirim balik dari server: kolom kosong pada kartu yang sudah punya nilai = "tetap" (kolom tak dikirim).
@@ -13,6 +16,8 @@ export type SavedPilgrimFormValue = {
   birthPlace: string
   birthDate: string
   nationality: string
+  /** Kewarganegaraan tersimpan — menggantinya mewajibkan nomor paspor diketik ulang (kolom paspor ditampilkan walau nonaktif). */
+  savedNationality: string
   nik: string
   /** Kartu sudah menyimpan NIK (tersamar) — kosong = tetap. */
   hasNik: boolean
@@ -33,7 +38,7 @@ export type SavedPilgrimFormValue = {
 }
 
 export const EMPTY_PILGRIM_FORM: SavedPilgrimFormValue = {
-  fullName: '', gender: '', birthPlace: '', birthDate: '', nationality: 'ID',
+  fullName: '', gender: '', birthPlace: '', birthDate: '', nationality: 'ID', savedNationality: 'ID',
   nik: '', hasNik: false, clearNik: false,
   passportNumber: '', passportMask: '', passportIssuedAt: '', passportExpiry: '', clearPassport: false,
   address: EMPTY_ADDRESS, hadAddress: false, contact: EMPTY_CONTACT, email: '', isSelf: false, extra: {},
@@ -42,7 +47,7 @@ export const EMPTY_PILGRIM_FORM: SavedPilgrimFormValue = {
 export function formFromCard(c: SavedPilgrimView): SavedPilgrimFormValue {
   const a = c.address
   return {
-    fullName: c.fullName, gender: c.gender ?? '', birthPlace: c.birthPlace ?? '', birthDate: c.birthDate ?? '', nationality: c.nationality,
+    fullName: c.fullName, gender: c.gender ?? '', birthPlace: c.birthPlace ?? '', birthDate: c.birthDate ?? '', nationality: c.nationality, savedNationality: c.nationality,
     nik: '', hasNik: c.nik !== null, clearNik: false,
     passportNumber: '', passportMask: c.passport?.number ?? '', passportIssuedAt: c.passport?.issuedAt ?? '', passportExpiry: c.passport?.expiry ?? '', clearPassport: false,
     address: a ? {
@@ -88,3 +93,33 @@ export function bodyFromForm(v: SavedPilgrimFormValue): SavedPilgrimInput {
 }
 
 export const canSubmitPilgrim = (v: SavedPilgrimFormValue) => v.fullName.trim().length >= 2 && v.birthDate !== ''
+
+/** Nilai kolom bawaan sudah terisi di formulir (NIK/paspor tersimpan dihitung terisi). */
+function roleFilled(v: SavedPilgrimFormValue, role: ManifestRole): boolean {
+  switch (role) {
+    case 'display_name': return v.fullName.trim().length >= 2
+    case 'gender': return v.gender !== ''
+    case 'birth_place': return v.birthPlace.trim() !== ''
+    case 'birth_date': return v.birthDate !== ''
+    case 'nationality': return v.nationality !== ''
+    case 'nik': return v.nationality !== 'ID' || v.nik.trim() !== '' || (v.hasNik && !v.clearNik) // WNA tak punya NIK
+    case 'passport_number': return v.passportNumber.trim() !== '' || (v.passportMask !== '' && !v.clearPassport)
+    case 'passport_issued': return v.passportIssuedAt !== ''
+    case 'passport_expiry': return v.passportExpiry !== ''
+    case 'phone': return v.contact.phone.trim() !== ''
+    case 'whatsapp': return v.contact.whatsapp.trim() !== ''
+    case 'email': return v.email.trim() !== ''
+    case 'address': return v.address.fullAddress.trim() !== ''
+  }
+}
+
+/** Kolom WAJIB katalog yang masih kosong di formulir — popup "Jadikan saya jamaah" menahan simpan sampai terisi. */
+export function missingRequired(v: SavedPilgrimFormValue, fields: readonly CardField[]): CardField[] {
+  return fields.filter(f => f.required && !(f.role === null ? !isEmptyValue(v.extra[f.fieldKey]) : roleFilled(v, f.role as ManifestRole)))
+}
+
+/** Ada data jamaah (selain data akun: nama, kontak, email, alamat) yang diisi — Profil membuat kartu "Saya sendiri" hanya bila ya. */
+export function hasCardOnlyData(v: SavedPilgrimFormValue): boolean {
+  return v.gender !== '' || v.birthPlace.trim() !== '' || v.birthDate !== '' || v.nationality !== 'ID' || v.nik.trim() !== ''
+    || v.passportNumber.trim() !== '' || v.passportIssuedAt !== '' || v.passportExpiry !== '' || Object.values(v.extra).some(x => !isEmptyValue(x))
+}

@@ -7,6 +7,8 @@ import { prisma } from '@/lib/db'
 import { startFakeServer, type FakeRequest } from './lib/fakeServer'
 import { assertThrowawayDb } from './lib/testDb'
 import { panelStatus, recordWhatsappAction, sendTestToStaff, TEST_MESSAGE } from '@/lib/whatsapp/admin'
+import { clearLinkedNumberCache, linkedWhatsappNumber } from '@/lib/whatsapp/number'
+import { formatE164 } from '@/lib/utils/phone'
 import { whatsappActionSchema } from '@/lib/validators/whatsapp'
 
 await assertThrowawayDb()
@@ -84,6 +86,30 @@ await t('jejak: settings_audit entity whatsapp, ringkasan tanpa nomor', async ()
   assert.ok(row)
   assert.equal(row.entity, 'whatsapp'); assert.equal(row.action, 'wa_disconnect'); assert.deepEqual(row.summary, { outcome: 'ok' })
   assert.ok(!/\d{8,}/.test(JSON.stringify(row.summary)))
+})
+
+await t('nomor verifikasi jamaah = nomor hasil scan (bukan env); terputus/mati/webhook belum disetel → null; cache dan serentak = satu pembacaan', async () => {
+  const keep = env.WHATSAPP_WEBHOOK_SECRET
+  env.WHATSAPP_WEBHOOK_SECRET = 'rahasia-webhook-uji-0123456789abcdef'
+  try {
+    clearLinkedNumberCache(); reset({ jid: '6289999999999:3@s.whatsapp.net' })
+    assert.deepEqual(await Promise.all([linkedWhatsappNumber(1000), linkedWhatsappNumber(1000)]), ['6289999999999', '6289999999999'], 'nomor JID, bukan NEXT_PUBLIC_BUSINESS_WA')
+    assert.equal(seen.filter(r => r.path === '/app/status').length, 1, 'permintaan serentak memakai satu pembacaan gateway')
+    reset({ loggedIn: false })
+    assert.equal(await linkedWhatsappNumber(1000 + 14_000), '6289999999999', 'masih di cache')
+    assert.equal(await linkedWhatsappNumber(1000 + 16_000), null, 'kedaluwarsa → terputus')
+    clearLinkedNumberCache(); reset(); env.WA_GATEWAY_URL = 'http://127.0.0.1:1'
+    assert.equal(await linkedWhatsappNumber(), null)
+    clearLinkedNumberCache(); reset(); delete env.WHATSAPP_WEBHOOK_SECRET
+    assert.equal(await linkedWhatsappNumber(), null, 'tanpa rahasia webhook pesan masuk ditolak — jangan menyuruh pengguna mengirim')
+  } finally {
+    clearLinkedNumberCache()
+    if (keep === undefined) delete env.WHATSAPP_WEBHOOK_SECRET; else env.WHATSAPP_WEBHOOK_SECRET = keep
+  }
+  const route = readFileSync(new URL('../app/api/v1/auth/whatsapp/verification/route.ts', import.meta.url), 'utf8')
+  assert.ok(route.includes('linkedWhatsappNumber()') && !route.includes('businessWaDigits'), 'route verifikasi memakai nomor tertaut')
+  for (const m of ['GET', 'POST']) assert.match(route, new RegExp(`export async function ${m}\\(\\) \\{\\s*try \\{\\s*(const session = )?await requireSession\\(\\)`), `${m} wajib bersesi`)
+  assert.equal(formatE164('6281234567890'), '+62 812-3456-7890'); assert.equal(formatE164(''), '')
 })
 
 await t('masukan: hanya { action } — nomor/teks dari klien ditolak (.strict)', () => {

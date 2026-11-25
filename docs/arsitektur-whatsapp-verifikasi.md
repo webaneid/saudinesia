@@ -81,3 +81,13 @@ Dua jalur melepas verifikasi nomor (`releaseWhatsappVerification` di `lib/auth/w
 - **Superadmin: `DELETE /api/v1/admin/system/users/[id]/whatsapp`** + tombol "Lepas WhatsApp" (muncul bila akun terverifikasi) di Manajemen Pengguna. Tanpa body; log audit hanya id pelaku/target.
 
 Uji: `scripts/test-whatsapp.ts` (+6 uji: parser, pelepasan lewat nomor/id, kasus nomor daur ulang end-to-end, cabang webhook BATAL, batas pengirim, penjaga route) — tiga pengaman dimutasi dan tertangkap; HTTP nyata (tanda tangan salah 401, BATAL sah melepas, manager/tanpa login 403, id tak ada 404, ulang → released=false).
+
+## 11. Nomor tujuan = nomor tertaut + UI baru (2026-11-25, `docs/rencana-profil-jamaah.md` P1)
+
+- Nomor tujuan verifikasi HANYA dari `linkedWhatsappNumber()` (`lib/whatsapp/number.ts`): nomor perangkat yang tertaut lewat scan QR (status GOWA,
+  cache 15 detik, baca bersamaan digabung). `null` bila gateway tak terhubung atau secret webhook tak ada — **tanpa** jatuh ke `NEXT_PUBLIC_BUSINESS_WA`
+  (pesan ke nomor tanpa webhook tak pernah terverifikasi).
+- `GET auth/whatsapp/verification` → `{ businessNumber }` (`no-store`); `POST` menolak 503 `whatsappUnavailable` sebelum menghabiskan batas laju.
+- Kartu: nomor yang diverifikasi, tombol "Verifikasi Sekarang" (membuka WhatsApp dengan pesan siap kirim), bagian kirim manual berisi nomor Saudinesia
+  + pesan dengan tombol salin, keadaan menunggu + kedaluwarsa, dan keadaan "sementara tidak tersedia". Jaminan ADR-0002 tidak berubah.
+- Uji: `test-whatsapp-admin` + browser dengan simulator GOWA (tautan `wa.me` benar, `opener` null, pesan masuk → terverifikasi).

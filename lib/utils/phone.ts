@@ -39,3 +39,14 @@ export function splitE164(digits: string): { countryCode: string; local: string 
   }
   return best ? { countryCode: best.code, local: clean.slice(best.dialCode.length) } : { countryCode: 'ID', local: clean }
 }
+
+/** Tampilan nomor E.164 yang mudah dibaca: `+62 812-3456-7890` (kode negara dipisah, sisanya per 3–4 digit). Kosong → ''. */
+export function formatE164(digits: string): string {
+  const clean = digits.replace(/\D/g, '')
+  if (!clean) return ''
+  const { countryCode, local } = splitE164(clean)
+  const dial = COUNTRIES.find((c) => c.code === countryCode)?.dialCode ?? ''
+  if (!dial || !clean.startsWith(dial)) return `+${clean}`
+  const groups = local.length <= 4 ? [local] : [local.slice(0, 3), ...(local.slice(3).match(/.{1,4}/g) ?? [])]
+  return `+${dial} ${groups.join('-')}`
+}

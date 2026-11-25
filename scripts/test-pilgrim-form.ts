@@ -1,7 +1,7 @@
 // Formulir kartu jamaah (docs/arsitektur-jamaah.md §5.2) — murni, tanpa database: badan permintaan dari nilai formulir.
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
-import { EMPTY_PILGRIM_FORM, bodyFromForm } from '@/components/shared/pilgrims/savedPilgrimForm'
+import { EMPTY_PILGRIM_FORM, bodyFromForm, hasCardOnlyData, missingRequired } from '@/components/shared/pilgrims/savedPilgrimForm'
 
 let failed = 0
 function t(name: string, fn: () => void) {
@@ -25,6 +25,21 @@ t('Paspor: "Hapus data paspor" mengirim null walau tanggal masih di state (audit
 t('Alamat: kosong tanpa alamat lama = tidak dikirim; dikosongkan dari alamat lama = null', () => {
   assert.equal('address' in bodyFromForm(base), false)
   assert.equal(bodyFromForm({ ...base, hadAddress: true }).address, null)
+})
+t('Kolom wajib katalog: kosong/terisi per peran dan kolom admin; NIK WNA tak ditagih; NIK/paspor tersimpan dihitung terisi', () => {
+  const f = (role: string | null, fieldKey = role ?? 'gol', required = true) => ({ id: fieldKey, fieldKey, label: fieldKey, fieldType: 'text', options: null, required, role, order: 0 })
+  const miss = (v: typeof base, ...fields: ReturnType<typeof f>[]) => missingRequired(v, fields).map(x => x.fieldKey)
+  assert.deepEqual(miss(base, f('display_name'), f('gender'), f('birth_date'), f('nik'), f(null), f('email', 'email', false)), ['gender', 'nik', 'gol'])
+  assert.deepEqual(miss({ ...base, gender: 'male', hasNik: true, passportMask: '••••1', extra: { gol: 'A' } }, f('gender'), f('nik'), f('passport_number'), f(null)), [])
+  assert.deepEqual(miss({ ...base, hasNik: true, clearNik: true }, f('nik')), ['nik'])
+  assert.deepEqual(miss({ ...base, nationality: 'MY' }, f('nik')), [])
+  assert.deepEqual(miss({ ...base, extra: { gol: '' } }, f(null)), ['gol'])
+})
+t('Profil: kartu "Saya sendiri" dibuat hanya bila ada data jamaah (bukan sekadar nama, kontak, email, alamat akun)', () => {
+  assert.equal(hasCardOnlyData({ ...EMPTY_PILGRIM_FORM, fullName: 'Budi', email: 'a@b.c', isSelf: true }), false)
+  assert.equal(hasCardOnlyData({ ...EMPTY_PILGRIM_FORM, gender: 'female' }), true)
+  assert.equal(hasCardOnlyData({ ...EMPTY_PILGRIM_FORM, extra: { gol: 'A' } }), true)
+  assert.equal(hasCardOnlyData({ ...EMPTY_PILGRIM_FORM, extra: { gol: '' } }), false)
 })
 t('?w= di halaman kartu: daftar putih hasOwn (bukan `in` — kunci prototipe seperti __proto__/toString ditolak)', () => {
   const src = readFileSync('app/[locale]/(pilgrim)/jamaah/[id]/page.tsx', 'utf8')

@@ -46,16 +46,18 @@ type Props = {
   onChange: (v: ContactValue) => void
   /** false = tanpa kolom Email (mis. pendaftaran/Lengkapi data akun: email adalah identitas akun, bukan data kontak). */
   showEmail?: boolean
+  /** Hanya satu nomor (kolom lainnya tidak diminta) — bawaan: keduanya dengan centang "Sama dengan nomor HP". */
+  only?: 'phone' | 'whatsapp'
 }
 
-export function ContactPicker({ value, onChange, showEmail = true }: Props) {
+export function ContactPicker({ value, onChange, showEmail = true, only }: Props) {
   const t = useTranslations('shared.contact')
   // "Sama dengan nomor HP" dimulai dari nilai turunan (bandingkan phone vs whatsapp aktual —
   // penting saat memuat data existing yang sudah divergen), tapi begitu pengguna secara EKSPLISIT
   // membuka centang, itu harus tetap terbuka walau phone/whatsapp kebetulan masih sama persis —
   // makanya butuh override lokal `unlocked`, bukan murni turunan (docs/arsitektur-komponen-kontak.md §3.2).
   const [unlocked, setUnlocked] = useState(false)
-  const sameAsPhone = unlocked ? false : isWhatsappSameAsPhone(value)
+  const sameAsPhone = unlocked || only ? false : isWhatsappSameAsPhone(value)
 
   function setPhoneCountryCode(next: string) {
     onChange(sameAsPhone
@@ -88,16 +90,16 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="space-y-2">
+      {only !== 'whatsapp' && <div className="space-y-2">
         <Label>{t('phone')}</Label>
         <div className="flex gap-2">
           <CountryCodeSelect value={value.phoneCountryCode} onChange={setPhoneCountryCode} />
           <Input type="tel" placeholder="8xx xxxx xxxx" className="flex-1"
             value={value.phone} onChange={e => setPhone(e.target.value)} />
         </div>
-      </div>
+      </div>}
 
-      <div className="space-y-2">
+      {only !== 'phone' && <div className="space-y-2">
         <Label>{t('whatsapp')}</Label>
         <div className="flex gap-2">
           <CountryCodeSelect value={value.whatsappCountryCode} onChange={setWhatsappCountryCode} disabled={sameAsPhone} />
@@ -105,11 +107,11 @@ export function ContactPicker({ value, onChange, showEmail = true }: Props) {
             value={value.whatsapp} onChange={e => setWhatsapp(e.target.value)}
             disabled={sameAsPhone} />
         </div>
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+        {!only && <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <input type="checkbox" checked={sameAsPhone} onChange={e => toggleSameAsPhone(e.target.checked)} />
           {t('sameAsPhone')}
-        </label>
-      </div>
+        </label>}
+      </div>}
 
       {showEmail && (
         <div className="space-y-2">

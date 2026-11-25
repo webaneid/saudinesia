@@ -9,7 +9,7 @@ import { activeFields, pilgrimCatalog } from '@/lib/pilgrim-data/catalog'
 import { isSealedRole, snapshotFromCard, type CardForSnapshot } from '@/lib/manifest/roles'
 import type { ManifestAddressValue } from '@/lib/manifest/addressValue'
 import { resolveAddressValues } from '@/lib/manifest/address'
-import { validateFieldValues } from '@/lib/manifest/values'
+import { isEmptyValue, validateFieldValues } from '@/lib/manifest/values'
 import { ensurePiiKeysMatch, maskPassport, NIK_MASK, nikProblem, normalizeNik, normalizePassport, sealNik, sealPassport } from '@/lib/pii'
 import { calendarDateOf, todayInApp, type CalendarDate } from '@/lib/time'
 import { pilgrimRequirements } from '@/lib/documents/requirements'
@@ -65,6 +65,14 @@ function addressOf(a: CardRow['address']): ManifestAddressValue | null {
 /** Kolom AKTIF katalog Data Jamaah (docs/arsitektur-data-jamaah.md §3.1) — snapshot kartu dan penyegelan isian memakai daftar yang sama untuk semua produk. */
 export async function activeCatalog(db: Tx | typeof prisma) {
   return activeFields(await pilgrimCatalog(db))
+}
+
+/** Kartu milik `ownerId` belum lengkap untuk kolom `fields` (kolom wajib kosong) atau belum beralamat — popup "Jadikan saya jamaah". Baca saja. */
+export async function cardIncomplete(ownerId: string, cardId: string, fields: readonly (Parameters<typeof snapshotFromCard>[0][number] & { required: boolean })[]): Promise<boolean> {
+  const card = await prisma.savedPilgrim.findFirst({ where: { id: cardId, ownerId }, select: cardSelect })
+  if (!card || !card.address) return true
+  const values = snapshotFromCard(fields, forSnapshot(card))
+  return fields.some(f => f.required && isEmptyValue(values[f.fieldKey]) && !(f.role === 'nik' && card.nationality !== 'ID'))
 }
 
 type Locked = { id: string; bookingId: string; ownerId: string; savedPilgrimId: string | null; fieldValues: Record<string, unknown> }
