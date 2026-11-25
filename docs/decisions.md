@@ -3967,3 +3967,9 @@ Rincian potensi vs hak per booking hanya ditampilkan ke superadmin.
 **Rationale:** Arahan pemilik "Ya, perbaiki semua" atas audit sinkronisasi. Menggantikan aturan Fase 7a "mengedit kartu tidak mengubah booking" hanya untuk yang belum diajukan; verifikasi tetap atas data beku.
 **Alternatives considered:** snapshot selalu mengikuti kartu (ditolak — data yang sudah diperiksa bisa berubah diam-diam); menyalin seluruh kartu ke booking (ditolak — menghapus isian petugas); menahan penonaktifan jenis yang masih jadi syarat (ditolak — admin harus mengedit tiap produk); buka ulang untuk setiap perubahan syarat (ditolak — verifikasi ulang tanpa sebab).
 **Security check:** skill security-review atas seluruh berkas — 0 Critical/High/Medium; 1 Low dicatat (SEC-314). NIK/paspor disalin tersegel tanpa dibuka; rute produk tetap `requireManager`, catatan riwayat hanya label dokumen; SQL mentah berparameter; kunci diuji deterministik; tanpa dependency baru.
+
+## 2026-11-25 — Kewajiban NIK/paspor di kartu mengikuti tanda Wajib di Data Jamaah (ADR-0006 Accepted)
+**Decision:** NIK (WNI bukan bayi) dan nomor paspor (WNA) ditagih saat menyimpan kartu hanya bila kolomnya aktif DAN bertanda Wajib; kartu "Saya sendiri" tetap boleh belum lengkap. Pemilik menyetujui ("Ya, ikuti tanda Wajib").
+**Rationale:** Data Jamaah adalah satu-satunya tempat pengaturan; tanda Wajib yang mati tetapi tetap menahan membuat pengaturan tidak dipercaya.
+**Alternatives considered:** tetap wajib begitu aktif (ditolak — arahan pemilik); menagih paspor WNI saat menyimpan kartu (ditolak — kolom wajib lain juga baru ditagih saat "Ajukan", dan jamaah bisa belum punya paspor).
+**Security check:** skill security-review — 0 temuan baru. Bentuk NIK/paspor dan penyegelan tak berubah; deteksi orang yang sama di dua akun hanya ada bila NIK/paspor diisi (konsekuensi yang sudah disampaikan ke pemilik); verifikasi petugas tetap gerbang.

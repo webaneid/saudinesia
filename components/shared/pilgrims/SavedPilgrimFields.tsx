@@ -11,6 +11,8 @@ import { ChoiceSelect } from '@/components/shared/ChoiceSelect'
 import { COUNTRY_OPTIONS } from '@/lib/ui/countryOptions'
 import { ManifestFieldsForm } from '@/components/booking/ManifestFieldsForm'
 import { NIK_MASK } from '@/lib/pii/mask'
+import { isBaby } from '@/lib/pilgrims/age'
+import { isCalendarDate } from '@/lib/time'
 import type { ManifestRole } from '@/lib/manifest/roles'
 import { cardLayout, orderedRoles, type CardField } from './cardFields'
 import { useFieldLabel } from './useFieldLabel'
@@ -47,6 +49,7 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPref
   const layout = useMemo(() => cardLayout(loaded ?? null, omit), [loaded, omit])
   const set = <K extends keyof SavedPilgrimFormValue>(k: K, x: SavedPilgrimFormValue[K]) => onChange({ ...v, [k]: x })
   const wni = v.nationality === 'ID'
+  const baby = isCalendarDate(v.birthDate) && isBaby(v.birthDate) // bayi belum punya NIK
   const has = (r: ManifestRole) => layout.roles.has(r)
   const labelOf = useFieldLabel()
   const label = (r: ManifestRole) => labelOf(r, layout.roles.get(r))
@@ -84,7 +87,7 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPref
         </>
       case 'nik':
         return wni && <>
-          <Label htmlFor={`${idPrefix}-nik`}>{label(role)}{star(!relaxed && (required(role) || !v.isSelf))}</Label>
+          <Label htmlFor={`${idPrefix}-nik`}>{label(role)}{star(required(role) && !baby)}</Label>
           <Input id={`${idPrefix}-nik`} inputMode="numeric" autoComplete="off" value={v.nik} maxLength={40}
             placeholder={v.hasNik && !v.clearNik ? t('savedKeep', { mask: NIK_MASK }) : t('nikPlaceholder')}
             onChange={e => onChange({ ...v, nik: e.target.value, clearNik: false })} />
@@ -98,7 +101,7 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPref
         </>
       case 'passport_number':
         return <>
-          <Label htmlFor={`${idPrefix}-pass`}>{label(role)}{star(required(role) || (!wni && !relaxed && !v.isSelf))}</Label>
+          <Label htmlFor={`${idPrefix}-pass`}>{label(role)}{star(required(role))}</Label>
           <Input id={`${idPrefix}-pass`} autoComplete="off" value={v.passportNumber} maxLength={40}
             placeholder={v.passportMask && !v.clearPassport ? t('savedKeep', { mask: v.passportMask }) : t('passportPlaceholder')}
             onChange={e => onChange({ ...v, passportNumber: e.target.value, clearPassport: false })} />
@@ -150,7 +153,7 @@ export function SavedPilgrimFields({ value: v, onChange, showSelf = true, idPref
 
       {passport.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-sm font-semibold">{wni || relaxed || v.isSelf ? t('passportWni') : t('passportForeign')}</h2>
+          <h2 className="text-sm font-semibold">{!wni && required('passport_number') ? t('passportForeign') : t('passportWni')}</h2>
           {grid(passport)}
         </section>
       )}

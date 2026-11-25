@@ -284,7 +284,7 @@ di DB sekali pakai; `bun run test` penuh.
   formulir) → `cardLayout`/`orderedRoles` (`components/shared/pilgrims/cardFields.ts`, murni) → `SavedPilgrimFields`. Kolom bawaan nonaktif tidak
   tampil; nama dan tanggal lahir selalu tampil (`ALWAYS_SHOWN`); label = label katalog (diterjemahkan `useFieldLabel` bila masih label bawaan);
   katalog gagal dimuat → semua kolom. Dipakai Jamaah Saya, Profil, popup booking, dan admin atas nama pelanggan.
-- Server: kewajiban NIK/paspor = `piiDemand` (`lib/pilgrims/service.ts`), ADR-0006. Kolom tersembunyi tak pernah dikosongkan (SEC-312 ditutup:
+- Server: kewajiban NIK/paspor = `piiDemand` (`lib/pilgrims/service.ts`), ADR-0006: aktif DAN bertanda Wajib (bukan sekadar aktif). Kolom tersembunyi tak pernah dikosongkan (SEC-312 ditutup:
   `gender`/`birthPlace` tak dikirim = tetap, `null` = dikosongkan).
 - Profil: satu formulir → kartu "Saya sendiri" + akun + kontak. Wajib hanya nama dan alamat (`profileSchema.address`); tanpa data jamaah, kartu tidak
   dibuat. Saran "yang belum diisi" di atas formulir, tanpa memblokir.
@@ -326,6 +326,12 @@ Audit alur produk → halaman jamaah menemukan delapan ketidaksinkronan; semuany
 - Booking yang sudah tertinggal sebelum rilis ini ikut pada perubahan kartu berikutnya (hanya kolom yang berubah atau kosong); untuk memaksa: "Lepas" lalu pilih ulang.
 - Jamaah yang sudah terverifikasi sebelum rilis ini tidak dinilai ulang mundur.
 - Halaman checkout tidak menampilkan daftar dokumen (hanya halaman produk).
-- Pengaturan yang menunggu pemilik: kolom Alamat aktif/tidak, nomor + masa berlaku paspor wajib/tidak, KTP hanya untuk WNI ≥ 17 tahun.
+- Alamat dan nomor/masa berlaku paspor diatur pemilik sendiri di Data Jamaah (Aktif/Wajib), tanpa perubahan kode. KTP menurut umur belum ada: syarat dokumen per produk hanya wajib/opsional.
+
+### 14.4 NIK dan paspor mengikuti tanda Wajib (2026-11-25)
+
+`piiDemand` dulu hanya melihat Aktif: NIK/paspor yang aktif tanpa tanda Wajib tetap menahan simpan kartu WNI/WNA. Kini hanya kolom aktif DAN bertanda
+Wajib. Tanda bintang dan judul bagian paspor di formulir mengikuti aturan yang sama; bayi dan WNA tak pernah ditagih NIK. Paspor WNI bertanda Wajib
+ditagih saat "Ajukan" (sama dengan kolom wajib lain), bukan saat menyimpan kartu. Kartu tanpa NIK/paspor = tanpa identitas gudang.
 
 Bukti: `test-booking-link` (edit kartu nyata terhadap lima booking berstatus beda, segel dibuka), `test-pilgrim-requirements` (buka ulang, kunci deterministik, jenis nonaktif, katalog paket, penjaga rute), `test-pilgrim-data` (`nikOptional`), `test-pilgrim-documents` (formulir unggah); browser di DB sekali pakai untuk alur jamaah dan halaman paket.
